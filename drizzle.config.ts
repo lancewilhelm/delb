@@ -5,6 +5,6 @@ export default defineConfig({
   schema: "./app/utils/db/schema.ts",
   dialect: "sqlite",
   dbCredentials: {
-    url: "data/opentome.db",
+    url: "data/delb.db",
   },
 });

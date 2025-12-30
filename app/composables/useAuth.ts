@@ -80,9 +80,9 @@ export function useAuth() {
 
     // Clear the cookies
     const storesToClear = [
-      "opentome.userSettings",
-      "opentome.globalSettings",
-      "opentome.ui",
+      "delb.userSettings",
+      "delb.globalSettings",
+      "delb.ui",
     ];
     for (const store of storesToClear) {
       const cookie = useCookie(store);

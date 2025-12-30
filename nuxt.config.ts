@@ -71,6 +71,6 @@ export default defineNuxtConfig({
     ],
   },
   piniaPluginPersistedstate: {
-    key: "opentome.%id",
+    key: "delb.%id",
   },
 });

@@ -63,19 +63,20 @@ const config = useRuntimeConfig();
             icon="lucide:info"
             class="flex flex-col gap-2"
         >
-            <OpenTomeLogo fill="var(--main-color)" />
+            <DelbLogo fill="var(--main-color)" />
             <div class="text-(--sub-color) italic">
                 version: {{ config.public.appVersion || "manual" }}
             </div>
+            <div class="text-(--sub-color) italic">Delb</div>
             <NuxtLink
-                to="https://github.com/lancewilhelm/opentome"
+                to="https://github.com/lancewilhelm/delb"
                 class="flex items-center gap-1"
             >
                 <Icon
                     name="simple-icons:github"
                     class="w-4 h-4 text-(--main-color)"
                 />
-                <span class="text-(--main-color)">github</span>
+                <span class="text-(--main-color)">Delb on GitHub</span>
             </NuxtLink>
         </SettingsGroup>
 

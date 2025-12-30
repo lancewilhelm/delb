@@ -11,7 +11,7 @@ export const auth = betterAuth({
   baseURL: getBaseURL(),
   trustedOrigins: getTrustedOrigins(),
   advanced: {
-    cookiePrefix: "opentome",
+    cookiePrefix: "delb",
   },
   plugins: [
     baAdmin({

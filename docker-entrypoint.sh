@@ -3,7 +3,7 @@
 set -e
 
 # Paths
-DB_PATH=/app/data/opentome.db
+DB_PATH=/app/data/delb.db
 KEY_FILE=/app/data/auth_secret.key
 
 # Generate BETTER_AUTH_SECRET if not provided

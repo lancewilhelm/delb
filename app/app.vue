@@ -6,7 +6,7 @@ const favicon = useDynamicFavicon();
 // Reactive title
 useHead({
     titleTemplate: (title: string | undefined) =>
-        title ? `${title} | OpenTome` : "OpenTome",
+        title ? `${title} | Delb` : "Delb",
 });
 
 // Favicon updater: watch and re-apply the head link

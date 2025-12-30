@@ -48,7 +48,7 @@ async function handleSubmit() {
         <NuxtLink
             to="/login"
             class="logo text-7xl font-bold mb-6 text-(--main-color)"
-            >OpenTome</NuxtLink
+            >Delb</NuxtLink
         >
         <form
             class="flex flex-col gap-2 items-center register-form"

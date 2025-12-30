@@ -65,6 +65,19 @@ export const verifications = sqliteTable("verifications", {
   updatedAt: integer("updated_at", { mode: "timestamp" }),
 });
 
+// BOOKS TABLE (minimal MVP)
+export const books = sqliteTable("books", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  author: text("author").notNull(),
+  format: text("format").notNull(), // e.g. "epub"
+  relativePath: text("relative_path").notNull(), // e.g. "data/books/{author}/{title}/{title}.epub"
+  coverImagePath: text("cover_image_path"), // e.g. "data/books/{author}/{title}/cover.jpg"
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
 // USER SETTINGS TABLE
 export const userSettings = sqliteTable("user_settings", {
   userId: text("user_id").primaryKey().unique(),
@@ -86,6 +99,8 @@ export const globalSettings = sqliteTable("global_settings", {
 // TYPE
 export type InsertUserSettings = InferInsertModel<typeof userSettings>;
 export type InsertGlobalSettings = InferInsertModel<typeof globalSettings>;
+export type InsertBook = InferInsertModel<typeof books>;
 
 export type SelectUserSettings = InferSelectModel<typeof userSettings>;
 export type SelectGlobalSettings = InferSelectModel<typeof globalSettings>;
+export type SelectBook = InferSelectModel<typeof books>;

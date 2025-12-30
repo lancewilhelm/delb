@@ -45,9 +45,7 @@ async function handleSubmit() {
     <div
         class="login-container w-full h-full flex flex-col items-center justify-center"
     >
-        <div class="text-7xl font-bold mb-6 text-(--main-color) logo">
-            OpenTome
-        </div>
+        <div class="text-7xl font-bold mb-6 text-(--main-color) logo">Delb</div>
         <form
             class="flex flex-col gap-2 items-center login-form"
             @submit.prevent="handleSubmit"

@@ -66,7 +66,7 @@ else
 fi
 
 # Export DATABASE_URL (for local Drizzle migrations)
-export DATABASE_URL="file:$(pwd)/data/opentome.db"
+export DATABASE_URL="file:$(pwd)/data/delb.db"
 
 # Run Drizzle migrations
 echo "Running Drizzle database schema push..."

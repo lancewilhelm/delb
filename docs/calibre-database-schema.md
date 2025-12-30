@@ -1,6 +1,6 @@
 # Calibre database schema reference (SQLite)
 
-This document captures a **reference** view of the SQLite schemas Calibre uses, primarily to inform OpenTome’s future import/migration planning.
+This document captures a **reference** view of the SQLite schemas Calibre uses, primarily to inform Delb’s future import/migration planning.
 
 Sources:
 - The schema listing in this doc is based on an extracted summary (provided in the project discussion) from Calibre’s repository code and SQL resources.
@@ -12,6 +12,7 @@ Sources:
 - Many elements are **implementation-dependent** (views, triggers, indexes, tokenizers, custom functions).
 - Calibre supports **dynamic custom columns**, which can cause additional tables/triggers to exist beyond the “core” tables listed below.
 - Calibre may **clone/backup** databases or create temporary databases for various operations; those generally reuse the same schema patterns.
+- **Delb MVP upload limitation (known):** uploading the same book more than once (same author + title) does not currently deconflict. The upload will overwrite the stored file on disk (since the storage path is deterministic) and insert another row in the database. A future improvement is to add a deconfliction flow (prompt user: replace, keep both, cancel) and/or enforce a uniqueness constraint.
 
 ---
 
@@ -162,7 +163,7 @@ A common normalized pattern (conceptual) for a custom column is:
 - Plus indexes and triggers.
 - Denormalized patterns also exist depending on custom column type/config.
 
-For import planning in OpenTome: expect that a Calibre `metadata.db` may contain *many extra tables* related to custom columns.
+For import planning in Delb: expect that a Calibre `metadata.db` may contain *many extra tables* related to custom columns.
 
 ---
 
@@ -356,16 +357,16 @@ Some Calibre database behavior depends on SQLite extensions:
 - A custom FTS5 tokenizer used by the FTS databases.
 - Extension module registration and build metadata are defined in Calibre upstream.
 
-For OpenTome import planning, this matters because:
+For Delb import planning, this matters because:
 - Import may need to replicate **derived fields** (e.g. `sortconcat`-like behavior) in application logic rather than relying on SQLite extensions.
 - Full-text search ingestion may require re-indexing rather than attempting to import FTS tables directly.
 
 ---
 
-## Suggested next steps for OpenTome (import-oriented)
+## Suggested next steps for Delb (import-oriented)
 
 When you’re ready to implement import:
-1. Decide whether OpenTome will import:
+1. Decide whether Delb will import:
    - only `metadata.db` core tables, or
    - also notes and last-read positions, or
    - also reconstruct FTS indexes.
