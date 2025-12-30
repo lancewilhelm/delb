@@ -17,15 +17,15 @@ const emit = defineEmits<{
             class="flex gap-4 items-center backdrop-blur bg-(--bg-color)/50 p-4 rounded-bl-2xl justify-self-end app-header-right z-10"
         >
             <Icon
+                v-tooltip="'Upload book'"
                 name="lucide:upload"
                 class="text-(--main-color) cursor-pointer scale-125 header-icon"
                 @click="emit('upload')"
-                title="Upload book"
             />
             <Icon
+                v-tooltip="'Open command palette'"
                 name="lucide:command"
                 class="text-(--main-color) cursor-pointer scale-125 header-icon"
-                title="Open command palette"
                 @click="
                     uiStore.setCommandPaletteVisible(
                         !uiStore.commandPaletteVisible,

@@ -101,13 +101,11 @@ onMounted(() => {
                                 :alt="`Cover for ${b.title}`"
                                 class="w-37.5 cursor-pointer"
                             />
-                            <div>
-                                <div class="font-bold truncate">
-                                    {{ b.title }}
-                                </div>
-                                <div class="opacity-70 truncate">
-                                    {{ b.author }}
-                                </div>
+                            <div class="flex flex-col">
+                                <HoverScrollText>{{ b.title }}</HoverScrollText>
+                                <HoverScrollText class="opacity-70">{{
+                                    b.author
+                                }}</HoverScrollText>
                             </div>
                         </div>
                     </div>

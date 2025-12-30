@@ -187,3 +187,35 @@ tr:last-child td {
     outline: 2px solid var(--main-color);
     outline-offset: 3px;
 }
+
+.tooltip {
+    position: fixed; /* positioned to viewport; avoids scroll containers */
+    top: 0;
+    left: 0;
+    transform: translate3d(var(--tooltip-x, 0px), var(--tooltip-y, 0px), 0);
+
+    pointer-events: none; /* never block hover/click on target */
+    opacity: 0;
+    transition: opacity 120ms ease;
+    z-index: 10000;
+}
+
+.tooltip-content {
+    max-width: 70ch;
+    border-radius: 10px;
+    background: var(--sub-alt-color);
+    color: var(--text-color);
+    padding: 7px 10px;
+    box-shadow: 0 5px 5px rgba(0, 0, 0, 0.1);
+}
+
+.tooltip[data-state="open"] {
+    opacity: 1;
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .tooltip {
+        transition: none;
+    }
+}
