@@ -1,0 +1,36 @@
+:root {
+  --bg-color: #1a1a1a;
+  --main-color: #fbf4b6;
+  --caret-color: #f48dcf;
+  --sub-color: #c1a7eb;
+  --sub-alt-color: #222222;
+  --text-color: #b4e9ff;
+  --error-color: #ff6961;
+  --error-extra-color: #c23b22;
+  --colorful-error-color: #ff6961;
+  --colorful-error-extra-color: #c23b22;
+}
+
+.chat-bubble-user {
+  color: var(--caret-color);
+}
+
+.chat-bubble-user-content {
+  background-color: var(--bg-color);
+}
+
+.chat-input {
+  border-color: var(--caret-color);
+}
+
+.chat-list-item-title {
+  color: var(--sub-color);
+}
+
+.header-line {
+  background-color: var(--main-color);
+}
+
+.chat-input-textarea {
+  color: var(--caret-color);
+}

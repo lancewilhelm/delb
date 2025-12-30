@@ -1,0 +1,189 @@
+@import "tailwindcss";
+
+:root {
+  --border-radius: 8px;
+  --yes-color: #008800;
+  --no-color: #880000;
+  --transition: all 0.3s;
+}
+
+body {
+  background: var(--bg-color);
+  color: var(--text-color);
+  font-family: "Geist", sans-serif;
+  overflow: hidden;
+  scrollbar-color: var(--main-color) transparent;
+  scrollbar-width: auto;
+}
+
+h1 {
+  font-size: 2.5rem;
+}
+
+h2 {
+  font-size: 2rem;
+}
+
+h3 {
+  font-size: 1.75rem;
+}
+
+h4 {
+  font-size: 1.5rem;
+}
+
+h5 {
+  font-size: 1.25rem;
+}
+
+h6 {
+  font-size: 1rem;
+}
+
+ul,
+ol {
+  padding-left: 2rem;
+}
+
+ul {
+  list-style-type: disc;
+}
+
+ul ul {
+  list-style-type: circle;
+}
+
+ul ul ul {
+  list-style-type: square;
+}
+
+ol {
+  list-style-type: decimal;
+}
+
+ol ol {
+  list-style-type: lower-alpha;
+}
+
+ol ol ol {
+  list-style-type: lower-roman;
+}
+
+li {
+  margin-bottom: 0.5rem;
+}
+
+math {
+  padding: 5px 0;
+}
+
+code {
+  white-space: pre;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--sub-alt-color);
+  margin: 1rem 0;
+}
+
+input {
+  background-color: var(--sub-alt-color);
+  border-radius: var(--border-radius);
+  padding: 0.5em;
+}
+
+textarea {
+  background-color: var(--sub-alt-color);
+  border-radius: var(--border-radius);
+  padding: 0.5em;
+}
+
+input:focus,
+textarea:focus {
+  outline: none;
+}
+
+button {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  margin: 5px 0;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+button:hover {
+  background-color: var(--text-color);
+  color: var(--bg-color);
+}
+
+button:active {
+  background-color: var(--sub-color);
+  color: var(--bg-color);
+}
+
+button:active:focus {
+  outline: none;
+}
+
+button:focus {
+  outline: 2px solid var(--main-color);
+  outline-offset: 3px;
+}
+
+a {
+  border-radius: var(--border-radius);
+}
+
+a:focus {
+  outline: 2px solid var(--main-color);
+  outline-offset: 3px;
+}
+
+table {
+  border-collapse: separate; /* Needed for border-radius */
+  border-spacing: 0;
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden; /* Ensures content fits rounded corners */
+  border: 1px solid var(--sub-alt-color);
+  background: var(--bg-color);
+}
+
+th,
+td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--sub-alt-color);
+  text-align: left;
+}
+
+th {
+  background: var(--sub-alt-color);
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+.settings-select-item-select:focus {
+  outline: 2px solid var(--main-color);
+  outline-offset: 3px;
+}
+
+.katex-html {
+  display: none;
+}
+
+::selection {
+  background-color: var(--main-color);
+  color: var(--bg-color);
+  outline: 3px solid var(--sub-color);
+}
+
+.focus-outline:focus {
+  outline: 2px solid var(--main-color);
+  outline-offset: 3px;
+}

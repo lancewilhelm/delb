@@ -1,0 +1,102 @@
+:root {
+  --bg-color: #011926;
+  --bg-alt-color: #0d2c3f;
+  --main-color: #00e980;
+  --caret-color: #00e980;
+  --sub-color: #245c69;
+  --sub-alt-color: #000c13;
+  --text-color: #fff;
+  --error-color: #b94da1;
+  --error-extra-color: #9b3a76;
+  --colorful-error-color: #b94da1;
+  --colorful-error-extra-color: #9b3a76;
+}
+
+@keyframes aurora {
+  0% {
+    color: #009fb4;
+  }
+
+  25% {
+    color: #00e975;
+  }
+
+  50% {
+    color: #00ffea;
+  }
+
+  75% {
+    color: #00e975;
+  }
+
+  100% {
+    color: #009fb4;
+  }
+}
+
+@keyframes aurora-fill {
+  0% {
+    fill: #009fb4;
+  }
+
+  25% {
+    fill: #00e975;
+  }
+
+  50% {
+    fill: #00ffea;
+  }
+
+  75% {
+    fill: #00e975;
+  }
+
+  100% {
+    fill: #009fb4;
+  }
+}
+
+@keyframes aurora-bg {
+  0% {
+    background: #009fb4;
+  }
+
+  25% {
+    background: #00e975;
+  }
+
+  50% {
+    background: #00ffea;
+  }
+
+  75% {
+    background: #00e975;
+  }
+
+  100% {
+    background: #009fb4;
+  }
+}
+
+a:hover,
+.chat-list-item-title:hover,
+.chat-list-group-title,
+.header-icon,
+.chat-list-header,
+.chat-input-model-item:hover {
+  animation: aurora 5s linear infinite;
+}
+
+button,
+.tooltip,
+.header-line {
+  animation: aurora-bg 5s linear infinite;
+}
+
+button {
+  color: var(--bg-color);
+}
+
+#logo .bg {
+  animation: aurora-fill 5s linear infinite;
+}

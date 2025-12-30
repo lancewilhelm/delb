@@ -1,0 +1,184 @@
+:root {
+  --bg-color: #141221;
+  --main-color: #fd77d7;
+  --caret-color: #dde5ed;
+  --text-color: #dde5ed;
+  --error-color: #fd77d7;
+  --sub-color: #676e8a;
+  --sub-alt-color: #1e1d2f;
+  --error-color: #ff5869;
+  --error-extra-color: #b03c47;
+  --colorful-error-color: #ff5869;
+  --colorful-error-extra-color: #b03c47;
+}
+
+#logo{
+  -webkit-transform: rotateY(180deg);
+  unicode-bidi: bidi-override;
+  transition: 0.5s;
+}
+
+header #logo .top {
+  font-family: "Comic Sans MS", "Comic Sans", cursive;
+}
+
+header #logo .icon {
+  -webkit-transform: rotateX(180deg);
+  transition: 0.5s;
+}
+
+#words .incorrect.extra {
+  -webkit-transform: rotateY(180deg);
+  unicode-bidi: bidi-override;
+  direction: rtl;
+}
+
+footer .leftright .right .current-theme .text {
+  /* font-family: "Comic Sans MS", "Comic Sans", cursive; */
+}
+
+#caret {
+  background-image: url(https://i.imgur.com/yN31JmJ.png) !important;
+  background-color: transparent !important;
+  background-size: 1rem !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+}
+
+#caret.default {
+  width: 4px !important;
+}
+
+.config .toggleButton {
+  -webkit-transform: rotateY(180deg);
+  unicode-bidi: bidi-override;
+  direction: rtl;
+  align-content: right;
+}
+
+.config .mode .nav-button {
+  -webkit-transform: rotateY(180deg);
+  unicode-bidi: bidi-override;
+  direction: rtl;
+  align-content: right;
+}
+
+.config .wordCount .nav-button,
+.config .time .nav-button,
+.config .quoteLength .nav-button,
+.config .customText .nav-button {
+  -webkit-transform: rotateY(180deg);
+  unicode-bidi: bidi-override;
+  direction: rtl;
+  align-content: right;
+}
+
+header.focus nav .nav-button,
+header.focus nav:before,
+header.focus nav:after {
+  background: var(--sub-color);
+  -webkit-transform: rotateY(180deg) !important;
+}
+
+#logo:hover {
+  -webkit-transform: rotateY(0deg);
+  direction: ltr;
+}
+
+footer .leftright .right .current-theme:hover .fas.fa-fw.fa-palette {
+  -webkit-transform: rotateY(180deg);
+  transition: 0.5s;
+}
+
+nav {
+  gap: 0.5rem;
+}
+
+nav  {
+  border-radius: 10rem i !important;
+  color: var(--bg-color);
+  transition: 0.5s;
+}
+
+nav .nav-button:nth-child(1) {
+  color: #ab92e1;
+}
+
+nav .nav-button:nth-child(2) {
+  color: #f3ea5d;
+}
+
+nav .nav-button:nth-child(3) {
+  color: #7ae1bf;
+}
+
+nav .nav-button:nth-child(4) {
+  color: #ff5869;
+}
+
+nav .nav-button:nth-child(5) {
+  color: #fc76d9;
+}
+
+nav .nav-button:nth-child(6) {
+  color: #fc76d9;
+}
+
+nav .nav-button:nth-child(7) {
+  color: #ab92e1;
+}
+
+nav .nav-button:nth-child(8) {
+  color: #f3ea5d;
+}
+
+body.crtmode nav .nav-button:nth-child(1) {
+  box-shadow: 3px 0 1px color-mix(in srgb, #ab92e1 20%, transparent),
+    -3px 0 color-mix(in srgb, #ab92e1 30%, transparent), 0 0 3px;
+}
+
+body.crtmode nav .nav-button:nth-child(2) {
+  box-shadow: 3px 0 1px color-mix(in srgb, #f3ea5d 20%, transparent),
+    -3px 0 color-mix(in srgb, #f3ea5d 30%, transparent), 0 0 3px;
+}
+
+body.crtmode nav .nav-button:nth-child(3) {
+  box-shadow: 3px 0 1px color-mix(in srgb, #7ae1bf 20%, transparent),
+    -3px 0 color-mix(in srgb, #7ae1bf 30%, transparent), 0 0 3px;
+}
+
+body.crtmode nav .nav-button:nth-child(4) {
+  box-shadow: 3px 0 1px color-mix(in srgb, #ff5869 20%, transparent),
+    -3px 0 color-mix(in srgb, #ff5869 30%, transparent), 0 0 3px;
+}
+
+body.crtmode nav .nav-button:nth-child(5) {
+  box-shadow: 3px 0 1px color-mix(in srgb, #fc76d9 20%, transparent),
+    -3px 0 color-mix(in srgb, #fc76d9 30%, transparent), 0 0 3px;
+}
+
+body.crtmode nav .nav-button:nth-child(6) {
+  box-shadow: 3px 0 1px color-mix(in srgb, #fc76d9 20%, transparent),
+    -3px 0 color-mix(in srgb, #fc76d9 30%, transparent), 0 0 3px;
+}
+
+body.crtmode nav .nav-button:nth-child(7) {
+  box-shadow: 3px 0 1px color-mix(in srgb, #ab92e1 20%, transparent),
+    -3px 0 color-mix(in srgb, #ab92e1 30%, transparent), 0 0 3px;
+}
+
+body.crtmode nav .nav-button:nth-child(8) {
+  box-shadow: 3px 0 1px color-mix(in srgb, #f3ea5d 20%, transparent),
+    -3px 0 color-mix(in srgb, #f3ea5d 30%, transparent), 0 0 3px;
+}
+
+body.crtmode #caret {
+  box-shadow: none !important;
+  filter: drop-shadow(3px 0px 1px var(--crt-main-color-glow))
+    drop-shadow(-3px 0px 0px var(--crt-main-color-glow));
+}
+
+body.crtmode header.focus nav .nav-button {
+  box-shadow: 3px 0 1px var(--crt-sub-color-glow),
+    -3px 0 var(--crt-sub-color-glow);
+}

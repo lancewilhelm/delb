@@ -1,0 +1,87 @@
+:root {
+  --bg-color: #111;
+  --main-color: #eee;
+  --caret-color: #eee;
+  --sub-color: #444;
+  --sub-alt-color: #191919;
+  --text-color: #eee;
+  --error-color: #da3333;
+  --error-extra-color: #791717;
+  --colorful-error-color: #da3333;
+  --colorful-error-extra-color: #791717;
+}
+
+body {
+  scrollbar-color: var(--sub-alt-color) transparent !important;
+}
+
+.chat-list {
+  background-color: var(--bg-color);
+  border-right: 1px solid var(--sub-alt-color);
+}
+
+.header-icon {
+  color: var(--sub-color);
+}
+
+.chat-welcome {
+  display: none;
+}
+
+.chat-input-container {
+  max-width: 100%;
+  margin: 0;
+}
+
+.chat-input-row {
+  padding: 0;
+  background-color: var(--bg-color);
+}
+
+.chat-input {
+  box-shadow: none;
+  border-radius: 0;
+  border: none;
+  background-color: var(--bg-color);
+}
+
+.chat-input-bottom-row * {
+  color: var(--sub-color) !important;
+}
+
+.chat-input-button,
+.stb-button {
+  background-color: var(--sub-color);
+  color: var(--sub-color);
+}
+
+.chat-container-content {
+  max-width: 100%;
+  margin: 0;
+}
+
+.chat-bubble-user-align::before,
+.chat-bubble-assistant-align::before {
+  content: "---";
+}
+
+.chat-bubble-user-align {
+  align-items: flex-start !important;
+}
+
+.chat-bubble-user-content {
+  background-color: var(--bg-color);
+}
+
+.chat-bubble-user-content-inner {
+  padding: 0;
+}
+
+.chat-bubble-buttons-assistant *,
+.chat-bubble-buttons-user * {
+  color: var(--sub-color) !important;
+}
+
+a {
+  text-decoration: underline;
+}
