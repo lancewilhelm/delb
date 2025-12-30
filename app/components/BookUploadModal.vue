@@ -1,0 +1,205 @@
+<script setup lang="ts">
+import { useDropZone } from "@vueuse/core";
+
+// Explicit component name helps Nuxt's DevTools and makes intent clear.
+defineOptions({ name: "BookUploadModal" });
+
+const props = defineProps<{
+    open: boolean;
+}>();
+
+const emit = defineEmits<{
+    (e: "close" | "uploaded"): void;
+}>();
+
+const dropZoneRef = ref<HTMLElement | null>(null);
+const inputRef = ref<HTMLInputElement | null>(null);
+
+const files = ref<File[]>([]);
+const uploading = ref(false);
+const errorMessage = ref<string | null>(null);
+
+function toEpubFiles(list: FileList | File[]): File[] {
+    const arr = Array.from(list);
+    return arr.filter((f) => {
+        const nameOk = f.name.toLowerCase().endsWith(".epub");
+        const typeOk = f.type === "application/epub+zip";
+        // Some browsers may omit `type`, so accept by extension.
+        return nameOk || typeOk;
+    });
+}
+
+function addFiles(newFiles: File[]) {
+    if (!newFiles.length) return;
+    files.value = [...files.value, ...newFiles];
+}
+
+function clearFiles() {
+    files.value = [];
+    if (inputRef.value) inputRef.value.value = "";
+}
+
+function removeFile(file: File) {
+    files.value = files.value.filter((f) => f !== file);
+}
+
+function browse() {
+    inputRef.value?.click();
+}
+
+watch(
+    () => props.open,
+    (open) => {
+        if (open) {
+            // Reset per-open to keep the flow simple/predictable.
+            errorMessage.value = null;
+            uploading.value = false;
+            clearFiles();
+        }
+    },
+);
+
+useDropZone(dropZoneRef, {
+    onDrop(dropped) {
+        if (!dropped) return;
+        addFiles(toEpubFiles(dropped));
+    },
+});
+
+type FetchErrorLike = {
+    data?: { message?: string };
+    statusMessage?: string;
+    message?: string;
+};
+
+async function uploadEpubs() {
+    if (!files.value.length || uploading.value) return;
+
+    uploading.value = true;
+    errorMessage.value = null;
+
+    try {
+        const form = new FormData();
+        for (const f of files.value) {
+            form.append("file", f);
+        }
+
+        await $fetch("/api/books/upload", {
+            method: "POST",
+            body: form,
+        });
+
+        emit("uploaded");
+        emit("close");
+    } catch (err) {
+        const e = err as FetchErrorLike;
+        errorMessage.value =
+            e?.data?.message ||
+            e?.statusMessage ||
+            e?.message ||
+            "Upload failed";
+    } finally {
+        uploading.value = false;
+    }
+}
+</script>
+
+<template>
+    <ModalWindow :open="open" @close="emit('close')">
+        <div class="flex flex-col gap-2 w-[320px]">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <div class="text-lg font-semibold">Upload books</div>
+                    <div class="text-sm opacity-80">
+                        Drop EPUB files here or browse.
+                    </div>
+                </div>
+
+                <icon
+                    name="lucide-x"
+                    class="scale-150 cursor-pointer opacity-80 hover:opacity-100"
+                    @click="emit('close')"
+                />
+            </div>
+
+            <div
+                ref="dropZoneRef"
+                class="border border-dashed rounded-md p-6 flex flex-col items-center justify-center gap-3"
+            >
+                <div class="text-md opacity-80 text-center">
+                    Drag & drop EPUB files here
+                </div>
+                <icon name="lucide-book" class="scale-200 opacity-80" />
+
+                <div class="flex gap-2 items-center">
+                    <input
+                        ref="inputRef"
+                        type="file"
+                        class="hidden"
+                        multiple
+                        accept=".epub,application/epub+zip"
+                        @change="
+                            (e) => {
+                                const picked =
+                                    (e.target as HTMLInputElement).files ??
+                                    undefined;
+                                if (picked) addFiles(toEpubFiles(picked));
+                            }
+                        "
+                    />
+                </div>
+            </div>
+
+            <button class="px-3 py-2 border rounded-md" @click="browse">
+                Browse…
+            </button>
+
+            <div v-if="files.length" class="space-y-2">
+                <div class="text-sm font-semibold">
+                    Pending Uploads:
+                    <span class="font-normal opacity-80">{{
+                        files.length
+                    }}</span>
+                </div>
+
+                <div class="text-sm opacity-80">
+                    <div
+                        v-for="f in files"
+                        :key="`${f.name}-${f.size}-${f.lastModified}`"
+                        class="flex items-center justify-between"
+                    >
+                        <div class="truncate">{{ f.name }}</div>
+                        <icon
+                            name="lucide-x"
+                            class="scale-100 opacity-80 text-(--error-color) cursor-pointer shrink-0"
+                            @click="removeFile(f)"
+                            title="Remove file"
+                        />
+                    </div>
+                </div>
+
+                <div class="flex gap-2 w-full justify-center">
+                    <button
+                        class="px-3 py-2 border rounded-md disabled:opacity-50 w-full"
+                        :disabled="uploading || !files.length"
+                        @click="uploadEpubs"
+                    >
+                        {{ uploading ? "Uploading..." : "Upload" }}
+                    </button>
+
+                    <button
+                        class="px-3 py-2 border rounded-md disabled:opacity-50 w-full hover:bg-(--error-color)!"
+                        :disabled="uploading"
+                        @click="clearFiles"
+                    >
+                        Clear
+                    </button>
+                </div>
+            </div>
+
+            <p v-if="errorMessage" class="text-sm text-red-600">
+                {{ errorMessage }}
+            </p>
+        </div>
+    </ModalWindow>
+</template>

@@ -21,63 +21,44 @@ type Book = {
     createdAt: string | number | Date;
 };
 
-const files = ref<File[]>([]);
-const uploading = ref(false);
+type BooksListResponse = {
+    data?: {
+        books?: Book[];
+    };
+};
+
+type FetchErrorLike = {
+    data?: { message?: string };
+    statusMessage?: string;
+    message?: string;
+};
+
 const errorMessage = ref<string | null>(null);
 
 const books = ref<Book[]>([]);
 const loadingBooks = ref(false);
+
+const uploadModalOpen = ref(false);
 
 async function refreshBooks() {
     loadingBooks.value = true;
     errorMessage.value = null;
 
     try {
-        const res: any = await $fetch("/api/books", { method: "GET" });
+        const res = (await $fetch("/api/books", {
+            method: "GET",
+        })) as BooksListResponse;
+
         books.value = res?.data?.books ?? [];
-    } catch (err: any) {
+    } catch (err) {
+        const e = err as FetchErrorLike;
         errorMessage.value =
-            err?.data?.message ||
-            err?.statusMessage ||
-            err?.message ||
+            e?.data?.message ||
+            e?.statusMessage ||
+            e?.message ||
             "Failed to load books";
     } finally {
         loadingBooks.value = false;
-    }
-}
-
-async function uploadEpubs() {
-    if (!files.value.length) return;
-
-    uploading.value = true;
-    errorMessage.value = null;
-
-    try {
-        const form = new FormData();
-        for (const f of files.value) {
-            form.append("file", f);
-        }
-
-        await $fetch("/api/books/upload", {
-            method: "POST",
-            body: form,
-        });
-
-        files.value = [];
-        const input = document.getElementById(
-            "epub-upload",
-        ) as HTMLInputElement | null;
-        if (input) input.value = "";
-
-        await refreshBooks();
-    } catch (err: any) {
-        errorMessage.value =
-            err?.data?.message ||
-            err?.statusMessage ||
-            err?.message ||
-            "Upload failed";
-    } finally {
-        uploading.value = false;
     }
 }
 
@@ -88,59 +69,15 @@ onMounted(() => {
 
 <template>
     <div class="flex flex-col w-full h-full overflow-hidden">
-        <AppHeader class="w-full" />
+        <AppHeader class="w-full" @upload="uploadModalOpen = true" />
+
+        <BookUploadModal
+            :open="uploadModalOpen"
+            @close="uploadModalOpen = false"
+            @uploaded="refreshBooks"
+        />
 
         <div class="w-full h-full p-4 space-y-6 overflow-auto">
-            <div class="space-y-2">
-                <h2 class="text-xl font-semibold">Delb</h2>
-                <p class="text-sm opacity-80">
-                    Upload an EPUB to add it to your library.
-                </p>
-
-                <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <input
-                        id="epub-upload"
-                        type="file"
-                        multiple
-                        accept=".epub,application/epub+zip"
-                        class="block w-full sm:w-auto"
-                        @change="
-                            (e) => {
-                                files = Array.from(
-                                    (e.target as HTMLInputElement).files ?? [],
-                                );
-                            }
-                        "
-                    />
-
-                    <button
-                        class="px-3 py-2 border rounded-md disabled:opacity-50"
-                        :disabled="!files.length || uploading"
-                        @click="uploadEpubs"
-                    >
-                        {{
-                            uploading
-                                ? "Uploading..."
-                                : files.length > 1
-                                  ? `Upload ${files.length} EPUBs`
-                                  : "Upload EPUB"
-                        }}
-                    </button>
-
-                    <button
-                        class="px-3 py-2 border rounded-md disabled:opacity-50"
-                        :disabled="loadingBooks"
-                        @click="refreshBooks"
-                    >
-                        {{ loadingBooks ? "Refreshing..." : "Refresh" }}
-                    </button>
-                </div>
-
-                <p v-if="errorMessage" class="text-sm text-red-600">
-                    {{ errorMessage }}
-                </p>
-            </div>
-
             <div class="space-y-2">
                 <h3 class="text-lg font-semibold">Books</h3>
 
@@ -149,7 +86,7 @@ onMounted(() => {
                 </div>
 
                 <div v-else-if="books.length === 0" class="text-sm opacity-80">
-                    No books yet. Upload an EPUB above.
+                    No books yet. Use Upload in the header to add one.
                 </div>
 
                 <div v-else class="flex gap-3 flex-wrap">
