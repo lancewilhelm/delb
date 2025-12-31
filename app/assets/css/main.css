@@ -134,15 +134,6 @@ button:focus {
     outline-offset: 3px;
 }
 
-a {
-    border-radius: var(--border-radius);
-}
-
-a:focus {
-    outline: 2px solid var(--main-color);
-    outline-offset: 3px;
-}
-
 table {
     border-collapse: separate; /* Needed for border-radius */
     border-spacing: 0;

@@ -92,17 +92,23 @@ onMounted(() => {
                 <div v-else class="flex gap-3 flex-wrap">
                     <div v-for="b in books" :key="b.id" class="w-45">
                         <div class="flex flex-col gap-1">
-                            <BookCover
-                                :src="
-                                    b.coverImagePath
-                                        ? `/api/media/covers/${b.coverImagePath.replace(/^data\/books\//, '')}`
-                                        : null
-                                "
-                                :alt="`Cover for ${b.title}`"
-                                class="w-37.5 cursor-pointer"
-                            />
+                            <NuxtLink :to="`/books/${b.id}`">
+                                <BookCover
+                                    :src="
+                                        b.coverImagePath
+                                            ? `/api/media/covers/${b.coverImagePath.replace(/^data\/books\//, '')}`
+                                            : null
+                                    "
+                                    :alt="`Cover for ${b.title}`"
+                                    class="cursor-pointer"
+                                />
+                            </NuxtLink>
                             <div class="flex flex-col">
-                                <HoverScrollText>{{ b.title }}</HoverScrollText>
+                                <NuxtLink :to="`/books/${b.id}`" class="flex">
+                                    <HoverScrollText>{{
+                                        b.title
+                                    }}</HoverScrollText>
+                                </NuxtLink>
                                 <HoverScrollText class="opacity-70">{{
                                     b.author
                                 }}</HoverScrollText>

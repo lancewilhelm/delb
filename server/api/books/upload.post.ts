@@ -156,7 +156,7 @@ export default defineEventHandler(async (event) => {
 
   const results: Array<{
     success: boolean;
-    book?: any;
+    book?: unknown;
     filename?: string;
     error?: string;
   }> = [];
@@ -165,15 +165,22 @@ export default defineEventHandler(async (event) => {
     try {
       const book = await processOneEpubUpload(part);
       results.push({ success: true, book, filename: part.filename });
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.error(err, "POST /api/books/upload: Failed to process one upload");
+
+      const e = err as {
+        data?: { message?: string };
+        statusMessage?: string;
+        message?: string;
+      };
+
       results.push({
         success: false,
         filename: part.filename,
         error:
-          err?.data?.message ||
-          err?.statusMessage ||
-          err?.message ||
+          e?.data?.message ||
+          e?.statusMessage ||
+          e?.message ||
           "Failed to upload file",
       });
     }

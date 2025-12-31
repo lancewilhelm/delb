@@ -39,10 +39,7 @@ export default defineEventHandler(async (event) => {
 
   // Path traversal protection: ensure requestedAbs is within booksBaseAbs
   const relToBase = path.relative(booksBaseAbs, requestedAbs);
-  const isOutside =
-    relToBase.startsWith("..") || path.isAbsolute(relToBase) === false
-      ? relToBase.startsWith("..")
-      : false;
+  // NOTE: `path.relative(...)` returns a relative path in normal usage; we rely on `relToBase` checks below.
 
   // The above `isOutside` logic can be simplified, but kept explicit for clarity:
   // - If rel starts with ".." => outside
@@ -86,7 +83,7 @@ export default defineEventHandler(async (event) => {
     setHeader(event, "Cache-Control", "public, max-age=3600");
 
     return buf;
-  } catch (err: any) {
+  } catch {
     // File not found (or unreadable)
     throw createError({ statusCode: 404, statusMessage: "Not found" });
   }
