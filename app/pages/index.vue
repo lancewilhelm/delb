@@ -79,7 +79,7 @@ onMounted(() => {
 
         <div class="w-full h-full p-4 space-y-6 overflow-auto">
             <div class="space-y-2">
-                <h3 class="text-lg font-semibold">Books</h3>
+                <div class="text-4xl font-serif">Books</div>
 
                 <div v-if="loadingBooks" class="text-sm opacity-80">
                     Loading...
@@ -90,7 +90,7 @@ onMounted(() => {
                 </div>
 
                 <div v-else class="flex gap-3 flex-wrap">
-                    <div v-for="b in books" :key="b.id" class="w-45">
+                    <div v-for="b in books" :key="b.id" class="w-43">
                         <div class="flex flex-col gap-1">
                             <NuxtLink :to="`/books/${b.id}`">
                                 <BookCover

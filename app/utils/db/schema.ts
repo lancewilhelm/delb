@@ -73,6 +73,14 @@ export const books = sqliteTable("books", {
   format: text("format").notNull(), // e.g. "epub"
   relativePath: text("relative_path").notNull(), // e.g. "data/books/{author}/{title}/{title}.epub"
   coverImagePath: text("cover_image_path"), // e.g. "data/books/{author}/{title}/cover.jpg"
+
+  // Extended EPUB metadata (best-effort; may be null/undefined)
+  description: text("description"),
+  publisher: text("publisher"),
+  published: text("published"), // stored as raw string from EPUB metadata (e.g. "2020-01-01")
+  language: text("language"),
+  identifier: text("identifier"),
+
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),

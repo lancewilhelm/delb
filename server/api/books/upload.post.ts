@@ -14,11 +14,20 @@ import {
   toSafePathSegment,
 } from "~~/server/utils/books/fs";
 
+/**
+ * Get the extension of a filename.
+ * @param filename
+ * @returns
+ */
 function getExtension(filename: string): string {
   const ext = path.extname(filename || "").toLowerCase();
   return ext.startsWith(".") ? ext.slice(1) : ext;
 }
 
+/**
+ * Ensure that the filename is an EPUB file.
+ * @param filename
+ */
 function ensureEpub(filename: string) {
   const ext = getExtension(filename);
   if (ext !== "epub") {
@@ -36,6 +45,11 @@ type MultipartFilePart = {
   data?: Buffer;
 };
 
+/**
+ * Process a single EPUB upload.
+ * @param filePart
+ * @returns object containing the book's metadata and the path to the cover image
+ */
 async function processOneEpubUpload(filePart: MultipartFilePart) {
   if (!filePart.filename || !filePart.data) {
     throw createError({ statusCode: 400, statusMessage: "Missing EPUB file" });
@@ -110,6 +124,14 @@ async function processOneEpubUpload(filePart: MultipartFilePart) {
     format: "epub",
     relativePath: epubRelativePath,
     coverImagePath,
+
+    // Persist extended metadata (best-effort)
+    description: (meta.description || null) as string | null,
+    publisher: (meta.publisher || null) as string | null,
+    published: (meta.published || null) as string | null,
+    language: (meta.language || null) as string | null,
+    identifier: (meta.identifier || null) as string | null,
+
     createdAt: now,
   });
 

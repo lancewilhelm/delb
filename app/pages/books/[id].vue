@@ -18,6 +18,13 @@ type Book = {
     format: string;
     relativePath: string;
     coverImagePath?: string | null;
+
+    // Extended metadata (best-effort; may be null/undefined)
+    description?: string | null;
+    publisher?: string | null;
+    published?: string | null;
+    language?: string | null;
+
     createdAt: string | number | Date;
 };
 
@@ -46,6 +53,119 @@ const { isAdmin } = useAuth();
 
 const showDeleteConfirm = ref(false);
 const deleting = ref(false);
+
+const descriptionExpanded = ref(false);
+
+function sanitizeDescriptionHtml(input: string): string {
+    // Minimal, conservative sanitizer:
+    // - remove <script> / <style>
+    // - strip inline event handlers (onclick, onload, etc)
+    // - disallow javascript: URLs / data: URLs
+    // - allow a limited set of tags, unwrap others (keep text)
+    //
+    // If parsing fails, fall back to plain text.
+    if (typeof window === "undefined") {
+        // During SSR we avoid DOM parsing (and also avoid rendering raw HTML server-side).
+        return "";
+    }
+
+    try {
+        const doc = document.implementation.createHTMLDocument("");
+        const container = doc.createElement("div");
+        container.innerHTML = input ?? "";
+
+        // Remove dangerous elements entirely
+        for (const el of Array.from(
+            container.querySelectorAll("script,style,iframe,object,embed"),
+        )) {
+            el.remove();
+        }
+
+        // Allowed tags (basic book-description formatting)
+        const allowedTags = new Set([
+            "DIV",
+            "P",
+            "BR",
+            "EM",
+            "I",
+            "STRONG",
+            "B",
+            "UL",
+            "OL",
+            "LI",
+            "BLOCKQUOTE",
+            "A",
+            "SPAN",
+        ]);
+
+        const walk = (node: Node) => {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+                const el = node as HTMLElement;
+
+                // Remove event handlers + risky attributes
+                for (const attr of Array.from(el.attributes)) {
+                    const name = attr.name.toLowerCase();
+                    const value = attr.value;
+
+                    if (name.startsWith("on")) {
+                        el.removeAttribute(attr.name);
+                        continue;
+                    }
+
+                    if (name === "href" || name === "src") {
+                        const v = String(value || "")
+                            .trim()
+                            .toLowerCase();
+                        if (
+                            v.startsWith("javascript:") ||
+                            v.startsWith("data:")
+                        ) {
+                            el.removeAttribute(attr.name);
+                            continue;
+                        }
+                    }
+
+                    // Keep only a small set of harmless attributes
+                    if (
+                        name !== "href" &&
+                        name !== "title" &&
+                        name !== "style"
+                    ) {
+                        el.removeAttribute(attr.name);
+                    }
+                }
+
+                // If tag not allowed, unwrap it (replace element with its children)
+                if (!allowedTags.has(el.tagName)) {
+                    const parent = el.parentNode;
+                    if (parent) {
+                        while (el.firstChild) {
+                            parent.insertBefore(el.firstChild, el);
+                        }
+                        parent.removeChild(el);
+                        return;
+                    }
+                }
+            }
+
+            for (const child of Array.from(node.childNodes)) {
+                walk(child);
+            }
+        };
+
+        walk(container);
+
+        return container.innerHTML;
+    } catch {
+        return "";
+    }
+}
+
+const safeDescriptionHtml = computed(() => {
+    const desc = book.value?.description;
+    if (!desc) return "";
+    return sanitizeDescriptionHtml(desc);
+});
 
 const coverUrl = computed(() => {
     const b = book.value;
@@ -223,9 +343,14 @@ watch(
                 {{ errorMessage }}
             </div>
 
-            <div v-else-if="book" class="grid gap-6 md:grid-cols-[320px_1fr]">
+            <div
+                v-else-if="book"
+                class="grid gap-6 md:grid-cols-[320px_1fr] items-start"
+            >
                 <!-- Cover (left) -->
-                <div class="max-w-[200px] md:max-w-[320px]">
+                <div
+                    class="flex flex-col justify-center items-center max-w-[200px] md:max-w-[320px]"
+                >
                     <!-- Keep a consistent aspect ratio; cover itself is max 320px wide -->
                     <div class="w-full aspect-[2/3]">
                         <BookCover
@@ -234,50 +359,6 @@ watch(
                             class="w-full h-full"
                         />
                     </div>
-                </div>
-
-                <!-- Details (right) -->
-                <div class="min-w-0 flex flex-col gap-4">
-                    <div class="min-w-0 space-y-1">
-                        <div class="text-4xl leading-tight font-serif">
-                            {{ book.title }}
-                        </div>
-
-                        <div class="text-xl font-light opacity-80 font-serif">
-                            <span>{{ book.author }}</span>
-                        </div>
-                    </div>
-
-                    <div class="grid gap-2 text-sm">
-                        <div class="grid grid-cols-[110px_1fr] gap-2">
-                            <div class="opacity-70">Format</div>
-                            <div class="min-w-0">{{ book.format }}</div>
-                        </div>
-
-                        <div class="grid grid-cols-[110px_1fr] gap-2">
-                            <div class="opacity-70">Added</div>
-                            <div class="min-w-0">
-                                {{
-                                    typeof book.createdAt === "string" ||
-                                    typeof book.createdAt === "number"
-                                        ? new Date(
-                                              book.createdAt,
-                                          ).toLocaleString()
-                                        : new Date(
-                                              book.createdAt,
-                                          ).toLocaleString()
-                                }}
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-[110px_1fr] gap-2">
-                            <div class="opacity-70">Path</div>
-                            <div class="min-w-0 break-all opacity-80">
-                                {{ book.relativePath }}
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- Actions -->
                     <div class="flex flex-wrap gap-1 pt-2">
                         <button
@@ -310,6 +391,120 @@ watch(
                             <icon name="lucide:trash-2" class="scale-135" />
                             Delete
                         </button>
+                    </div>
+                </div>
+
+                <!-- Details (right) -->
+                <div class="min-w-0 flex flex-col gap-4">
+                    <div class="min-w-0 space-y-1">
+                        <div class="text-4xl leading-tight font-serif">
+                            {{ book.title }}
+                        </div>
+
+                        <div class="text-xl font-light opacity-80 font-serif">
+                            <span>{{ book.author }}</span>
+                        </div>
+
+                        <div
+                            v-if="book.description"
+                            class="font-light prose prose-sm max-w-none text-(--text-color) opacity-90"
+                        >
+                            <div class="relative">
+                                <div
+                                    :class="[
+                                        descriptionExpanded
+                                            ? ''
+                                            : 'max-h-[300px] overflow-hidden',
+                                    ]"
+                                >
+                                    <ClientOnly>
+                                        <!-- eslint-disable-next-line vue/no-v-html -->
+                                        <!--
+                                            We intentionally render EPUB descriptions as HTML.
+                                            XSS mitigation: `safeDescriptionHtml` is sanitized client-side
+                                            (scripts/iframes removed, inline handlers stripped, javascript:/data: URLs removed,
+                                            and only a small allowlist of tags/attrs is preserved).
+                                        -->
+                                        <!-- eslint-disable-next-line vue/no-v-html -->
+                                        <div v-html="safeDescriptionHtml" />
+                                        <template #fallback>
+                                            <span>{{ book.description }}</span>
+                                        </template>
+                                    </ClientOnly>
+                                </div>
+
+                                <div
+                                    v-if="!descriptionExpanded"
+                                    class="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-(--bg-color) to-transparent"
+                                />
+                            </div>
+
+                            <div
+                                class="mt-2 text-sm underline opacity-80 hover:opacity-100 cursor-pointer"
+                                @click="
+                                    descriptionExpanded = !descriptionExpanded
+                                "
+                            >
+                                {{
+                                    descriptionExpanded
+                                        ? "Read less"
+                                        : "Read more..."
+                                }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid gap-2 text-sm">
+                        <div
+                            v-if="book.publisher"
+                            class="grid grid-cols-[110px_1fr] gap-2"
+                        >
+                            <div class="opacity-70">Publisher</div>
+                            <div class="min-w-0">{{ book.publisher }}</div>
+                        </div>
+
+                        <div
+                            v-if="book.published"
+                            class="grid grid-cols-[110px_1fr] gap-2"
+                        >
+                            <div class="opacity-70">Published</div>
+                            <div class="min-w-0">{{ book.published }}</div>
+                        </div>
+
+                        <div
+                            v-if="book.language"
+                            class="grid grid-cols-[110px_1fr] gap-2"
+                        >
+                            <div class="opacity-70">Language</div>
+                            <div class="min-w-0">{{ book.language }}</div>
+                        </div>
+
+                        <div class="grid grid-cols-[110px_1fr] gap-2">
+                            <div class="opacity-70">Added</div>
+                            <div class="min-w-0">
+                                {{
+                                    typeof book.createdAt === "string" ||
+                                    typeof book.createdAt === "number"
+                                        ? new Date(
+                                              book.createdAt,
+                                          ).toLocaleString()
+                                        : new Date(
+                                              book.createdAt,
+                                          ).toLocaleString()
+                                }}
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-[110px_1fr] gap-2">
+                            <div class="opacity-70">Path</div>
+                            <div class="min-w-0 break-all opacity-80">
+                                {{ book.relativePath }}
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-[110px_1fr] gap-2">
+                            <div class="opacity-70">Format</div>
+                            <div class="min-w-0">{{ book.format }}</div>
+                        </div>
                     </div>
 
                     <ModalWindow
@@ -361,17 +556,6 @@ watch(
                             </div>
                         </div>
                     </ModalWindow>
-
-                    <!-- Future sections placeholder -->
-                    <div
-                        class="pt-4 border-t border-(--sub-color)/40 space-y-2"
-                    >
-                        <div class="text-sm font-medium">Details</div>
-                        <div class="text-sm opacity-70">
-                            More metadata (series, publisher, identifiers,
-                            description) can be added here later.
-                        </div>
-                    </div>
                 </div>
             </div>
 

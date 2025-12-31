@@ -6,10 +6,14 @@ import path from "node:path";
 export type EpubMetadata = {
   title: string;
   author: string;
+  description?: string;
   language?: string;
   identifier?: string;
   publisher?: string;
   published?: string;
+  subject?: string;
+  ISBN?: string;
+  UUID?: string;
 };
 
 function firstNonEmpty(...values: Array<unknown>): string | undefined {
@@ -29,6 +33,9 @@ function firstNonEmpty(...values: Array<unknown>): string | undefined {
  * - `epub2` expects a file path (string) in its constructor, so we write the buffer
  *   to a temporary file and parse from there.
  * - For MVP we only *require* `title` and `author` (fallbacks applied).
+ * @param buffer
+ * @param opts
+ * @returns a promise that resolves to an object containing the book's metadata and the path to the cover image
  */
 export async function parseEpubMetadataFromBuffer(
   buffer: Buffer,
@@ -72,19 +79,27 @@ export async function parseEpubMetadataFromBuffer(
               m["dc:creator"],
             ) ?? "Unknown Author";
 
+          const description = firstNonEmpty(m.description, m["dc:description"]);
           const language = firstNonEmpty(m.language, m["dc:language"]);
           const identifier = firstNonEmpty(m.identifier, m["dc:identifier"]);
           const publisher = firstNonEmpty(m.publisher, m["dc:publisher"]);
+          const subject = firstNonEmpty(m.subject, m["dc:subject"]);
           const published = firstNonEmpty(m.date, m["dc:date"]);
+          const ISBN = firstNonEmpty(m.ISBN, m["dc:ISBN"]);
+          const UUID = firstNonEmpty(m.UUID, m["dc:UUID"]);
 
           cleanup();
           resolve({
             title,
             author,
+            description,
             language,
             identifier,
             publisher,
             published,
+            subject,
+            ISBN,
+            UUID,
           });
         } catch (e) {
           cleanup();
