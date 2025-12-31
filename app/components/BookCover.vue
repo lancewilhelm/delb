@@ -19,13 +19,14 @@ type Props = {
     /**
      * Optional extra classes to apply to the outer wrapper.
      */
-    class?: string;
+    class?: string | undefined;
 };
 
 const props = withDefaults(defineProps<Props>(), {
     src: null,
     alt: "Book cover",
     showPlaceholder: true,
+    class: undefined,
 });
 
 // Vue will merge `class` on the root automatically, but we keep a prop for explicitness.

@@ -9,6 +9,8 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "prepare:nuxt": "nuxt prepare",
+    "typecheck": "nuxt typecheck",
+    "lint": "eslint . --ext .vue,.js,.ts,.jsx,.tsx",
     "postinstall": "sh -c 'if [ \"${NUXT_PREPARE:-}\" = \"1\" ] || [ \"${NUXT_PREPARE:-}\" = \"true\" ]; then nuxt prepare; else echo \"Skipping nuxt prepare (set NUXT_PREPARE=1 to enable)\"; fi'",
     "db:push": "npx -y -p esbuild@0.25.12 -p drizzle-kit@0.31.8 drizzle-kit push",
     "db:generate": "npx -y -p esbuild@0.25.12 -p drizzle-kit@0.31.8 drizzle-kit generate",

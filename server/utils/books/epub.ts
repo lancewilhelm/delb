@@ -51,7 +51,14 @@ export async function parseEpubMetadataFromBuffer(
 
       const onEnd = () => {
         try {
-          const m: any = (epub as any).metadata ?? {};
+          const metadataUnknown: unknown = (
+            epub as unknown as { metadata?: unknown }
+          ).metadata;
+
+          const m =
+            metadataUnknown && typeof metadataUnknown === "object"
+              ? (metadataUnknown as Record<string, unknown>)
+              : {};
 
           const title = firstNonEmpty(m.title, m["dc:title"]) ?? fallbackTitle;
 
@@ -86,12 +93,18 @@ export async function parseEpubMetadataFromBuffer(
       };
 
       const cleanup = () => {
-        epub.removeListener("error", onError as any);
-        epub.removeListener("end", onEnd as any);
+        epub.removeListener(
+          "error",
+          onError as unknown as (...args: unknown[]) => void,
+        );
+        epub.removeListener(
+          "end",
+          onEnd as unknown as (...args: unknown[]) => void,
+        );
       };
 
-      epub.on("error", onError as any);
-      epub.on("end", onEnd as any);
+      epub.on("error", onError as unknown as (...args: unknown[]) => void);
+      epub.on("end", onEnd as unknown as (...args: unknown[]) => void);
 
       // Triggers parsing
       epub.parse();

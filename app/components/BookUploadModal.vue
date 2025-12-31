@@ -170,10 +170,10 @@ async function uploadEpubs() {
                     >
                         <div class="truncate">{{ f.name }}</div>
                         <icon
+                            v-tooltip="'Remove file'"
                             name="lucide-x"
                             class="scale-100 opacity-80 text-(--error-color) cursor-pointer shrink-0"
                             @click="removeFile(f)"
-                            title="Remove file"
                         />
                     </div>
                 </div>

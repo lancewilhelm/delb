@@ -80,36 +80,60 @@ export async function extractAndStoreEpubCover(opts: {
         cleanup();
         resolve();
       };
+
+      const onErrorListener = onError as unknown as (
+        ...args: unknown[]
+      ) => void;
+      const onEndListener = onEnd as unknown as (...args: unknown[]) => void;
+
       const cleanup = () => {
-        epub.removeListener("error", onError as any);
-        epub.removeListener("end", onEnd as any);
+        epub.removeListener("error", onErrorListener);
+        epub.removeListener("end", onEndListener);
       };
 
-      epub.on("error", onError as any);
-      epub.on("end", onEnd as any);
+      epub.on("error", onErrorListener);
+      epub.on("end", onEndListener);
       epub.parse();
     });
 
   await parse();
 
-  // `epub2` has a few shapes across versions; treat as `any` and probe safely.
-  const anyEpub: any = epub as any;
+  type EpubManifestItem = {
+    id?: string;
+    href?: string;
+    mediaType?: string;
+  };
+
+  type EpubLike = {
+    cover?: unknown;
+    manifest?: Record<string, EpubManifestItem> | unknown;
+    getImage?: (
+      id: string,
+      cb: (err: unknown, data: unknown, mime?: unknown) => void,
+    ) => void;
+    getFile?: (
+      idOrHref: string,
+      cb: (err: unknown, data: unknown, mime?: unknown) => void,
+    ) => void;
+  };
+
+  const anyEpub = epub as unknown as EpubLike;
 
   // `cover` is sometimes a file id/href; sometimes object; sometimes undefined.
   const coverRef: unknown = anyEpub?.cover;
-  const manifest: Array<any> | undefined =
-    anyEpub?.manifest && typeof anyEpub.manifest === "object"
-      ? Object.values(anyEpub.manifest)
+
+  const manifest: EpubManifestItem[] | undefined =
+    anyEpub?.manifest &&
+    typeof anyEpub.manifest === "object" &&
+    !Array.isArray(anyEpub.manifest)
+      ? (Object.values(anyEpub.manifest as Record<string, EpubManifestItem>) ??
+        undefined)
       : undefined;
 
   const isImageMime = (mt?: string) =>
     typeof mt === "string" && mt.toLowerCase().startsWith("image/");
 
-  const pickCoverCandidate = (): {
-    id?: string;
-    href?: string;
-    mediaType?: string;
-  } | null => {
+  const pickCoverCandidate = (): EpubManifestItem | null => {
     // 1) Try an explicit cover reference if it looks like an id/href
     if (typeof coverRef === "string" && coverRef.trim()) {
       // Might be an id in the manifest or an href.
@@ -117,7 +141,7 @@ export async function extractAndStoreEpubCover(opts: {
         manifest?.find((m) => m?.id === coverRef) ??
         manifest?.find((m) => m?.href === coverRef) ??
         null;
-      if (byId && isImageMime(byId?.mediaType)) {
+      if (byId && isImageMime(byId.mediaType)) {
         return { id: byId.id, href: byId.href, mediaType: byId.mediaType };
       }
 
@@ -139,17 +163,15 @@ export async function extractAndStoreEpubCover(opts: {
         }))
         ?.sort((a, b) => b.score - a.score) ?? [];
 
-    if (candidates.length) {
-      const best = candidates[0];
-      if (best.score > 0) {
-        return { id: best.id, href: best.href, mediaType: best.mediaType };
-      }
+    const best = candidates[0];
+    if (best && best.score > 0) {
+      return { id: best.id, href: best.href, mediaType: best.mediaType };
     }
 
     return null;
   };
 
-  const scoreCoverCandidate = (m: any): number => {
+  const scoreCoverCandidate = (m: EpubManifestItem): number => {
     const id = (m?.id ?? "").toString().toLowerCase();
     const href = (m?.href ?? "").toString().toLowerCase();
     const mt = (m?.mediaType ?? "").toString().toLowerCase();
@@ -180,32 +202,48 @@ export async function extractAndStoreEpubCover(opts: {
     mimeType: string;
   } | null> => {
     // Many `epub2` builds provide `getImage(id, cb)` and/or `getFile(idOrHref, cb)`.
-    const getImage = anyEpub?.getImage?.bind(epub);
-    const getFile = anyEpub?.getFile?.bind(epub);
+    const getImage = anyEpub?.getImage?.bind(epub) as
+      | ((
+          id: string,
+          cb: (err: unknown, data: unknown, mime?: unknown) => void,
+        ) => void)
+      | undefined;
 
-    const wrapCb = <T>(
-      fn: (...args: any[]) => void,
-      ...args: any[]
-    ): Promise<T> =>
-      new Promise<T>((resolve, reject) => {
-        fn(...args, (err: any, data: any, mime?: any) => {
+    const getFile = anyEpub?.getFile?.bind(epub) as
+      | ((
+          idOrHref: string,
+          cb: (err: unknown, data: unknown, mime?: unknown) => void,
+        ) => void)
+      | undefined;
+
+    const wrapCb = (
+      fn:
+        | ((
+            idOrHref: string,
+            cb: (err: unknown, data: unknown, mime?: unknown) => void,
+          ) => void)
+        | ((
+            id: string,
+            cb: (err: unknown, data: unknown, mime?: unknown) => void,
+          ) => void),
+      idOrHref: string,
+    ): Promise<[unknown, unknown]> =>
+      new Promise<[unknown, unknown]>((resolve, reject) => {
+        fn(idOrHref, (err, data, mime) => {
           if (err) return reject(err);
-          resolve([data, mime] as any);
+          resolve([data, mime]);
         });
       });
 
     // Try cover by id first (more reliable than href in `epub2`)
     if (candidate.id && typeof getImage === "function") {
       try {
-        const [data, mime] = (await wrapCb<any>(getImage, candidate.id)) as [
-          Buffer,
-          string | undefined,
-        ];
+        const [data, mime] = await wrapCb(getImage, candidate.id);
         if (Buffer.isBuffer(data)) {
           return {
             bytes: data,
             mimeType: (
-              mime ||
+              (typeof mime === "string" ? mime : undefined) ||
               candidate.mediaType ||
               "application/octet-stream"
             ).toString(),
@@ -219,15 +257,12 @@ export async function extractAndStoreEpubCover(opts: {
     // Try getFile by id
     if (candidate.id && typeof getFile === "function") {
       try {
-        const [data, mime] = (await wrapCb<any>(getFile, candidate.id)) as [
-          Buffer,
-          string | undefined,
-        ];
+        const [data, mime] = await wrapCb(getFile, candidate.id);
         if (Buffer.isBuffer(data)) {
           return {
             bytes: data,
             mimeType: (
-              mime ||
+              (typeof mime === "string" ? mime : undefined) ||
               candidate.mediaType ||
               "application/octet-stream"
             ).toString(),
@@ -241,15 +276,12 @@ export async function extractAndStoreEpubCover(opts: {
     // Try getFile by href
     if (candidate.href && typeof getFile === "function") {
       try {
-        const [data, mime] = (await wrapCb<any>(getFile, candidate.href)) as [
-          Buffer,
-          string | undefined,
-        ];
+        const [data, mime] = await wrapCb(getFile, candidate.href);
         if (Buffer.isBuffer(data)) {
           return {
             bytes: data,
             mimeType: (
-              mime ||
+              (typeof mime === "string" ? mime : undefined) ||
               candidate.mediaType ||
               "application/octet-stream"
             ).toString(),

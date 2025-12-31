@@ -45,9 +45,9 @@ async function refreshBooks() {
     errorMessage.value = null;
 
     try {
-        const res = (await $fetch("/api/books", {
+        const res = await $fetch<BooksListResponse>("/api/books", {
             method: "GET",
-        })) as BooksListResponse;
+        });
 
         books.value = res?.data?.books ?? [];
     } catch (err) {

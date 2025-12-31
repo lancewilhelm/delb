@@ -20,9 +20,21 @@ export function toSafePathSegment(input: string, fallback = "unknown"): string {
   let s = raw.normalize("NFKC");
 
   // Replace path separators & common unsafe characters with spaces
-  s = s.replace(/[\/\\]/g, " ");
-  s = s.replace(/[\u0000-\u001F\u007F]/g, " "); // control chars
-  s = s.replace(/[<>:"|?*\u0000]/g, " "); // Windows-reserved + NUL
+  s = s.replace(/[\\/]/g, " ");
+
+  // Avoid embedding control characters in regex literals (lint rule: `no-control-regex`).
+  // Filter control chars via codepoints instead of regex.
+  s = Array.from(s)
+    .filter((ch) => {
+      const cp = ch.codePointAt(0);
+      if (cp === undefined) return false;
+      // Exclude ASCII control chars + DEL
+      return !(cp <= 0x1f || cp === 0x7f);
+    })
+    .join("");
+
+  // Windows-reserved characters (NUL already removed above)
+  s = s.replace(/[<>:"|?*]/g, " ");
 
   // Avoid dot segments / traversal
   s = s.replace(/\.\.+/g, ".");
