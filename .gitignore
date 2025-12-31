@@ -23,5 +23,10 @@ logs
 .env.*
 !.env.example
 
-# data
+# data (keep folder via placeholder file: data/.gitkeep)
 data/
+!data/.gitkeep
+
+# books storage (keep folder via placeholder file: books/.gitkeep)
+books/
+!books/.gitkeep
