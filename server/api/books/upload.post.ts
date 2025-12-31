@@ -72,7 +72,7 @@ async function processOneEpubUpload(filePart: MultipartFilePart) {
   const safeAuthor = toSafePathSegment(author, "Unknown Author");
   const safeTitle = toSafePathSegment(title, "Untitled");
 
-  // Store as: data/books/{author}/{title}/{title}.epub
+  // Store as: books/{author}/{title}/{title}.epub
   const epubRelativePath = buildBookRelativePath({
     author: safeAuthor,
     title: safeTitle,

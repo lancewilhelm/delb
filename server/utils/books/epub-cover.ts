@@ -9,7 +9,7 @@ import sharp from "sharp";
  */
 export type ExtractedCover = {
   /**
-   * Relative path where the cover was written (POSIX-style, e.g. `data/books/A/T/cover.webp`)
+   * Relative path where the cover was written (POSIX-style, e.g. `books/A/T/cover.webp`)
    */
   relativePath: string;
   /**
@@ -50,7 +50,7 @@ export async function extractAndStoreEpubCover(opts: {
   outputDirAbsolute: string;
 
   /**
-   * Relative path (POSIX) to store in the DB (e.g. `data/books/A/T/cover.webp`).
+   * Relative path (POSIX) to store in the DB (e.g. `books/A/T/cover.webp`).
    * The function will write the cover image to the absolute equivalent of this.
    */
   outputRelativePathPosix: string;

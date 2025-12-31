@@ -57,7 +57,7 @@ export function toSafePathSegment(input: string, fallback = "unknown"): string {
 
 /**
  * Build the relative storage path for a book file:
- *   data/books/{author}/{title}/{filename}
+ *   books/{author}/{title}/{filename}
  *
  * Returns a *relative* POSIX-style path (forward slashes) suitable for storing in DB.
  */
@@ -72,7 +72,7 @@ export function buildBookRelativePath(opts: {
 
   // Always store as a forward-slash path in DB for portability.
   // (We'll resolve to an absolute FS path at runtime server-side.)
-  return ["data", "books", authorDir, titleDir, fileName].join("/");
+  return ["books", authorDir, titleDir, fileName].join("/");
 }
 
 /**

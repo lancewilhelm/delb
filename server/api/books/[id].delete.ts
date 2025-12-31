@@ -13,12 +13,12 @@ import { auth } from "~/utils/auth";
  *
  * Admin-only endpoint that deletes:
  * - the book row from the database
- * - the associated files from disk under `<projectRoot>/data`
+ * - the associated files from disk under `<projectRoot>/books`
  *
  * Notes:
  * - Book paths are stored in DB as `relativePath` and `coverImagePath`
- *   (both typically prefixed with `data/...`).
- * - We resolve those safely under `<projectRoot>/data` and block path traversal.
+ *   (both typically prefixed with `books/...`).
+ * - We resolve those safely under `<projectRoot>/books` and block path traversal.
  * - If the book directory becomes empty after deletion, we attempt to remove it
  *   (best-effort).
  */
@@ -30,7 +30,10 @@ export default defineEventHandler(async (event) => {
     headers: event.headers,
   });
 
-  if (!session || (session.user.role !== "admin" && session.user.role !== "owner")) {
+  if (
+    !session ||
+    (session.user.role !== "admin" && session.user.role !== "owner")
+  ) {
     setResponseStatus(event, 401);
     return { success: false, message: "Unauthorized" };
   }
@@ -51,15 +54,15 @@ export default defineEventHandler(async (event) => {
       return { success: false, message: "Book not found" };
     }
 
-    const dataBaseAbs = path.resolve(process.cwd(), "data");
+    const booksBaseAbs = path.resolve(process.cwd(), "books");
 
-    const resolveUnderData = (storedPath: string) => {
-      // Stored paths usually look like: "data/books/Author/Title/file.ext"
-      // Normalize to path relative to `<projectRoot>/data`
-      const relFromData = storedPath.replace(/^data[\\/]/, "");
-      const abs = path.resolve(dataBaseAbs, relFromData);
+    const resolveUnderBooks = (storedPath: string) => {
+      // Stored paths usually look like: "books/Author/Title/file.ext"
+      // Normalize to path relative to `<projectRoot>/books`
+      const relFromBooks = storedPath.replace(/^books[\\/]/, "");
+      const abs = path.resolve(booksBaseAbs, relFromBooks);
 
-      const relToBase = path.relative(dataBaseAbs, abs);
+      const relToBase = path.relative(booksBaseAbs, abs);
       if (relToBase.startsWith("..") || relToBase.includes(`..${path.sep}`)) {
         throw createError({ statusCode: 400, statusMessage: "Invalid path" });
       }
@@ -67,8 +70,12 @@ export default defineEventHandler(async (event) => {
       return abs;
     };
 
-    const fileAbs = book.relativePath ? resolveUnderData(book.relativePath) : null;
-    const coverAbs = book.coverImagePath ? resolveUnderData(book.coverImagePath) : null;
+    const fileAbs = book.relativePath
+      ? resolveUnderBooks(book.relativePath)
+      : null;
+    const coverAbs = book.coverImagePath
+      ? resolveUnderBooks(book.coverImagePath)
+      : null;
 
     // Determine the book directory (best effort; based on the EPUB path)
     const bookDirAbs = fileAbs ? path.dirname(fileAbs) : null;
@@ -82,7 +89,10 @@ export default defineEventHandler(async (event) => {
       try {
         await rm(coverAbs, { force: true });
       } catch (e) {
-        logger.warn(e, "DELETE /api/books/:id: Failed to delete cover (continuing)");
+        logger.warn(
+          e,
+          "DELETE /api/books/:id: Failed to delete cover (continuing)",
+        );
       }
     }
 
@@ -91,7 +101,10 @@ export default defineEventHandler(async (event) => {
       try {
         await rm(fileAbs, { force: true });
       } catch (e) {
-        logger.warn(e, "DELETE /api/books/:id: Failed to delete book file (continuing)");
+        logger.warn(
+          e,
+          "DELETE /api/books/:id: Failed to delete book file (continuing)",
+        );
       }
     }
 

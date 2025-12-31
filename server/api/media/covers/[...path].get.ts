@@ -5,17 +5,17 @@ import { logger } from "~/utils/logger";
 
 /**
  * Serves cover images stored under:
- *   <projectRoot>/data/books/<author>/<title>/cover.jpg (or other image types)
+ *   <projectRoot>/books/<author>/<title>/cover.jpg (or other image types)
  *
  * Request path:
- *   GET /api/media/covers/<relative path under data/books>
+ *   GET /api/media/covers/<relative path under books>
  *
  * Example:
  *   /api/media/covers/Matt Dinniman/Dungeon Crawler Carl/cover.jpg
  *
  * Security:
  * - Prevents path traversal by resolving and ensuring the resolved path
- *   stays within the `data/books` directory.
+ *   stays within the `books` directory.
  *
  * Notes:
  * - This endpoint is intentionally minimal for the MVP.
@@ -30,7 +30,7 @@ export default defineEventHandler(async (event) => {
       : [];
 
   // Base directory for all book assets
-  const booksBaseAbs = path.resolve(process.cwd(), "data", "books");
+  const booksBaseAbs = path.resolve(process.cwd(), "books");
 
   // Join provided path under the base dir
   // Note: route params come URL-decoded by Nitro, but we decode defensively.

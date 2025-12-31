@@ -14,8 +14,8 @@ import { auth } from "~/utils/auth";
  * Authenticated endpoint that streams the stored book file (EPUB for the MVP).
  *
  * Notes:
- * - Uses the book's `relativePath` (stored like `data/books/.../*.epub`) and resolves
- *   it safely under `<projectRoot>/data`.
+ * - Uses the book's `relativePath` (stored like `books/.../*.epub`) and resolves
+ *   it safely under `<projectRoot>/books`.
  * - Includes path traversal protection.
  * - Sends Content-Disposition: attachment for download.
  */
@@ -51,14 +51,14 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Resolve the stored file path safely under <projectRoot>/data
-  // Stored `relativePath` is currently like: data/books/<author>/<title>/<title>.epub
-  const dataBaseAbs = path.resolve(process.cwd(), "data");
-  const relFromData = book.relativePath.replace(/^data[\\/]/, "");
-  const fileAbs = path.resolve(dataBaseAbs, relFromData);
+  // Resolve the stored file path safely under <projectRoot>/books
+  // Stored `relativePath` is currently like: books/<author>/<title>/<title>.epub
+  const booksBaseAbs = path.resolve(process.cwd(), "books");
+  const relFromBooks = book.relativePath.replace(/^books[\\/]/, "");
+  const fileAbs = path.resolve(booksBaseAbs, relFromBooks);
 
-  // Path traversal protection: must remain under dataBaseAbs
-  const relToBase = path.relative(dataBaseAbs, fileAbs);
+  // Path traversal protection: must remain under booksBaseAbs
+  const relToBase = path.relative(booksBaseAbs, fileAbs);
   if (relToBase.startsWith("..") || relToBase.includes(`..${path.sep}`)) {
     logger.warn(
       { id, relativePath: book.relativePath },

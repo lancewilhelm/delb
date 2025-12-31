@@ -71,8 +71,8 @@ export const books = sqliteTable("books", {
   title: text("title").notNull(),
   author: text("author").notNull(),
   format: text("format").notNull(), // e.g. "epub"
-  relativePath: text("relative_path").notNull(), // e.g. "data/books/{author}/{title}/{title}.epub"
-  coverImagePath: text("cover_image_path"), // e.g. "data/books/{author}/{title}/cover.jpg"
+  relativePath: text("relative_path").notNull(), // e.g. "books/{author}/{title}/{title}.epub"
+  coverImagePath: text("cover_image_path"), // e.g. "books/{author}/{title}/cover.jpg"
 
   // Extended EPUB metadata (best-effort; may be null/undefined)
   description: text("description"),

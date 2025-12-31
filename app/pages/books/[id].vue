@@ -171,9 +171,9 @@ const coverUrl = computed(() => {
     const b = book.value;
     if (!b?.coverImagePath) return null;
 
-    // Stored as: data/books/<author>/<title>/cover.webp
-    // API expects: /api/media/covers/<path under data/books>
-    return `/api/media/covers/${b.coverImagePath.replace(/^data\/books\//, "")}`;
+    // Stored as: books/<author>/<title>/cover.webp
+    // API expects: /api/media/covers/<path under books>
+    return `/api/media/covers/${b.coverImagePath.replace(/^books\//, "")}`;
 });
 
 const downloadUrl = computed(() => {
@@ -348,17 +348,11 @@ watch(
                 class="grid gap-6 md:grid-cols-[320px_1fr] items-start"
             >
                 <!-- Cover (left) -->
-                <div
-                    class="flex flex-col justify-center items-center max-w-[200px] md:max-w-[320px]"
-                >
-                    <!-- Keep a consistent aspect ratio; cover itself is max 320px wide -->
-                    <div class="w-full aspect-[2/3]">
-                        <BookCover
-                            :src="coverUrl"
-                            :alt="`Cover for ${book.title}`"
-                            class="w-full h-full"
-                        />
-                    </div>
+                <div class="flex flex-col justify-center items-center">
+                    <BookCover
+                        :src="coverUrl"
+                        :alt="`Cover for ${book.title}`"
+                    />
                     <!-- Actions -->
                     <div class="flex flex-wrap gap-1 pt-2">
                         <button
@@ -395,8 +389,8 @@ watch(
                 </div>
 
                 <!-- Details (right) -->
-                <div class="min-w-0 flex flex-col gap-4">
-                    <div class="min-w-0 space-y-1">
+                <div class="flex flex-col gap-4">
+                    <div class="space-y-1">
                         <div class="text-4xl leading-tight font-serif">
                             {{ book.title }}
                         </div>
@@ -414,7 +408,7 @@ watch(
                                     :class="[
                                         descriptionExpanded
                                             ? ''
-                                            : 'max-h-[300px] overflow-hidden',
+                                            : 'max-h-75 overflow-hidden',
                                     ]"
                                 >
                                     <ClientOnly>
@@ -454,7 +448,7 @@ watch(
                         </div>
                     </div>
 
-                    <div class="grid gap-2 text-sm">
+                    <div class="grid md:grid-cols-2 gap-2 text-sm">
                         <div
                             v-if="book.publisher"
                             class="grid grid-cols-[110px_1fr] gap-2"
@@ -511,7 +505,7 @@ watch(
                         :open="showDeleteConfirm"
                         @close="() => (showDeleteConfirm = false)"
                     >
-                        <div class="flex flex-col gap-4 w-[360px] max-w-full">
+                        <div class="flex flex-col gap-4 w-90 max-w-full">
                             <div
                                 class="text-lg font-semibold text-(--error-color)"
                             >
