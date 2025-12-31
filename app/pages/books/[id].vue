@@ -58,12 +58,12 @@ const descriptionExpanded = ref(false);
 
 function sanitizeDescriptionHtml(input: string): string {
     // Minimal, conservative sanitizer:
-    // - remove <script> / <style>
+    // - remove <script> / <style> / iframes
     // - strip inline event handlers (onclick, onload, etc)
     // - disallow javascript: URLs / data: URLs
     // - allow a limited set of tags, unwrap others (keep text)
     //
-    // If parsing fails, fall back to plain text.
+    // If parsing fails, fall back to empty string.
     if (typeof window === "undefined") {
         // During SSR we avoid DOM parsing (and also avoid rendering raw HTML server-side).
         return "";
@@ -96,6 +96,13 @@ function sanitizeDescriptionHtml(input: string): string {
             "BLOCKQUOTE",
             "A",
             "SPAN",
+            "H1",
+            "H2",
+            "H3",
+            "H4",
+            "H5",
+            "H6",
+            "HR",
         ]);
 
         const walk = (node: Node) => {
@@ -171,9 +178,9 @@ const coverUrl = computed(() => {
     const b = book.value;
     if (!b?.coverImagePath) return null;
 
-    // Stored as: books/<author>/<title>/cover.webp
-    // API expects: /api/media/covers/<path under books>
-    return `/api/media/covers/${b.coverImagePath.replace(/^books\//, "")}`;
+    // Stored as: library/<author>/<title>/cover.webp
+    // API expects: /api/media/covers/<path under library>
+    return `/api/media/covers/${b.coverImagePath.replace(/^library\//, "")}`;
 });
 
 const downloadUrl = computed(() => {
@@ -278,7 +285,9 @@ async function loadBook() {
     try {
         const res = await fetch(
             `/api/books/${encodeURIComponent(bookId.value)}`,
-            { method: "GET" },
+            {
+                method: "GET",
+            },
         );
 
         if (!res.ok) {
@@ -345,14 +354,18 @@ watch(
 
             <div
                 v-else-if="book"
-                class="grid gap-6 md:grid-cols-[320px_1fr] items-start"
+                class="flex flex-col md:flex-row gap-6 items-start"
             >
                 <!-- Cover (left) -->
-                <div class="flex flex-col justify-center items-center">
+                <div
+                    class="flex flex-col justify-center items-center w-80 shrink-0"
+                >
+                    <!-- Keep a consistent aspect ratio; cover itself is max 320px wide -->
                     <BookCover
                         :src="coverUrl"
                         :alt="`Cover for ${book.title}`"
                     />
+
                     <!-- Actions -->
                     <div class="flex flex-wrap gap-1 pt-2">
                         <button
@@ -389,8 +402,8 @@ watch(
                 </div>
 
                 <!-- Details (right) -->
-                <div class="flex flex-col gap-4">
-                    <div class="space-y-1">
+                <div class="min-w-0 flex flex-col gap-4">
+                    <div class="min-w-0 space-y-1">
                         <div class="text-4xl leading-tight font-serif">
                             {{ book.title }}
                         </div>
@@ -401,7 +414,7 @@ watch(
 
                         <div
                             v-if="book.description"
-                            class="font-light prose prose-sm max-w-none text-(--text-color) opacity-90"
+                            class="min-w-0 font-light prose prose-sm max-w-none text-(--text-color) opacity-90"
                         >
                             <div class="relative">
                                 <div
@@ -412,13 +425,6 @@ watch(
                                     ]"
                                 >
                                     <ClientOnly>
-                                        <!-- eslint-disable-next-line vue/no-v-html -->
-                                        <!--
-                                            We intentionally render EPUB descriptions as HTML.
-                                            XSS mitigation: `safeDescriptionHtml` is sanitized client-side
-                                            (scripts/iframes removed, inline handlers stripped, javascript:/data: URLs removed,
-                                            and only a small allowlist of tags/attrs is preserved).
-                                        -->
                                         <!-- eslint-disable-next-line vue/no-v-html -->
                                         <div v-html="safeDescriptionHtml" />
                                         <template #fallback>
@@ -495,6 +501,7 @@ watch(
                                 {{ book.relativePath }}
                             </div>
                         </div>
+
                         <div class="grid grid-cols-[110px_1fr] gap-2">
                             <div class="opacity-70">Format</div>
                             <div class="min-w-0">{{ book.format }}</div>
@@ -514,18 +521,14 @@ watch(
 
                             <div class="text-sm opacity-80">
                                 This will permanently delete the database record
-                                and remove the file from the data folder. This
+                                and remove the file from the books folder. This
                                 action cannot be undone.
                             </div>
 
                             <div class="text-sm">
                                 <div class="opacity-70">Book</div>
-                                <div class="font-medium">
-                                    {{ book.title }}
-                                </div>
-                                <div class="opacity-70">
-                                    {{ book.author }}
-                                </div>
+                                <div class="font-medium">{{ book.title }}</div>
+                                <div class="opacity-70">{{ book.author }}</div>
                             </div>
 
                             <div class="flex gap-2 justify-end">

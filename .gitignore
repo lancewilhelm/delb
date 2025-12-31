@@ -27,6 +27,6 @@ logs
 data/
 !data/.gitkeep
 
-# books storage (keep folder via placeholder file: books/.gitkeep)
-books/
-!books/.gitkeep
+# library storage (keep folder via placeholder file: library/.gitkeep)
+library/
+!library/.gitkeep

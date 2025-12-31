@@ -96,7 +96,7 @@ onMounted(() => {
                                 <BookCover
                                     :src="
                                         b.coverImagePath
-                                            ? `/api/media/covers/${b.coverImagePath.replace(/^books\//, '')}`
+                                            ? `/api/media/covers/${b.coverImagePath.replace(/^library\//, '')}`
                                             : null
                                     "
                                     :alt="`Cover for ${b.title}`"
