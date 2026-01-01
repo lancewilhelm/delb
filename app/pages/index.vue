@@ -79,7 +79,7 @@ onMounted(() => {
 
         <div class="w-full h-full p-4 space-y-6 overflow-auto">
             <div class="space-y-2">
-                <div class="text-4xl font-serif">Books</div>
+                <div class="text-4xl font-serif text-(--main-color)">Books</div>
 
                 <div v-if="loadingBooks" class="text-sm opacity-80">
                     Loading...

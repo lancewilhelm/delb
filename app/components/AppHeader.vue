@@ -7,14 +7,19 @@ const emit = defineEmits<{
 </script>
 
 <template>
-    <div class="flex justify-between items-center h-10 z-10 app-header">
-        <div
-            class="flex items-center backdrop-blur bg-(--bg-color)/50 gap-4 p-4 rounded-br-2xl app-header-left z-20"
-        >
-            <PageNavigation />
+    <div
+        class="flex justify-between items-center h-10 z-10 app-header bg-(--sub-alt-color) border-b border-(--sub-color)"
+    >
+        <div class="flex items-center gap-4 p-4 app-header-left">
+            <Icon
+                v-tooltip="'Open Library'"
+                name="lucide:book"
+                class="text-(--main-color) cursor-pointer scale-125 header-icon"
+                @click="navigateTo('/')"
+            />
         </div>
         <div
-            class="flex gap-4 items-center backdrop-blur bg-(--bg-color)/50 p-4 rounded-bl-2xl justify-self-end app-header-right z-10"
+            class="flex gap-4 items-center p-4 justify-self-end app-header-right"
         >
             <Icon
                 v-tooltip="'Upload book'"
@@ -31,6 +36,12 @@ const emit = defineEmits<{
                         !uiStore.commandPaletteVisible,
                     )
                 "
+            />
+            <Icon
+                v-tooltip="'Open Settings'"
+                name="lucide:settings"
+                class="text-(--main-color) cursor-pointer scale-125 header-icon"
+                @click="navigateTo('/settings')"
             />
         </div>
     </div>

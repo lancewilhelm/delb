@@ -468,7 +468,9 @@ watch(
                             class="grid grid-cols-[110px_1fr] gap-2"
                         >
                             <div class="opacity-70">Published</div>
-                            <div class="min-w-0">{{ book.published }}</div>
+                            <div class="min-w-0">
+                                {{ book.published.substring(0, 10) }}
+                            </div>
                         </div>
 
                         <div
