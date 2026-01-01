@@ -108,21 +108,17 @@ button {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 10px;
-    padding: 10px;
-    margin: 5px 0;
     cursor: pointer;
     transition: var(--transition);
+    border-radius: 6px;
 }
 
 button:hover {
-    background-color: var(--text-color);
-    color: var(--bg-color);
+    background: color-mix(in srgb, var(--sub-color) 30%, transparent);
 }
 
 button:active {
     background-color: var(--sub-color);
-    color: var(--bg-color);
 }
 
 button:active:focus {
@@ -131,7 +127,6 @@ button:active:focus {
 
 button:focus {
     outline: 2px solid var(--main-color);
-    outline-offset: 3px;
 }
 
 table {

@@ -1,10 +1,15 @@
 import path from "node:path";
 import { createReadStream } from "node:fs";
 
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { cloudDb } from "~~/server/utils/db/cloud";
-import { books } from "~/utils/db/schema";
+import {
+  bookFiles,
+  books,
+  collectionBooks,
+  collectionMembers,
+} from "~/utils/db/schema";
 import { logger } from "~/utils/logger";
 import { auth } from "~/utils/auth";
 
@@ -31,20 +36,55 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: "Unauthorized" });
   }
 
+  const userId = session.user.id;
+
   const id = getRouterParam(event, "id");
   if (!id) {
     throw createError({ statusCode: 400, statusMessage: "Missing book id" });
   }
 
-  // Look up the book
-  const rows = await cloudDb.select().from(books).where(eq(books.id, id));
-  const book = rows[0];
+  // Enforce visibility: user must be a member of at least one collection
+  // that contains the requested book.
+  const memberships = await cloudDb
+    .select({ collectionId: collectionMembers.collectionId })
+    .from(collectionMembers)
+    .where(eq(collectionMembers.userId, userId));
+
+  const memberCollectionIds = Array.from(
+    new Set(memberships.map((m) => m.collectionId)),
+  ).filter(Boolean);
+
+  if (!memberCollectionIds.length) {
+    // Avoid leaking existence
+    throw createError({ statusCode: 404, statusMessage: "Book not found" });
+  }
+
+  const visible = await cloudDb
+    .select()
+    .from(books)
+    .innerJoin(
+      collectionBooks,
+      and(eq(collectionBooks.bookId, books.id), eq(books.id, id)),
+    )
+    .where(inArray(collectionBooks.collectionId, memberCollectionIds))
+    .limit(1);
+
+  const book = visible[0]?.books;
 
   if (!book) {
     throw createError({ statusCode: 404, statusMessage: "Book not found" });
   }
 
-  if (!book.relativePath) {
+  // Choose a downloadable file (v1: prefer EPUB)
+  const files = await cloudDb
+    .select()
+    .from(bookFiles)
+    .where(and(eq(bookFiles.bookId, id), eq(bookFiles.format, "epub")))
+    .limit(1);
+
+  const file = files[0];
+
+  if (!file?.relativePath) {
     throw createError({
       statusCode: 500,
       statusMessage: "Book file path missing",
@@ -54,14 +94,14 @@ export default defineEventHandler(async (event) => {
   // Resolve the stored file path safely under <projectRoot>/books
   // Stored `relativePath` is currently like: books/<author>/<title>/<title>.epub
   const booksBaseAbs = path.resolve(process.cwd(), "books");
-  const relFromBooks = book.relativePath.replace(/^books[\\/]/, "");
+  const relFromBooks = file.relativePath.replace(/^books[\\/]/, "");
   const fileAbs = path.resolve(booksBaseAbs, relFromBooks);
 
   // Path traversal protection: must remain under booksBaseAbs
   const relToBase = path.relative(booksBaseAbs, fileAbs);
   if (relToBase.startsWith("..") || relToBase.includes(`..${path.sep}`)) {
     logger.warn(
-      { id, relativePath: book.relativePath },
+      { id, relativePath: file.relativePath },
       "GET /api/books/:id/download: blocked path traversal attempt",
     );
     throw createError({ statusCode: 400, statusMessage: "Invalid path" });
@@ -83,7 +123,7 @@ export default defineEventHandler(async (event) => {
       .replace(/\s+/g, " ")
       .trim();
 
-  const filename = `${safe(book.title)} - ${safe(book.author)}.epub`;
+  const filename = `${safe(book.title)}.epub`;
 
   setHeader(event, "Content-Type", "application/epub+zip");
   setHeader(event, "Content-Disposition", `attachment; filename="${filename}"`);

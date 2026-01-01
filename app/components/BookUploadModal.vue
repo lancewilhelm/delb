@@ -19,6 +19,40 @@ const files = ref<File[]>([]);
 const uploading = ref(false);
 const errorMessage = ref<string | null>(null);
 
+type CollectionOption = {
+    id: string;
+    name: string;
+};
+
+const collectionsLoading = ref(false);
+const collections = ref<CollectionOption[]>([]);
+const selectedCollectionIds = ref<string[]>([]);
+
+async function fetchCollections() {
+    collectionsLoading.value = true;
+    try {
+        const res = await $fetch<{
+            success: boolean;
+            data?: { collections?: Array<{ id: string; name: string }> };
+        }>("/api/collections", { method: "GET" });
+
+        collections.value = (res?.data?.collections ?? []).map((c) => ({
+            id: c.id,
+            name: c.name,
+        }));
+
+        // Default selection behavior:
+        // - If nothing selected yet, pick the first available collection.
+        // (Server should ensure a "Personal" collection exists; until then this
+        // falls back to first.)
+        if (!selectedCollectionIds.value.length && collections.value.length) {
+            selectedCollectionIds.value = [collections.value[0]!.id];
+        }
+    } finally {
+        collectionsLoading.value = false;
+    }
+}
+
 function toEpubFiles(list: FileList | File[]): File[] {
     const arr = Array.from(list);
     return arr.filter((f) => {
@@ -49,12 +83,15 @@ function browse() {
 
 watch(
     () => props.open,
-    (open) => {
+    async (open) => {
         if (open) {
             // Reset per-open to keep the flow simple/predictable.
             errorMessage.value = null;
             uploading.value = false;
             clearFiles();
+
+            // Load collections when modal opens so selection is current.
+            await fetchCollections();
         }
     },
 );
@@ -82,6 +119,11 @@ async function uploadEpubs() {
         const form = new FormData();
         for (const f of files.value) {
             form.append("file", f);
+        }
+
+        // Send selected collection ids (multi-select).
+        for (const id of selectedCollectionIds.value) {
+            form.append("collectionId", id);
         }
 
         await $fetch("/api/books/upload", {
@@ -120,6 +162,38 @@ async function uploadEpubs() {
                     class="scale-150 cursor-pointer opacity-80 hover:opacity-100"
                     @click="emit('close')"
                 />
+            </div>
+
+            <div class="space-y-1">
+                <div class="text-sm font-semibold">Collections</div>
+
+                <div v-if="collectionsLoading" class="text-sm opacity-80">
+                    Loading collections…
+                </div>
+
+                <div v-else-if="!collections.length" class="text-sm opacity-80">
+                    No collections yet. Create one, then upload.
+                </div>
+
+                <div v-else class="space-y-1">
+                    <label
+                        v-for="c in collections"
+                        :key="c.id"
+                        class="flex items-center gap-2 text-sm"
+                    >
+                        <input
+                            v-model="selectedCollectionIds"
+                            type="checkbox"
+                            :value="c.id"
+                            :disabled="uploading"
+                        />
+                        <span class="truncate">{{ c.name }}</span>
+                    </label>
+
+                    <div class="text-xs opacity-70">
+                        Defaults to your personal collection.
+                    </div>
+                </div>
             </div>
 
             <div
@@ -181,7 +255,11 @@ async function uploadEpubs() {
                 <div class="flex gap-2 w-full justify-center">
                     <button
                         class="px-3 py-2 border rounded-md disabled:opacity-50 w-full"
-                        :disabled="uploading || !files.length"
+                        :disabled="
+                            uploading ||
+                            !files.length ||
+                            !selectedCollectionIds.length
+                        "
                         @click="uploadEpubs"
                     >
                         {{ uploading ? "Uploading..." : "Upload" }}

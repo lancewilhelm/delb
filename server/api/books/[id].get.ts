@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { cloudDb } from "~~/server/utils/db/cloud";
-import { books } from "~/utils/db/schema";
+import { books, collectionBooks, collectionMembers } from "~/utils/db/schema";
 import { logger } from "~/utils/logger";
 import { auth } from "~/utils/auth";
 
@@ -16,16 +16,43 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: "Unauthorized" });
   }
 
+  const userId = session.user.id;
+
   const id = getRouterParam(event, "id");
   if (!id) {
     throw createError({ statusCode: 400, statusMessage: "Missing book id" });
   }
 
   try {
-    const rows = await cloudDb.select().from(books).where(eq(books.id, id));
-    const book = rows[0];
+    // Enforce visibility: user must be a member of at least one collection
+    // that contains the requested book.
+    const memberships = await cloudDb
+      .select({ collectionId: collectionMembers.collectionId })
+      .from(collectionMembers)
+      .where(eq(collectionMembers.userId, userId));
+
+    const memberCollectionIds = Array.from(
+      new Set(memberships.map((m) => m.collectionId)),
+    ).filter(Boolean);
+
+    if (!memberCollectionIds.length) {
+      throw createError({ statusCode: 404, statusMessage: "Book not found" });
+    }
+
+    const visible = await cloudDb
+      .select()
+      .from(books)
+      .innerJoin(
+        collectionBooks,
+        and(eq(collectionBooks.bookId, books.id), eq(books.id, id)),
+      )
+      .where(inArray(collectionBooks.collectionId, memberCollectionIds))
+      .limit(1);
+
+    const book = visible[0]?.books;
 
     if (!book) {
+      // Use 404 to avoid leaking existence of books the user cannot access.
       throw createError({ statusCode: 404, statusMessage: "Book not found" });
     }
 

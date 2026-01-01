@@ -4,7 +4,17 @@ import { rm } from "node:fs/promises";
 import { eq } from "drizzle-orm";
 
 import { cloudDb } from "~~/server/utils/db/cloud";
-import { books } from "~/utils/db/schema";
+import {
+  bookFiles,
+  books,
+  collectionBooks,
+  bookAuthors,
+  bookTags,
+  bookIdentifiers,
+  userBookStatus,
+  bookRatings,
+  bookNotes,
+} from "~/utils/db/schema";
 import { logger } from "~/utils/logger";
 import { auth } from "~/utils/auth";
 
@@ -12,15 +22,14 @@ import { auth } from "~/utils/auth";
  * DELETE /api/books/:id
  *
  * Admin-only endpoint that deletes:
- * - the book row from the database
- * - the associated files from disk under `<projectRoot>/books`
+ * - the canonical book row from the database
+ * - associated rows (files, links, per-user state)
+ * - associated files from disk under `<projectRoot>/books`
  *
  * Notes:
- * - Book paths are stored in DB as `relativePath` and `coverImagePath`
+ * - File paths live in `book_files.relativePath` and cover path lives in `books.coverImagePath`
  *   (both typically prefixed with `books/...`).
  * - We resolve those safely under `<projectRoot>/books` and block path traversal.
- * - If the book directory becomes empty after deletion, we attempt to remove it
- *   (best-effort).
  */
 export default defineEventHandler(async (event) => {
   logger.debug("DELETE /api/books/:id");
@@ -54,6 +63,12 @@ export default defineEventHandler(async (event) => {
       return { success: false, message: "Book not found" };
     }
 
+    // Load associated files (formats)
+    const fileRows = await cloudDb
+      .select()
+      .from(bookFiles)
+      .where(eq(bookFiles.bookId, id));
+
     const booksBaseAbs = path.resolve(process.cwd(), "books");
 
     const resolveUnderBooks = (storedPath: string) => {
@@ -70,21 +85,11 @@ export default defineEventHandler(async (event) => {
       return abs;
     };
 
-    const fileAbs = book.relativePath
-      ? resolveUnderBooks(book.relativePath)
-      : null;
     const coverAbs = book.coverImagePath
       ? resolveUnderBooks(book.coverImagePath)
       : null;
 
-    // Determine the book directory (best effort; based on the EPUB path)
-    const bookDirAbs = fileAbs ? path.dirname(fileAbs) : null;
-
-    // 1) Delete DB row first or last? Prefer deleting files first to avoid orphaning
-    // files if DB delete succeeds but filesystem fails. We'll delete files best-effort
-    // and still remove DB record.
-    //
-    // Delete cover (best-effort)
+    // 1) Delete files from disk (best-effort)
     if (coverAbs) {
       try {
         await rm(coverAbs, { force: true });
@@ -96,29 +101,32 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    // Delete book file (best-effort)
-    if (fileAbs) {
+    for (const f of fileRows) {
+      if (!f.relativePath) continue;
+      const fileAbs = resolveUnderBooks(f.relativePath);
       try {
         await rm(fileAbs, { force: true });
       } catch (e) {
         logger.warn(
           e,
-          "DELETE /api/books/:id: Failed to delete book file (continuing)",
+          "DELETE /api/books/:id: Failed to delete a book file (continuing)",
         );
       }
     }
 
-    // Delete the book directory if it's now empty (best-effort)
-    if (bookDirAbs) {
-      try {
-        // Only remove if empty: rm without recursive will fail if not empty.
-        await rm(bookDirAbs, { force: true });
-      } catch {
-        // ignore (likely not empty, or doesn't exist)
-      }
-    }
+    // 2) Delete associated DB rows (ordering chosen to avoid foreign key issues)
+    await cloudDb.delete(collectionBooks).where(eq(collectionBooks.bookId, id));
+    await cloudDb.delete(bookFiles).where(eq(bookFiles.bookId, id));
+    await cloudDb.delete(bookAuthors).where(eq(bookAuthors.bookId, id));
+    await cloudDb.delete(bookTags).where(eq(bookTags.bookId, id));
+    await cloudDb.delete(bookIdentifiers).where(eq(bookIdentifiers.bookId, id));
 
-    // 2) Delete DB row
+    // per-user state
+    await cloudDb.delete(userBookStatus).where(eq(userBookStatus.bookId, id));
+    await cloudDb.delete(bookRatings).where(eq(bookRatings.bookId, id));
+    await cloudDb.delete(bookNotes).where(eq(bookNotes.bookId, id));
+
+    // 3) Delete the canonical book row
     await cloudDb.delete(books).where(eq(books.id, id));
 
     return { success: true };

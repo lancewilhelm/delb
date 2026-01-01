@@ -8,7 +8,7 @@ const emit = defineEmits<{
 
 <template>
     <div
-        class="flex justify-between items-center h-10 z-10 app-header bg-(--sub-alt-color) border-b border-(--sub-color)"
+        class="flex justify-between items-center h-10 z-10 app-header bg-(--sub-alt-color) border-b border-t border-(--sub-color)"
     >
         <div class="flex items-center gap-4 p-4 app-header-left">
             <Icon
