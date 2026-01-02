@@ -17,11 +17,17 @@ import { auth } from "~/utils/auth";
 
 import { parseEpubMetadataFromBuffer } from "~~/server/utils/books/epub";
 import { extractAndStoreEpubCover } from "~~/server/utils/books/epub-cover";
-import {
-  buildBookRelativePath,
-  resolveDataPath,
-  toSafePathSegment,
-} from "~~/server/utils/books/fs";
+import { resolveDataPath, toSafePathSegment } from "~~/server/utils/books/fs";
+import { makeAuthorSortKey, makeTitleSortKey } from "~~/server/utils/sort/keys";
+import { buildBookStorageRelativePath } from "~~/server/utils/books/storage/paths";
+
+type SupportedBookFormat = "epub" | "pdf" | "mobi" | "azw3";
+const SUPPORTED_BOOK_FORMATS: ReadonlyArray<SupportedBookFormat> = [
+  "epub",
+  "pdf",
+  "mobi",
+  "azw3",
+];
 
 /**
  * Get the extension of a filename.
@@ -33,19 +39,30 @@ function getExtension(filename: string): string {
   return ext.startsWith(".") ? ext.slice(1) : ext;
 }
 
-/**
- * Ensure that the filename is an EPUB file.
- * @param filename
- */
-function ensureEpub(filename: string) {
+function isSupportedBookFormat(ext: string): ext is SupportedBookFormat {
+  return (SUPPORTED_BOOK_FORMATS as ReadonlyArray<string>).includes(ext);
+}
+
+function ensureSupportedBookFormat(filename: string): SupportedBookFormat {
   const ext = getExtension(filename);
-  if (ext !== "epub") {
+  if (!ext || !isSupportedBookFormat(ext)) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Only .epub uploads are supported in this MVP",
+      statusMessage: `Unsupported upload format. Supported: ${SUPPORTED_BOOK_FORMATS.map((x) => `.${x}`).join(", ")}`,
     });
   }
+  return ext;
 }
+
+type ParsedBookMetadata = {
+  /** Display title */
+  title: string;
+  /** Display author (v1: single author string) */
+  author: string;
+  description?: string;
+  language?: string;
+  published?: string;
+};
 
 type MultipartFilePart = {
   name?: string;
@@ -53,6 +70,62 @@ type MultipartFilePart = {
   type?: string;
   data?: Buffer;
 };
+
+/**
+ * Skeleton metadata parsing for non-EPUB formats.
+ * This intentionally does not attempt to parse real metadata yet.
+ */
+async function parseNonEpubMetadataFromBuffer(opts: {
+  buffer: Buffer;
+  format: Exclude<SupportedBookFormat, "epub">;
+  filename: string;
+  fallbackTitle: string;
+}): Promise<ParsedBookMetadata> {
+  // TODO: Implement per-format parsing later:
+  // - pdf: read document info dictionary (Title/Author/Subject/Keywords)
+  // - mobi/azw3: parse Kindle headers + EXTH records
+  // For MVP: use safe fallbacks derived from filename.
+  void opts.buffer;
+  void opts.format;
+  void opts.filename;
+
+  return {
+    title: opts.fallbackTitle || "Untitled",
+    author: "Unknown Author",
+  };
+}
+
+async function parseBookMetadataFromBuffer(opts: {
+  buffer: Buffer;
+  format: SupportedBookFormat;
+  filename: string;
+}): Promise<ParsedBookMetadata> {
+  const fallbackTitle = path.basename(
+    opts.filename,
+    path.extname(opts.filename),
+  );
+
+  if (opts.format === "epub") {
+    const meta = await parseEpubMetadataFromBuffer(opts.buffer, {
+      fallbackTitle,
+    });
+
+    return {
+      title: meta.title || fallbackTitle || "Untitled",
+      author: meta.author || "Unknown Author",
+      description: meta.description,
+      language: meta.language,
+      published: meta.published,
+    };
+  }
+
+  return await parseNonEpubMetadataFromBuffer({
+    buffer: opts.buffer,
+    format: opts.format,
+    filename: opts.filename,
+    fallbackTitle,
+  });
+}
 
 /**
  * Ensure the user can add books to every target collection.
@@ -110,6 +183,7 @@ async function findOrCreateAuthorByName(name: string) {
   await cloudDb.insert(authors).values({
     id,
     name,
+    sortName: makeAuthorSortKey(name),
     createdAt: now,
     updatedAt: now,
   });
@@ -118,85 +192,86 @@ async function findOrCreateAuthorByName(name: string) {
 }
 
 /**
- * Process a single EPUB upload.
+ * Process a single book upload (EPUB/PDF/MOBI/AZW3).
  * @param filePart
- * @param userId
- * @param collectionIds
- * @returns object containing the book's metadata and the path to the cover image
+ * @param input
+ * @returns object containing the book's metadata and stored file path
  */
-async function processOneEpubUpload(
+async function processOneBookUpload(
   filePart: MultipartFilePart,
   input: { userId: string; collectionIds: string[] },
 ) {
   if (!filePart.filename || !filePart.data) {
-    throw createError({ statusCode: 400, statusMessage: "Missing EPUB file" });
+    throw createError({ statusCode: 400, statusMessage: "Missing book file" });
   }
 
-  ensureEpub(filePart.filename);
+  const format = ensureSupportedBookFormat(filePart.filename);
 
-  // Parse EPUB metadata
-  const fallbackTitle = path.basename(
-    filePart.filename,
-    path.extname(filePart.filename),
-  );
-  const meta = await parseEpubMetadataFromBuffer(filePart.data, {
-    fallbackTitle,
+  // Parse metadata (EPUB implemented, others skeleton)
+  const meta = await parseBookMetadataFromBuffer({
+    buffer: filePart.data,
+    format,
+    filename: filePart.filename,
   });
 
   const authorName = meta.author || "Unknown Author";
-  const title = meta.title || fallbackTitle || "Untitled";
+  const title = meta.title || "Untitled";
 
-  const safeAuthor = toSafePathSegment(authorName, "Unknown Author");
   const safeTitle = toSafePathSegment(title, "Untitled");
 
-  // Store as: books/{author}/{title}/{title}.epub
-  const epubRelativePath = buildBookRelativePath({
-    author: safeAuthor,
-    title: safeTitle,
-    filename: `${safeTitle}.epub`,
+  const id = crypto.randomUUID();
+  const relativePath = buildBookStorageRelativePath({
+    authorNames: [authorName],
+    title,
+    bookId: id,
+    filename: `${safeTitle}.${format}`,
+    baseDir: "library",
   });
 
-  const epubAbsolutePath = resolveDataPath(epubRelativePath);
-  const bookDirAbsolute = path.dirname(epubAbsolutePath);
+  const absolutePath = resolveDataPath(relativePath);
+  const bookDirAbsolute = path.dirname(absolutePath);
 
   // Ensure directories exist then write file
   await mkdir(bookDirAbsolute, { recursive: true });
-  await writeFile(epubAbsolutePath, filePart.data);
+  await writeFile(absolutePath, filePart.data);
 
-  // Best-effort cover extraction (does not fail the upload if cover is missing)
-  // We store a small WebP thumbnail to keep bandwidth/disk usage low.
+  // Best-effort cover extraction (EPUB only for now)
   let coverImagePath: string | null = null;
-  try {
-    const coverRelativePath = buildBookRelativePath({
-      author: safeAuthor,
-      title: safeTitle,
-      filename: "cover.webp",
-    });
+  if (format === "epub") {
+    try {
+      const coverRelativePath = buildBookStorageRelativePath({
+        authorNames: [authorName],
+        title,
+        bookId: id,
+        filename: "cover.webp",
+        baseDir: "library",
+      });
 
-    const extracted = await extractAndStoreEpubCover({
-      epubFilePath: epubAbsolutePath,
-      outputDirAbsolute: bookDirAbsolute,
-      outputRelativePathPosix: coverRelativePath,
-      maxWidth: 320,
-      webpQuality: 80,
-    });
+      const extracted = await extractAndStoreEpubCover({
+        epubFilePath: absolutePath,
+        outputDirAbsolute: bookDirAbsolute,
+        outputRelativePathPosix: coverRelativePath,
+        maxWidth: 320,
+        webpQuality: 80,
+      });
 
-    coverImagePath = extracted?.relativePath ?? null;
-  } catch (error) {
-    logger.debug(
-      error,
-      "POST /api/books/upload: Failed to extract cover (continuing without cover)",
-    );
-    coverImagePath = null;
+      coverImagePath = extracted?.relativePath ?? null;
+    } catch (error) {
+      logger.debug(
+        error,
+        "POST /api/books/upload: Failed to extract cover (continuing without cover)",
+      );
+      coverImagePath = null;
+    }
   }
 
-  const id = crypto.randomUUID();
   const now = new Date();
 
   // Create canonical book record
   await cloudDb.insert(books).values({
     id,
     title,
+    sortTitle: makeTitleSortKey(title),
     description: (meta.description || null) as string | null,
     published: (meta.published || null) as string | null,
     language: (meta.language || null) as string | null,
@@ -206,7 +281,7 @@ async function processOneEpubUpload(
     updatedAt: now,
   });
 
-  // Attach author (lean v1: one author from EPUB metadata)
+  // Attach author (lean v1: one author)
   const author = await findOrCreateAuthorByName(authorName);
   await cloudDb.insert(bookAuthors).values({
     bookId: id,
@@ -214,12 +289,12 @@ async function processOneEpubUpload(
     position: 1,
   });
 
-  // Attach EPUB file
+  // Attach uploaded file
   await cloudDb.insert(bookFiles).values({
     id: crypto.randomUUID(),
     bookId: id,
-    format: "epub",
-    relativePath: epubRelativePath,
+    format,
+    relativePath,
     createdAt: now,
   });
 
@@ -237,8 +312,8 @@ async function processOneEpubUpload(
     id,
     title,
     author: authorName,
-    format: "epub",
-    relativePath: epubRelativePath,
+    format,
+    relativePath,
     coverImagePath,
     createdAt: now,
   };
@@ -284,7 +359,7 @@ export default defineEventHandler(async (event) => {
   if (!fileParts.length) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Missing EPUB file(s)",
+      statusMessage: "Missing book file(s)",
     });
   }
 
@@ -297,7 +372,7 @@ export default defineEventHandler(async (event) => {
 
   for (const part of fileParts) {
     try {
-      const book = await processOneEpubUpload(part, { userId, collectionIds });
+      const book = await processOneBookUpload(part, { userId, collectionIds });
       results.push({ success: true, book, filename: part.filename });
     } catch (err: unknown) {
       logger.error(err, "POST /api/books/upload: Failed to process one upload");

@@ -1,4 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
+import { makeAuthorSortKey, makeTitleSortKey } from "~~/server/utils/sort/keys";
+import { moveBookStorageToCanonical } from "~~/server/utils/books/storage/move/move-book-storage";
 import { cloudDb } from "~~/server/utils/db/cloud";
 import {
   authors,
@@ -125,6 +127,7 @@ async function findOrCreateAuthorByName(name: string) {
   await cloudDb.insert(authors).values({
     id,
     name,
+    sortName: makeAuthorSortKey(name),
     createdAt: now,
     updatedAt: now,
   });
@@ -362,8 +365,16 @@ export default defineEventHandler(async (event) => {
     updatedAt: new Date(),
   };
 
+  // Track whether a storage move is needed after mutations.
+  // We treat any title change or author-list mutation as needing a canonical move.
+  let shouldMoveStorage = false;
+
   const title = normalizeOptionalString((body as PutBookBody).title);
-  if (title !== undefined) update.title = title ?? "";
+  if (title !== undefined) {
+    update.title = title ?? "";
+    update.sortTitle = makeTitleSortKey(update.title);
+    shouldMoveStorage = true;
+  }
 
   const description = normalizeOptionalString(
     (body as PutBookBody).description,
@@ -494,6 +505,9 @@ export default defineEventHandler(async (event) => {
         }
       }
 
+      // Any author-list mutation should trigger a canonical storage move.
+      shouldMoveStorage = true;
+
       // Orphan cleanup: any authors that were previously linked but are no longer linked
       const currentLinks = await cloudDb
         .select({ authorId: bookAuthors.authorId })
@@ -556,6 +570,20 @@ export default defineEventHandler(async (event) => {
     }
     for (const sid of Array.from(new Set(maybeOrphanSeriesIds))) {
       await deleteSeriesIfUnreferenced(sid);
+    }
+
+    // If title/authors changed, move on-disk storage to the canonical folder derived from current metadata.
+    // This keeps the filesystem browsable for users.
+    if (shouldMoveStorage) {
+      try {
+        await moveBookStorageToCanonical({ bookId: id });
+      } catch (moveErr: unknown) {
+        // Do not fail the edit if the move fails; log for investigation.
+        logger.warn(
+          { bookId: id, error: moveErr },
+          "PUT /api/books/:id: failed to move book storage to canonical path",
+        );
+      }
     }
 
     return { success: true };

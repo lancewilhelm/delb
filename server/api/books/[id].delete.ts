@@ -24,12 +24,12 @@ import { auth } from "~/utils/auth";
  * Admin-only endpoint that deletes:
  * - the canonical book row from the database
  * - associated rows (files, links, per-user state)
- * - associated files from disk under `<projectRoot>/books`
+ * - associated files from disk under `<projectRoot>/library`
  *
  * Notes:
  * - File paths live in `book_files.relativePath` and cover path lives in `books.coverImagePath`
- *   (both typically prefixed with `books/...`).
- * - We resolve those safely under `<projectRoot>/books` and block path traversal.
+ *   (both typically prefixed with `library/...`).
+ * - We resolve those safely under `<projectRoot>/library` and block path traversal.
  */
 export default defineEventHandler(async (event) => {
   logger.debug("DELETE /api/books/:id");
@@ -69,15 +69,15 @@ export default defineEventHandler(async (event) => {
       .from(bookFiles)
       .where(eq(bookFiles.bookId, id));
 
-    const booksBaseAbs = path.resolve(process.cwd(), "books");
+    const libraryBaseAbs = path.resolve(process.cwd(), "library");
 
-    const resolveUnderBooks = (storedPath: string) => {
-      // Stored paths usually look like: "books/Author/Title/file.ext"
-      // Normalize to path relative to `<projectRoot>/books`
-      const relFromBooks = storedPath.replace(/^books[\\/]/, "");
-      const abs = path.resolve(booksBaseAbs, relFromBooks);
+    const resolveUnderLibrary = (storedPath: string) => {
+      // Stored paths usually look like: "library/Author/Title/file.ext"
+      // Normalize to path relative to `<projectRoot>/library`
+      const relFromLibrary = storedPath.replace(/^library[\\/]/, "");
+      const abs = path.resolve(libraryBaseAbs, relFromLibrary);
 
-      const relToBase = path.relative(booksBaseAbs, abs);
+      const relToBase = path.relative(libraryBaseAbs, abs);
       if (relToBase.startsWith("..") || relToBase.includes(`..${path.sep}`)) {
         throw createError({ statusCode: 400, statusMessage: "Invalid path" });
       }
@@ -86,7 +86,7 @@ export default defineEventHandler(async (event) => {
     };
 
     const coverAbs = book.coverImagePath
-      ? resolveUnderBooks(book.coverImagePath)
+      ? resolveUnderLibrary(book.coverImagePath)
       : null;
 
     // 1) Delete files from disk (best-effort)
@@ -103,7 +103,7 @@ export default defineEventHandler(async (event) => {
 
     for (const f of fileRows) {
       if (!f.relativePath) continue;
-      const fileAbs = resolveUnderBooks(f.relativePath);
+      const fileAbs = resolveUnderLibrary(f.relativePath);
       try {
         await rm(fileAbs, { force: true });
       } catch (e) {

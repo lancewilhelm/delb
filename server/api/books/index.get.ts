@@ -99,7 +99,9 @@ export default defineEventHandler(async (event) => {
       ),
     );
 
-    const rows = bookRows.map((r) => r[0]).filter(Boolean);
+    const rows = bookRows
+      .map((r) => r[0])
+      .filter((b): b is NonNullable<(typeof books)["$inferSelect"]> => !!b);
 
     // Attach author display info (multi-author):
     // - return `authorNames` (string[]) and `authors` ({id,name}[])

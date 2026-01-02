@@ -115,7 +115,7 @@ Books are stored in the `library/` directory at the project root with the struct
 library/
 └── {author}/
     └── {title}/
-        ├── {book-file}.epub
+        ├── {book-file}.epub|pdf|mobi|azw3
         └── cover.webp
 ```
 

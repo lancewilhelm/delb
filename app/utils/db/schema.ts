@@ -125,6 +125,10 @@ export const series = sqliteTable("series", {
 export const authors = sqliteTable("authors", {
   id: text("id").primaryKey(),
   name: text("name").notNull().unique(),
+
+  // Stored sort key (Calibre-style): used for deterministic sorting (e.g. by last name).
+  sortName: text("sort_name").notNull().default(""),
+
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -148,6 +152,10 @@ export const tags = sqliteTable("tags", {
 export const books = sqliteTable("books", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
+
+  // Stored sort key (Calibre-style): title with a leading "The " removed (case-insensitive).
+  // Note: current UI default ordering is newest-first; this is for future sort modes.
+  sortTitle: text("sort_title").notNull().default(""),
 
   // Metadata (shared across collections)
   description: text("description"),

@@ -53,14 +53,40 @@ async function fetchCollections() {
     }
 }
 
-function toEpubFiles(list: FileList | File[]): File[] {
+const ALLOWED_EBOOK_EXTENSIONS = ["epub", "pdf", "mobi", "azw3"] as const;
+type AllowedEbookExtension = (typeof ALLOWED_EBOOK_EXTENSIONS)[number];
+
+function getExtensionFromFilename(filename: string): string {
+    const m = (filename || "").toLowerCase().match(/\.([a-z0-9]+)$/);
+    return m?.[1] ?? "";
+}
+
+function isAllowedUploadFile(f: File): boolean {
+    const ext = getExtensionFromFilename(f.name);
+
+    if (
+        ext === "epub" &&
+        (f.type === "application/epub+zip" || f.type === "")
+    ) {
+        return true;
+    }
+
+    // Some browsers omit or misreport `type` for these formats; accept by extension.
+    if (ALLOWED_EBOOK_EXTENSIONS.includes(ext as AllowedEbookExtension)) {
+        return true;
+    }
+
+    // Also allow by common PDF mime type.
+    if (ext === "pdf" && (f.type === "application/pdf" || f.type === "")) {
+        return true;
+    }
+
+    return false;
+}
+
+function toAllowedUploadFiles(list: FileList | File[]): File[] {
     const arr = Array.from(list);
-    return arr.filter((f) => {
-        const nameOk = f.name.toLowerCase().endsWith(".epub");
-        const typeOk = f.type === "application/epub+zip";
-        // Some browsers may omit `type`, so accept by extension.
-        return nameOk || typeOk;
-    });
+    return arr.filter(isAllowedUploadFile);
 }
 
 function addFiles(newFiles: File[]) {
@@ -99,7 +125,7 @@ watch(
 useDropZone(dropZoneRef, {
     onDrop(dropped) {
         if (!dropped) return;
-        addFiles(toEpubFiles(dropped));
+        addFiles(toAllowedUploadFiles(dropped));
     },
 });
 
@@ -153,7 +179,7 @@ async function uploadEpubs() {
                 <div>
                     <div class="text-lg font-semibold">Upload books</div>
                     <div class="text-sm opacity-80">
-                        Drop EPUB files here or browse.
+                        Drop ebook files here or browse (EPUB, PDF, MOBI, AZW3).
                     </div>
                 </div>
 
@@ -201,7 +227,7 @@ async function uploadEpubs() {
                 class="border border-dashed rounded-md p-6 flex flex-col items-center justify-center gap-3"
             >
                 <div class="text-md opacity-80 text-center">
-                    Drag & drop EPUB files here
+                    Drag & drop ebook files here
                 </div>
                 <icon name="lucide-book" class="scale-200 opacity-80" />
 
@@ -211,13 +237,14 @@ async function uploadEpubs() {
                         type="file"
                         class="hidden"
                         multiple
-                        accept=".epub,application/epub+zip"
+                        accept=".epub,.pdf,.mobi,.azw3,application/epub+zip,application/pdf"
                         @change="
                             (e) => {
                                 const picked =
                                     (e.target as HTMLInputElement).files ??
                                     undefined;
-                                if (picked) addFiles(toEpubFiles(picked));
+                                if (picked)
+                                    addFiles(toAllowedUploadFiles(picked));
                             }
                         "
                     />
@@ -225,7 +252,7 @@ async function uploadEpubs() {
             </div>
 
             <button
-                v-tooltip="'Choose EPUB files from your computer'"
+                v-tooltip="'Choose ebook files from your computer'"
                 class="px-3 py-2 bg-(--sub-color)/15"
                 @click="browse"
             >
@@ -261,7 +288,7 @@ async function uploadEpubs() {
                         v-tooltip="
                             !selectedCollectionIds.length
                                 ? 'Select at least one collection'
-                                : 'Upload selected EPUBs'
+                                : 'Upload selected books'
                         "
                         class="px-3 py-2 w-full disabled:opacity-50 bg-(--sub-color)/15"
                         :disabled="

@@ -16,13 +16,14 @@ import { auth } from "~/utils/auth";
 /**
  * GET /api/books/:id/download
  *
- * Authenticated endpoint that streams the stored book file (EPUB for the MVP).
+ * Authenticated endpoint that streams the stored book file.
  *
  * Notes:
- * - Uses the book's `relativePath` (stored like `books/.../*.epub`) and resolves
- *   it safely under `<projectRoot>/books`.
+ * - Uses the book's `relativePath` (stored like `library/.../*.<ext>`) and resolves
+ *   it safely under `<projectRoot>/library`.
  * - Includes path traversal protection.
  * - Sends Content-Disposition: attachment for download.
+ * - v1 supported formats: epub, pdf, mobi, azw3
  */
 export default defineEventHandler(async (event) => {
   logger.debug("GET /api/books/:id/download");
@@ -75,14 +76,35 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: "Book not found" });
   }
 
-  // Choose a downloadable file (v1: prefer EPUB)
-  const files = await cloudDb
+  const supportedFormats = ["epub", "pdf", "mobi", "azw3"] as const;
+
+  const contentTypeByFormat: Record<(typeof supportedFormats)[number], string> =
+    {
+      epub: "application/epub+zip",
+      pdf: "application/pdf",
+      mobi: "application/x-mobipocket-ebook",
+      azw3: "application/vnd.amazon.ebook",
+    };
+
+  // Choose a downloadable file (prefer best-known reading formats first)
+  const preferredOrder = ["epub", "pdf", "azw3", "mobi"] as const;
+
+  const allFiles = await cloudDb
     .select()
     .from(bookFiles)
-    .where(and(eq(bookFiles.bookId, id), eq(bookFiles.format, "epub")))
-    .limit(1);
+    .where(eq(bookFiles.bookId, id));
 
-  const file = files[0];
+  const normalized = allFiles
+    .map((f) => ({
+      ...f,
+      format: (f.format ?? "").toString().trim().toLowerCase(),
+    }))
+    .filter((f) => supportedFormats.includes(f.format as never));
+
+  const file =
+    preferredOrder
+      .map((fmt) => normalized.find((f) => f.format === fmt))
+      .find(Boolean) ?? normalized[0];
 
   if (!file?.relativePath) {
     throw createError({
@@ -91,14 +113,14 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Resolve the stored file path safely under <projectRoot>/books
-  // Stored `relativePath` is currently like: books/<author>/<title>/<title>.epub
-  const booksBaseAbs = path.resolve(process.cwd(), "books");
-  const relFromBooks = file.relativePath.replace(/^books[\\/]/, "");
-  const fileAbs = path.resolve(booksBaseAbs, relFromBooks);
+  // Resolve the stored file path safely under <projectRoot>/library
+  // Stored `relativePath` is like: library/<author>/<title (id8)>/<filename>
+  const libraryBaseAbs = path.resolve(process.cwd(), "library");
+  const relFromLibrary = file.relativePath.replace(/^library[\\/]/, "");
+  const fileAbs = path.resolve(libraryBaseAbs, relFromLibrary);
 
-  // Path traversal protection: must remain under booksBaseAbs
-  const relToBase = path.relative(booksBaseAbs, fileAbs);
+  // Path traversal protection: must remain under libraryBaseAbs
+  const relToBase = path.relative(libraryBaseAbs, fileAbs);
   if (relToBase.startsWith("..") || relToBase.includes(`..${path.sep}`)) {
     logger.warn(
       { id, relativePath: file.relativePath },
@@ -107,9 +129,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Invalid path" });
   }
 
-  // Only allow EPUB in the MVP
-  const ext = path.extname(fileAbs).toLowerCase();
-  if (ext !== ".epub") {
+  const format = (file.format || path.extname(fileAbs).slice(1))
+    .trim()
+    .toLowerCase();
+
+  if (!supportedFormats.includes(format as never)) {
     throw createError({
       statusCode: 400,
       statusMessage: "Unsupported book format for download",
@@ -123,9 +147,9 @@ export default defineEventHandler(async (event) => {
       .replace(/\s+/g, " ")
       .trim();
 
-  const filename = `${safe(book.title)}.epub`;
+  const filename = `${safe(book.title)}.${format}`;
 
-  setHeader(event, "Content-Type", "application/epub+zip");
+  setHeader(event, "Content-Type", contentTypeByFormat[format as never]);
   setHeader(event, "Content-Disposition", `attachment; filename="${filename}"`);
   // For privacy, avoid caching by intermediaries.
   setHeader(event, "Cache-Control", "private, no-store");

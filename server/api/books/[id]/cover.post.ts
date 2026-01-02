@@ -18,7 +18,7 @@ import { auth } from "~/utils/auth";
  * POST /api/books/:id/cover
  *
  * Admin-only endpoint that accepts an uploaded image and stores it as:
- *   library/<author>/<title>/cover.webp
+ *   library/<author(s)>/<title (id8)>/cover.webp
  *
  * Then updates `books.coverImagePath` accordingly.
  *
@@ -33,7 +33,7 @@ import { auth } from "~/utils/auth";
  *
  * Notes:
  * - The canonical directory for a book is derived from an existing `book_files.relativePath`
- *   (e.g. `library/<author>/<title>/<title>.epub`).
+ *   (e.g. `library/<author(s)>/<title (id8)>/<title>.epub`).
  * - Always stores as `cover.webp` (overwrite semantics).
  */
 export default defineEventHandler(async (event) => {
@@ -134,7 +134,7 @@ export default defineEventHandler(async (event) => {
     // Resolve target directory under <projectRoot>/library
     const libraryBaseAbs = path.resolve(process.cwd(), "library");
 
-    // relativePath is stored like: "library/<author>/<title>/<file>"
+    // relativePath is stored like: "library/<author(s)>/<title (id8)>/<file>"
     const relFromLibrary = preferred.relativePath.replace(/^library[\\/]/, "");
     const bookFileAbs = path.resolve(libraryBaseAbs, relFromLibrary);
 
@@ -169,9 +169,10 @@ export default defineEventHandler(async (event) => {
 
     // Compute DB path (posix-style) for coverImagePath.
     // We keep it relative and stable: library/<author>/<title>/cover.webp
-    const coverRelPosix = path
-      .posix
-      .join("library", ...path.relative(libraryBaseAbs, coverAbs).split(path.sep));
+    const coverRelPosix = path.posix.join(
+      "library",
+      ...path.relative(libraryBaseAbs, coverAbs).split(path.sep),
+    );
 
     await cloudDb
       .update(books)
