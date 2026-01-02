@@ -147,7 +147,11 @@ onBeforeUnmount(() => {
             @click="toggleDropdown"
         >
             <Icon
-                name="lucide:folder"
+                :name="
+                    activeLabel === 'All'
+                        ? 'lucide:library-big'
+                        : 'lucide:folder'
+                "
                 class="text-(--main-color) opacity-80 shrink-0"
             />
             <span class="max-w-48 truncate text-sm opacity-80">{{
@@ -183,7 +187,7 @@ onBeforeUnmount(() => {
                     @click="selectAll"
                 >
                     <Icon
-                        name="lucide:layers"
+                        name="lucide:library-big"
                         class="text-(--main-color) opacity-80 shrink-0"
                     />
                     <span class="truncate">All</span>

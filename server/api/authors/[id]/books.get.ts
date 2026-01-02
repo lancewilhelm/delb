@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { cloudDb } from "~~/server/utils/db/cloud";
 import {
   authors,
@@ -12,31 +12,56 @@ import {
 import { logger } from "~/utils/logger";
 import { auth } from "~/utils/auth";
 
+/**
+ * GET /api/authors/:id/books?collectionId=<optional>
+ *
+ * Returns books associated with a given author that the current user can access.
+ *
+ * Access control:
+ * - Requires an authenticated user
+ * - Only returns books that exist in collections the user is a member of
+ * - Optional `collectionId` further scopes results to that one collection (if user is a member)
+ *
+ * Response shape mirrors GET /api/books (list) enough for reuse in the UI:
+ * - includes `authors` ({id,name}[]) + `authorNames` + legacy `author`
+ * - includes `publisher` ({id,name}|null) and `series` ({id,name}|null)
+ */
 export default defineEventHandler(async (event) => {
-  logger.debug("GET /api/books");
+  logger.debug("GET /api/authors/:id/books");
 
-  // Keep consistent with the rest of the app: require an authenticated user
   const session = await auth.api.getSession({
     headers: event.headers,
   });
 
   if (!session) {
     setResponseStatus(event, 401);
-    return {
-      success: false,
-      message: "Unauthorized",
-    };
+    return { success: false, message: "Unauthorized" };
   }
 
   const userId = session.user.id;
 
-  // Optional query param:
-  // - collectionId=<id> fetches books only from that collection (if user is a member)
-  // - omit collectionId to fetch books from all collections the user is a member of
+  const authorId = getRouterParam(event, "id");
+  if (!authorId) {
+    setResponseStatus(event, 400);
+    return { success: false, message: "Missing author id" };
+  }
+
   const { collectionId } = getQuery(event) as { collectionId?: string };
 
   try {
-    // Find collections the user is a member of
+    // Confirm author exists (nice UX; still no access leak beyond existence of author row)
+    const authorExists = await cloudDb
+      .select({ id: authors.id })
+      .from(authors)
+      .where(eq(authors.id, authorId))
+      .limit(1);
+
+    if (!authorExists.length) {
+      // Match the "don't leak much" style used elsewhere: 404
+      throw createError({ statusCode: 404, statusMessage: "Author not found" });
+    }
+
+    // 1) Determine which collections the user can see
     const memberships = await cloudDb
       .select({ collectionId: collectionMembers.collectionId })
       .from(collectionMembers)
@@ -47,101 +72,98 @@ export default defineEventHandler(async (event) => {
     ).filter(Boolean);
 
     if (!memberCollectionIds.length) {
-      return {
-        success: true,
-        data: {
-          books: [],
-        },
-      };
+      return { success: true, data: { books: [] } };
     }
 
-    // Determine which collections to use for the query
+    // 2) Apply optional collection scope
     const targetCollectionIds = collectionId
       ? memberCollectionIds.includes(collectionId)
         ? [collectionId]
         : []
       : memberCollectionIds;
 
-    // If a specific collection was requested but the user isn't a member, return empty
-    // (avoid leaking existence of collections).
     if (!targetCollectionIds.length) {
-      return {
-        success: true,
-        data: {
-          books: [],
-        },
-      };
+      // If a specific collection was requested but user isn't a member, return empty
+      return { success: true, data: { books: [] } };
     }
 
-    // Pull all book ids from the target collections
-    const bookLinks = await cloudDb
+    // 3) Get visible book ids from those collections
+    const visibleBookLinks = await cloudDb
       .select({ bookId: collectionBooks.bookId })
       .from(collectionBooks)
       .where(inArray(collectionBooks.collectionId, targetCollectionIds));
 
-    const bookIds = Array.from(new Set(bookLinks.map((r) => r.bookId))).filter(
-      Boolean,
-    );
+    const visibleBookIds = Array.from(
+      new Set(visibleBookLinks.map((r) => r.bookId)),
+    ).filter(Boolean);
 
-    if (!bookIds.length) {
-      return {
-        success: true,
-        data: {
-          books: [],
-        },
-      };
+    if (!visibleBookIds.length) {
+      return { success: true, data: { books: [] } };
     }
 
-    // Fetch each book by id (lean/simple approach; small N expected in v1)
-    const bookRows = await Promise.all(
-      bookIds.map((id) =>
-        cloudDb.select().from(books).where(eq(books.id, id)).limit(1),
-      ),
-    );
+    // 4) Find the subset of visible books that have this author
+    const authoredLinks = await cloudDb
+      .select({ bookId: bookAuthors.bookId })
+      .from(bookAuthors)
+      .where(
+        and(
+          eq(bookAuthors.authorId, authorId),
+          inArray(bookAuthors.bookId, visibleBookIds),
+        ),
+      );
 
-    const rows = bookRows.map((r) => r[0]).filter(Boolean);
+    const authoredBookIds = Array.from(
+      new Set(authoredLinks.map((l) => l.bookId)),
+    ).filter(Boolean);
 
-    // Attach author display info (multi-author):
-    // - return `authorNames` (string[]) and `authors` ({id,name}[])
-    // - keep legacy `author` as the first/primary author for back-compat
-    const authorLinks = await cloudDb
+    if (!authoredBookIds.length) {
+      return { success: true, data: { books: [] } };
+    }
+
+    // 5) Fetch books
+    // Prefer a single IN query rather than N per book.
+    const bookRows = await cloudDb
+      .select()
+      .from(books)
+      .where(inArray(books.id, authoredBookIds));
+
+    // 6) Attach authors (ordered)
+    const allAuthorLinks = await cloudDb
       .select({
         bookId: bookAuthors.bookId,
         authorId: bookAuthors.authorId,
         position: bookAuthors.position,
       })
       .from(bookAuthors)
-      .where(inArray(bookAuthors.bookId, bookIds));
+      .where(inArray(bookAuthors.bookId, authoredBookIds));
 
-    const authorIds = Array.from(
-      new Set(authorLinks.map((l) => l.authorId)),
+    const allAuthorIds = Array.from(
+      new Set(allAuthorLinks.map((l) => l.authorId)),
     ).filter(Boolean);
 
-    const authorRows = authorIds.length
+    const authorRows = allAuthorIds.length
       ? await cloudDb
           .select({ id: authors.id, name: authors.name })
           .from(authors)
-          .where(inArray(authors.id, authorIds))
+          .where(inArray(authors.id, allAuthorIds))
       : [];
 
     const authorNameById = new Map(authorRows.map((a) => [a.id, a.name]));
 
-    const linksByBookId = new Map<string, typeof authorLinks>();
-    for (const link of authorLinks) {
+    const linksByBookId = new Map<string, typeof allAuthorLinks>();
+    for (const link of allAuthorLinks) {
       const list = linksByBookId.get(link.bookId) ?? [];
       list.push(link);
       linksByBookId.set(link.bookId, list);
     }
 
-    // Attach publisher + series display info:
-    // - return `publisher`/`series` as `{id,name}` for list views
-    // - also keep `publisherId`/`seriesId` for compatibility
+    // 7) Attach publisher + series display info
     const publisherIds = Array.from(
-      new Set(rows.map((b) => b.publisherId).filter(Boolean)),
+      new Set(bookRows.map((b) => b.publisherId).filter(Boolean)),
     ) as string[];
 
     const seriesIds = Array.from(
-      new Set(rows.map((b) => b.seriesId).filter(Boolean)),
+      new Set(bookRows.map((b) => b.seriesId).filter(Boolean)),
     ) as string[];
 
     const publisherRows = publisherIds.length
@@ -161,7 +183,7 @@ export default defineEventHandler(async (event) => {
     const publisherById = new Map(publisherRows.map((p) => [p.id, p]));
     const seriesById = new Map(seriesRows.map((s) => [s.id, s]));
 
-    const rowsWithAuthor = rows.map((b) => {
+    const out = bookRows.map((b) => {
       const links = (linksByBookId.get(b.id) ?? []).slice();
       links.sort((a, c) => {
         const aPos = typeof a.position === "number" ? a.position : 10_000;
@@ -206,24 +228,28 @@ export default defineEventHandler(async (event) => {
     });
 
     // Keep previous behavior: newest first
-    rowsWithAuthor.sort((a, b) => {
+    out.sort((a, b) => {
       const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
       const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
       return bTime - aTime;
     });
 
-    return {
-      success: true,
-      data: {
-        books: rowsWithAuthor,
-      },
-    };
-  } catch (error) {
-    logger.error(error, "GET /api/books: Error fetching books");
-    setResponseStatus(event, 500);
-    return {
-      success: false,
-      message: "Failed to fetch books",
-    };
+    return { success: true, data: { books: out } };
+  } catch (error: unknown) {
+    // Preserve explicit HTTP errors (401/400/404) thrown above
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "statusCode" in error &&
+      (error as { statusCode?: unknown }).statusCode
+    ) {
+      throw error;
+    }
+
+    logger.error(error, "GET /api/authors/:id/books: failed");
+    throw createError({
+      statusCode: 500,
+      statusMessage: "Failed to fetch author books",
+    });
   }
 });

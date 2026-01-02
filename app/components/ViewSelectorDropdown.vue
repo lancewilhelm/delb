@@ -28,26 +28,13 @@ const views: Array<{
     subtitle?: string;
 }> = [
     { id: "books", label: "Books", icon: "lucide:book", enabled: true },
-    {
-        id: "authors",
-        label: "Authors",
-        icon: "lucide:user",
-        enabled: false,
-        subtitle: "Coming soon",
-    },
-    {
-        id: "series",
-        label: "Series",
-        icon: "lucide:layers",
-        enabled: false,
-        subtitle: "Coming soon",
-    },
+    { id: "authors", label: "Authors", icon: "lucide:user", enabled: true },
+    { id: "series", label: "Series", icon: "lucide:layers", enabled: true },
     {
         id: "publishers",
         label: "Publishers",
         icon: "lucide:building-2",
-        enabled: false,
-        subtitle: "Coming soon",
+        enabled: true,
     },
 ];
 
