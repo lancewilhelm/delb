@@ -277,6 +277,7 @@ const publisherInput = ref("");
 const publisherSuggestions = ref<{ id: string; name: string }[]>([]);
 const publisherSuggestOpen = ref(false);
 const publisherSearching = ref(false);
+const publisherFocused = ref(false);
 let publisherSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
 const seriesInput = ref("");
@@ -558,6 +559,10 @@ watch(
 watch(
     () => publisherInput.value,
     (v) => {
+        // Only search/show suggestions while the input is actively focused.
+        // This prevents the dropdown from opening on initial hydration when the field has a value.
+        if (!publisherFocused.value) return;
+
         if (publisherSearchTimer) {
             clearTimeout(publisherSearchTimer);
             publisherSearchTimer = null;
@@ -861,9 +866,12 @@ watch(
 
 <template>
     <div class="flex flex-col w-full h-full overflow-hidden">
+        <!-- Header -->
         <AppHeader class="w-full" />
 
+        <!-- Content -->
         <div class="w-full h-full p-4 overflow-auto">
+            <!-- Back button -->
             <div class="flex items-center gap-2 mb-4 text-(--main-color)">
                 <div
                     v-tooltip="'Back to book'"
@@ -1033,7 +1041,8 @@ watch(
 
                 <!-- Right column: metadata fields -->
                 <div class="min-w-0 flex flex-col gap-4 grow max-w-3xl">
-                    <div class="flex items-start justify-between gap-4">
+                    <!-- Metadata header -->
+                    <div class="flex items-center justify-between gap-4">
                         <div class="min-w-0">
                             <div class="text-sm opacity-70">
                                 ID: <span class="font-mono">{{ book.id }}</span>
@@ -1066,7 +1075,9 @@ watch(
                         {{ successMessage }}
                     </div>
 
+                    <!-- Metadata form -->
                     <div class="grid gap-4">
+                        <!-- Title -->
                         <div class="grid gap-2">
                             <label class="text-sm opacity-70">Title</label>
                             <input
@@ -1077,6 +1088,7 @@ watch(
                             />
                         </div>
 
+                        <!-- Authors -->
                         <div class="grid gap-2">
                             <label class="text-sm opacity-70">Authors</label>
 
@@ -1085,31 +1097,14 @@ watch(
                                 v-if="authorChips.length"
                                 class="flex flex-wrap gap-2"
                             >
-                                <div
+                                <UiChip
                                     v-for="(c, i) in authorChips"
                                     :key="(c.id ?? c.name) + ':' + i"
-                                    class="inline-flex items-center gap-2 px-2 py-1 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
-                                >
-                                    <span class="truncate max-w-60">
-                                        {{ c.name }}
-                                    </span>
-                                    <button
-                                        type="button"
-                                        class="opacity-70 hover:opacity-100"
-                                        aria-label="Remove author"
-                                        @click.stop="
-                                            authorChips = chipRemove(
-                                                authorChips,
-                                                i,
-                                            )
-                                        "
-                                    >
-                                        <icon
-                                            name="lucide:x"
-                                            class="scale-110"
-                                        />
-                                    </button>
-                                </div>
+                                    :label="c.name"
+                                    @remove="
+                                        authorChips = chipRemove(authorChips, i)
+                                    "
+                                />
                             </div>
 
                             <!-- Author input + suggestions -->
@@ -1177,13 +1172,9 @@ watch(
                                     </button>
                                 </div>
                             </div>
-
-                            <div class="text-xs opacity-60">
-                                Type commas to create chips. Pause to see
-                                suggestions from existing authors.
-                            </div>
                         </div>
 
+                        <!-- Description -->
                         <div class="grid gap-2">
                             <label class="text-sm opacity-70"
                                 >Description</label
@@ -1195,269 +1186,75 @@ watch(
                             />
                         </div>
 
+                        <!-- Series Details -->
                         <div class="grid sm:grid-cols-2 gap-4">
+                            <!-- Series -->
                             <div class="grid gap-2">
-                                <label class="text-sm opacity-70"
-                                    >Published</label
-                                >
-                                <input
-                                    v-model="form.published"
-                                    class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
-                                    type="date"
-                                    placeholder="YYYY-MM-DD"
-                                />
-                            </div>
+                                <label class="text-sm opacity-70">
+                                    Series
+                                </label>
 
-                            <div class="grid gap-2">
-                                <label class="text-sm opacity-70"
-                                    >Language</label
-                                >
-                                <input
-                                    v-model="form.language"
-                                    class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
-                                    type="text"
-                                    placeholder="e.g. en"
-                                />
-                            </div>
-                        </div>
-
-                        <div class="grid gap-4">
-                            <div class="grid gap-2">
-                                <label class="text-sm opacity-70">Tags</label>
-
-                                <!-- Selected tag chips -->
-                                <div
-                                    v-if="tagChips.length"
-                                    class="flex flex-wrap gap-2"
-                                >
-                                    <div
-                                        v-for="(c, i) in tagChips"
-                                        :key="(c.id ?? c.name) + ':' + i"
-                                        class="inline-flex items-center gap-2 px-2 py-1 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
-                                    >
-                                        <span class="truncate max-w-60">
-                                            {{ c.name }}
-                                        </span>
-                                        <button
-                                            type="button"
-                                            class="opacity-70 hover:opacity-100"
-                                            aria-label="Remove tag"
-                                            @click.stop="
-                                                tagChips = chipRemove(
-                                                    tagChips,
-                                                    i,
-                                                )
-                                            "
-                                        >
-                                            <icon
-                                                name="lucide:x"
-                                                class="scale-110"
-                                            />
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <!-- Tag input + suggestions -->
                                 <div class="relative">
                                     <input
-                                        v-model="tagInput"
+                                        v-model="form.series"
                                         class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
                                         type="text"
-                                        placeholder="Type tags… (comma to create chips)"
-                                        @keydown.enter.prevent="
-                                            (() => {
-                                                const committed =
-                                                    chipCommitOnEnter(
-                                                        tagChips,
-                                                        tagInput,
-                                                    );
-                                                if (committed.committed) {
-                                                    tagChips = committed.chips;
-                                                    tagInput = committed.input;
-                                                    tagSuggestOpen = false;
-                                                }
-                                            })()
-                                        "
+                                        placeholder="Series name"
+                                        @input="seriesInput = form.series"
                                         @keydown.esc="
                                             (() => {
-                                                tagSuggestions = [];
-                                                tagSuggestOpen = false;
+                                                seriesSuggestions = [];
+                                                seriesSuggestOpen = false;
                                             })()
                                         "
                                         @focus="
-                                            tagSuggestOpen =
-                                                !!tagSuggestions.length
+                                            (() => {
+                                                seriesFocused = true;
+                                                seriesSuggestOpen =
+                                                    !!seriesSuggestions.length;
+                                            })()
+                                        "
+                                        @blur="
+                                            (() => {
+                                                seriesFocused = false;
+                                                seriesSuggestOpen = false;
+                                            })()
                                         "
                                     />
 
                                     <div
                                         v-if="
-                                            tagSuggestOpen &&
-                                            (tagSearching ||
-                                                tagSuggestions.length)
+                                            seriesSuggestOpen &&
+                                            (seriesSearching ||
+                                                seriesSuggestions.length)
                                         "
                                         class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
                                     >
                                         <div
-                                            v-if="tagSearching"
+                                            v-if="seriesSearching"
                                             class="px-3 py-2 text-sm opacity-70"
                                         >
                                             Searching…
                                         </div>
 
                                         <button
-                                            v-for="s in tagSuggestions"
+                                            v-for="s in seriesSuggestions"
                                             :key="s.id"
                                             type="button"
                                             class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10"
                                             @click="
-                                                tagChips =
-                                                    chipAddFromSuggestion(
-                                                        tagChips,
-                                                        s,
-                                                    );
-                                                tagInput = '';
-                                                tagSuggestOpen = false;
+                                                form.series = s.name;
+                                                seriesInput = s.name;
+                                                seriesSuggestOpen = false;
                                             "
                                         >
                                             {{ s.name }}
                                         </button>
                                     </div>
                                 </div>
-
-                                <div class="text-xs opacity-60">
-                                    Type commas to create chips. Pause to see
-                                    suggestions from existing tags.
-                                </div>
                             </div>
 
-                            <div class="grid sm:grid-cols-2 gap-4">
-                                <div class="grid gap-2">
-                                    <label class="text-sm opacity-70">
-                                        Publisher
-                                    </label>
-
-                                    <div class="relative">
-                                        <input
-                                            v-model="form.publisher"
-                                            class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
-                                            type="text"
-                                            placeholder="Publisher name"
-                                            @input="
-                                                publisherInput = form.publisher
-                                            "
-                                            @keydown.esc="
-                                                (() => {
-                                                    publisherSuggestions = [];
-                                                    publisherSuggestOpen = false;
-                                                })()
-                                            "
-                                            @focus="
-                                                publisherSuggestOpen =
-                                                    !!publisherSuggestions.length
-                                            "
-                                        />
-
-                                        <div
-                                            v-if="
-                                                publisherSuggestOpen &&
-                                                (publisherSearching ||
-                                                    publisherSuggestions.length)
-                                            "
-                                            class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
-                                        >
-                                            <div
-                                                v-if="publisherSearching"
-                                                class="px-3 py-2 text-sm opacity-70"
-                                            >
-                                                Searching…
-                                            </div>
-
-                                            <button
-                                                v-for="s in publisherSuggestions"
-                                                :key="s.id"
-                                                type="button"
-                                                class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10"
-                                                @click="
-                                                    form.publisher = s.name;
-                                                    publisherInput = s.name;
-                                                    publisherSuggestOpen = false;
-                                                "
-                                            >
-                                                {{ s.name }}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="grid gap-2">
-                                    <label class="text-sm opacity-70">
-                                        Series
-                                    </label>
-
-                                    <div class="relative">
-                                        <input
-                                            v-model="form.series"
-                                            class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
-                                            type="text"
-                                            placeholder="Series name"
-                                            @input="seriesInput = form.series"
-                                            @keydown.esc="
-                                                (() => {
-                                                    seriesSuggestions = [];
-                                                    seriesSuggestOpen = false;
-                                                })()
-                                            "
-                                            @focus="
-                                                (() => {
-                                                    seriesFocused = true;
-                                                    seriesSuggestOpen =
-                                                        !!seriesSuggestions.length;
-                                                })()
-                                            "
-                                            @blur="
-                                                (() => {
-                                                    seriesFocused = false;
-                                                    seriesSuggestOpen = false;
-                                                })()
-                                            "
-                                        />
-
-                                        <div
-                                            v-if="
-                                                seriesSuggestOpen &&
-                                                (seriesSearching ||
-                                                    seriesSuggestions.length)
-                                            "
-                                            class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
-                                        >
-                                            <div
-                                                v-if="seriesSearching"
-                                                class="px-3 py-2 text-sm opacity-70"
-                                            >
-                                                Searching…
-                                            </div>
-
-                                            <button
-                                                v-for="s in seriesSuggestions"
-                                                :key="s.id"
-                                                type="button"
-                                                class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10"
-                                                @click="
-                                                    form.series = s.name;
-                                                    seriesInput = s.name;
-                                                    seriesSuggestOpen = false;
-                                                "
-                                            >
-                                                {{ s.name }}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="grid sm:grid-cols-2 gap-4">
+                            <!-- Series Index -->
                             <div class="grid gap-2">
                                 <label class="text-sm opacity-70">
                                     Series Index
@@ -1471,15 +1268,181 @@ watch(
                                     placeholder="(blank to clear)"
                                 />
                             </div>
+                        </div>
 
-                            <div class="grid gap-2">
-                                <label class="text-sm opacity-70">Notes</label>
-                                <div class="text-sm opacity-70">
-                                    This page edits only canonical book
-                                    metadata. Authors/tags/files aren’t editable
-                                    yet.
+                        <!-- Tags -->
+                        <div class="grid gap-2">
+                            <label class="text-sm opacity-70">Tags</label>
+
+                            <!-- Selected tag chips -->
+                            <div
+                                v-if="tagChips.length"
+                                class="flex flex-wrap gap-2"
+                            >
+                                <UiChip
+                                    v-for="(c, i) in tagChips"
+                                    :key="(c.id ?? c.name) + ':' + i"
+                                    :label="c.name"
+                                    @remove="tagChips = chipRemove(tagChips, i)"
+                                />
+                            </div>
+
+                            <!-- Tag input + suggestions -->
+                            <div class="relative">
+                                <input
+                                    v-model="tagInput"
+                                    class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                                    type="text"
+                                    placeholder="Type tags… (comma to create chips)"
+                                    @keydown.enter.prevent="
+                                        (() => {
+                                            const committed = chipCommitOnEnter(
+                                                tagChips,
+                                                tagInput,
+                                            );
+                                            if (committed.committed) {
+                                                tagChips = committed.chips;
+                                                tagInput = committed.input;
+                                                tagSuggestOpen = false;
+                                            }
+                                        })()
+                                    "
+                                    @keydown.esc="
+                                        (() => {
+                                            tagSuggestions = [];
+                                            tagSuggestOpen = false;
+                                        })()
+                                    "
+                                    @focus="
+                                        tagSuggestOpen = !!tagSuggestions.length
+                                    "
+                                />
+
+                                <div
+                                    v-if="
+                                        tagSuggestOpen &&
+                                        (tagSearching || tagSuggestions.length)
+                                    "
+                                    class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
+                                >
+                                    <div
+                                        v-if="tagSearching"
+                                        class="px-3 py-2 text-sm opacity-70"
+                                    >
+                                        Searching…
+                                    </div>
+
+                                    <button
+                                        v-for="s in tagSuggestions"
+                                        :key="s.id"
+                                        type="button"
+                                        class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10"
+                                        @click="
+                                            tagChips = chipAddFromSuggestion(
+                                                tagChips,
+                                                s,
+                                            );
+                                            tagInput = '';
+                                            tagSuggestOpen = false;
+                                        "
+                                    >
+                                        {{ s.name }}
+                                    </button>
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- Publishing details -->
+                        <div class="grid sm:grid-cols-2 gap-4">
+                            <!-- Publisher -->
+                            <div class="grid gap-2">
+                                <label class="text-sm opacity-70">
+                                    Publisher
+                                </label>
+
+                                <div class="relative">
+                                    <input
+                                        v-model="form.publisher"
+                                        class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                                        type="text"
+                                        placeholder="Publisher name"
+                                        @input="publisherInput = form.publisher"
+                                        @keydown.esc="
+                                            (() => {
+                                                publisherSuggestions = [];
+                                                publisherSuggestOpen = false;
+                                            })()
+                                        "
+                                        @focus="
+                                            (() => {
+                                                publisherFocused = true;
+                                                publisherSuggestOpen =
+                                                    !!publisherSuggestions.length;
+                                            })()
+                                        "
+                                        @blur="
+                                            (() => {
+                                                publisherFocused = false;
+                                                publisherSuggestOpen = false;
+                                            })()
+                                        "
+                                    />
+
+                                    <div
+                                        v-if="
+                                            publisherSuggestOpen &&
+                                            (publisherSearching ||
+                                                publisherSuggestions.length)
+                                        "
+                                        class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
+                                    >
+                                        <div
+                                            v-if="publisherSearching"
+                                            class="px-3 py-2 text-sm opacity-70"
+                                        >
+                                            Searching…
+                                        </div>
+
+                                        <button
+                                            v-for="s in publisherSuggestions"
+                                            :key="s.id"
+                                            type="button"
+                                            class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10"
+                                            @click="
+                                                form.publisher = s.name;
+                                                publisherInput = s.name;
+                                                publisherSuggestOpen = false;
+                                            "
+                                        >
+                                            {{ s.name }}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Published -->
+                            <div class="grid gap-2">
+                                <label class="text-sm opacity-70"
+                                    >Published</label
+                                >
+                                <input
+                                    v-model="form.published"
+                                    class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                                    type="date"
+                                    placeholder="YYYY-MM-DD"
+                                />
+                            </div>
+                        </div>
+
+                        <!-- Language -->
+                        <div class="grid gap-2">
+                            <label class="text-sm opacity-70">Language</label>
+                            <input
+                                v-model="form.language"
+                                class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                                type="text"
+                                placeholder="e.g. en"
+                            />
                         </div>
                     </div>
                 </div>

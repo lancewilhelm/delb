@@ -20,8 +20,6 @@ type BookThumb = {
 const props = withDefaults(
     defineProps<{
         book: BookThumb;
-        /** Override the link destination. Defaults to `/books/<id>` */
-        to?: string;
         /** Show the author line (if present in `book`). Default: true */
         showAuthor?: boolean;
         /** Additional classes for the outer wrapper */
@@ -33,8 +31,6 @@ const props = withDefaults(
         class: "",
     },
 );
-
-const resolvedTo = computed(() => props.to ?? `/books/${props.book.id}`);
 
 const coverSrc = computed(() => {
     const p = props.book.coverImagePath;
@@ -66,24 +62,39 @@ const authorLabel = computed(() => {
 <template>
     <div :class="['w-43', props.class]">
         <div class="flex flex-col gap-1">
-            <NuxtLink :to="resolvedTo">
-                <BookCover
-                    :src="coverSrc"
-                    :alt="`Cover for ${props.book.title}`"
-                    class="cursor-pointer"
-                />
-            </NuxtLink>
+            <BookCover
+                :src="coverSrc"
+                :alt="`Cover for ${props.book.title}`"
+                class="cursor-pointer"
+                @click="navigateTo(`/books/${props.book.id}`)"
+            />
 
             <div class="flex flex-col">
-                <NuxtLink :to="resolvedTo" class="flex">
-                    <HoverScrollText>{{ props.book.title }}</HoverScrollText>
-                </NuxtLink>
+                <HoverScrollText
+                    ><span
+                        class="cursor-pointer hover:underline"
+                        @click="navigateTo(`/books/${props.book.id}`)"
+                        >{{ props.book.title }}
+                    </span>
+                </HoverScrollText>
 
                 <HoverScrollText
                     v-if="props.showAuthor && authorLabel"
-                    class="opacity-70"
-                >
-                    {{ authorLabel }}
+                    class="opacity-70 cursor-pointer"
+                    ><span v-for="(a, index) in book.authors" :key="a.id">
+                        <span
+                            class="cursor-pointer hover:underline"
+                            @click="navigateTo(`/authors/${a.id}`)"
+                        >
+                            {{ a.name }}
+                        </span>
+                        <span
+                            v-if="
+                                book.authors && index < book.authors.length - 1
+                            "
+                            >,
+                        </span>
+                    </span>
                 </HoverScrollText>
             </div>
         </div>

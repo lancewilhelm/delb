@@ -452,26 +452,50 @@ watch(
 
                 <!-- Details (right) -->
                 <div class="min-w-0 flex flex-col gap-4">
-                    <div v-if="book.series" class="min-w-0 space-y-1">
-                        <div class="font-serif italic text-lg opacity-80">
-                            {{ book.series.name }}
+                    <!-- Series -->
+                    <div class="min-w-0 space-y-1">
+                        <div
+                            v-if="book.series"
+                            class="font-serif italic text-lg opacity-80"
+                        >
+                            <span
+                                class="cursor-pointer hover:underline"
+                                @click="navigateTo(`/series/${book.series.id}`)"
+                                >{{ book.series.name }}</span
+                            >
                             {{
                                 book.series.index ? `#${book.series.index}` : ""
                             }}
                         </div>
+
+                        <!-- Title -->
                         <div class="text-4xl leading-tight font-serif">
                             {{ book.title }}
                         </div>
 
+                        <!-- Authors -->
                         <div class="text-xl font-light opacity-80 font-serif">
-                            <span>{{
-                                (book.authors ?? [])
-                                    .map((a) => a.name)
-                                    .filter(Boolean)
-                                    .join(", ")
-                            }}</span>
+                            <span
+                                v-for="(a, index) in book.authors"
+                                :key="a.id"
+                            >
+                                <span
+                                    class="cursor-pointer hover:underline"
+                                    @click="navigateTo(`/authors/${a.id}`)"
+                                >
+                                    {{ a.name }}
+                                </span>
+                                <span
+                                    v-if="
+                                        book.authors &&
+                                        index < book.authors.length - 1
+                                    "
+                                    >,
+                                </span>
+                            </span>
                         </div>
 
+                        <!-- Description -->
                         <div
                             v-if="book.description"
                             class="min-w-0 font-light prose prose-sm max-w-none text-(--text-color) opacity-90"
