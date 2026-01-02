@@ -224,7 +224,11 @@ async function uploadEpubs() {
                 </div>
             </div>
 
-            <button class="px-3 py-2 border rounded-md" @click="browse">
+            <button
+                v-tooltip="'Choose EPUB files from your computer'"
+                class="px-3 py-2"
+                @click="browse"
+            >
                 Browse…
             </button>
 
@@ -254,7 +258,12 @@ async function uploadEpubs() {
 
                 <div class="flex gap-2 w-full justify-center">
                     <button
-                        class="px-3 py-2 border rounded-md disabled:opacity-50 w-full"
+                        v-tooltip="
+                            !selectedCollectionIds.length
+                                ? 'Select at least one collection'
+                                : 'Upload selected EPUBs'
+                        "
+                        class="px-3 py-2 w-full disabled:opacity-50"
                         :disabled="
                             uploading ||
                             !files.length ||
@@ -266,7 +275,8 @@ async function uploadEpubs() {
                     </button>
 
                     <button
-                        class="px-3 py-2 border rounded-md disabled:opacity-50 w-full hover:bg-(--error-color)!"
+                        v-tooltip="'Remove all pending uploads'"
+                        class="px-3 py-2 w-full disabled:opacity-50 hover:bg-(--error-color)!"
                         :disabled="uploading"
                         @click="clearFiles"
                     >

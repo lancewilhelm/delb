@@ -1,6 +1,13 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { cloudDb } from "~~/server/utils/db/cloud";
-import { books, collectionBooks, collectionMembers } from "~/utils/db/schema";
+import {
+  authors,
+  bookAuthors,
+  bookFiles,
+  books,
+  collectionBooks,
+  collectionMembers,
+} from "~/utils/db/schema";
 import { logger } from "~/utils/logger";
 import { auth } from "~/utils/auth";
 
@@ -56,10 +63,36 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 404, statusMessage: "Book not found" });
     }
 
+    // Authors for this book (ordered)
+    const authorLinks = await cloudDb
+      .select({
+        authorId: bookAuthors.authorId,
+        position: bookAuthors.position,
+        name: authors.name,
+      })
+      .from(bookAuthors)
+      .innerJoin(authors, eq(authors.id, bookAuthors.authorId))
+      .where(eq(bookAuthors.bookId, id))
+      .orderBy(asc(bookAuthors.position), asc(authors.name));
+
+    const bookAuthorsOut = authorLinks.map((a) => ({
+      id: a.authorId,
+      name: a.name,
+      position: a.position ?? null,
+    }));
+
+    // Files for this book (all known formats)
+    const files = await cloudDb
+      .select()
+      .from(bookFiles)
+      .where(eq(bookFiles.bookId, id));
+
     return {
       success: true,
       data: {
         book,
+        authors: bookAuthorsOut,
+        files,
       },
     };
   } catch (error: unknown) {

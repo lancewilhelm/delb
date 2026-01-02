@@ -1,5 +1,7 @@
 import { defineStore } from "pinia";
 
+export type LibraryView = "books" | "authors" | "series" | "publishers";
+
 export const useUiStore = defineStore(
   "ui",
   () => {
@@ -9,10 +11,20 @@ export const useUiStore = defineStore(
     }
 
     /**
-     * Resizable left sidebar width (Collections sidebar).
+     * Header "View" selection state.
+     * This controls *what* the user is looking at (Books/Authors/Series/Publishers).
+     */
+    const libraryView = ref<LibraryView>("books");
+    function setLibraryView(view: LibraryView) {
+      libraryView.value = view;
+    }
+
+    /**
+     * Left sidebar (Collections sidebar) UI state.
      * Stored in pixels and persisted via Pinia persist.
      */
     const leftSidebarWidthPx = ref(260);
+    const leftSidebarCollapsed = ref(false);
 
     function setLeftSidebarWidthPx(widthPx: number) {
       // Clamp to a reasonable range to avoid breaking layout.
@@ -22,17 +34,34 @@ export const useUiStore = defineStore(
       leftSidebarWidthPx.value = next;
     }
 
+    function setLeftSidebarCollapsed(collapsed: boolean) {
+      leftSidebarCollapsed.value = collapsed;
+    }
+
+    function toggleLeftSidebarCollapsed() {
+      leftSidebarCollapsed.value = !leftSidebarCollapsed.value;
+    }
+
     function $reset() {
       // Insert reset logic here if needed
+      libraryView.value = "books";
       leftSidebarWidthPx.value = 260;
+      leftSidebarCollapsed.value = false;
     }
 
     return {
       commandPaletteVisible,
       setCommandPaletteVisible,
 
+      libraryView,
+      setLibraryView,
+
       leftSidebarWidthPx,
       setLeftSidebarWidthPx,
+
+      leftSidebarCollapsed,
+      setLeftSidebarCollapsed,
+      toggleLeftSidebarCollapsed,
 
       $reset,
     };

@@ -14,14 +14,19 @@ useHead({
 type Book = {
     id: string;
     title: string;
-    author: string;
-    format: string;
-    relativePath: string;
     coverImagePath?: string | null;
+
+    // New schema: authors are related entities (many-to-many)
+    authors?: { id: string; name: string }[];
+
+    // New schema: publisher is a related entity; API returns denormalized for now
+    publisher?: { id: string; name: string } | null;
+
+    // New schema: files (multiple formats possible); API returns denormalized for now
+    files?: { id: string; format: string; relativePath: string }[];
 
     // Extended metadata (best-effort; may be null/undefined)
     description?: string | null;
-    publisher?: string | null;
     published?: string | null;
     language?: string | null;
 
@@ -31,6 +36,13 @@ type Book = {
 type BookGetResponse = {
     data?: {
         book?: Book;
+        authors?: { id: string; name: string; position?: number | null }[];
+        files?: {
+            id: string;
+            bookId: string;
+            format: string;
+            relativePath: string;
+        }[];
     };
     success?: boolean;
     message?: string;
@@ -192,7 +204,12 @@ const downloading = ref(false);
 
 function guessDownloadFilename(b: Book) {
     const title = (b.title || "book").trim();
-    const ext = (b.format || "epub").trim().toLowerCase() || "epub";
+
+    const preferred =
+        b.files?.find((f) => (f.format || "").toLowerCase() === "epub") ??
+        b.files?.[0];
+
+    const ext = (preferred?.format || "epub").trim().toLowerCase() || "epub";
     return `${title}.${ext}`;
 }
 
@@ -298,6 +315,23 @@ async function loadBook() {
 
         book.value = json?.data?.book ?? null;
 
+        // Allow either nested `book.authors/files` or top-level `data.authors/files`
+        if (book.value) {
+            if (!book.value.authors && json?.data?.authors) {
+                book.value.authors = json.data.authors.map((a) => ({
+                    id: a.id,
+                    name: a.name,
+                }));
+            }
+            if (!book.value.files && json?.data?.files) {
+                book.value.files = json.data.files.map((f) => ({
+                    id: f.id,
+                    format: f.format,
+                    relativePath: f.relativePath,
+                }));
+            }
+        }
+
         if (!book.value) {
             errorMessage.value = "Book not found";
         } else {
@@ -333,7 +367,7 @@ watch(
         <AppHeader class="w-full" />
 
         <div class="w-full h-full p-4 overflow-auto">
-            <div class="flex items-center gap-2 mb-4">
+            <div class="flex items-center gap-2 mb-4 text-(--main-color)">
                 <NuxtLink
                     v-tooltip="'Go back'"
                     to="/"
@@ -409,7 +443,12 @@ watch(
                         </div>
 
                         <div class="text-xl font-light opacity-80 font-serif">
-                            <span>{{ book.author }}</span>
+                            <span>{{
+                                (book.authors ?? [])
+                                    .map((a) => a.name)
+                                    .filter(Boolean)
+                                    .join(", ")
+                            }}</span>
                         </div>
 
                         <div
@@ -456,11 +495,11 @@ watch(
 
                     <div class="grid md:grid-cols-2 gap-2 text-sm">
                         <div
-                            v-if="book.publisher"
+                            v-if="book.publisher?.name"
                             class="grid grid-cols-[110px_1fr] gap-2"
                         >
                             <div class="opacity-70">Publisher</div>
-                            <div class="min-w-0">{{ book.publisher }}</div>
+                            <div class="min-w-0">{{ book.publisher.name }}</div>
                         </div>
 
                         <div
@@ -497,16 +536,25 @@ watch(
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-[110px_1fr] gap-2">
-                            <div class="opacity-70">Path</div>
+                        <div
+                            v-if="book.files && book.files.length"
+                            class="grid grid-cols-[110px_1fr] gap-2"
+                        >
+                            <div class="opacity-70">Files</div>
                             <div class="min-w-0 break-all opacity-80">
-                                {{ book.relativePath }}
+                                {{
+                                    book.files
+                                        .map((f) => {
+                                            const fmt = (
+                                                f.format || ""
+                                            ).toUpperCase();
+                                            const p = f.relativePath || "";
+                                            return fmt ? `${fmt}: ${p}` : p;
+                                        })
+                                        .filter(Boolean)
+                                        .join(" • ")
+                                }}
                             </div>
-                        </div>
-
-                        <div class="grid grid-cols-[110px_1fr] gap-2">
-                            <div class="opacity-70">Format</div>
-                            <div class="min-w-0">{{ book.format }}</div>
                         </div>
                     </div>
 
@@ -530,7 +578,14 @@ watch(
                             <div class="text-sm">
                                 <div class="opacity-70">Book</div>
                                 <div class="font-medium">{{ book.title }}</div>
-                                <div class="opacity-70">{{ book.author }}</div>
+                                <div class="opacity-70">
+                                    {{
+                                        (book.authors ?? [])
+                                            .map((a) => a.name)
+                                            .filter(Boolean)
+                                            .join(", ")
+                                    }}
+                                </div>
                             </div>
 
                             <div class="flex gap-2 justify-end">

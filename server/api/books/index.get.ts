@@ -1,6 +1,12 @@
 import { eq, inArray } from "drizzle-orm";
 import { cloudDb } from "~~/server/utils/db/cloud";
-import { books, collectionBooks, collectionMembers } from "~/utils/db/schema";
+import {
+  authors,
+  bookAuthors,
+  books,
+  collectionBooks,
+  collectionMembers,
+} from "~/utils/db/schema";
 import { logger } from "~/utils/logger";
 import { auth } from "~/utils/auth";
 
@@ -93,8 +99,57 @@ export default defineEventHandler(async (event) => {
 
     const rows = bookRows.map((r) => r[0]).filter(Boolean);
 
+    // Attach author display info (v1: primary author = lowest position, else any)
+    const authorLinks = await cloudDb
+      .select({
+        bookId: bookAuthors.bookId,
+        authorId: bookAuthors.authorId,
+        position: bookAuthors.position,
+      })
+      .from(bookAuthors)
+      .where(inArray(bookAuthors.bookId, bookIds));
+
+    const authorIds = Array.from(
+      new Set(authorLinks.map((l) => l.authorId)),
+    ).filter(Boolean);
+
+    const authorRows = authorIds.length
+      ? await cloudDb
+          .select({ id: authors.id, name: authors.name })
+          .from(authors)
+          .where(inArray(authors.id, authorIds))
+      : [];
+
+    const authorNameById = new Map(authorRows.map((a) => [a.id, a.name]));
+
+    const linksByBookId = new Map<string, typeof authorLinks>();
+    for (const link of authorLinks) {
+      const list = linksByBookId.get(link.bookId) ?? [];
+      list.push(link);
+      linksByBookId.set(link.bookId, list);
+    }
+
+    const rowsWithAuthor = rows.map((b) => {
+      const links = (linksByBookId.get(b.id) ?? []).slice();
+      links.sort((a, c) => {
+        const aPos = typeof a.position === "number" ? a.position : 10_000;
+        const cPos = typeof c.position === "number" ? c.position : 10_000;
+        return aPos - cPos;
+      });
+
+      const primary = links[0];
+      const author =
+        (primary?.authorId && authorNameById.get(primary.authorId)) ||
+        undefined;
+
+      return {
+        ...b,
+        author,
+      };
+    });
+
     // Keep previous behavior: newest first
-    rows.sort((a, b) => {
+    rowsWithAuthor.sort((a, b) => {
       const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
       const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
       return bTime - aTime;
@@ -103,7 +158,7 @@ export default defineEventHandler(async (event) => {
     return {
       success: true,
       data: {
-        books: rows,
+        books: rowsWithAuthor,
       },
     };
   } catch (error) {
