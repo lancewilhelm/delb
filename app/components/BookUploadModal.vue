@@ -226,7 +226,7 @@ async function uploadEpubs() {
 
             <button
                 v-tooltip="'Choose EPUB files from your computer'"
-                class="px-3 py-2"
+                class="px-3 py-2 bg-(--sub-color)/15"
                 @click="browse"
             >
                 Browse…
@@ -263,7 +263,7 @@ async function uploadEpubs() {
                                 ? 'Select at least one collection'
                                 : 'Upload selected EPUBs'
                         "
-                        class="px-3 py-2 w-full disabled:opacity-50"
+                        class="px-3 py-2 w-full disabled:opacity-50 bg-(--sub-color)/15"
                         :disabled="
                             uploading ||
                             !files.length ||
@@ -276,7 +276,7 @@ async function uploadEpubs() {
 
                     <button
                         v-tooltip="'Remove all pending uploads'"
-                        class="px-3 py-2 w-full disabled:opacity-50 hover:bg-(--error-color)!"
+                        class="px-3 py-2 w-full disabled:opacity-50 hover:bg-(--error-color)! bg-(--sub-color)/15"
                         :disabled="uploading"
                         @click="clearFiles"
                     >

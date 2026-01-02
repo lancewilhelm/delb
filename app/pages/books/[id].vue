@@ -22,6 +22,9 @@ type Book = {
     // New schema: publisher is a related entity; API returns denormalized for now
     publisher?: { id: string; name: string } | null;
 
+    // New schema: series is a related entity; API returns denormalized for now
+    series?: { id: string; name: string; index?: number | null } | null;
+
     // New schema: files (multiple formats possible); API returns denormalized for now
     files?: { id: string; format: string; relativePath: string }[];
 
@@ -494,12 +497,31 @@ watch(
                     </div>
 
                     <div class="grid md:grid-cols-2 gap-2 text-sm">
+                        <div class="grid grid-cols-[110px_1fr] gap-2">
+                            <div class="opacity-70">Publisher</div>
+                            <div class="min-w-0">
+                                {{ book.publisher?.name ?? "Unknown" }}
+                            </div>
+                        </div>
+
                         <div
-                            v-if="book.publisher?.name"
+                            v-if="book.series?.name"
                             class="grid grid-cols-[110px_1fr] gap-2"
                         >
-                            <div class="opacity-70">Publisher</div>
-                            <div class="min-w-0">{{ book.publisher.name }}</div>
+                            <div class="opacity-70">Series</div>
+                            <div class="min-w-0">
+                                <span>{{ book.series.name }}</span>
+                                <span
+                                    v-if="
+                                        typeof book.series?.index ===
+                                            'number' &&
+                                        !Number.isNaN(book.series.index)
+                                    "
+                                    class="opacity-80"
+                                >
+                                    ({{ book.series.index }})
+                                </span>
+                            </div>
                         </div>
 
                         <div

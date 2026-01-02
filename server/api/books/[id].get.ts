@@ -7,6 +7,8 @@ import {
   books,
   collectionBooks,
   collectionMembers,
+  publishers,
+  series,
 } from "~/utils/db/schema";
 import { logger } from "~/utils/logger";
 import { auth } from "~/utils/auth";
@@ -63,6 +65,31 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 404, statusMessage: "Book not found" });
     }
 
+    // Publisher + Series (denormalized objects for the detail page)
+    const publisher = book.publisherId
+      ? ((
+          await cloudDb
+            .select({ id: publishers.id, name: publishers.name })
+            .from(publishers)
+            .where(eq(publishers.id, book.publisherId))
+            .limit(1)
+        )[0] ?? null)
+      : null;
+
+    const seriesRow = book.seriesId
+      ? ((
+          await cloudDb
+            .select({ id: series.id, name: series.name })
+            .from(series)
+            .where(eq(series.id, book.seriesId))
+            .limit(1)
+        )[0] ?? null)
+      : null;
+
+    const seriesOut = seriesRow
+      ? { ...seriesRow, index: book.seriesIndex ?? null }
+      : null;
+
     // Authors for this book (ordered)
     const authorLinks = await cloudDb
       .select({
@@ -90,7 +117,11 @@ export default defineEventHandler(async (event) => {
     return {
       success: true,
       data: {
-        book,
+        book: {
+          ...book,
+          publisher,
+          series: seriesOut,
+        },
         authors: bookAuthorsOut,
         files,
       },
