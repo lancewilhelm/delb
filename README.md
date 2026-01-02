@@ -13,7 +13,7 @@ A modern, self-hosted digital library manager built with Nuxt. Manage your ebook
 - **Library Management** - Upload, organize, and browse your ebook collection
 - **Multi-user Support** - User authentication with role-based permissions (owner, admin, user, guest)
 - **Modern UI** - Clean, responsive interface with theme support
-- **Book Details** - View metadata, descriptions, and cover images
+- **Book Details** - View metadata, descriptions, and cover images (admins can edit metadata, authors, and covers)
 - **Direct Downloads** - Download books directly from the web interface
 - **Search & Filter** - Find books quickly with search and filtering
 - **SQLite Database** - Lightweight, file-based database with Drizzle ORM
@@ -57,6 +57,10 @@ The application will be available at `http://localhost:3000`.
 1. On first run, create an owner account through the registration page
 2. The first user registered becomes the owner with full admin privileges
 3. Additional users can be invited or registered with appropriate roles
+4. Admins/owners can edit a book at `/books/{id}/edit` (an **Edit** button appears on the book page for admins), including:
+   - Metadata fields (title, description, published, language, series/publisher IDs)
+   - Authors (single field; can be comma-separated for multiple authors)
+   - Cover image upload (stored as `cover.webp` alongside the book file)
 
 ## Project Structure
 

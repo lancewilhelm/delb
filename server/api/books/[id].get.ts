@@ -4,11 +4,13 @@ import {
   authors,
   bookAuthors,
   bookFiles,
+  bookTags,
   books,
   collectionBooks,
   collectionMembers,
   publishers,
   series,
+  tags,
 } from "~/utils/db/schema";
 import { logger } from "~/utils/logger";
 import { auth } from "~/utils/auth";
@@ -108,6 +110,22 @@ export default defineEventHandler(async (event) => {
       position: a.position ?? null,
     }));
 
+    // Tags for this book (unordered)
+    const tagLinks = await cloudDb
+      .select({
+        tagId: bookTags.tagId,
+        name: tags.name,
+      })
+      .from(bookTags)
+      .innerJoin(tags, eq(tags.id, bookTags.tagId))
+      .where(eq(bookTags.bookId, id))
+      .orderBy(asc(tags.name));
+
+    const bookTagsOut = tagLinks.map((t) => ({
+      id: t.tagId,
+      name: t.name,
+    }));
+
     // Files for this book (all known formats)
     const files = await cloudDb
       .select()
@@ -121,9 +139,11 @@ export default defineEventHandler(async (event) => {
           ...book,
           publisher,
           series: seriesOut,
+          tags: bookTagsOut,
         },
         authors: bookAuthorsOut,
         files,
+        tags: bookTagsOut,
       },
     };
   } catch (error: unknown) {

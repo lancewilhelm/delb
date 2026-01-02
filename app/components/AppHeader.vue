@@ -18,12 +18,11 @@ const emit = defineEmits<{
             >
                 Delb
             </div>
+            <CollectionPickerDropdown />
         </div>
 
         <!-- Center: Collection switcher (scope) -->
-        <div class="flex items-center gap-2">
-            <CollectionPickerDropdown />
-        </div>
+        <div class="flex items-center gap-2"></div>
 
         <!-- Right: actions -->
         <div

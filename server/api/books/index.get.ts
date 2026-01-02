@@ -99,7 +99,9 @@ export default defineEventHandler(async (event) => {
 
     const rows = bookRows.map((r) => r[0]).filter(Boolean);
 
-    // Attach author display info (v1: primary author = lowest position, else any)
+    // Attach author display info (multi-author):
+    // - return `authorNames` (string[]) and `authors` ({id,name}[])
+    // - keep legacy `author` as the first/primary author for back-compat
     const authorLinks = await cloudDb
       .select({
         bookId: bookAuthors.bookId,
@@ -137,14 +139,29 @@ export default defineEventHandler(async (event) => {
         return aPos - cPos;
       });
 
-      const primary = links[0];
-      const author =
-        (primary?.authorId && authorNameById.get(primary.authorId)) ||
-        undefined;
+      const authorNames = links
+        .map((l) => (l.authorId ? authorNameById.get(l.authorId) : undefined))
+        .filter((n): n is string => typeof n === "string" && n.length > 0);
+
+      const authorsOut = links
+        .map((l) => {
+          const name = l.authorId ? authorNameById.get(l.authorId) : undefined;
+          if (!l.authorId || !name) return null;
+          return { id: l.authorId, name };
+        })
+        .filter(
+          (a): a is { id: string; name: string } =>
+            !!a && typeof a.id === "string" && typeof a.name === "string",
+        );
+
+      // Back-compat: keep the first author in `author`
+      const author = authorNames[0];
 
       return {
         ...b,
         author,
+        authorNames,
+        authors: authorsOut,
       };
     });
 

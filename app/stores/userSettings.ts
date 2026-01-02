@@ -28,7 +28,7 @@ export interface UserSettings {
 
 function getDefaultSettings(): UserSettings {
   return {
-    fontFamily: "Geist",
+    fontFamily: "Nunito",
     favoriteThemes: [],
     themeSorting: {
       sortedByName: false,

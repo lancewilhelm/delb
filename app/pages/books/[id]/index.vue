@@ -19,6 +19,9 @@ type Book = {
     // New schema: authors are related entities (many-to-many)
     authors?: { id: string; name: string }[];
 
+    // New schema: tags are related entities (many-to-many)
+    tags?: { id: string; name: string }[];
+
     // New schema: publisher is a related entity; API returns denormalized for now
     publisher?: { id: string; name: string } | null;
 
@@ -395,7 +398,7 @@ watch(
             >
                 <!-- Cover (left) -->
                 <div
-                    class="flex flex-col justify-center items-center w-80 shrink-0"
+                    class="flex flex-col justify-center items-center w-80 shrink-0 self-center md:self-start"
                 >
                     <!-- Keep a consistent aspect ratio; cover itself is max 320px wide -->
                     <BookCover
@@ -425,6 +428,15 @@ watch(
                             {{ downloading ? "Downloading..." : "Download" }}
                         </button>
 
+                        <NuxtLink
+                            v-if="isAdmin"
+                            class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
+                            :to="`/books/${book.id}/edit`"
+                        >
+                            <icon name="lucide:pencil" class="scale-135" />
+                            Edit
+                        </NuxtLink>
+
                         <button
                             v-if="isAdmin"
                             class="px-3 py-2 rounded-md border border-(--error-color) text-(--error-color) hover:bg-(--error-color)/90! text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
@@ -440,7 +452,13 @@ watch(
 
                 <!-- Details (right) -->
                 <div class="min-w-0 flex flex-col gap-4">
-                    <div class="min-w-0 space-y-1">
+                    <div v-if="book.series" class="min-w-0 space-y-1">
+                        <div class="font-serif italic text-lg opacity-80">
+                            {{ book.series.name }}
+                            {{
+                                book.series.index ? `#${book.series.index}` : ""
+                            }}
+                        </div>
                         <div class="text-4xl leading-tight font-serif">
                             {{ book.title }}
                         </div>
@@ -494,6 +512,19 @@ watch(
                                 }}
                             </div>
                         </div>
+
+                        <div
+                            v-if="(book.tags ?? []).length"
+                            class="flex flex-wrap gap-2 mt-3"
+                        >
+                            <div
+                                v-for="t in book.tags ?? []"
+                                :key="t.id"
+                                class="inline-flex items-center px-2 py-1 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-xs"
+                            >
+                                {{ t.name }}
+                            </div>
+                        </div>
                     </div>
 
                     <div class="grid md:grid-cols-2 gap-2 text-sm">
@@ -501,26 +532,6 @@ watch(
                             <div class="opacity-70">Publisher</div>
                             <div class="min-w-0">
                                 {{ book.publisher?.name ?? "Unknown" }}
-                            </div>
-                        </div>
-
-                        <div
-                            v-if="book.series?.name"
-                            class="grid grid-cols-[110px_1fr] gap-2"
-                        >
-                            <div class="opacity-70">Series</div>
-                            <div class="min-w-0">
-                                <span>{{ book.series.name }}</span>
-                                <span
-                                    v-if="
-                                        typeof book.series?.index ===
-                                            'number' &&
-                                        !Number.isNaN(book.series.index)
-                                    "
-                                    class="opacity-80"
-                                >
-                                    ({{ book.series.index }})
-                                </span>
                             </div>
                         </div>
 
