@@ -8,6 +8,27 @@
 
 A modern, self-hosted digital library manager built with Nuxt. Manage your ebook collection with a clean web interface.
 
+## Calibre import (import-in-place)
+
+Delb can **import an existing Calibre library in place**.
+
+- Calibre library root is mounted at: `library/`
+- Calibre database is read from: `library/metadata.db`
+- Delb writes its own database to: `data/delb.db`
+- Delb **does not copy/move** book files during this import; it stores pointers to existing files under `library/...`.
+
+### Caveats (important)
+
+- **Filesystem ownership:** With import-in-place, treat `library/` as **Calibre-owned** storage.
+  - If Delb moves/renames files under `library/`, Calibre may no longer be able to find formats and covers referenced by `metadata.db`.
+- **Editing metadata in Delb:** Editing titles/authors/tags in Delb updates `data/delb.db` only. It does **not** update Calibre’s `metadata.db`.
+  - That means Calibre will still show its original metadata unless you manually sync it in Calibre.
+- **Recommendation:** If you plan to keep using Calibre alongside Delb, keep a backup of your Calibre library before running any tools that might reorganize files.
+
+See:
+- `docs/calibre-import.md` for the import process + caveats
+- `docs/calibre-database-schema.md` for Calibre schema reference
+
 ## Features
 
 - **Library Management** - Upload, organize, and browse your ebook collection
@@ -84,6 +105,7 @@ delb/
 
 - [Known Issues](docs/known-issues.md) - Known bugs and workarounds
 - [Tooltip Guide](docs/tooltip.md) - Component documentation
+- [Calibre Import](docs/calibre-import.md) - Import-in-place process + caveats
 - [Calibre Database Schema](docs/calibre-database-schema.md) - Reference schema
 
 ## Development

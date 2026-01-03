@@ -140,7 +140,7 @@ onBeforeUnmount(() => {
         <!-- Trigger -->
         <button
             ref="anchorRef"
-            v-tooltip="'Switch collection scope'"
+            v-tooltip="'Switch collection'"
             class="p-1 flex items-center gap-2"
             :aria-expanded="open"
             aria-haspopup="menu"

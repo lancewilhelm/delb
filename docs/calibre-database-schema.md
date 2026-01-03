@@ -6,6 +6,57 @@ Sources:
 - The schema listing in this doc is based on an extracted summary (provided in the project discussion) from Calibre’s repository code and SQL resources.
 - Calibre upstream code search: https://github.com/kovidgoyal/calibre/search?q=CREATE+TABLE&type=code
 
+## Calibre → Delb import-in-place (current behavior)
+
+Delb supports importing an existing Calibre library **in place**:
+
+- The Calibre library is mounted at Delb’s `library/` directory.
+- Calibre’s database is read from `library/metadata.db`.
+- Delb writes its own data to `data/delb.db`.
+- Delb does **not** move or rename any Calibre files during import. It stores pointers to existing files on disk.
+
+### Admin controls
+
+The import is driven from the admin settings page (Library Management):
+
+- **Import from Calibre**: one-time import of metadata + file pointers into Delb.  
+  This is intended to be safe and repeatable.
+- **Re-scan Calibre**: re-reads `library/metadata.db` and refreshes:
+  - linked book files (formats) and their paths
+  - cover paths
+  - metadata (title, description, identifiers, tags, series, publisher, language)
+  Optionally, the rescan can also import books that were added to Calibre after the first import.
+
+### Idempotency and linking to Calibre book ids
+
+To support rescan and prevent duplicate imports, Delb stores the Calibre `books.id` value alongside the Delb book record:
+
+- Delb `books.calibre_book_id` ⇄ Calibre `books.id`
+
+Delb does **not** preserve Calibre’s *library UUID*; it only uses the Calibre book id to make the import/rescan idempotent.
+
+### Files and formats
+
+Calibre commonly stores formats as files inside the book folder (for example: `*.epub`, `*.pdf`, `*.mobi`, `*.azw3`), along with sidecar files such as:
+
+- `metadata.opf`
+- `cover.jpg` / `cover.png`
+
+Delb records every discovered format as a row in `book_files`:
+
+- `book_files.format` is the lowercased extension (`epub`, `pdf`, `mobi`, `azw3`, ...)
+- `book_files.relative_path` is stored as a Delb-style `library/...` path pointing at the existing Calibre file.
+
+Delb prefers discovering formats via the Calibre DB when possible, but will fall back to scanning the on-disk book directory when the DB does not expose filenames in a reliable way across Calibre versions.
+
+### Covers
+
+Delb sets `books.cover_image_path` to the first existing file found in the Calibre book folder:
+
+- `cover.jpg`, `cover.jpeg`, or `cover.png`
+
+Delb does not convert covers to `cover.webp` during import-in-place (that would be a separate optional “normalize/migrate” operation).
+
 ## Important notes / caveats
 
 - **This may be incomplete.** Calibre evolves schemas over time and applies upgrades based on `PRAGMA user_version`.

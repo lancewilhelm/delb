@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ConcreteComponent } from "vue";
+import type { RouteLocationNormalized } from "vue-router";
 // Redirect to the profile page if the page parameter is empty
 definePageMeta({
     auth: {
@@ -7,7 +8,7 @@ definePageMeta({
         redirectGuestTo: "/login",
     },
     middleware: [
-        function (to) {
+        function (to: RouteLocationNormalized) {
             if (!to.params.page) {
                 return navigateTo("/settings/general");
             } else if (
@@ -15,7 +16,7 @@ definePageMeta({
                 to.params.page.length === 1 &&
                 to.params.page[0] === "admin"
             ) {
-                return navigateTo("/settings/admin/users");
+                return navigateTo("/settings/admin/library");
             }
         },
     ],
