@@ -230,7 +230,8 @@ async function scanBookDirForFormats(opts: {
       out.push({
         calibreBookId: opts.calibreBook.calibreBookId,
         format: ext,
-        filename,
+        // CalibreReader (libsql) returns paths relative to the library root.
+        // Delb stores paths under `library/...`.
         relativePath: ["library", relDir, filename].join("/"),
       });
     }
@@ -288,7 +289,7 @@ export default defineEventHandler(async (event) => {
   const reader = new CalibreReader({ libraryRootAbs, readonly: true });
 
   try {
-    const snap = reader.getSnapshot();
+    const snap = await reader.getSnapshot();
 
     const summary: ImportSummary = {
       action,
@@ -361,8 +362,10 @@ export default defineEventHandler(async (event) => {
     }
 
     const calibreCommentByBookId = new Map<number, string>();
-    for (const c of snap.comments)
+    for (const c of snap.comments) {
+      if (!c.text) continue;
       calibreCommentByBookId.set(c.calibreBookId, c.text);
+    }
 
     const calibreIdentifiersByBookId = new Map<
       number,
@@ -766,8 +769,15 @@ export default defineEventHandler(async (event) => {
       for (const f of formatFiles) {
         const format = normalizeFormat(f.format);
         if (!format) continue;
-        const relativePath = safeNonEmptyString(f.relativePath);
-        if (!relativePath) continue;
+
+        const rawRelativePath = safeNonEmptyString(f.relativePath);
+        if (!rawRelativePath) continue;
+
+        // CalibreReader returns paths relative to the Calibre library root (e.g. "Author/Title (1)/Book.epub").
+        // Delb stores paths under `library/...`.
+        const relativePath = rawRelativePath.startsWith("library/")
+          ? rawRelativePath
+          : ["library", rawRelativePath].join("/");
 
         // We only store paths under `library/...`. The download endpoint protects traversal.
         if (!relativePath.startsWith("library/")) {
@@ -877,7 +887,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // Light sanity warnings for missing DB / common mount mistakes
-    if (!reader.hasTable("books")) {
+    if (!(await reader.hasTable("books"))) {
       summary.results.warnings.push(
         "Calibre DB missing `books` table (unexpected).",
       );
@@ -890,6 +900,6 @@ export default defineEventHandler(async (event) => {
 
     return { success: true, data: summary };
   } finally {
-    reader.close();
+    await reader.close();
   }
 });

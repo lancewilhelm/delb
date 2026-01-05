@@ -4,6 +4,10 @@ This document describes how Delb imports an existing **Calibre** library when yo
 
 > Goal: pull in as much metadata as possible while **not moving or renaming any files** in the Calibre library.
 
+## How Delb reads `metadata.db`
+
+Delb reads Calibre’s `library/metadata.db` using the `@libsql/client` SQLite driver (local `file:` URL). This avoids relying on native Node addons for reading the Calibre database, which improves portability in Docker deployments.
+
 ---
 
 ## Summary

@@ -1,31 +1,19 @@
-///Users/lancewilhelm/projects/delb/server/utils/import/calibre/calibre-reader.ts
 import path from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 
-import Database from "better-sqlite3";
+import { createClient, type Client, type ResultSet } from "@libsql/client";
+import { createError } from "h3";
 import { logger } from "~/utils/logger";
 
 /**
  * Calibre metadata.db reader (import helper)
  *
- * Assumptions for Delb v1 import-in-place:
- * - Calibre library is mounted at Delb's `library/` folder.
- * - Calibre's `metadata.db` exists at `library/metadata.db`.
+ * Goals:
+ * - Avoid native Node addons (e.g. better-sqlite3) for container portability
+ * - Be resilient (schema varies across Calibre versions)
+ * - Prefer import-in-place: compute format file paths relative to Calibre library root
  *
- * Design goals:
- * - Be resilient across Calibre versions by:
- *   - Checking for table/column existence before querying
- *   - Avoiding reliance on Calibre custom SQLite functions / FTS
- * - Prefer file-based formats on disk (Calibre's "library folder") rather than BLOB-based tables.
- *
- * Note:
- * - Calibre schemas vary. This reader focuses on common tables described in `docs/calibre-database-schema.md`.
- * - For formats: Calibre versions differ. Some have a `data` table with BLOBs, others store file info in a
- *   formats table (e.g. `books_data_link`), and the canonical on-disk structure is typically:
- *     library/<books.path>/<title> - <authors>.<ext>
- *   Since we are import-in-place and Delb already resolves `library/...` paths safely, we prefer:
- *   - a best-effort query for known "formats link" tables
- *   - a safe fallback to scanning the book directory on disk (optional, controlled by caller)
+ * Note: This is intentionally a *thin* reader, not a full Calibre ORM.
  */
 
 export type CalibreReaderOptions = {
@@ -35,7 +23,7 @@ export type CalibreReaderOptions = {
   /** Optional override for the metadata db filename (default: metadata.db). */
   metadataDbFilename?: string;
 
-  /** Open the DB read-only by default. */
+  /** Open the DB read-only by default. (SQLite file access is read-only by convention here) */
   readonly?: boolean;
 };
 
@@ -46,14 +34,8 @@ export type CalibreBookRow = {
   timestamp?: string | null;
   pubdate?: string | null;
   lastModified?: string | null;
-
-  // Calibre book folder relative path under library root (common in many versions)
-  // e.g. "Terry Pratchett/Guards! Guards! (123)"
   path?: string | null;
-
   seriesIndex?: number | null;
-
-  // We attach these via joins in higher-level getters
 };
 
 export type CalibreAuthorRow = {
@@ -70,18 +52,37 @@ export type CalibreTagRow = {
 export type CalibrePublisherRow = {
   calibrePublisherId: number;
   name: string;
-  sort?: string | null;
 };
 
 export type CalibreSeriesRow = {
   calibreSeriesId: number;
   name: string;
-  sort?: string | null;
+};
+
+export type CalibreBookAuthorLink = {
+  calibreBookId: number;
+  calibreAuthorId: number;
+};
+
+export type CalibreBookTagLink = {
+  calibreBookId: number;
+  calibreTagId: number;
+};
+
+export type CalibreBookPublisherLink = {
+  calibreBookId: number;
+  calibrePublisherId: number;
+};
+
+export type CalibreBookSeriesLink = {
+  calibreBookId: number;
+  calibreSeriesId: number;
+  seriesIndex?: number | null;
 };
 
 export type CalibreCommentRow = {
   calibreBookId: number;
-  text: string;
+  text: string | null;
 };
 
 export type CalibreIdentifierRow = {
@@ -90,55 +91,30 @@ export type CalibreIdentifierRow = {
   value: string;
 };
 
-export type CalibreBookAuthorLinkRow = {
-  calibreBookId: number;
-  calibreAuthorId: number;
-};
-
-export type CalibreBookTagLinkRow = {
-  calibreBookId: number;
-  calibreTagId: number;
-};
-
-export type CalibreBookPublisherLinkRow = {
-  calibreBookId: number;
-  calibrePublisherId: number;
-};
-
-export type CalibreBookSeriesLinkRow = {
-  calibreBookId: number;
-  calibreSeriesId: number;
-};
-
-export type CalibreLanguageLinkRow = {
+export type CalibreLanguageRow = {
   calibreBookId: number;
   langCode: string;
 };
 
-/**
- * Represents a format file on disk for a Calibre book.
- * `relativePath` is intended to be a Delb-style stored path (POSIX-ish):
- *   library/<calibre-book-dir>/<filename.ext>
- */
 export type CalibreFormatFile = {
   calibreBookId: number;
-  format: string; // normalized lower-case extension (e.g. "epub")
-  filename: string;
-  relativePath: string; // includes leading "library/..."
+  format: string;
+  /**
+   * Path relative to Calibre library root.
+   * Example: `Author Name/Title (123)/Title - Author Name.epub`
+   */
+  relativePath: string;
 };
 
-type TableInfoRow = { name: string };
-type ColumnInfoRow = { name: string };
-
-function normalizeFormat(input: string): string {
-  return (input ?? "").toString().trim().toLowerCase();
-}
-
 function asNumber(v: unknown): number | null {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "bigint") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
   if (typeof v === "string" && v.trim() !== "") {
     const n = Number(v);
-    if (Number.isFinite(n)) return n;
+    return Number.isFinite(n) ? n : null;
   }
   return null;
 }
@@ -147,12 +123,71 @@ function safeString(v: unknown): string {
   return (v ?? "").toString();
 }
 
+function normalizeFormat(input: string): string {
+  return (input ?? "").toString().trim().toLowerCase();
+}
+
+type Row = Record<string, unknown>;
+
+function rowsFrom(rs: ResultSet): Row[] {
+  // libsql returns rows as objects keyed by column name
+  return (rs.rows as unknown as Row[]) ?? [];
+}
+
+/**
+ * Small helper around @libsql/client for local file sqlite usage.
+ * Keeps the CalibreReader code cleaner.
+ */
+class LibsqlFileDb {
+  private readonly client: Client;
+
+  constructor(dbAbs: string) {
+    this.client = createClient({ url: `file:${dbAbs}` });
+  }
+
+  async execute(
+    sql: string,
+    args: Array<string | number | bigint | null> = [],
+  ): Promise<ResultSet> {
+    // `@libsql/client` expects args that are SQLite-compatible scalar values.
+    return await this.client.execute({ sql, args });
+  }
+
+  async all(
+    sql: string,
+    args: Array<string | number | bigint | null> = [],
+  ): Promise<Row[]> {
+    const rs = await this.execute(sql, args);
+    return rowsFrom(rs);
+  }
+
+  async get(
+    sql: string,
+    args: Array<string | number | bigint | null> = [],
+  ): Promise<Row | undefined> {
+    const rs = await this.execute(sql, args);
+    const r = rowsFrom(rs)[0];
+    return r;
+  }
+
+  async close(): Promise<void> {
+    try {
+      // Not always present in typings / some transports
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = this.client as any;
+      if (typeof c.close === "function") await c.close();
+    } catch {
+      // ignore
+    }
+  }
+}
+
 /**
  * CalibreReader wraps a read-only connection to `metadata.db`.
  * Call `close()` when you're done.
  */
 export class CalibreReader {
-  private readonly db: Database.Database;
+  private readonly db: LibsqlFileDb;
   private readonly libraryRootAbs: string;
 
   constructor(opts: CalibreReaderOptions) {
@@ -168,477 +203,38 @@ export class CalibreReader {
       });
     }
 
-    // better-sqlite3 `readonly` option exists; keep conservative.
-    this.db = new Database(dbAbs, {
-      readonly: opts.readonly ?? true,
-      fileMustExist: true,
-    });
-
-    // Some Calibre DBs can be busy if Calibre is running.
-    // This makes reads more tolerant in practice.
-    try {
-      this.db.pragma("busy_timeout = 5000");
-    } catch {
-      // ignore
-    }
+    // readonly is enforced by us (we never write), and by mounting the library read-only in Docker.
+    // @libsql/client uses SQLite under the hood for file: URLs.
+    this.db = new LibsqlFileDb(dbAbs);
   }
 
-  close() {
-    this.db.close();
+  async close() {
+    await this.db.close();
   }
 
-  /** Return true if `metadata.db` has a given table. */
-  hasTable(tableName: string): boolean {
-    const row = this.db
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1",
-      )
-      .get(tableName) as TableInfoRow | undefined;
-
-    return !!row?.name;
-  }
-
-  /** Return true if a table has a given column. */
-  hasColumn(tableName: string, columnName: string): boolean {
-    if (!this.hasTable(tableName)) return false;
-
-    const rows = this.db
-      .prepare(`PRAGMA table_info(${this.escapeIdent(tableName)})`)
-      .all() as ColumnInfoRow[];
-
-    return rows.some((r) => r?.name === columnName);
-  }
-
-  /** Very small identifier escaper for PRAGMA uses (table names only). */
+  /** Very small identifier escaper for PRAGMA uses (table names/columns only). */
   private escapeIdent(ident: string): string {
-    // SQLite identifiers can be quoted with double quotes; double quotes inside are doubled.
     const safe = (ident ?? "").toString().replace(/"/g, '""');
     return `"${safe}"`;
   }
 
-  /**
-   * Read all books from Calibre.
-   *
-   * Fields vary by Calibre version; we include common ones when present:
-   * - books.id (required)
-   * - books.title (required)
-   * - books.sort (optional)
-   * - books.timestamp (optional)
-   * - books.pubdate (optional)
-   * - books.last_modified (optional)
-   * - books.path (optional but very useful)
-   * - books.series_index (optional)
-   */
-  getBooks(): CalibreBookRow[] {
-    if (!this.hasTable("books")) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: "Calibre metadata.db is missing required table: books",
-      });
-    }
-
-    const fields: string[] = ["id as calibreBookId", "title as title"];
-
-    if (this.hasColumn("books", "sort")) fields.push("sort as sort");
-    if (this.hasColumn("books", "timestamp"))
-      fields.push("timestamp as timestamp");
-    if (this.hasColumn("books", "pubdate")) fields.push("pubdate as pubdate");
-    if (this.hasColumn("books", "last_modified"))
-      fields.push("last_modified as lastModified");
-    if (this.hasColumn("books", "path")) fields.push("path as path");
-    if (this.hasColumn("books", "series_index"))
-      fields.push("series_index as seriesIndex");
-
-    const sql = `SELECT ${fields.join(", ")} FROM books ORDER BY id ASC`;
-    const rows = this.db.prepare(sql).all() as Array<Record<string, unknown>>;
-
-    return rows.map((r) => ({
-      calibreBookId: asNumber(r.calibreBookId) ?? 0,
-      title: safeString(r.title) || "Unknown",
-      sort: r.sort !== undefined ? (r.sort as string | null) : undefined,
-      timestamp:
-        r.timestamp !== undefined ? (r.timestamp as string | null) : undefined,
-      pubdate:
-        r.pubdate !== undefined ? (r.pubdate as string | null) : undefined,
-      lastModified:
-        r.lastModified !== undefined
-          ? (r.lastModified as string | null)
-          : undefined,
-      path: r.path !== undefined ? (r.path as string | null) : undefined,
-      seriesIndex:
-        r.seriesIndex !== undefined
-          ? typeof r.seriesIndex === "number"
-            ? r.seriesIndex
-            : (asNumber(r.seriesIndex) as number | null)
-          : undefined,
-    }));
+  /** Return true if `metadata.db` has a given table. */
+  async hasTable(tableName: string): Promise<boolean> {
+    const row = await this.db.get(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1",
+      [tableName],
+    );
+    return !!row?.name;
   }
 
-  getAuthors(): CalibreAuthorRow[] {
-    if (!this.hasTable("authors")) return [];
+  /** Return true if a table has a given column. */
+  async hasColumn(tableName: string, columnName: string): Promise<boolean> {
+    if (!(await this.hasTable(tableName))) return false;
 
-    const fields: string[] = ["id as calibreAuthorId", "name as name"];
-    if (this.hasColumn("authors", "sort")) fields.push("sort as sort");
-
-    const sql = `SELECT ${fields.join(", ")} FROM authors ORDER BY name COLLATE NOCASE ASC`;
-    const rows = this.db.prepare(sql).all() as Array<Record<string, unknown>>;
-
-    return rows.map((r) => ({
-      calibreAuthorId: asNumber(r.calibreAuthorId) ?? 0,
-      name: safeString(r.name),
-      sort: r.sort !== undefined ? (r.sort as string | null) : undefined,
-    }));
-  }
-
-  getTags(): CalibreTagRow[] {
-    if (!this.hasTable("tags")) return [];
-
-    const sql = `SELECT id as calibreTagId, name as name FROM tags ORDER BY name COLLATE NOCASE ASC`;
-    const rows = this.db.prepare(sql).all() as Array<Record<string, unknown>>;
-
-    return rows.map((r) => ({
-      calibreTagId: asNumber(r.calibreTagId) ?? 0,
-      name: safeString(r.name),
-    }));
-  }
-
-  getPublishers(): CalibrePublisherRow[] {
-    if (!this.hasTable("publishers")) return [];
-
-    const fields: string[] = ["id as calibrePublisherId", "name as name"];
-    if (this.hasColumn("publishers", "sort")) fields.push("sort as sort");
-
-    const sql = `SELECT ${fields.join(", ")} FROM publishers ORDER BY name COLLATE NOCASE ASC`;
-    const rows = this.db.prepare(sql).all() as Array<Record<string, unknown>>;
-
-    return rows.map((r) => ({
-      calibrePublisherId: asNumber(r.calibrePublisherId) ?? 0,
-      name: safeString(r.name),
-      sort: r.sort !== undefined ? (r.sort as string | null) : undefined,
-    }));
-  }
-
-  getSeries(): CalibreSeriesRow[] {
-    if (!this.hasTable("series")) return [];
-
-    const fields: string[] = ["id as calibreSeriesId", "name as name"];
-    if (this.hasColumn("series", "sort")) fields.push("sort as sort");
-
-    const sql = `SELECT ${fields.join(", ")} FROM series ORDER BY name COLLATE NOCASE ASC`;
-    const rows = this.db.prepare(sql).all() as Array<Record<string, unknown>>;
-
-    return rows.map((r) => ({
-      calibreSeriesId: asNumber(r.calibreSeriesId) ?? 0,
-      name: safeString(r.name),
-      sort: r.sort !== undefined ? (r.sort as string | null) : undefined,
-    }));
-  }
-
-  /**
-   * Book -> author links.
-   *
-   * Calibre commonly uses `books_authors_link` with columns:
-   * - book (int)
-   * - author (int)
-   */
-  getBookAuthorsLinks(): CalibreBookAuthorLinkRow[] {
-    if (!this.hasTable("books_authors_link")) return [];
-
-    const sql = `SELECT book as calibreBookId, author as calibreAuthorId FROM books_authors_link`;
-    const rows = this.db.prepare(sql).all() as Array<Record<string, unknown>>;
-
-    return rows
-      .map((r) => ({
-        calibreBookId: asNumber(r.calibreBookId) ?? 0,
-        calibreAuthorId: asNumber(r.calibreAuthorId) ?? 0,
-      }))
-      .filter((r) => r.calibreBookId > 0 && r.calibreAuthorId > 0);
-  }
-
-  /**
-   * Book -> tag links.
-   *
-   * Calibre commonly uses `books_tags_link` with columns:
-   * - book (int)
-   * - tag (int)
-   */
-  getBookTagsLinks(): CalibreBookTagLinkRow[] {
-    if (!this.hasTable("books_tags_link")) return [];
-
-    const sql = `SELECT book as calibreBookId, tag as calibreTagId FROM books_tags_link`;
-    const rows = this.db.prepare(sql).all() as Array<Record<string, unknown>>;
-
-    return rows
-      .map((r) => ({
-        calibreBookId: asNumber(r.calibreBookId) ?? 0,
-        calibreTagId: asNumber(r.calibreTagId) ?? 0,
-      }))
-      .filter((r) => r.calibreBookId > 0 && r.calibreTagId > 0);
-  }
-
-  /**
-   * Book -> publisher link.
-   *
-   * Calibre commonly uses `books_publishers_link` with columns:
-   * - book (int)
-   * - publisher (int)
-   */
-  getBookPublishersLinks(): CalibreBookPublisherLinkRow[] {
-    if (!this.hasTable("books_publishers_link")) return [];
-
-    const sql = `SELECT book as calibreBookId, publisher as calibrePublisherId FROM books_publishers_link`;
-    const rows = this.db.prepare(sql).all() as Array<Record<string, unknown>>;
-
-    return rows
-      .map((r) => ({
-        calibreBookId: asNumber(r.calibreBookId) ?? 0,
-        calibrePublisherId: asNumber(r.calibrePublisherId) ?? 0,
-      }))
-      .filter((r) => r.calibreBookId > 0 && r.calibrePublisherId > 0);
-  }
-
-  /**
-   * Book -> series link.
-   *
-   * Calibre commonly uses `books_series_link` with columns:
-   * - book (int)
-   * - series (int)
-   */
-  getBookSeriesLinks(): CalibreBookSeriesLinkRow[] {
-    if (!this.hasTable("books_series_link")) return [];
-
-    const sql = `SELECT book as calibreBookId, series as calibreSeriesId FROM books_series_link`;
-    const rows = this.db.prepare(sql).all() as Array<Record<string, unknown>>;
-
-    return rows
-      .map((r) => ({
-        calibreBookId: asNumber(r.calibreBookId) ?? 0,
-        calibreSeriesId: asNumber(r.calibreSeriesId) ?? 0,
-      }))
-      .filter((r) => r.calibreBookId > 0 && r.calibreSeriesId > 0);
-  }
-
-  /**
-   * Book comments/description.
-   *
-   * Calibre commonly uses `comments` with columns:
-   * - book (int)
-   * - text (text)
-   */
-  getComments(): CalibreCommentRow[] {
-    if (!this.hasTable("comments")) return [];
-
-    const sql = `SELECT book as calibreBookId, text as text FROM comments`;
-    const rows = this.db.prepare(sql).all() as Array<Record<string, unknown>>;
-
-    return rows
-      .map((r) => ({
-        calibreBookId: asNumber(r.calibreBookId) ?? 0,
-        text: safeString(r.text),
-      }))
-      .filter((r) => r.calibreBookId > 0 && r.text.length > 0);
-  }
-
-  /**
-   * Book identifiers (isbn, amazon, etc).
-   *
-   * Calibre commonly uses `identifiers` with columns:
-   * - book (int)
-   * - type (text)
-   * - val (text)
-   */
-  getIdentifiers(): CalibreIdentifierRow[] {
-    if (!this.hasTable("identifiers")) return [];
-
-    const sql = `SELECT book as calibreBookId, type as type, val as value FROM identifiers`;
-    const rows = this.db.prepare(sql).all() as Array<Record<string, unknown>>;
-
-    return rows
-      .map((r) => ({
-        calibreBookId: asNumber(r.calibreBookId) ?? 0,
-        type: normalizeFormat(safeString(r.type)),
-        value: safeString(r.value),
-      }))
-      .filter(
-        (r) => r.calibreBookId > 0 && r.type.length > 0 && r.value.length > 0,
-      );
-  }
-
-  /**
-   * Languages are upgrade-added in some Calibre versions:
-   * - languages(lang_code)
-   * - books_languages_link(book, language)  (common)
-   *
-   * However, the link column name can vary across versions. This helper detects the
-   * correct column name and then performs the join.
-   *
-   * We'll return (bookId, langCode) pairs.
-   */
-  getLanguages(): CalibreLanguageLinkRow[] {
-    if (!this.hasTable("languages") || !this.hasTable("books_languages_link")) {
-      return [];
-    }
-
-    // Calibre schema variation: the FK column on `books_languages_link` is not
-    // universally named `language`. Detect what exists.
-    const linkCandidates = [
-      "language",
-      "lang",
-      "languages",
-      "lang_code",
-      "langId",
-    ];
-    const linkCol =
-      linkCandidates.find((c) => this.hasColumn("books_languages_link", c)) ??
-      null;
-
-    if (!linkCol) return [];
-
-    // Calibre schema variation: `languages` has `lang_code` in most versions,
-    // but be defensive.
-    const codeColCandidate = this.hasColumn("languages", "lang_code")
-      ? "lang_code"
-      : this.hasColumn("languages", "code")
-        ? "code"
-        : null;
-
-    if (!codeColCandidate) return [];
-
-    const sql = `
-      SELECT
-        bl.book as calibreBookId,
-        l.${codeColCandidate} as langCode
-      FROM books_languages_link bl
-      INNER JOIN languages l ON l.id = bl.${linkCol}
-    `;
-    const rows = this.db.prepare(sql).all() as Array<Record<string, unknown>>;
-
-    return rows
-      .map((r) => ({
-        calibreBookId: asNumber(r.calibreBookId) ?? 0,
-        langCode: normalizeFormat(safeString(r.langCode)),
-      }))
-      .filter((r) => r.calibreBookId > 0 && r.langCode.length > 0);
-  }
-
-  /**
-   * Best-effort: query format information from common Calibre tables.
-   *
-   * Calibre schemas vary significantly here. This method implements detectors for a few
-   * common patterns and returns filename+format when possible.
-   *
-   * When this fails or returns empty, callers can optionally fall back to scanning the
-   * on-disk book directories (requires knowing `books.path`).
-   */
-  getFormatFilesFromDb(): CalibreFormatFile[] {
-    // Pattern A (common in older docs): `data` table stores BLOBs, not file paths -> not useful for import-in-place.
-    // Pattern B (common in newer versions): `books_data_link` linking to `data` rows that contain name/format.
-    // Pattern C: `book_formats` or `formats` tables (varies).
-    //
-    // Because we cannot be sure, we try a couple known shapes.
-
-    const out: CalibreFormatFile[] = [];
-
-    // Helper to build Delb-style relative path under `library/`
-    const booksById = new Map<number, CalibreBookRow>();
-    try {
-      for (const b of this.getBooks()) booksById.set(b.calibreBookId, b);
-    } catch (e) {
-      logger.warn(
-        e,
-        "CalibreReader: failed to load books while resolving formats",
-      );
-    }
-
-    // Detector 1: books_data_link + data (with format + name)
-    if (this.hasTable("books_data_link") && this.hasTable("data")) {
-      const hasDataFormat =
-        this.hasColumn("data", "format") ||
-        this.hasColumn("data", "format_col");
-      const hasDataName = this.hasColumn("data", "name");
-
-      if (hasDataName && hasDataFormat) {
-        const formatCol = this.hasColumn("data", "format")
-          ? "format"
-          : "format_col";
-
-        const sql = `
-          SELECT
-            bdl.book as calibreBookId,
-            d.${formatCol} as format,
-            d.name as filename
-          FROM books_data_link bdl
-          INNER JOIN data d ON d.id = bdl.data
-        `;
-
-        const rows = this.db.prepare(sql).all() as Array<
-          Record<string, unknown>
-        >;
-
-        for (const r of rows) {
-          const calibreBookId = asNumber(r.calibreBookId) ?? 0;
-          const b = booksById.get(calibreBookId);
-          const calibreRelDir = (b?.path ?? "").toString().trim();
-
-          const format = normalizeFormat(safeString(r.format));
-          const filename = safeString(r.filename).trim();
-
-          if (!calibreBookId || !format || !filename || !calibreRelDir)
-            continue;
-
-          out.push({
-            calibreBookId,
-            format,
-            filename,
-            relativePath: ["library", calibreRelDir, filename].join("/"),
-          });
-        }
-
-        if (out.length) return out;
-      }
-    }
-
-    // Detector 2: data table with non-blob references (rare) - try `data.format` + `data.name` + `data.book`
-    if (this.hasTable("data") && this.hasColumn("data", "book")) {
-      const hasFormat = this.hasColumn("data", "format");
-      const hasName = this.hasColumn("data", "name");
-      if (hasFormat && hasName) {
-        const sql = `
-          SELECT
-            book as calibreBookId,
-            format as format,
-            name as filename
-          FROM data
-        `;
-        const rows = this.db.prepare(sql).all() as Array<
-          Record<string, unknown>
-        >;
-
-        for (const r of rows) {
-          const calibreBookId = asNumber(r.calibreBookId) ?? 0;
-          const b = booksById.get(calibreBookId);
-          const calibreRelDir = (b?.path ?? "").toString().trim();
-
-          const format = normalizeFormat(safeString(r.format));
-          const filename = safeString(r.filename).trim();
-
-          if (!calibreBookId || !format || !filename || !calibreRelDir)
-            continue;
-
-          out.push({
-            calibreBookId,
-            format,
-            filename,
-            relativePath: ["library", calibreRelDir, filename].join("/"),
-          });
-        }
-
-        if (out.length) return out;
-      }
-    }
-
-    // Nothing found by DB-based detectors.
-    return [];
+    const rows = await this.db.all(
+      `PRAGMA table_info(${this.escapeIdent(tableName)})`,
+    );
+    return rows.some((r) => r?.name === columnName);
   }
 
   /**
@@ -652,28 +248,17 @@ export class CalibreReader {
   }
 
   /**
-   * Compute expected cover paths (relative + absolute) for a Calibre book.
-   *
-   * Supports both:
-   * - Calibre-native full-resolution covers: `cover.jpg|cover.jpeg|cover.png`
-   * - Delb-derived assets (if generated during import/rescan):
-   *   - `thumb.webp` (lightweight UI cover, preferred for default rendering)
-   *   - `cover.source.*` and `source.*` (full-resolution source, served on demand)
-   *
-   * The return list is ordered by preference (best-first).
+   * Cover candidates expected by the import route.
+   * Returns Delb-style `library/<book.path>/<filename>` relative paths plus absolute paths.
    */
   getCoverCandidates(book: CalibreBookRow): Array<{
     filename: string;
-    relativePath: string; // includes leading library/
+    relativePath: string;
     absPath: string;
   }> {
     const relDir = (book.path ?? "").toString().trim();
     if (!relDir) return [];
 
-    // Preference order:
-    // 1) thumb.webp (if Delb generated it)
-    // 2) Delb's canonical-ish source name(s) (if present)
-    // 3) Calibre's original cover.{jpg,jpeg,png}
     const candidates = [
       "thumb.webp",
       "cover.source.jpg",
@@ -697,39 +282,546 @@ export class CalibreReader {
   }
 
   /**
-   * Convenience: fetch everything needed for a Delb import in one call,
-   * while keeping each slice queryable independently.
+   * Read all books from Calibre.
+   *
+   * Fields vary by Calibre version; we include common ones when present:
+   * - books.id (required)
+   * - books.title (required)
+   * - books.sort (optional)
+   * - books.timestamp (optional)
+   * - books.pubdate (optional)
+   * - books.last_modified (optional)
+   * - books.path (optional but very useful)
+   * - books.series_index (optional)
    */
-  getSnapshot(): {
+  async getBooks(): Promise<CalibreBookRow[]> {
+    if (!(await this.hasTable("books"))) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Calibre metadata.db is missing required table: books",
+      });
+    }
+
+    const fields: string[] = ["id as calibreBookId", "title as title"];
+
+    if (await this.hasColumn("books", "sort")) fields.push("sort as sort");
+    if (await this.hasColumn("books", "timestamp"))
+      fields.push("timestamp as timestamp");
+    if (await this.hasColumn("books", "pubdate"))
+      fields.push("pubdate as pubdate");
+    if (await this.hasColumn("books", "last_modified"))
+      fields.push("last_modified as lastModified");
+    if (await this.hasColumn("books", "path")) fields.push("path as path");
+    if (await this.hasColumn("books", "series_index"))
+      fields.push("series_index as seriesIndex");
+
+    const sql = `SELECT ${fields.join(", ")} FROM books ORDER BY id ASC`;
+    const rows = await this.db.all(sql);
+
+    return rows.map((r) => ({
+      calibreBookId: asNumber(r.calibreBookId) ?? 0,
+      title: safeString(r.title) || "Unknown",
+      sort: r.sort !== undefined ? (r.sort as string | null) : undefined,
+      timestamp:
+        r.timestamp !== undefined ? (r.timestamp as string | null) : undefined,
+      pubdate:
+        r.pubdate !== undefined ? (r.pubdate as string | null) : undefined,
+      lastModified:
+        r.lastModified !== undefined
+          ? (r.lastModified as string | null)
+          : undefined,
+      path: r.path !== undefined ? (r.path as string | null) : undefined,
+      seriesIndex:
+        r.seriesIndex !== undefined
+          ? typeof r.seriesIndex === "number"
+            ? r.seriesIndex
+            : asNumber(r.seriesIndex)
+          : undefined,
+    }));
+  }
+
+  /** Read all authors. */
+  async getAuthors(): Promise<CalibreAuthorRow[]> {
+    if (!(await this.hasTable("authors"))) return [];
+
+    const fields: string[] = ["id as calibreAuthorId", "name as name"];
+    if (await this.hasColumn("authors", "sort")) fields.push("sort as sort");
+
+    const sql = `SELECT ${fields.join(", ")} FROM authors ORDER BY id ASC`;
+    const rows = await this.db.all(sql);
+
+    return rows.map((r) => ({
+      calibreAuthorId: asNumber(r.calibreAuthorId) ?? 0,
+      name: safeString(r.name) || "Unknown",
+      sort: r.sort !== undefined ? (r.sort as string | null) : undefined,
+    }));
+  }
+
+  /** Read all tags. */
+  async getTags(): Promise<CalibreTagRow[]> {
+    if (!(await this.hasTable("tags"))) return [];
+
+    const sql = `SELECT id as calibreTagId, name as name FROM tags ORDER BY id ASC`;
+    const rows = await this.db.all(sql);
+
+    return rows.map((r) => ({
+      calibreTagId: asNumber(r.calibreTagId) ?? 0,
+      name: safeString(r.name) || "Unknown",
+    }));
+  }
+
+  /** Read all publishers. */
+  async getPublishers(): Promise<CalibrePublisherRow[]> {
+    if (!(await this.hasTable("publishers"))) return [];
+    const sql = `SELECT id as calibrePublisherId, name as name FROM publishers ORDER BY id ASC`;
+    const rows = await this.db.all(sql);
+
+    return rows.map((r) => ({
+      calibrePublisherId: asNumber(r.calibrePublisherId) ?? 0,
+      name: safeString(r.name) || "Unknown",
+    }));
+  }
+
+  /** Read all series. */
+  async getSeries(): Promise<CalibreSeriesRow[]> {
+    if (!(await this.hasTable("series"))) return [];
+    const sql = `SELECT id as calibreSeriesId, name as name FROM series ORDER BY id ASC`;
+    const rows = await this.db.all(sql);
+
+    return rows.map((r) => ({
+      calibreSeriesId: asNumber(r.calibreSeriesId) ?? 0,
+      name: safeString(r.name) || "Unknown",
+    }));
+  }
+
+  /**
+   * Read book-author join.
+   * Calibre usually stores this in `books_authors_link` with columns:
+   * - book (books.id)
+   * - author (authors.id)
+   */
+  async getBookAuthorLinks(): Promise<CalibreBookAuthorLink[]> {
+    const table = "books_authors_link";
+    if (!(await this.hasTable(table))) return [];
+
+    const bookCol = (await this.hasColumn(table, "book"))
+      ? "book"
+      : (await this.hasColumn(table, "book_id"))
+        ? "book_id"
+        : null;
+    const authorCol = (await this.hasColumn(table, "author"))
+      ? "author"
+      : (await this.hasColumn(table, "author_id"))
+        ? "author_id"
+        : null;
+
+    if (!bookCol || !authorCol) return [];
+
+    const sql = `SELECT ${this.escapeIdent(bookCol)} as calibreBookId, ${this.escapeIdent(authorCol)} as calibreAuthorId FROM ${this.escapeIdent(table)}`;
+    const rows = await this.db.all(sql);
+
+    return rows
+      .map((r) => ({
+        calibreBookId: asNumber(r.calibreBookId) ?? 0,
+        calibreAuthorId: asNumber(r.calibreAuthorId) ?? 0,
+      }))
+      .filter((r) => r.calibreBookId > 0 && r.calibreAuthorId > 0);
+  }
+
+  /**
+   * Read book-tag join.
+   * Usually `books_tags_link` with columns:
+   * - book
+   * - tag
+   */
+  async getBookTagLinks(): Promise<CalibreBookTagLink[]> {
+    const table = "books_tags_link";
+    if (!(await this.hasTable(table))) return [];
+
+    const bookCol = (await this.hasColumn(table, "book"))
+      ? "book"
+      : (await this.hasColumn(table, "book_id"))
+        ? "book_id"
+        : null;
+    const tagCol = (await this.hasColumn(table, "tag"))
+      ? "tag"
+      : (await this.hasColumn(table, "tag_id"))
+        ? "tag_id"
+        : null;
+
+    if (!bookCol || !tagCol) return [];
+
+    const sql = `SELECT ${this.escapeIdent(bookCol)} as calibreBookId, ${this.escapeIdent(tagCol)} as calibreTagId FROM ${this.escapeIdent(table)}`;
+    const rows = await this.db.all(sql);
+
+    return rows
+      .map((r) => ({
+        calibreBookId: asNumber(r.calibreBookId) ?? 0,
+        calibreTagId: asNumber(r.calibreTagId) ?? 0,
+      }))
+      .filter((r) => r.calibreBookId > 0 && r.calibreTagId > 0);
+  }
+
+  /**
+   * Read book-publisher mapping.
+   * Often `books.publisher` is a foreign key to publishers.id.
+   */
+  async getBookPublisherLinks(): Promise<CalibreBookPublisherLink[]> {
+    if (!(await this.hasTable("books"))) return [];
+    if (!(await this.hasColumn("books", "publisher"))) return [];
+
+    const sql = `SELECT id as calibreBookId, publisher as calibrePublisherId FROM books WHERE publisher IS NOT NULL`;
+    const rows = await this.db.all(sql);
+
+    return rows
+      .map((r) => ({
+        calibreBookId: asNumber(r.calibreBookId) ?? 0,
+        calibrePublisherId: asNumber(r.calibrePublisherId) ?? 0,
+      }))
+      .filter((r) => r.calibreBookId > 0 && r.calibrePublisherId > 0);
+  }
+
+  /**
+   * Read book-series mapping.
+   * Often `books.series` foreign key to series.id (and `books.series_index` present).
+   */
+  async getBookSeriesLinks(): Promise<CalibreBookSeriesLink[]> {
+    if (!(await this.hasTable("books"))) return [];
+    if (!(await this.hasColumn("books", "series"))) return [];
+
+    const indexCol = (await this.hasColumn("books", "series_index"))
+      ? "series_index"
+      : null;
+
+    const fields = [
+      "id as calibreBookId",
+      "series as calibreSeriesId",
+      ...(indexCol ? [`${this.escapeIdent(indexCol)} as seriesIndex`] : []),
+    ];
+
+    const sql = `SELECT ${fields.join(", ")} FROM books WHERE series IS NOT NULL`;
+    const rows = await this.db.all(sql);
+
+    return rows
+      .map((r) => ({
+        calibreBookId: asNumber(r.calibreBookId) ?? 0,
+        calibreSeriesId: asNumber(r.calibreSeriesId) ?? 0,
+        seriesIndex:
+          r.seriesIndex !== undefined
+            ? typeof r.seriesIndex === "number"
+              ? r.seriesIndex
+              : asNumber(r.seriesIndex)
+            : undefined,
+      }))
+      .filter((r) => r.calibreBookId > 0 && r.calibreSeriesId > 0);
+  }
+
+  /**
+   * Read comments/description.
+   * Calibre commonly stores HTML comments in `comments` with:
+   * - book (books.id)
+   * - text
+   */
+  async getComments(): Promise<CalibreCommentRow[]> {
+    const table = "comments";
+    if (!(await this.hasTable(table))) return [];
+
+    const bookCol = (await this.hasColumn(table, "book"))
+      ? "book"
+      : (await this.hasColumn(table, "book_id"))
+        ? "book_id"
+        : null;
+    const textCol = (await this.hasColumn(table, "text")) ? "text" : null;
+
+    if (!bookCol || !textCol) return [];
+
+    const sql = `SELECT ${this.escapeIdent(bookCol)} as calibreBookId, ${this.escapeIdent(textCol)} as text FROM ${this.escapeIdent(table)}`;
+    const rows = await this.db.all(sql);
+
+    return rows
+      .map((r) => ({
+        calibreBookId: asNumber(r.calibreBookId) ?? 0,
+        text: r.text !== undefined ? (r.text as string | null) : null,
+      }))
+      .filter((r) => r.calibreBookId > 0);
+  }
+
+  /**
+   * Read identifiers.
+   * Calibre commonly:
+   * - table: identifiers
+   * - columns: book, type, val
+   */
+  async getIdentifiers(): Promise<CalibreIdentifierRow[]> {
+    const table = "identifiers";
+    if (!(await this.hasTable(table))) return [];
+
+    const bookCol = (await this.hasColumn(table, "book"))
+      ? "book"
+      : (await this.hasColumn(table, "book_id"))
+        ? "book_id"
+        : null;
+    const typeCol = (await this.hasColumn(table, "type")) ? "type" : null;
+    const valCol = (await this.hasColumn(table, "val"))
+      ? "val"
+      : (await this.hasColumn(table, "value"))
+        ? "value"
+        : null;
+
+    if (!bookCol || !typeCol || !valCol) return [];
+
+    const sql = `SELECT ${this.escapeIdent(bookCol)} as calibreBookId, ${this.escapeIdent(typeCol)} as type, ${this.escapeIdent(valCol)} as value FROM ${this.escapeIdent(table)}`;
+    const rows = await this.db.all(sql);
+
+    return rows
+      .map((r) => ({
+        calibreBookId: asNumber(r.calibreBookId) ?? 0,
+        type: normalizeFormat(safeString(r.type)),
+        value: safeString(r.value),
+      }))
+      .filter(
+        (r) => r.calibreBookId > 0 && r.type.length > 0 && r.value.length > 0,
+      );
+  }
+
+  /**
+   * Read book languages.
+   * Calibre schemas vary:
+   * - some have `books_languages_link` + `languages` tables
+   * - some embed language code in link table
+   *
+   * Returns list of (bookId, langCode).
+   */
+  async getLanguages(): Promise<CalibreLanguageRow[]> {
+    const linkTable = "books_languages_link";
+    if (!(await this.hasTable(linkTable))) return [];
+
+    const bookCol = (await this.hasColumn(linkTable, "book"))
+      ? "book"
+      : (await this.hasColumn(linkTable, "book_id"))
+        ? "book_id"
+        : null;
+
+    const directLangCol = (await this.hasColumn(linkTable, "lang_code"))
+      ? "lang_code"
+      : (await this.hasColumn(linkTable, "lang"))
+        ? "lang"
+        : null;
+
+    // Direct language code stored in the link table
+    if (bookCol && directLangCol) {
+      const sql = `SELECT ${this.escapeIdent(bookCol)} as calibreBookId, ${this.escapeIdent(directLangCol)} as langCode FROM ${this.escapeIdent(linkTable)}`;
+      const rows = await this.db.all(sql);
+      return rows
+        .map((r) => ({
+          calibreBookId: asNumber(r.calibreBookId) ?? 0,
+          langCode: safeString(r.langCode),
+        }))
+        .filter((r) => r.calibreBookId > 0 && r.langCode.length > 0);
+    }
+
+    // Link table references a languages table
+    const langIdCol = (await this.hasColumn(linkTable, "language"))
+      ? "language"
+      : (await this.hasColumn(linkTable, "lang_id"))
+        ? "lang_id"
+        : null;
+
+    if (!bookCol || !langIdCol || !(await this.hasTable("languages")))
+      return [];
+
+    const languagesTable = "languages";
+    const langPk = (await this.hasColumn(languagesTable, "id")) ? "id" : null;
+    const codeCol = (await this.hasColumn(languagesTable, "lang_code"))
+      ? "lang_code"
+      : (await this.hasColumn(languagesTable, "code"))
+        ? "code"
+        : (await this.hasColumn(languagesTable, "lang"))
+          ? "lang"
+          : null;
+
+    if (!langPk || !codeCol) return [];
+
+    const sql = `
+      SELECT bl.${this.escapeIdent(bookCol)} as calibreBookId, l.${this.escapeIdent(codeCol)} as langCode
+      FROM ${this.escapeIdent(linkTable)} bl
+      JOIN ${this.escapeIdent(languagesTable)} l
+        ON l.${this.escapeIdent(langPk)} = bl.${this.escapeIdent(langIdCol)}
+    `;
+    const rows = await this.db.all(sql);
+    return rows
+      .map((r) => ({
+        calibreBookId: asNumber(r.calibreBookId) ?? 0,
+        langCode: safeString(r.langCode),
+      }))
+      .filter((r) => r.calibreBookId > 0 && r.langCode.length > 0);
+  }
+
+  /**
+   * Best-effort discovery of format files.
+   *
+   * Strategy:
+   * 1) Try a common-ish DB-derived mapping (books_data_link + data) when present.
+   * 2) Optionally fall back to scanning each book folder for known extensions.
+   *
+   * Note: For import-in-place we store paths relative to the Calibre library root.
+   */
+  async getFormatFiles(opts?: {
+    scanDiskFallback?: boolean;
+  }): Promise<CalibreFormatFile[]> {
+    const out: CalibreFormatFile[] = [];
+
+    // DB-derived attempt (best-effort)
+    try {
+      const linkTable = "books_data_link";
+      if (await this.hasTable(linkTable)) {
+        const bookCol = (await this.hasColumn(linkTable, "book"))
+          ? "book"
+          : (await this.hasColumn(linkTable, "book_id"))
+            ? "book_id"
+            : null;
+        const dataCol = (await this.hasColumn(linkTable, "data"))
+          ? "data"
+          : (await this.hasColumn(linkTable, "data_id"))
+            ? "data_id"
+            : null;
+        const formatCol = (await this.hasColumn(linkTable, "format"))
+          ? "format"
+          : null;
+
+        if (bookCol && dataCol && formatCol && (await this.hasTable("data"))) {
+          const dataTable = "data";
+          const dataPk = (await this.hasColumn(dataTable, "id")) ? "id" : null;
+          const nameCol = (await this.hasColumn(dataTable, "name"))
+            ? "name"
+            : null;
+
+          if (dataPk && nameCol) {
+            const sql = `
+              SELECT bdl.${this.escapeIdent(bookCol)} as calibreBookId,
+                     bdl.${this.escapeIdent(formatCol)} as format,
+                     d.${this.escapeIdent(nameCol)} as name
+              FROM ${this.escapeIdent(linkTable)} bdl
+              JOIN ${this.escapeIdent(dataTable)} d
+                ON d.${this.escapeIdent(dataPk)} = bdl.${this.escapeIdent(dataCol)}
+            `;
+            const rows = await this.db.all(sql);
+
+            const booksById = new Map<number, CalibreBookRow>();
+            for (const b of await this.getBooks())
+              booksById.set(b.calibreBookId, b);
+
+            for (const r of rows) {
+              const calibreBookId = asNumber(r.calibreBookId) ?? 0;
+              const format = safeString(r.format).toUpperCase();
+              const name = safeString(r.name);
+              const book = booksById.get(calibreBookId);
+
+              if (!book?.path || !name || !format || !calibreBookId) continue;
+
+              const rel = path.posix.join(
+                book.path.replaceAll("\\", "/"),
+                name.replaceAll("\\", "/"),
+              );
+
+              out.push({ calibreBookId, format, relativePath: rel });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      logger.warn(e, "CalibreReader: failed to load formats from DB");
+    }
+
+    if (out.length > 0) return out;
+    if (!opts?.scanDiskFallback) return [];
+
+    // Disk fallback: scan each book directory under books.path for typical format extensions.
+    const books = await this.getBooks();
+    for (const b of books) {
+      if (!b.path) continue;
+
+      const bookDirAbs = path.resolve(this.libraryRootAbs, b.path);
+      let entries: string[] = [];
+      try {
+        entries = readdirSync(bookDirAbs, { withFileTypes: true })
+          .filter((d) => d.isFile())
+          .map((d) => d.name);
+      } catch {
+        continue;
+      }
+
+      for (const file of entries) {
+        const ext = path.extname(file).replace(/^\./, "").toUpperCase();
+        if (!ext) continue;
+
+        const isKnown =
+          ext === "EPUB" ||
+          ext === "MOBI" ||
+          ext === "AZW" ||
+          ext === "AZW3" ||
+          ext === "PDF" ||
+          ext === "CBZ" ||
+          ext === "CBR" ||
+          ext === "TXT" ||
+          ext === "RTF" ||
+          ext === "DJVU" ||
+          ext === "DOC" ||
+          ext === "DOCX" ||
+          ext === "HTML" ||
+          ext === "HTM";
+
+        if (!isKnown) continue;
+
+        out.push({
+          calibreBookId: b.calibreBookId,
+          format: ext,
+          relativePath: path.posix.join(
+            b.path.replaceAll("\\", "/"),
+            file.replaceAll("\\", "/"),
+          ),
+        });
+      }
+    }
+
+    return out;
+  }
+
+  /**
+   * Convenience helper used by the admin import route.
+   * Keeps route logic simple by returning all related slices at once.
+   */
+  async getSnapshot(): Promise<{
     books: CalibreBookRow[];
     authors: CalibreAuthorRow[];
     tags: CalibreTagRow[];
     publishers: CalibrePublisherRow[];
     series: CalibreSeriesRow[];
-    bookAuthors: CalibreBookAuthorLinkRow[];
-    bookTags: CalibreBookTagLinkRow[];
-    bookPublishers: CalibreBookPublisherLinkRow[];
-    bookSeries: CalibreBookSeriesLinkRow[];
+    bookAuthors: CalibreBookAuthorLink[];
+    bookTags: CalibreBookTagLink[];
+    bookPublishers: CalibreBookPublisherLink[];
+    bookSeries: CalibreBookSeriesLink[];
     comments: CalibreCommentRow[];
     identifiers: CalibreIdentifierRow[];
-    languages: CalibreLanguageLinkRow[];
+    languages: CalibreLanguageRow[];
     formatFiles: CalibreFormatFile[];
-  } {
-    const books = this.getBooks();
+  }> {
+    const books = await this.getBooks();
+
     return {
       books,
-      authors: this.getAuthors(),
-      tags: this.getTags(),
-      publishers: this.getPublishers(),
-      series: this.getSeries(),
-      bookAuthors: this.getBookAuthorsLinks(),
-      bookTags: this.getBookTagsLinks(),
-      bookPublishers: this.getBookPublishersLinks(),
-      bookSeries: this.getBookSeriesLinks(),
-      comments: this.getComments(),
-      identifiers: this.getIdentifiers(),
-      languages: this.getLanguages(),
-      formatFiles: this.getFormatFilesFromDb(),
+      authors: await this.getAuthors(),
+      tags: await this.getTags(),
+      publishers: await this.getPublishers(),
+      series: await this.getSeries(),
+      bookAuthors: await this.getBookAuthorLinks(),
+      bookTags: await this.getBookTagLinks(),
+      bookPublishers: await this.getBookPublisherLinks(),
+      bookSeries: await this.getBookSeriesLinks(),
+      comments: await this.getComments(),
+      identifiers: await this.getIdentifiers(),
+      languages: await this.getLanguages(),
+      formatFiles: await this.getFormatFiles({ scanDiskFallback: true }),
     };
   }
 }
