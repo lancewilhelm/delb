@@ -24,11 +24,14 @@ const props = withDefaults(
         showAuthor?: boolean;
         /** Additional classes for the outer wrapper */
         class?: string;
+        /** Lock the aspect ratio to 3:2 */
+        lockAspectRatio?: boolean;
     }>(),
     {
         to: undefined,
         showAuthor: true,
         class: "",
+        lockAspectRatio: false,
     },
 );
 
@@ -36,9 +39,28 @@ const coverSrc = computed(() => {
     const p = props.book.coverImagePath;
     if (!p) return null;
 
-    // Stored as: library/<...>/cover.webp (or similar)
+    // Cover storage model:
+    // - DB normally points to `.../thumb.webp` for list/grid usage
+    // - Older data (or some imports) may point to a source cover like `.../cover.jpg` or `.../cover.source.jpg`
+    // In those cases, prefer serving a sibling `thumb.webp` to keep list/grid views lightweight.
+    const normalized = p.replace(/\\/g, "/");
+
+    const base = normalized.replace(/^library\//, "");
+    const lastSlash = base.lastIndexOf("/");
+    const dir = lastSlash >= 0 ? base.slice(0, lastSlash) : "";
+    const thumbRel = (dir ? `${dir}/` : "") + "thumb.webp";
+
+    const looksLikeSourceCover =
+        /\/cover\.(jpe?g|png|webp|gif|svg)$/i.test(normalized) ||
+        /\/cover\.source\.[^/]+$/i.test(normalized) ||
+        /\/source\.[^/]+$/i.test(normalized);
+
+    if (looksLikeSourceCover) {
+        return `/api/media/covers/${thumbRel}`;
+    }
+
     // API expects: /api/media/covers/<path under library>
-    return `/api/media/covers/${p.replace(/^library\//, "")}`;
+    return `/api/media/covers/${base}`;
 });
 
 const authorLabel = computed(() => {
@@ -66,6 +88,7 @@ const authorLabel = computed(() => {
                 :src="coverSrc"
                 :alt="`Cover for ${props.book.title}`"
                 class="cursor-pointer"
+                :class="lockAspectRatio ? 'aspect-2/3' : ''"
                 @click="navigateTo(`/books/${props.book.id}`)"
             />
 

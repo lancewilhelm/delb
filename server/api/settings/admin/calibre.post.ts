@@ -2,6 +2,7 @@ import path from "node:path";
 import { readdir, stat } from "node:fs/promises";
 
 import { and, eq, sql } from "drizzle-orm";
+import sharp from "sharp";
 
 import { auth } from "~/utils/auth";
 import { logger } from "~/utils/logger";
@@ -578,15 +579,55 @@ export default defineEventHandler(async (event) => {
         safeNonEmptyString(calibreBook.timestamp) ??
         null;
 
-      // Cover: choose first existing cover candidate on disk.
+      // Cover:
+      // - Calibre typically stores a full-res `cover.jpg/png` in the book directory.
+      // - Delb should use a lightweight `thumb.webp` almost everywhere, and only serve
+      //   the full-res source on demand.
+      //
+      // Policy here:
+      // - If a Calibre cover exists, generate/ensure `thumb.webp` next to it (idempotent).
+      // - Store `books.coverImagePath` as the thumbnail path (`library/<dir>/thumb.webp`).
       let coverImagePath: string | null = null;
       const coverCandidates = reader.getCoverCandidates(calibreBook);
       summary.results.coverCandidatesFound += coverCandidates.length;
 
       for (const c of coverCandidates) {
         if (await fileExists(c.absPath)) {
-          // Store Delb-style `library/...` relative path (POSIX separators).
-          coverImagePath = c.relativePath;
+          const relDir = (calibreBook.path ?? "").toString().trim();
+          if (!relDir) break;
+
+          const bookDirAbs = reader.resolveBookDirAbs(calibreBook);
+          if (!bookDirAbs) break;
+
+          const thumbAbs = path.resolve(bookDirAbs, "thumb.webp");
+          const thumbRelPosix = ["library", relDir, "thumb.webp"].join("/");
+
+          // Generate thumb only if it doesn't already exist (keeps imports fast on re-scan)
+          if (!(await fileExists(thumbAbs))) {
+            try {
+              const { readFile, writeFile } = await import("node:fs/promises");
+              const srcBytes = await readFile(c.absPath);
+
+              const thumbBytes = await sharp(srcBytes)
+                .rotate()
+                .resize({ width: 320, withoutEnlargement: true })
+                .webp({ quality: 80 })
+                .toBuffer();
+
+              await writeFile(thumbAbs, thumbBytes);
+            } catch (e) {
+              // If thumbnail generation fails, fall back to pointing at the original cover
+              // (still correct, just heavier).
+              logger.warn(
+                e,
+                "calibre import: failed to generate thumb.webp; falling back to source cover path",
+              );
+              coverImagePath = c.relativePath;
+              break;
+            }
+          }
+
+          coverImagePath = thumbRelPosix;
           break;
         }
       }

@@ -9,21 +9,29 @@ import sharp from "sharp";
  */
 export type ExtractedCover = {
   /**
-   * Relative path where the cover was written (POSIX-style, e.g. `library/A/T/cover.webp`)
+   * Relative path where the thumbnail was written (POSIX-style, e.g. `library/A/T/thumb.webp`)
    */
-  relativePath: string;
+  thumbRelativePath: string;
   /**
    * MIME type we believe the original cover bytes represent.
    */
-  mimeType: string;
+  sourceMimeType: string;
   /**
-   * File extension used for the stored image (e.g. `jpg`).
+   * File extension used for the stored source image (e.g. `jpg`).
    */
-  extension: string;
+  sourceExtension: string;
   /**
-   * Size in bytes of the stored file.
+   * Relative path where the original/source cover was written (POSIX-style, e.g. `library/A/T/source.jpg`)
    */
-  byteLength: number;
+  sourceRelativePath: string;
+  /**
+   * Size in bytes of the stored thumbnail file.
+   */
+  thumbByteLength: number;
+  /**
+   * Size in bytes of the stored source file.
+   */
+  sourceByteLength: number;
 };
 
 /**
@@ -34,7 +42,8 @@ export type ExtractedCover = {
  * 2) Prefer `epub.cover` if available (common in `epub2`).
  * 3) Fallback: scan manifest for an item with id including "cover" and image mime.
  * 4) Read cover bytes via `getImage(...)` or `getFile(...)`.
- * 5) Convert to a small WebP thumbnail asset using `sharp` (stable display + small size).
+ * 5) Persist the original cover bytes as `source.<ext>`.
+ * 6) Generate a small WebP thumbnail (`thumb.webp`, default 320px wide).
  *
  * Returns `null` if no cover could be extracted.
  */
@@ -50,10 +59,21 @@ export async function extractAndStoreEpubCover(opts: {
   outputDirAbsolute: string;
 
   /**
-   * Relative path (POSIX) to store in the DB (e.g. `library/A/T/cover.webp`).
-   * The function will write the cover image to the absolute equivalent of this.
+   * Relative path (POSIX) to store the thumbnail in the DB (e.g. `library/A/T/thumb.webp`).
+   * The function will write the thumbnail image to the absolute equivalent of this.
    */
-  outputRelativePathPosix: string;
+  outputThumbRelativePathPosix: string;
+
+  /**
+   * Relative path (POSIX) to store the source/original cover.
+   *
+   * NOTE: This function will normalize the filename to `cover.<ext>` based on the detected mime,
+   * and will return the normalized relative path in `sourceRelativePath`.
+   *
+   * Example input:  `library/A/T/source.bin`
+   * Example output: `library/A/T/cover.jpg`
+   */
+  outputSourceRelativePathPosix: string;
 
   /**
    * Max thumbnail width in pixels (default 320).
@@ -301,42 +321,56 @@ export async function extractAndStoreEpubCover(opts: {
   // Ensure output directory exists
   await mkdir(opts.outputDirAbsolute, { recursive: true });
 
-  // Normalize output path; caller supplies relative POSIX path for DB storage.
-  // The absolute output file path is derived from outputDirAbsolute + basename.
-  const outBasename = path.posix.basename(opts.outputRelativePathPosix);
-  const outAbsolute = path.join(opts.outputDirAbsolute, outBasename);
+  // Resolve absolute output paths from provided POSIX-relative paths
+  const thumbBasename = path.posix.basename(opts.outputThumbRelativePathPosix);
+  const thumbAbsolute = path.join(opts.outputDirAbsolute, thumbBasename);
 
-  // Convert to small WebP for easy display and consistent thumbnails.
-  // If conversion fails (e.g. unsupported image), fall back to raw bytes save.
-  let outBytes: Buffer;
-  let mimeType = "image/webp";
-  let extension = "webp";
+  // 1) Persist original/source bytes as-is, but normalize the filename to: cover.<ext>
+  const sourceBytes = cover.bytes;
+  const sourceMimeType = cover.mimeType || "application/octet-stream";
 
+  // Best-effort source extension inference based on mime type
+  let sourceExtension = "bin";
+  if (sourceMimeType.includes("webp")) sourceExtension = "webp";
+  else if (sourceMimeType.includes("png")) sourceExtension = "png";
+  else if (sourceMimeType.includes("jpeg") || sourceMimeType.includes("jpg"))
+    sourceExtension = "jpg";
+
+  const outputSourceDirPosix = path.posix.dirname(
+    opts.outputSourceRelativePathPosix,
+  );
+  const normalizedSourceRelPosix = path.posix.join(
+    outputSourceDirPosix,
+    `cover.${sourceExtension}`,
+  );
+  const sourceAbsolute = path.join(
+    opts.outputDirAbsolute,
+    path.posix.basename(normalizedSourceRelPosix),
+  );
+
+  await writeFile(sourceAbsolute, sourceBytes);
+
+  // 2) Generate WebP thumbnail as thumb.webp (default 320w).
+  // If conversion fails, fall back to storing the original bytes at thumb.webp.
+  let thumbBytes: Buffer;
   try {
-    outBytes = await sharp(cover.bytes)
+    thumbBytes = await sharp(sourceBytes)
       .rotate() // respect EXIF when present
       .resize({ width: maxWidth, withoutEnlargement: true })
       .webp({ quality: webpQuality })
       .toBuffer();
   } catch {
-    // Fallback: store as-is with best guess extension; still write to requested path.
-    outBytes = cover.bytes;
-    mimeType = cover.mimeType || "application/octet-stream";
-
-    // Attempt to infer an extension from mimeType; otherwise keep ".bin".
-    if (mimeType.includes("webp")) extension = "webp";
-    else if (mimeType.includes("png")) extension = "png";
-    else if (mimeType.includes("jpeg") || mimeType.includes("jpg"))
-      extension = "jpg";
-    else extension = "bin";
+    thumbBytes = sourceBytes;
   }
 
-  await writeFile(outAbsolute, outBytes);
+  await writeFile(thumbAbsolute, thumbBytes);
 
   return {
-    relativePath: opts.outputRelativePathPosix,
-    mimeType,
-    extension,
-    byteLength: outBytes.byteLength,
+    thumbRelativePath: opts.outputThumbRelativePathPosix,
+    sourceRelativePath: normalizedSourceRelPosix,
+    sourceMimeType,
+    sourceExtension,
+    thumbByteLength: thumbBytes.byteLength,
+    sourceByteLength: sourceBytes.byteLength,
   };
 }

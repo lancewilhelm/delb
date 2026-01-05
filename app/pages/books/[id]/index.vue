@@ -192,14 +192,51 @@ const safeDescriptionHtml = computed(() => {
     return sanitizeDescriptionHtml(desc);
 });
 
-const coverUrl = computed(() => {
+const coverThumbUrl = computed(() => {
     const b = book.value;
     if (!b?.coverImagePath) return null;
 
-    // Stored as: library/<author>/<title>/cover.webp
+    // Stored as a relative `library/...` path (typically `.../thumb.webp`)
     // API expects: /api/media/covers/<path under library>
     return `/api/media/covers/${b.coverImagePath.replace(/^library\//, "")}`;
 });
+
+/**
+ * Full-resolution cover URL.
+ *
+ * Use the dedicated API so the client does not need to guess file extensions.
+ * This returns the TRUE original cover bytes stored on disk (or best-effort fallback).
+ */
+const coverSourceUrl = computed(() => {
+    const id = bookId.value;
+    if (!id) return null;
+    return `/api/books/${encodeURIComponent(id)}/cover-source`;
+});
+
+const coverViewerOpen = ref(false);
+const coverViewerSrc = ref<string | null>(null);
+
+function openCoverViewer() {
+    // Start optimistic: try the derived source URL; if it fails, we fall back to thumb in `onCoverViewerError`.
+    coverViewerSrc.value = coverSourceUrl.value ?? coverThumbUrl.value;
+    coverViewerOpen.value = Boolean(coverViewerSrc.value);
+}
+
+function closeCoverViewer() {
+    coverViewerOpen.value = false;
+    coverViewerSrc.value = null;
+}
+
+function onCoverViewerError() {
+    // If the derived source wasn't available (wrong ext / missing file), fall back to thumb.
+    if (coverViewerSrc.value !== coverThumbUrl.value) {
+        coverViewerSrc.value = coverThumbUrl.value;
+        return;
+    }
+
+    // If even thumb fails, close viewer.
+    closeCoverViewer();
+}
 
 const downloadUrl = computed(() => {
     if (!bookId.value) return null;
@@ -402,9 +439,36 @@ watch(
                 >
                     <!-- Keep a consistent aspect ratio; cover itself is max 320px wide -->
                     <BookCover
-                        :src="coverUrl"
+                        :src="coverThumbUrl"
                         :alt="`Cover for ${book.title}`"
+                        class="cursor-pointer"
+                        @click="openCoverViewer"
                     />
+
+                    <!-- Simple modal viewer for full-resolution cover -->
+                    <div
+                        v-if="coverViewerOpen"
+                        class="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+                        @click.self="closeCoverViewer"
+                    >
+                        <div class="relative max-w-[95vw] max-h-[95vh]">
+                            <button
+                                type="button"
+                                class="absolute -top-3 -right-3 bg-(--bg-color) border border-(--sub-color) rounded-full w-9 h-9 flex items-center justify-center hover:bg-(--sub-color)/10"
+                                @click="closeCoverViewer"
+                            >
+                                <icon name="lucide:x" class="scale-135" />
+                            </button>
+
+                            <img
+                                v-if="coverViewerSrc"
+                                :src="coverViewerSrc"
+                                :alt="`Cover for ${book.title}`"
+                                class="block max-w-[95vw] max-h-[95vh] object-contain rounded-md"
+                                @error="onCoverViewerError"
+                            />
+                        </div>
+                    </div>
 
                     <!-- Actions -->
                     <div class="flex flex-wrap gap-1 pt-2">

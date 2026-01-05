@@ -236,26 +236,43 @@ async function processOneBookUpload(
   await writeFile(absolutePath, filePart.data);
 
   // Best-effort cover extraction (EPUB only for now)
+  //
+  // New cover storage model:
+  // - Store extracted original cover bytes as: `source.<ext>` (true original, full resolution)
+  // - Store a 320px-wide thumbnail as: `thumb.webp` (used almost everywhere)
+  // - Persist `books.coverImagePath` as the thumbnail path (`thumb.webp`)
+  //
+  // The full-res source is served only on-demand by requesting its path.
   let coverImagePath: string | null = null;
   if (format === "epub") {
     try {
-      const coverRelativePath = buildBookStorageRelativePath({
+      const thumbRelativePath = buildBookStorageRelativePath({
         authorNames: [authorName],
         title,
         bookId: id,
-        filename: "cover.webp",
+        filename: "thumb.webp",
+        baseDir: "library",
+      });
+
+      const sourceRelativePath = buildBookStorageRelativePath({
+        authorNames: [authorName],
+        title,
+        bookId: id,
+        filename: "source.bin",
         baseDir: "library",
       });
 
       const extracted = await extractAndStoreEpubCover({
         epubFilePath: absolutePath,
         outputDirAbsolute: bookDirAbsolute,
-        outputRelativePathPosix: coverRelativePath,
+        outputThumbRelativePathPosix: thumbRelativePath,
+        outputSourceRelativePathPosix: sourceRelativePath,
         maxWidth: 320,
         webpQuality: 80,
       });
 
-      coverImagePath = extracted?.relativePath ?? null;
+      // Store thumbnail path in DB
+      coverImagePath = extracted?.thumbRelativePath ?? null;
     } catch (error) {
       logger.debug(
         error,

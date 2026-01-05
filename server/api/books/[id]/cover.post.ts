@@ -17,10 +17,15 @@ import { auth } from "~/utils/auth";
 /**
  * POST /api/books/:id/cover
  *
- * Admin-only endpoint that accepts an uploaded image and stores it as:
- *   library/<author(s)>/<title (id8)>/cover.webp
+ * Admin-only endpoint that accepts an uploaded image and stores:
+ * - Original bytes as: `library/<author(s)>/<title (id8)>/cover.<ext>` (true original)
+ * - Thumbnail as:     `library/<author(s)>/<title (id8)>/thumb.webp` (320px wide)
  *
- * Then updates `books.coverImagePath` accordingly.
+ * Then updates `books.coverImagePath` to point at the thumbnail (`thumb.webp`).
+ *
+ * Notes:
+ * - The UI should use `books.coverImagePath` for most places (thumbnail).
+ * - The full-resolution source is available on request via `/api/media/covers/.../cover.<ext>`.
  *
  * Request: multipart/form-data with a single file field named `file`.
  *
@@ -34,7 +39,9 @@ import { auth } from "~/utils/auth";
  * Notes:
  * - The canonical directory for a book is derived from an existing `book_files.relativePath`
  *   (e.g. `library/<author(s)>/<title (id8)>/<title>.epub`).
- * - Always stores as `cover.webp` (overwrite semantics).
+ * - Overwrite semantics for both files:
+ *   - `cover.<ext>` is overwritten
+ *   - `thumb.webp` is overwritten
  */
 export default defineEventHandler(async (event) => {
   logger.debug("POST /api/books/:id/cover");
@@ -149,40 +156,73 @@ export default defineEventHandler(async (event) => {
     }
 
     const bookDirAbs = path.dirname(bookFileAbs);
-    const coverAbs = path.join(bookDirAbs, "cover.webp");
 
-    // Convert uploaded image to webp. Keep it reasonably sized.
-    // (You can tune these later; these match the “small thumbnail cover” idea.)
-    const webp = await sharp(filePart.data)
+    // Detect the uploaded image format so we can persist the true original as `cover.<ext>`.
+    const meta = await sharp(filePart.data).rotate().metadata();
+    const fmt = (meta.format || "").toString().toLowerCase();
+
+    // Map sharp's format names to common file extensions.
+    // If we can't confidently detect, fall back to jpg (still preserves original pixels, but re-encodes).
+    const ext =
+      fmt === "jpeg" || fmt === "jpg"
+        ? "jpg"
+        : fmt === "png"
+          ? "png"
+          : fmt === "webp"
+            ? "webp"
+            : fmt === "gif"
+              ? "gif"
+              : fmt === "avif"
+                ? "avif"
+                : fmt === "tiff"
+                  ? "tiff"
+                  : "jpg";
+
+    const sourceAbs = path.join(bookDirAbs, `cover.${ext}`);
+    const thumbAbs = path.join(bookDirAbs, "thumb.webp");
+
+    // Thumbnail: 320px wide, webp for consistent lightweight UI rendering.
+    const thumbWebp = await sharp(filePart.data)
       .rotate() // respect EXIF orientation
       .resize({
-        width: 640,
-        height: 640,
-        fit: "inside",
+        width: 320,
         withoutEnlargement: true,
       })
       .webp({ quality: 80 })
       .toBuffer();
 
     await mkdir(bookDirAbs, { recursive: true });
-    await writeFile(coverAbs, webp);
 
-    // Compute DB path (posix-style) for coverImagePath.
-    // We keep it relative and stable: library/<author>/<title>/cover.webp
-    const coverRelPosix = path.posix.join(
+    if (ext === "jpg") {
+      // If we had to fall back (unknown format), store a high-quality JPEG as the "source".
+      // This is the best we can do without a trustworthy original container format.
+      const sourceJpeg = await sharp(filePart.data)
+        .rotate()
+        .jpeg({ quality: 95 })
+        .toBuffer();
+      await writeFile(sourceAbs, sourceJpeg);
+    } else {
+      // Store exact uploaded bytes as source.
+      await writeFile(sourceAbs, filePart.data);
+    }
+
+    await writeFile(thumbAbs, thumbWebp);
+
+    // DB should point to the thumbnail by default (most views use this).
+    const thumbRelPosix = path.posix.join(
       "library",
-      ...path.relative(libraryBaseAbs, coverAbs).split(path.sep),
+      ...path.relative(libraryBaseAbs, thumbAbs).split(path.sep),
     );
 
     await cloudDb
       .update(books)
-      .set({ coverImagePath: coverRelPosix, updatedAt: new Date() })
+      .set({ coverImagePath: thumbRelPosix, updatedAt: new Date() })
       .where(eq(books.id, id));
 
     return {
       success: true,
       data: {
-        coverImagePath: coverRelPosix,
+        coverImagePath: thumbRelPosix,
       },
     };
   } catch (error: unknown) {

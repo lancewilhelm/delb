@@ -486,6 +486,7 @@ onMounted(async () => {
                                 v-for="b in books"
                                 :key="b.id"
                                 :book="b"
+                                :lock-aspect-ratio="true"
                             />
                         </div>
                     </div>

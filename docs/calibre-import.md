@@ -132,13 +132,39 @@ This is intentional: for import-in-place, the filesystem is the most reliable so
 
 ## Covers
 
-Delb sets `books.cover_image_path` by checking for a cover file inside the Calibre book folder:
+Delb uses a **two-file cover model**:
 
-- `cover.jpg`
-- `cover.jpeg`
-- `cover.png`
+- **Thumbnail (default/UI):** `thumb.webp` (320px wide)
+- **Source (full resolution):** the original Calibre cover image (typically `cover.jpg` / `cover.png`)
 
-Delb does **not** convert Calibre covers to `cover.webp` during import-in-place.
+### What gets stored during Calibre import
+
+When a Calibre cover exists inside the Calibre book folder, Delb will:
+
+1. Keep the **original** Calibre cover file as-is (full resolution), e.g.
+   - `cover.jpg`
+   - `cover.jpeg`
+   - `cover.png`
+
+2. Generate a lightweight thumbnail **next to it** (idempotent):
+   - `thumb.webp` (320px wide)
+
+Delb sets `books.cover_image_path` to point to the thumbnail:
+
+- `library/<calibreRelDir>/thumb.webp`
+
+This keeps list/grid views fast and avoids transferring large images to the client by default.
+
+### How the UI serves covers
+
+- Most pages (thumbnails, lists, grids) use the path in `books.cover_image_path` (the `thumb.webp`).
+- When a user clicks the cover on the book detail page, the UI requests the **source** cover on demand (the true original, not resized).
+
+### Notes and caveats
+
+- Delb does **not** move or rename Calibre files during import-in-place.
+- Thumbnails are generated only when missing (so re-scan stays fast).
+- If thumbnail generation fails for a given book (corrupt/unsupported cover), Delb may fall back to using the original Calibre cover path for that book, which can be heavier.
 
 ---
 

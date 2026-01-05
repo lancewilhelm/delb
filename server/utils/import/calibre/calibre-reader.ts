@@ -652,8 +652,15 @@ export class CalibreReader {
   }
 
   /**
-   * Compute the expected cover path (relative + absolute) for a Calibre book.
-   * Calibre commonly stores `cover.jpg` or `cover.png` inside the book directory.
+   * Compute expected cover paths (relative + absolute) for a Calibre book.
+   *
+   * Supports both:
+   * - Calibre-native full-resolution covers: `cover.jpg|cover.jpeg|cover.png`
+   * - Delb-derived assets (if generated during import/rescan):
+   *   - `thumb.webp` (lightweight UI cover, preferred for default rendering)
+   *   - `cover.source.*` and `source.*` (full-resolution source, served on demand)
+   *
+   * The return list is ordered by preference (best-first).
    */
   getCoverCandidates(book: CalibreBookRow): Array<{
     filename: string;
@@ -663,7 +670,25 @@ export class CalibreReader {
     const relDir = (book.path ?? "").toString().trim();
     if (!relDir) return [];
 
-    const candidates = ["cover.jpg", "cover.jpeg", "cover.png"];
+    // Preference order:
+    // 1) thumb.webp (if Delb generated it)
+    // 2) Delb's canonical-ish source name(s) (if present)
+    // 3) Calibre's original cover.{jpg,jpeg,png}
+    const candidates = [
+      "thumb.webp",
+      "cover.source.jpg",
+      "cover.source.jpeg",
+      "cover.source.png",
+      "cover.source.webp",
+      "source.jpg",
+      "source.jpeg",
+      "source.png",
+      "source.webp",
+      "cover.jpg",
+      "cover.jpeg",
+      "cover.png",
+    ];
+
     return candidates.map((filename) => {
       const relativePath = ["library", relDir, filename].join("/");
       const absPath = path.resolve(this.libraryRootAbs, relDir, filename);
