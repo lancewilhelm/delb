@@ -424,7 +424,7 @@ onMounted(async () => {
             <!-- Main content (fixed header + scrollable content area) -->
             <div class="flex-1 overflow-hidden flex flex-col min-h-0">
                 <!-- Header (non-scrolling): view selector stays fixed -->
-                <div class="p-4 shrink-0">
+                <div class="px-4 shrink-0 border-b border-(--sub-color)">
                     <div class="flex items-end justify-between gap-4">
                         <!-- View selector (mode) lives here (top-left) -->
                         <ViewSelectorDropdown

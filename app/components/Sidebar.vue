@@ -79,7 +79,7 @@ onBeforeUnmount(() => {
     >
         <!-- Header -->
         <div
-            class="px-2 py-2 border-b border-(--sub-color) flex items-center gap-2"
+            class="px-2 py-2.5 border-b border-(--sub-color) flex items-center gap-2"
             :class="isCollapsed ? 'justify-center' : 'justify-between'"
         >
             <div v-if="!isCollapsed" class="flex items-center gap-2 min-w-0">
@@ -110,7 +110,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- Filter section placeholders (v1) -->
-        <div class="flex-1 overflow-auto px-2 py-2 space-y-4">
+        <div class="flex-1 py-2 overflow-auto space-y-4">
             <!-- Shelves (state) -->
             <section class="m-0">
                 <div
@@ -123,7 +123,8 @@ onBeforeUnmount(() => {
                 <div>
                     <button
                         v-tooltip="'Shelf filter (coming soon)'"
-                        class="w-full px-3 py-2 flex items-center gap-2 justify-start! opacity-70"
+                        class="w-full px-3 py-2 flex items-center gap-2 opacity-70 rounded-none!"
+                        :class="isCollapsed ? '' : 'justify-start!'"
                         disabled
                     >
                         <Icon
@@ -137,7 +138,8 @@ onBeforeUnmount(() => {
 
                     <button
                         v-tooltip="'Shelf filter (coming soon)'"
-                        class="w-full px-3 py-2 flex items-center gap-2 justify-start! opacity-70"
+                        class="w-full px-3 py-2 flex items-center gap-2 opacity-70 rounded-none!"
+                        :class="isCollapsed ? '' : 'justify-start!'"
                         disabled
                     >
                         <Icon
@@ -151,7 +153,8 @@ onBeforeUnmount(() => {
 
                     <button
                         v-tooltip="'Shelf filter (coming soon)'"
-                        class="w-full px-3 py-2 flex items-center gap-2 justify-start! opacity-70"
+                        class="w-full px-3 py-2 flex items-center gap-2 opacity-70 rounded-none!"
+                        :class="isCollapsed ? '' : 'justify-start!'"
                         disabled
                     >
                         <Icon
@@ -174,7 +177,8 @@ onBeforeUnmount(() => {
 
                 <button
                     v-tooltip="'Tag filters (coming soon)'"
-                    class="w-full px-3 py-2 flex items-center gap-2 justify-start! opacity-70"
+                    class="w-full px-3 py-2 flex items-center gap-2 opacity-70 rounded-none!"
+                    :class="isCollapsed ? '' : 'justify-start!'"
                     disabled
                 >
                     <Icon
@@ -198,7 +202,8 @@ onBeforeUnmount(() => {
 
                 <button
                     v-tooltip="'Rating filter (coming soon)'"
-                    class="w-full px-3 py-2 flex items-center gap-2 justify-start! opacity-70"
+                    class="w-full px-3 py-2 flex items-center gap-2 opacity-70 rounded-none!"
+                    :class="isCollapsed ? '' : 'justify-start!'"
                     disabled
                 >
                     <Icon
@@ -212,7 +217,10 @@ onBeforeUnmount(() => {
             </section>
 
             <!-- Later facets -->
-            <section class="m-0">
+            <section
+                class="m-0 flex flex-col"
+                :class="isCollapsed ? 'items-center' : ''"
+            >
                 <div
                     v-if="!isCollapsed"
                     class="px-2 py-1 text-xs uppercase tracking-wide opacity-70"
@@ -222,7 +230,8 @@ onBeforeUnmount(() => {
 
                 <button
                     v-tooltip="'More facets (coming soon)'"
-                    class="w-full px-3 py-2 flex items-center gap-2 justify-start! opacity-70"
+                    class="w-full px-3 py-2 flex items-center gap-2 opacity-70 rounded-none!"
+                    :class="isCollapsed ? '' : 'justify-start!'"
                     disabled
                 >
                     <Icon
