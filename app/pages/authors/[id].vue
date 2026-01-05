@@ -12,103 +12,70 @@ type FetchErrorLike = {
     message?: string;
 };
 
-type Book = {
-    id: string;
-    title: string;
-    coverImagePath?: string | null;
-
-    // List API denormalized fields (best-effort)
-    authors?: { id: string; name: string }[];
-    authorNames?: string[];
-    author?: string;
-
-    publisher?: { id: string; name: string } | null;
-    series?: { id: string; name: string } | null;
-
-    createdAt: string | number | Date;
-};
-
-type AuthorBooksResponse = {
-    data?: {
-        books?: Book[];
-    };
-    success?: boolean;
-    message?: string;
-};
-
 const route = useRoute();
 const collectionsStore = useCollectionsStore();
 
 const authorParam = computed(() => String(route.params.id || "").trim());
 const authorId = computed(() => decodeURIComponent(authorParam.value));
 
-const loading = ref(false);
 const errorMessage = ref<string | null>(null);
-
 const authorName = ref<string>("Author");
-const books = ref<Book[]>([]);
+const bookCount = ref<number>(0);
 
-const bookCount = computed(() => books.value.length);
+// Used to force-recreate the BooksInfiniteGrid (scope changes, navigation, etc.)
+const gridKey = ref(0);
 
-function deriveAuthorNameFromBooks(list: Book[], id: string) {
-    // Prefer exact author id match from `authors[]`
-    for (const b of list) {
-        const match = b.authors?.find((a) => a.id === id);
-        if (match?.name) return match.name;
+const activeCollectionId = computed<string | undefined>(() => {
+    if (
+        collectionsStore.activeSelection.kind === "collection" &&
+        collectionsStore.activeSelection.collectionId
+    ) {
+        return collectionsStore.activeSelection.collectionId;
     }
+    return undefined;
+});
 
-    // Back-compat for name-derived ids if any old links exist
-    if (id.startsWith("name:")) {
-        const raw = id.slice("name:".length);
-        if (raw) return raw;
-    }
+const endpoint = computed(() => {
+    if (!authorId.value) return "/api/books";
+    return `/api/authors/${encodeURIComponent(authorId.value)}/books`;
+});
 
-    return "Author";
-}
-
-async function refresh() {
+async function refreshHeaderName() {
     if (!authorId.value) return;
 
-    loading.value = true;
-    errorMessage.value = null;
+    // Ensure collections are loaded so scoped queries work
+    if (!collectionsStore.collections.length) {
+        await collectionsStore.fetchCollections();
+    }
 
     try {
-        // Ensure collections are loaded so collection-scoped queries work after navigation.
-        if (!collectionsStore.collections.length) {
-            await collectionsStore.fetchCollections();
-        }
+        const query: Record<string, string | number> = { limit: 1 };
+        if (activeCollectionId.value)
+            query.collectionId = activeCollectionId.value;
 
-        const query: Record<string, string> = {};
-        if (
-            collectionsStore.activeSelection.kind === "collection" &&
-            collectionsStore.activeSelection.collectionId
-        ) {
-            query.collectionId = collectionsStore.activeSelection.collectionId;
-        }
-
-        const res = await $fetch<AuthorBooksResponse>(
-            `/api/authors/${encodeURIComponent(authorId.value)}/books`,
-            {
-                method: "GET",
-                query,
-            },
-        );
-
-        const list = res?.data?.books ?? [];
-
-        // Stable ordering: newest first (match Home behavior)
-        list.sort((a, b) => {
-            const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
-            return bTime - aTime;
+        const res = await $fetch<{
+            data?: {
+                books?: Array<{
+                    authors?: Array<{ id: string; name: string }>;
+                }>;
+            };
+        }>(endpoint.value, {
+            method: "GET",
+            query,
         });
 
-        books.value = list;
-        authorName.value = deriveAuthorNameFromBooks(list, authorId.value);
+        const first = res?.data?.books?.[0];
+        const match = first?.authors?.find((a) => a.id === authorId.value);
+        if (match?.name) {
+            authorName.value = match.name;
+        } else if (authorId.value.startsWith("name:")) {
+            const raw = authorId.value.slice("name:".length);
+            authorName.value = raw || "Author";
+        } else {
+            authorName.value = "Author";
+        }
 
-        useHead({
-            title: `${authorName.value} · Author`,
-        });
+        useHead({ title: `${authorName.value} · Author` });
     } catch (err) {
         const e = err as FetchErrorLike;
         errorMessage.value =
@@ -116,56 +83,75 @@ async function refresh() {
             e?.statusMessage ||
             e?.message ||
             "Failed to load author";
-    } finally {
-        loading.value = false;
     }
 }
 
-onMounted(refresh);
-watch(authorId, refresh);
+function handleGridError(message: string) {
+    errorMessage.value = message;
+}
+
+watch(authorId, async () => {
+    errorMessage.value = null;
+    bookCount.value = 0;
+    gridKey.value++;
+    await refreshHeaderName();
+});
+
 watch(
     () => collectionsStore.activeSelection,
-    () => refresh(),
+    async () => {
+        errorMessage.value = null;
+        bookCount.value = 0;
+        gridKey.value++;
+        await refreshHeaderName();
+    },
     { deep: true },
 );
+
+onMounted(async () => {
+    await refreshHeaderName();
+});
 </script>
 
 <template>
     <div class="flex flex-col w-full h-full overflow-hidden">
         <AppHeader class="w-full" />
 
-        <div class="w-full h-full p-4 overflow-auto">
-            <div class="flex items-center gap-2 mb-4 text-(--main-color)">
-                <NuxtLink
-                    v-tooltip="'Go back'"
-                    to="/"
-                    class="opacity-80 hover:opacity-100"
-                >
-                    <Icon name="lucide:arrow-left" />
-                </NuxtLink>
+        <div class="flex-1 overflow-hidden flex flex-col min-h-0">
+            <!-- Header (non-scrolling) -->
+            <div class="p-4 shrink-0">
+                <div class="flex items-center gap-2 text-(--main-color)">
+                    <NuxtLink
+                        v-tooltip="'Go back'"
+                        to="/"
+                        class="opacity-80 hover:opacity-100"
+                    >
+                        <Icon name="lucide:arrow-left" />
+                    </NuxtLink>
 
-                <div class="text-2xl font-serif truncate">
-                    {{ authorName }}
+                    <div class="text-2xl font-serif truncate">
+                        {{ authorName }}
+                    </div>
+
+                    <div class="text-sm opacity-70">
+                        · {{ bookCount }} book{{ bookCount === 1 ? "" : "s" }}
+                    </div>
                 </div>
 
-                <div class="text-sm opacity-70">
-                    · {{ bookCount }} book{{ bookCount === 1 ? "" : "s" }}
+                <div v-if="errorMessage" class="text-sm text-red-600 mt-2">
+                    {{ errorMessage }}
                 </div>
             </div>
 
-            <div v-if="loading" class="text-sm opacity-80">Loading...</div>
-
-            <div v-else-if="errorMessage" class="text-sm text-red-600">
-                {{ errorMessage }}
-            </div>
-
-            <div v-else-if="books.length === 0" class="text-sm opacity-80">
-                No books found for this author in your accessible collections.
-            </div>
-
-            <div v-else class="flex gap-3 flex-wrap">
-                <BookThumbnail v-for="b in books" :key="b.id" :book="b" />
-            </div>
+            <!-- Body: only the books grid scrolls -->
+            <BooksInfiniteGrid
+                :key="gridKey"
+                :endpoint="endpoint"
+                :collection-id="activeCollectionId"
+                class="flex-1 min-h-0"
+                @error="handleGridError"
+                @update:count="(n) => (bookCount = n)"
+            />
         </div>
     </div>
 </template>

@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
 import { cloudDb } from "~~/server/utils/db/cloud";
 import {
   authors,
@@ -11,6 +11,41 @@ import {
 } from "~/utils/db/schema";
 import { logger } from "~/utils/logger";
 import { auth } from "~/utils/auth";
+
+type Cursor = {
+  createdAt: string;
+  id: string;
+};
+
+function clampInt(
+  input: unknown,
+  opts: { min: number; max: number; fallback: number },
+): number {
+  const n = Number.parseInt((input ?? "").toString(), 10);
+  if (!Number.isFinite(n)) return opts.fallback;
+  return Math.max(opts.min, Math.min(opts.max, n));
+}
+
+function encodeCursor(c: Cursor): string {
+  return Buffer.from(JSON.stringify(c), "utf8").toString("base64url");
+}
+
+function decodeCursor(raw: unknown): Cursor | null {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  try {
+    const json = Buffer.from(raw, "base64url").toString("utf8");
+    const parsed = JSON.parse(json) as Partial<Cursor>;
+    const createdAt = (parsed.createdAt ?? "").toString().trim();
+    const id = (parsed.id ?? "").toString().trim();
+    if (!createdAt || !id) return null;
+    // Validate date-ish
+    const t = new Date(createdAt).getTime();
+    if (!Number.isFinite(t)) return null;
+    return { createdAt, id };
+  } catch {
+    return null;
+  }
+}
 
 export default defineEventHandler(async (event) => {
   logger.debug("GET /api/books");
@@ -30,10 +65,21 @@ export default defineEventHandler(async (event) => {
 
   const userId = session.user.id;
 
-  // Optional query param:
+  // Optional query params:
   // - collectionId=<id> fetches books only from that collection (if user is a member)
   // - omit collectionId to fetch books from all collections the user is a member of
-  const { collectionId } = getQuery(event) as { collectionId?: string };
+  // - limit=<n> max page size (default 48)
+  // - cursor=<opaque> pagination cursor (createdAt+id) for infinite scroll
+  const q = getQuery(event) as {
+    collectionId?: string;
+    limit?: string;
+    cursor?: string;
+  };
+
+  const collectionId = q.collectionId;
+  // Allow smaller page sizes for dev/testing (small libraries, observer/manual pagination verification).
+  const limit = clampInt(q.limit, { min: 1, max: 200, fallback: 48 });
+  const cursor = decodeCursor(q.cursor);
 
   try {
     // Find collections the user is a member of
@@ -51,6 +97,7 @@ export default defineEventHandler(async (event) => {
         success: true,
         data: {
           books: [],
+          nextCursor: null,
         },
       };
     }
@@ -69,39 +116,52 @@ export default defineEventHandler(async (event) => {
         success: true,
         data: {
           books: [],
+          nextCursor: null,
         },
       };
     }
 
-    // Pull all book ids from the target collections
-    const bookLinks = await cloudDb
-      .select({ bookId: collectionBooks.bookId })
-      .from(collectionBooks)
-      .where(inArray(collectionBooks.collectionId, targetCollectionIds));
+    // Page query: fetch visible books via the collection link table.
+    // Sort: newest first, with deterministic tie-break by id.
+    const pageRows = await cloudDb
+      .select({ book: books })
+      .from(books)
+      .innerJoin(collectionBooks, eq(collectionBooks.bookId, books.id))
+      .where(
+        and(
+          inArray(collectionBooks.collectionId, targetCollectionIds),
+          cursor
+            ? or(
+                lt(books.createdAt, new Date(cursor.createdAt)),
+                and(
+                  eq(books.createdAt, new Date(cursor.createdAt)),
+                  lt(books.id, cursor.id),
+                ),
+              )
+            : undefined,
+        ),
+      )
+      // Avoid duplicates if a book is in multiple target collections.
+      // Group by book id provides a deterministic unique set in SQLite.
+      .groupBy(books.id)
+      .orderBy(desc(books.createdAt), desc(books.id))
+      .limit(limit + 1);
 
-    const bookIds = Array.from(new Set(bookLinks.map((r) => r.bookId))).filter(
-      Boolean,
-    );
+    const rows = pageRows
+      .map((r) => r.book)
+      .filter((b): b is NonNullable<(typeof books)["$inferSelect"]> => !!b);
+
+    const bookIds = rows.map((b) => b.id).filter(Boolean);
 
     if (!bookIds.length) {
       return {
         success: true,
         data: {
           books: [],
+          nextCursor: null,
         },
       };
     }
-
-    // Fetch each book by id (lean/simple approach; small N expected in v1)
-    const bookRows = await Promise.all(
-      bookIds.map((id) =>
-        cloudDb.select().from(books).where(eq(books.id, id)).limit(1),
-      ),
-    );
-
-    const rows = bookRows
-      .map((r) => r[0])
-      .filter((b): b is NonNullable<(typeof books)["$inferSelect"]> => !!b);
 
     // Attach author display info (multi-author):
     // - return `authorNames` (string[]) and `authors` ({id,name}[])
@@ -207,17 +267,26 @@ export default defineEventHandler(async (event) => {
       };
     });
 
-    // Keep previous behavior: newest first
-    rowsWithAuthor.sort((a, b) => {
-      const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return bTime - aTime;
-    });
+    // Only return a nextCursor when there are more books beyond this page.
+    // We do this by fetching limit+1 rows and using the extra row as "hasMore",
+    // while returning only `limit` rows to the client.
+    const hasMore = rowsWithAuthor.length > limit;
+    const page = hasMore ? rowsWithAuthor.slice(0, limit) : rowsWithAuthor;
+
+    const last = page[page.length - 1];
+    const nextCursor =
+      hasMore && last?.createdAt && last?.id
+        ? encodeCursor({
+            createdAt: new Date(last.createdAt).toISOString(),
+            id: last.id,
+          })
+        : null;
 
     return {
       success: true,
       data: {
-        books: rowsWithAuthor,
+        books: page,
+        nextCursor,
       },
     };
   } catch (error) {

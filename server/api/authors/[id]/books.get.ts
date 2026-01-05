@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
 import { cloudDb } from "~~/server/utils/db/cloud";
 import {
   authors,
@@ -13,7 +13,7 @@ import { logger } from "~/utils/logger";
 import { auth } from "~/utils/auth";
 
 /**
- * GET /api/authors/:id/books?collectionId=<optional>
+ * GET /api/authors/:id/books?collectionId=<optional>&limit=<n>&cursor=<opaque>
  *
  * Returns books associated with a given author that the current user can access.
  *
@@ -22,10 +22,48 @@ import { auth } from "~/utils/auth";
  * - Only returns books that exist in collections the user is a member of
  * - Optional `collectionId` further scopes results to that one collection (if user is a member)
  *
+ * Pagination:
+ * - Cursor-based pagination using (createdAt,id) ordering (newest first)
+ * - Returns `nextCursor` when more results exist
+ *
  * Response shape mirrors GET /api/books (list) enough for reuse in the UI:
  * - includes `authors` ({id,name}[]) + `authorNames` + legacy `author`
  * - includes `publisher` ({id,name}|null) and `series` ({id,name}|null)
  */
+type Cursor = {
+  createdAt: string;
+  id: string;
+};
+
+function clampInt(
+  input: unknown,
+  opts: { min: number; max: number; fallback: number },
+): number {
+  const n = Number.parseInt((input ?? "").toString(), 10);
+  if (!Number.isFinite(n)) return opts.fallback;
+  return Math.max(opts.min, Math.min(opts.max, n));
+}
+
+function encodeCursor(c: Cursor): string {
+  return Buffer.from(JSON.stringify(c), "utf8").toString("base64url");
+}
+
+function decodeCursor(raw: unknown): Cursor | null {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  try {
+    const json = Buffer.from(raw, "base64url").toString("utf8");
+    const parsed = JSON.parse(json) as Partial<Cursor>;
+    const createdAt = (parsed.createdAt ?? "").toString().trim();
+    const id = (parsed.id ?? "").toString().trim();
+    if (!createdAt || !id) return null;
+    const t = new Date(createdAt).getTime();
+    if (!Number.isFinite(t)) return null;
+    return { createdAt, id };
+  } catch {
+    return null;
+  }
+}
+
 export default defineEventHandler(async (event) => {
   logger.debug("GET /api/authors/:id/books");
 
@@ -46,7 +84,15 @@ export default defineEventHandler(async (event) => {
     return { success: false, message: "Missing author id" };
   }
 
-  const { collectionId } = getQuery(event) as { collectionId?: string };
+  const q = getQuery(event) as {
+    collectionId?: string;
+    limit?: string;
+    cursor?: string;
+  };
+
+  const collectionId = q.collectionId;
+  const limit = clampInt(q.limit, { min: 1, max: 200, fallback: 48 });
+  const cursor = decodeCursor(q.cursor);
 
   try {
     // Confirm author exists (nice UX; still no access leak beyond existence of author row)
@@ -101,33 +147,47 @@ export default defineEventHandler(async (event) => {
       return { success: true, data: { books: [] } };
     }
 
-    // 4) Find the subset of visible books that have this author
-    const authoredLinks = await cloudDb
-      .select({ bookId: bookAuthors.bookId })
-      .from(bookAuthors)
+    // 4) Page query: visible books by this author in the scoped collections.
+    // Sort: newest first, deterministic by id. Cursor is (createdAt,id).
+    const pageRows = await cloudDb
+      .select({ book: books })
+      .from(books)
+      .innerJoin(bookAuthors, eq(bookAuthors.bookId, books.id))
+      .innerJoin(collectionBooks, eq(collectionBooks.bookId, books.id))
       .where(
         and(
           eq(bookAuthors.authorId, authorId),
-          inArray(bookAuthors.bookId, visibleBookIds),
+          inArray(collectionBooks.collectionId, targetCollectionIds),
+          cursor
+            ? or(
+                lt(books.createdAt, new Date(cursor.createdAt)),
+                and(
+                  eq(books.createdAt, new Date(cursor.createdAt)),
+                  lt(books.id, cursor.id),
+                ),
+              )
+            : undefined,
         ),
-      );
+      )
+      // Avoid duplicates if the book appears multiple times due to joins.
+      .groupBy(books.id)
+      .orderBy(desc(books.createdAt), desc(books.id))
+      .limit(limit + 1);
 
-    const authoredBookIds = Array.from(
-      new Set(authoredLinks.map((l) => l.bookId)),
-    ).filter(Boolean);
+    const rows = pageRows
+      .map((r) => r.book)
+      .filter((b): b is NonNullable<(typeof books)["$inferSelect"]> => !!b);
 
-    if (!authoredBookIds.length) {
-      return { success: true, data: { books: [] } };
+    if (!rows.length) {
+      return { success: true, data: { books: [], nextCursor: null } };
     }
 
-    // 5) Fetch books
-    // Prefer a single IN query rather than N per book.
-    const bookRows = await cloudDb
-      .select()
-      .from(books)
-      .where(inArray(books.id, authoredBookIds));
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
 
-    // 6) Attach authors (ordered)
+    const bookIds = page.map((b) => b.id).filter(Boolean);
+
+    // 5) Attach authors (ordered)
     const allAuthorLinks = await cloudDb
       .select({
         bookId: bookAuthors.bookId,
@@ -135,7 +195,7 @@ export default defineEventHandler(async (event) => {
         position: bookAuthors.position,
       })
       .from(bookAuthors)
-      .where(inArray(bookAuthors.bookId, authoredBookIds));
+      .where(inArray(bookAuthors.bookId, bookIds));
 
     const allAuthorIds = Array.from(
       new Set(allAuthorLinks.map((l) => l.authorId)),
@@ -159,11 +219,11 @@ export default defineEventHandler(async (event) => {
 
     // 7) Attach publisher + series display info
     const publisherIds = Array.from(
-      new Set(bookRows.map((b) => b.publisherId).filter(Boolean)),
+      new Set(page.map((b) => b.publisherId).filter(Boolean)),
     ) as string[];
 
     const seriesIds = Array.from(
-      new Set(bookRows.map((b) => b.seriesId).filter(Boolean)),
+      new Set(page.map((b) => b.seriesId).filter(Boolean)),
     ) as string[];
 
     const publisherRows = publisherIds.length
@@ -183,7 +243,7 @@ export default defineEventHandler(async (event) => {
     const publisherById = new Map(publisherRows.map((p) => [p.id, p]));
     const seriesById = new Map(seriesRows.map((s) => [s.id, s]));
 
-    const out = bookRows.map((b) => {
+    const out = page.map((b) => {
       const links = (linksByBookId.get(b.id) ?? []).slice();
       links.sort((a, c) => {
         const aPos = typeof a.position === "number" ? a.position : 10_000;
@@ -227,14 +287,17 @@ export default defineEventHandler(async (event) => {
       };
     });
 
-    // Keep previous behavior: newest first
-    out.sort((a, b) => {
-      const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return bTime - aTime;
-    });
+    // The page query already orders newest first, so no need to re-sort.
+    const last = out[out.length - 1];
+    const nextCursor =
+      hasMore && last?.createdAt && last?.id
+        ? encodeCursor({
+            createdAt: new Date(last.createdAt).toISOString(),
+            id: last.id,
+          })
+        : null;
 
-    return { success: true, data: { books: out } };
+    return { success: true, data: { books: out, nextCursor } };
   } catch (error: unknown) {
     // Preserve explicit HTTP errors (401/400/404) thrown above
     if (
