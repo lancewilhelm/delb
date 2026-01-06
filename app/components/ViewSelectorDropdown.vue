@@ -99,7 +99,7 @@ onBeforeUnmount(() => {
         >
             <Icon
                 :name="activeView.icon"
-                class="text-(--main-color) opacity-90 shrink-0 scale-150"
+                class="text-(--main-color) opacity-90 shrink-0 text-2xl"
             />
             <span class="text-3xl font-serif text-(--main-color)">
                 {{ activeView.label }}
