@@ -442,7 +442,7 @@ watch(
                         :src="coverThumbUrl"
                         :alt="`Cover for ${book.title}`"
                         :title="book.title"
-                        class="cursor-pointer w-50! sm:w-full"
+                        class="cursor-pointer w-50! sm:w-full!"
                         @click="openCoverViewer"
                     />
 

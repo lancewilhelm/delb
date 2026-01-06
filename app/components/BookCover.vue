@@ -47,6 +47,7 @@ const hasSrc = computed(() => !!props.src);
             :alt="props.alt"
             loading="lazy"
             draggable="false"
+            class="w-full! h-full!"
         />
         <div
             v-else-if="props.showPlaceholder"
@@ -72,14 +73,6 @@ const hasSrc = computed(() => !!props.src);
     border-radius: 3px;
     overflow: hidden;
     background: transparent;
-}
-
-.cover img {
-    border-radius: 3px;
-    display: block;
-    height: auto;
-    object-fit: cover;
-    width: 100%;
 }
 
 /* Book Cover Effect */
