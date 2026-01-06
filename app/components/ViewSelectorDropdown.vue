@@ -92,7 +92,7 @@ onBeforeUnmount(() => {
         <!-- Trigger -->
         <button
             ref="anchorRef"
-            class="px-1 py-1 gap-2 hover:bg-transparent!"
+            class="px-1 py-0 gap-2 hover:bg-transparent!"
             :aria-expanded="open"
             aria-haspopup="menu"
             @click="toggleDropdown"
@@ -117,11 +117,8 @@ onBeforeUnmount(() => {
             class="absolute left-0 mt-2 w-40 bg-(--bg-color) border border-(--sub-color) rounded-md shadow-lg z-50 overflow-hidden"
             role="menu"
         >
-            <div class="px-3 py-2 border-b border-(--sub-color)">
+            <div class="px-3 py-2 border-(--sub-color)">
                 <div class="text-xs opacity-70">View</div>
-                <div class="text-sm font-semibold truncate">
-                    {{ activeView.label }}
-                </div>
             </div>
 
             <div>

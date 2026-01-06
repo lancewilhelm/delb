@@ -22,26 +22,37 @@ type FetchErrorLike = {
     message?: string;
 };
 
-const seriesHref = (id: string) => `/series/${encodeURIComponent(id)}`;
-
-// ------------------------------
-// Shared list response type (used by authors/series/publishers aggregation)
-// ------------------------------
-type BooksListResponse = {
+type AuthorsListResponse = {
     data?: {
-        books?: Array<{
+        authors?: Array<{
             id: string;
-            title: string;
-            authors?: { id: string; name: string }[];
-            authorNames?: string[];
-            author?: string;
-            publisher?: { id: string; name: string } | null;
-            series?: { id: string; name: string } | null;
-            coverImagePath?: string | null;
-            createdAt: string | number | Date;
+            name: string;
+            bookCount: number;
         }>;
     };
 };
+
+type SeriesListResponse = {
+    data?: {
+        series?: Array<{
+            id: string;
+            name: string;
+            bookCount: number;
+        }>;
+    };
+};
+
+type PublishersListResponse = {
+    data?: {
+        publishers?: Array<{
+            id: string;
+            name: string;
+            bookCount: number;
+        }>;
+    };
+};
+
+const seriesHref = (id: string) => `/series/${encodeURIComponent(id)}`;
 
 const errorMessage = ref<string | null>(null);
 
@@ -96,64 +107,16 @@ async function refreshAuthors() {
             query.collectionId = collectionsStore.activeSelection.collectionId;
         }
 
-        // Reuse /api/books (works for regular users) and aggregate authors client-side.
-        const res = await $fetch<BooksListResponse>("/api/books", {
+        // Use dedicated list endpoint so this view isn't dependent on how many books were loaded.
+        const res = await $fetch<AuthorsListResponse>("/api/authors", {
             method: "GET",
             query,
         });
 
-        const list = res?.data?.books ?? [];
+        const list = res?.data?.authors ?? [];
 
-        const byKey = new Map<
-            string,
-            { id: string; name: string; bookCount: number }
-        >();
-
-        for (const b of list) {
-            const aList =
-                Array.isArray(b.authors) && b.authors.length > 0
-                    ? b.authors
-                    : Array.isArray(b.authorNames) && b.authorNames.length > 0
-                      ? b.authorNames
-                            .filter(Boolean)
-                            .map((name) => ({ id: `name:${name}`, name }))
-                      : b.author
-                        ? [{ id: `name:${b.author}`, name: b.author }]
-                        : [];
-
-            // Count each author once per book (avoid oddities if API ever duplicates).
-            const seenThisBook = new Set<string>();
-            for (const a of aList as Array<{ id: string; name: string }>) {
-                const id = (a.id ?? "").toString();
-                const name = (a.name ?? "").toString();
-                if (!name) continue;
-
-                const key =
-                    id && !id.startsWith("name:")
-                        ? `id:${id}`
-                        : `name:${name.toLowerCase()}`;
-                if (seenThisBook.has(key)) continue;
-                seenThisBook.add(key);
-
-                const existing = byKey.get(key);
-                if (existing) {
-                    existing.bookCount += 1;
-                } else {
-                    byKey.set(key, {
-                        id: id && !id.startsWith("name:") ? id : key,
-                        name,
-                        bookCount: 1,
-                    });
-                }
-            }
-        }
-
-        const out = Array.from(byKey.values()).sort((a, b) => {
-            if (b.bookCount !== a.bookCount) return b.bookCount - a.bookCount;
-            return a.name.localeCompare(b.name);
-        });
-
-        authors.value = out;
+        // Keep client-side sort stable/predictable (server may already sort).
+        authors.value = [...list].sort((a, b) => a.name.localeCompare(b.name));
     } catch (err) {
         const e = err as FetchErrorLike;
         errorMessage.value =
@@ -202,43 +165,17 @@ async function refreshSeries() {
             query.collectionId = collectionsStore.activeSelection.collectionId;
         }
 
-        // Reuse /api/books and aggregate series client-side.
-        // The list API now includes `series: {id,name} | null`.
-        const res = await $fetch<BooksListResponse>("/api/books", {
+        // Use dedicated list endpoint so this view isn't dependent on how many books were loaded.
+        const res = await $fetch<SeriesListResponse>("/api/series", {
             method: "GET",
             query,
         });
 
-        const list = res?.data?.books ?? [];
+        const list = res?.data?.series ?? [];
 
-        const byKey = new Map<
-            string,
-            { id: string; name: string; bookCount: number }
-        >();
-
-        for (const b of list) {
-            const s = b.series ?? null;
-            if (!s?.id || !s?.name) continue;
-
-            const key = `id:${s.id}`;
-            const existing = byKey.get(key);
-            if (existing) {
-                existing.bookCount += 1;
-            } else {
-                byKey.set(key, {
-                    id: s.id,
-                    name: s.name,
-                    bookCount: 1,
-                });
-            }
-        }
-
-        const out = Array.from(byKey.values()).sort((a, b) => {
-            if (b.bookCount !== a.bookCount) return b.bookCount - a.bookCount;
-            return a.name.localeCompare(b.name);
-        });
-
-        seriesRows.value = out;
+        seriesRows.value = [...list].sort((a, b) =>
+            a.name.localeCompare(b.name),
+        );
     } catch (err) {
         const e = err as FetchErrorLike;
         errorMessage.value =
@@ -287,43 +224,17 @@ async function refreshPublishers() {
             query.collectionId = collectionsStore.activeSelection.collectionId;
         }
 
-        // Reuse /api/books and aggregate publishers client-side.
-        // The list API now includes `publisher: {id,name} | null`.
-        const res = await $fetch<BooksListResponse>("/api/books", {
+        // Use dedicated list endpoint so this view isn't dependent on how many books were loaded.
+        const res = await $fetch<PublishersListResponse>("/api/publishers", {
             method: "GET",
             query,
         });
 
-        const list = res?.data?.books ?? [];
+        const list = res?.data?.publishers ?? [];
 
-        const byKey = new Map<
-            string,
-            { id: string; name: string; bookCount: number }
-        >();
-
-        for (const b of list) {
-            const p = b.publisher ?? null;
-            if (!p?.id || !p?.name) continue;
-
-            const key = `id:${p.id}`;
-            const existing = byKey.get(key);
-            if (existing) {
-                existing.bookCount += 1;
-            } else {
-                byKey.set(key, {
-                    id: p.id,
-                    name: p.name,
-                    bookCount: 1,
-                });
-            }
-        }
-
-        const out = Array.from(byKey.values()).sort((a, b) => {
-            if (b.bookCount !== a.bookCount) return b.bookCount - a.bookCount;
-            return a.name.localeCompare(b.name);
-        });
-
-        publishers.value = out;
+        publishers.value = [...list].sort((a, b) =>
+            a.name.localeCompare(b.name),
+        );
     } catch (err) {
         const e = err as FetchErrorLike;
         errorMessage.value =
@@ -424,7 +335,7 @@ onMounted(async () => {
             <!-- Main content (fixed header + scrollable content area) -->
             <div class="flex-1 overflow-hidden flex flex-col min-h-0">
                 <!-- Header (non-scrolling): view selector stays fixed -->
-                <div class="px-4 shrink-0 border-b border-(--sub-color)">
+                <div class="px-4 py-1 shrink-0 border-b border-(--sub-color)">
                     <div class="flex items-end justify-between gap-4">
                         <!-- View selector (mode) lives here (top-left) -->
                         <ViewSelectorDropdown

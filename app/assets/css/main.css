@@ -121,13 +121,13 @@ button:active {
     background-color: var(--sub-color);
 }
 
-button:active:focus {
+/*button:active:focus {
     outline: none;
 }
 
 button:focus {
-    outline: 2px solid var(--main-color);
-}
+    outline: 1px solid var(--main-color);
+}*/
 
 table {
     border-collapse: separate; /* Needed for border-radius */
