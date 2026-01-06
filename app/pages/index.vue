@@ -409,7 +409,7 @@ onMounted(async () => {
                                 <div
                                     v-for="a in filteredAuthors"
                                     :key="a.id"
-                                    class="flex items-center justify-between border border-(--sub-color) rounded-md px-3 py-2"
+                                    class="flex items-center justify-between border border-(--sub-color) rounded-md px-3 py-2 overflow-hidden"
                                 >
                                     <div class="min-w-0">
                                         <NuxtLink
@@ -472,7 +472,7 @@ onMounted(async () => {
                                 <div
                                     v-for="s in filteredSeries"
                                     :key="s.id"
-                                    class="flex items-center justify-between border border-(--sub-color) rounded-md px-3 py-2"
+                                    class="flex items-center justify-between border border-(--sub-color) rounded-md px-3 py-2 overflow-hidden"
                                 >
                                     <div class="min-w-0">
                                         <NuxtLink
@@ -535,7 +535,7 @@ onMounted(async () => {
                                 <div
                                     v-for="p in filteredPublishers"
                                     :key="p.id"
-                                    class="flex items-center justify-between border border-(--sub-color) rounded-md px-3 py-2"
+                                    class="flex items-center justify-between border border-(--sub-color) rounded-md px-3 py-2 overflow-hidden"
                                 >
                                     <div class="min-w-0">
                                         <NuxtLink

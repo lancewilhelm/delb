@@ -11,6 +11,11 @@ type Props = {
     alt?: string;
 
     /**
+     * Title of the book.
+     */
+    title?: string;
+
+    /**
      * If `true`, renders a placeholder when `src` is missing.
      * Defaults to `true`.
      */
@@ -25,6 +30,7 @@ type Props = {
 const props = withDefaults(defineProps<Props>(), {
     src: null,
     alt: "Book cover",
+    title: "Book title",
     showPlaceholder: true,
     class: undefined,
 });
@@ -42,7 +48,12 @@ const hasSrc = computed(() => !!props.src);
             loading="lazy"
             draggable="false"
         />
-        <div v-else-if="props.showPlaceholder" class="cover__placeholder" />
+        <div
+            v-else-if="props.showPlaceholder"
+            class="flex w-full h-full bg-black/6 justify-center items-center font-serif italic p-4 text-center aspect-2/3"
+        >
+            {{ props.title }}
+        </div>
     </div>
 </template>
 
@@ -89,12 +100,5 @@ const hasSrc = computed(() => !!props.src);
         rgba(255, 255, 255, 0.14) 5.68%,
         rgba(244, 244, 244, 0) 6.96%
     );
-}
-
-/* Minimal placeholder so list layouts don't jump when there is no cover */
-.cover__placeholder {
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.06);
 }
 </style>

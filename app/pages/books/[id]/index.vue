@@ -431,17 +431,18 @@ watch(
 
             <div
                 v-else-if="book"
-                class="flex flex-col md:flex-row gap-6 items-start"
+                class="flex flex-col md:flex-row gap-3 sm:gap-6 items-start"
             >
                 <!-- Cover (left) -->
                 <div
-                    class="flex flex-col justify-center items-center w-80 shrink-0 self-center md:self-start"
+                    class="flex flex-col justify-center items-center w-full sm:w-80 shrink-0 self-center md:self-start"
                 >
                     <!-- Keep a consistent aspect ratio; cover itself is max 320px wide -->
                     <BookCover
                         :src="coverThumbUrl"
                         :alt="`Cover for ${book.title}`"
-                        class="cursor-pointer"
+                        :title="book.title"
+                        class="cursor-pointer w-50! sm:w-full"
                         @click="openCoverViewer"
                     />
 

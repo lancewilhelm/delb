@@ -87,6 +87,7 @@ const authorLabel = computed(() => {
             <BookCover
                 :src="coverSrc"
                 :alt="`Cover for ${props.book.title}`"
+                :title="props.book.title"
                 class="cursor-pointer"
                 :class="lockAspectRatio ? 'aspect-2/3' : ''"
                 @click="navigateTo(`/books/${props.book.id}`)"
