@@ -52,11 +52,15 @@ export type CalibreTagRow = {
 export type CalibrePublisherRow = {
   calibrePublisherId: number;
   name: string;
+  sort?: string | null;
+  link?: string | null;
 };
 
 export type CalibreSeriesRow = {
   calibreSeriesId: number;
   name: string;
+  sort?: string | null;
+  link?: string | null;
 };
 
 export type CalibreBookAuthorLink = {
@@ -373,24 +377,38 @@ export class CalibreReader {
   /** Read all publishers. */
   async getPublishers(): Promise<CalibrePublisherRow[]> {
     if (!(await this.hasTable("publishers"))) return [];
-    const sql = `SELECT id as calibrePublisherId, name as name FROM publishers ORDER BY id ASC`;
+
+    const fields: string[] = ["id as calibrePublisherId", "name as name"];
+    if (await this.hasColumn("publishers", "sort")) fields.push("sort as sort");
+    if (await this.hasColumn("publishers", "link")) fields.push("link as link");
+
+    const sql = `SELECT ${fields.join(", ")} FROM publishers ORDER BY id ASC`;
     const rows = await this.db.all(sql);
 
     return rows.map((r) => ({
       calibrePublisherId: asNumber(r.calibrePublisherId) ?? 0,
       name: safeString(r.name) || "Unknown",
+      sort: r.sort !== undefined ? (r.sort as string | null) : undefined,
+      link: r.link !== undefined ? (r.link as string | null) : undefined,
     }));
   }
 
   /** Read all series. */
   async getSeries(): Promise<CalibreSeriesRow[]> {
     if (!(await this.hasTable("series"))) return [];
-    const sql = `SELECT id as calibreSeriesId, name as name FROM series ORDER BY id ASC`;
+
+    const fields: string[] = ["id as calibreSeriesId", "name as name"];
+    if (await this.hasColumn("series", "sort")) fields.push("sort as sort");
+    if (await this.hasColumn("series", "link")) fields.push("link as link");
+
+    const sql = `SELECT ${fields.join(", ")} FROM series ORDER BY id ASC`;
     const rows = await this.db.all(sql);
 
     return rows.map((r) => ({
       calibreSeriesId: asNumber(r.calibreSeriesId) ?? 0,
       name: safeString(r.name) || "Unknown",
+      sort: r.sort !== undefined ? (r.sort as string | null) : undefined,
+      link: r.link !== undefined ? (r.link as string | null) : undefined,
     }));
   }
 
@@ -464,9 +482,45 @@ export class CalibreReader {
 
   /**
    * Read book-publisher mapping.
-   * Often `books.publisher` is a foreign key to publishers.id.
+   *
+   * Calibre commonly models this via `books_publishers_link` with columns:
+   * - book (books.id)
+   * - publisher (publishers.id)
+   *
+   * Some Calibre variants also have `books.publisher` as a FK; we fall back to that if the link table isn't present.
    */
   async getBookPublisherLinks(): Promise<CalibreBookPublisherLink[]> {
+    const linkTable = "books_publishers_link";
+
+    // Preferred: link table
+    if (await this.hasTable(linkTable)) {
+      const bookCol = (await this.hasColumn(linkTable, "book"))
+        ? "book"
+        : (await this.hasColumn(linkTable, "book_id"))
+          ? "book_id"
+          : null;
+      const publisherCol = (await this.hasColumn(linkTable, "publisher"))
+        ? "publisher"
+        : (await this.hasColumn(linkTable, "publisher_id"))
+          ? "publisher_id"
+          : null;
+
+      if (bookCol && publisherCol) {
+        const sql = `SELECT ${this.escapeIdent(bookCol)} as calibreBookId, ${this.escapeIdent(publisherCol)} as calibrePublisherId FROM ${this.escapeIdent(linkTable)}`;
+        const rows = await this.db.all(sql);
+
+        return rows
+          .map((r) => ({
+            calibreBookId: asNumber(r.calibreBookId) ?? 0,
+            calibrePublisherId: asNumber(r.calibrePublisherId) ?? 0,
+          }))
+          .filter((r) => r.calibreBookId > 0 && r.calibrePublisherId > 0);
+      }
+
+      return [];
+    }
+
+    // Fallback: books.publisher FK (older/alternate schema assumptions)
     if (!(await this.hasTable("books"))) return [];
     if (!(await this.hasColumn("books", "publisher"))) return [];
 
@@ -483,15 +537,85 @@ export class CalibreReader {
 
   /**
    * Read book-series mapping.
-   * Often `books.series` foreign key to series.id (and `books.series_index` present).
+   *
+   * Calibre commonly models this via `books_series_link` with columns:
+   * - book (books.id)
+   * - series (series.id)
+   *
+   * Series index is often stored on `books.series_index`.
+   * Some Calibre variants also have `books.series` as a FK; we fall back to that if the link table isn't present.
    */
   async getBookSeriesLinks(): Promise<CalibreBookSeriesLink[]> {
+    const linkTable = "books_series_link";
+
+    const indexCol =
+      (await this.hasTable("books")) &&
+      (await this.hasColumn("books", "series_index"))
+        ? "series_index"
+        : null;
+
+    // Preferred: link table
+    if (await this.hasTable(linkTable)) {
+      const bookCol = (await this.hasColumn(linkTable, "book"))
+        ? "book"
+        : (await this.hasColumn(linkTable, "book_id"))
+          ? "book_id"
+          : null;
+      const seriesCol = (await this.hasColumn(linkTable, "series"))
+        ? "series"
+        : (await this.hasColumn(linkTable, "series_id"))
+          ? "series_id"
+          : null;
+
+      if (!bookCol || !seriesCol) return [];
+
+      const sql = `SELECT ${this.escapeIdent(bookCol)} as calibreBookId, ${this.escapeIdent(seriesCol)} as calibreSeriesId FROM ${this.escapeIdent(linkTable)}`;
+      const rows = await this.db.all(sql);
+
+      // If we can, enrich with series_index from books table
+      let seriesIndexByBookId: Map<number, number | null> | null = null;
+      if (indexCol && (await this.hasTable("books"))) {
+        const idxRows = await this.db.all(
+          `SELECT id as calibreBookId, ${this.escapeIdent(indexCol)} as seriesIndex FROM books`,
+        );
+
+        const entries: Array<[number, number | null]> = [];
+        for (const r of idxRows) {
+          const bookId = asNumber(r.calibreBookId);
+          if (!bookId || bookId <= 0) continue;
+
+          const seriesIndex =
+            r.seriesIndex !== undefined
+              ? typeof r.seriesIndex === "number"
+                ? r.seriesIndex
+                : asNumber(r.seriesIndex)
+              : null;
+
+          entries.push([bookId, seriesIndex ?? null]);
+        }
+
+        seriesIndexByBookId = new Map<number, number | null>(entries);
+      }
+
+      return rows
+        .map((r) => {
+          const calibreBookId = asNumber(r.calibreBookId) ?? 0;
+          const calibreSeriesId = asNumber(r.calibreSeriesId) ?? 0;
+          const seriesIndex =
+            seriesIndexByBookId?.get(calibreBookId) ?? undefined;
+
+          return {
+            calibreBookId,
+            calibreSeriesId,
+            seriesIndex,
+          };
+        })
+        .filter((r) => r.calibreBookId > 0 && r.calibreSeriesId > 0);
+    }
+
+    // Fallback: books.series FK
     if (!(await this.hasTable("books"))) return [];
     if (!(await this.hasColumn("books", "series"))) return [];
-
-    const indexCol = (await this.hasColumn("books", "series_index"))
-      ? "series_index"
-      : null;
 
     const fields = [
       "id as calibreBookId",

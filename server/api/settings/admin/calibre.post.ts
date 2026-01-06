@@ -63,11 +63,20 @@ type ImportSummary = {
   calibreDbPath: string;
 
   scanned: {
+    // entity counts
     calibreBooks: number;
     calibreAuthors: number;
     calibreTags: number;
     calibrePublishers: number;
     calibreSeries: number;
+
+    // link counts (join tables)
+    calibreBookAuthorLinks: number;
+    calibreBookTagLinks: number;
+    calibreBookPublisherLinks: number;
+    calibreBookSeriesLinks: number;
+
+    // other
     calibreIdentifiers: number;
     calibreFormatFilesFromDb: number;
   };
@@ -83,6 +92,8 @@ type ImportSummary = {
     identifiersUpserted: number;
     bookAuthorLinksUpserted: number;
     bookTagLinksUpserted: number;
+    bookPublisherLinksUpserted: number;
+    bookSeriesLinksUpserted: number;
     collectionLinksAdded: number;
 
     // housekeeping / soft errors
@@ -297,11 +308,20 @@ export default defineEventHandler(async (event) => {
       libraryRoot: "library",
       calibreDbPath: "library/metadata.db",
       scanned: {
+        // entity counts
         calibreBooks: snap.books.length,
         calibreAuthors: snap.authors.length,
         calibreTags: snap.tags.length,
         calibrePublishers: snap.publishers.length,
         calibreSeries: snap.series.length,
+
+        // link counts (join tables)
+        calibreBookAuthorLinks: snap.bookAuthors.length,
+        calibreBookTagLinks: snap.bookTags.length,
+        calibreBookPublisherLinks: snap.bookPublishers.length,
+        calibreBookSeriesLinks: snap.bookSeries.length,
+
+        // other
         calibreIdentifiers: snap.identifiers.length,
         calibreFormatFilesFromDb: snap.formatFiles.length,
       },
@@ -316,6 +336,8 @@ export default defineEventHandler(async (event) => {
         identifiersUpserted: 0,
         bookAuthorLinksUpserted: 0,
         bookTagLinksUpserted: 0,
+        bookPublisherLinksUpserted: 0,
+        bookSeriesLinksUpserted: 0,
         collectionLinksAdded: 0,
         coverCandidatesFound: 0,
         coverPathsSet: 0,
@@ -405,6 +427,18 @@ export default defineEventHandler(async (event) => {
     }
 
     // ---- Helpers to upsert name-based entities ----
+    //
+    // Important: In dry-run mode, nothing is written to the DB. Without an in-memory
+    // cache, we'd "create" the same name repeatedly (because future lookups won't
+    // find rows that would have been inserted).
+    //
+    // These caches make dry-run "created" counts reflect unique entities that would exist
+    // after the import, not the number of link occurrences.
+    const authorIdByName = new Map<string, string>();
+    const tagIdByName = new Map<string, string>();
+    const publisherIdByName = new Map<string, string>();
+    const seriesIdByName = new Map<string, string>();
+
     async function upsertAuthorByName(
       name: string,
       sortName?: string | null,
@@ -412,12 +446,18 @@ export default defineEventHandler(async (event) => {
       const trimmed = (name ?? "").toString().trim();
       if (!trimmed) return "00000000-0000-0000-0000-000000000000"; // should never be used
 
+      const cached = authorIdByName.get(trimmed);
+      if (cached) return cached;
+
       const found = await cloudDb
         .select()
         .from(authors)
         .where(eq(authors.name, trimmed))
         .limit(1);
-      if (found[0]?.id) return found[0].id;
+      if (found[0]?.id) {
+        authorIdByName.set(trimmed, found[0].id);
+        return found[0].id;
+      }
 
       const id = crypto.randomUUID();
       const now = new Date();
@@ -432,6 +472,7 @@ export default defineEventHandler(async (event) => {
         });
       }
 
+      authorIdByName.set(trimmed, id);
       summary.results.authorsCreated += 1;
       return id;
     }
@@ -440,12 +481,18 @@ export default defineEventHandler(async (event) => {
       const trimmed = (name ?? "").toString().trim();
       if (!trimmed) return "00000000-0000-0000-0000-000000000000"; // should never be used
 
+      const cached = tagIdByName.get(trimmed);
+      if (cached) return cached;
+
       const found = await cloudDb
         .select()
         .from(tags)
         .where(eq(tags.name, trimmed))
         .limit(1);
-      if (found[0]?.id) return found[0].id;
+      if (found[0]?.id) {
+        tagIdByName.set(trimmed, found[0].id);
+        return found[0].id;
+      }
 
       const id = crypto.randomUUID();
       const now = new Date();
@@ -459,6 +506,7 @@ export default defineEventHandler(async (event) => {
         });
       }
 
+      tagIdByName.set(trimmed, id);
       summary.results.tagsCreated += 1;
       return id;
     }
@@ -467,12 +515,18 @@ export default defineEventHandler(async (event) => {
       const trimmed = (name ?? "").toString().trim();
       if (!trimmed) return "00000000-0000-0000-0000-000000000000"; // should never be used
 
+      const cached = publisherIdByName.get(trimmed);
+      if (cached) return cached;
+
       const found = await cloudDb
         .select()
         .from(publishers)
         .where(eq(publishers.name, trimmed))
         .limit(1);
-      if (found[0]?.id) return found[0].id;
+      if (found[0]?.id) {
+        publisherIdByName.set(trimmed, found[0].id);
+        return found[0].id;
+      }
 
       const id = crypto.randomUUID();
       const now = new Date();
@@ -486,6 +540,7 @@ export default defineEventHandler(async (event) => {
         });
       }
 
+      publisherIdByName.set(trimmed, id);
       summary.results.publishersCreated += 1;
       return id;
     }
@@ -494,12 +549,18 @@ export default defineEventHandler(async (event) => {
       const trimmed = (name ?? "").toString().trim();
       if (!trimmed) return "00000000-0000-0000-0000-000000000000"; // should never be used
 
+      const cached = seriesIdByName.get(trimmed);
+      if (cached) return cached;
+
       const found = await cloudDb
         .select()
         .from(series)
         .where(eq(series.name, trimmed))
         .limit(1);
-      if (found[0]?.id) return found[0].id;
+      if (found[0]?.id) {
+        seriesIdByName.set(trimmed, found[0].id);
+        return found[0].id;
+      }
 
       const id = crypto.randomUUID();
       const now = new Date();
@@ -513,6 +574,7 @@ export default defineEventHandler(async (event) => {
         });
       }
 
+      seriesIdByName.set(trimmed, id);
       summary.results.seriesCreated += 1;
       return id;
     }
@@ -730,6 +792,16 @@ export default defineEventHandler(async (event) => {
             .onConflictDoNothing();
         }
         summary.results.bookTagLinksUpserted += 1;
+      }
+
+      // Publisher link (books.publisherId is the link in Delb)
+      if (publisherId) {
+        summary.results.bookPublisherLinksUpserted += 1;
+      }
+
+      // Series link (books.seriesId is the link in Delb)
+      if (seriesId) {
+        summary.results.bookSeriesLinksUpserted += 1;
       }
 
       // Identifiers
