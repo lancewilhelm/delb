@@ -43,6 +43,24 @@ Books are **owned by the uploader**.
 - Sharing a collection grants access to the *collection*, not ownership of the underlying books.
 - Deleting a shared collection should never delete books from users’ Personal collections.
 
+#### Minimal sharing / RBAC (v1)
+
+Collections (other than Personal) can be shared with members using roles:
+
+- `owner` — can rename, manage members/roles, and delete the collection
+- `editor` — can rename (and in the future: add/remove books)
+- `viewer` — read-only access
+
+Notes:
+- The Personal collection is **not shareable**.
+- Member management is performed within the “Edit collection” modal.
+
+#### Collection deletion (v1)
+
+- Only `owner` can delete a collection.
+- **Personal collections cannot be deleted.**
+- Deleting a collection removes the collection and its membership/link records. It does **not** delete books.
+
 Future direction:
 - Only the uploader/owner of a book should be able to permanently delete it.
 
