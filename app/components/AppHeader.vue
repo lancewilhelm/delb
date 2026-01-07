@@ -18,7 +18,12 @@ function onUploadClick() {
         <div class="flex items-center gap-4 px-2 app-header-left">
             <div
                 class="text-(--main-color) cursor-pointer header-icon font-bold text-2xl logo"
-                @click="navigateTo('/')"
+                @click="
+                    () => {
+                        uiStore.setLibraryView('books');
+                        navigateTo('/');
+                    }
+                "
             >
                 Delb
             </div>
