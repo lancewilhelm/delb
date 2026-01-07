@@ -1,5 +1,5 @@
-import fuzzysort from "fuzzysort";
-import themesList from "~/assets/json/themes.json";
+import fuzzysort from 'fuzzysort';
+import themesList from '~/assets/json/themes.json';
 
 interface Theme {
   name: string;
@@ -18,7 +18,7 @@ export interface Option {
 }
 
 export function useCommandPalette() {
-  const query = ref("");
+  const query = ref('');
   const selectedOption = ref<Option>();
   const highlightedIndex = ref(0);
   const rowRefs = ref<HTMLElement[]>([]);
@@ -31,57 +31,66 @@ export function useCommandPalette() {
   );
   const allThemes = computed<Theme[]>(() => sortedThemesList);
 
+  const uiStore = useUiStore();
+  const userSettingsStore = useUserSettingsStore();
+
   const options = ref<Option[]>([
-    { label: "theme", icon: "lucide:palette" },
-    { label: "favorite themes", icon: "lucide:star" },
     {
-      label: "add current theme to favorites",
-      icon: "lucide:heart",
+      label: 'upload book',
+      icon: 'lucide:upload',
+      action: () => {
+        uiStore.setBookUploadModalVisible(true);
+      },
+    },
+    { label: 'theme', icon: 'lucide:palette' },
+    { label: 'favorite themes', icon: 'lucide:star' },
+    {
+      label: 'add current theme to favorites',
+      icon: 'lucide:heart',
       action: addCurrentThemeToFavorites,
     },
     {
-      label: "give me a random theme",
-      icon: "lucide:dice-5",
+      label: 'give me a random theme',
+      icon: 'lucide:dice-5',
       action: () => {
         const randomTheme =
           allThemes.value[Math.floor(Math.random() * allThemes.value.length)];
         if (!randomTheme) return;
-        useUserSettingsStore().updateSettings({ theme: randomTheme.name });
+        userSettingsStore.updateSettings({ theme: randomTheme.name });
         closePalette();
       },
     },
     {
-      label: "font family",
-      icon: "ri:font-family",
+      label: 'font family',
+      icon: 'ri:font-family',
       options: getFontFamilyOptions(),
     },
     {
-      label: "cover style",
-      icon: "lucide:book-image",
+      label: 'cover style',
+      icon: 'lucide:book-image',
       options: [
         {
-          label: "toggle glossy effect",
-          icon: "mage:stars-b-fill",
+          label: 'toggle glossy effect',
+          icon: 'mage:stars-b-fill',
           action: () => {
-            useUserSettingsStore().updateSettings({
+            userSettingsStore.updateSettings({
               coverStyle: {
-                ...useUserSettingsStore().settings.coverStyle,
-                glossySpine:
-                  !useUserSettingsStore().settings.coverStyle.glossySpine,
+                ...userSettingsStore.settings.coverStyle,
+                glossySpine: !userSettingsStore.settings.coverStyle.glossySpine,
               },
             });
             closePalette();
           },
         },
         {
-          label: "toggle rounded right corners",
-          icon: "lucide:log-in",
+          label: 'toggle rounded right corners',
+          icon: 'lucide:log-in',
           action: () => {
-            useUserSettingsStore().updateSettings({
+            userSettingsStore.updateSettings({
               coverStyle: {
-                ...useUserSettingsStore().settings.coverStyle,
+                ...userSettingsStore.settings.coverStyle,
                 roundedRight:
-                  !useUserSettingsStore().settings.coverStyle.roundedRight,
+                  !userSettingsStore.settings.coverStyle.roundedRight,
               },
             });
             closePalette();
@@ -90,16 +99,16 @@ export function useCommandPalette() {
       ],
     },
     {
-      label: "settings",
-      icon: "lucide:settings",
+      label: 'settings',
+      icon: 'lucide:settings',
       action: () => {
         useUiStore().setCommandPaletteVisible(false);
-        navigateTo("/settings");
+        navigateTo('/settings');
       },
     },
     {
-      label: "log out",
-      icon: "lucide:log-out",
+      label: 'log out',
+      icon: 'lucide:log-out',
       action: () => useAuth().signOut(),
     },
   ]);
@@ -107,13 +116,12 @@ export function useCommandPalette() {
   const filteredOptions = computed<Option[]>(() => {
     const list = selectedOption.value?.options ?? options.value;
     if (!query.value) return list;
-    return fuzzysort.go(query.value, list, { key: "label" }).map((r) => r.obj);
+    return fuzzysort.go(query.value, list, { key: 'label' }).map((r) => r.obj);
   });
 
   const filteredThemes = computed<Theme[]>(() => {
-    if (selectedOption.value?.label === "favorite themes") {
+    if (selectedOption.value?.label === 'favorite themes') {
       const favoriteThemes = allThemes.value.filter((t) => {
-        const userSettingsStore = useUserSettingsStore();
         const settings = userSettingsStore.settings;
         return settings.favoriteThemes?.includes(t.name);
       });
@@ -121,13 +129,13 @@ export function useCommandPalette() {
         return favoriteThemes;
       } else {
         return fuzzysort
-          .go(query.value, favoriteThemes, { key: "name" })
+          .go(query.value, favoriteThemes, { key: 'name' })
           .map((r) => r.obj);
       }
     }
     if (!query.value) return allThemes.value;
     return fuzzysort
-      .go(query.value, allThemes.value, { key: "name" })
+      .go(query.value, allThemes.value, { key: 'name' })
       .map((r) => r.obj);
   });
 
@@ -147,7 +155,7 @@ export function useCommandPalette() {
   function closePalette() {
     useUiStore().setCommandPaletteVisible(false);
     selectedOption.value = undefined;
-    query.value = "";
+    query.value = '';
     highlightedIndex.value = 0;
   }
 
@@ -159,25 +167,25 @@ export function useCommandPalette() {
       closePalette();
     } else if (option.options) {
       selectedOption.value = option;
-      query.value = "";
+      query.value = '';
       highlightedIndex.value = 0;
-    } else if (option.label === "theme" || option.label === "favorite themes") {
+    } else if (option.label === 'theme' || option.label === 'favorite themes') {
       selectedOption.value = option;
-      query.value = "";
+      query.value = '';
       highlightedIndex.value = 0;
     }
   }
 
   function selectTheme(theme?: Theme) {
     if (!theme) return;
-    useUserSettingsStore().updateSettings({ theme: theme.name });
+    userSettingsStore.updateSettings({ theme: theme.name });
     closePalette();
   }
 
   function previewTheme(theme?: string) {
     if (!theme) {
       hoveredTheme.value = null;
-      loadTheme(useUserSettingsStore().settings.theme);
+      loadTheme(userSettingsStore.settings.theme);
     } else {
       hoveredTheme.value = theme;
       loadTheme(theme);
@@ -189,22 +197,22 @@ export function useCommandPalette() {
 
   function handleInputKeydown(event: KeyboardEvent) {
     if (
-      selectedOption.value?.label === "theme" ||
-      selectedOption.value?.label === "favorite themes"
+      selectedOption.value?.label === 'theme' ||
+      selectedOption.value?.label === 'favorite themes'
     ) {
       // This branch is for Theme selection
       const themes = filteredThemes.value;
       if (themes.length === 0) return;
-      if (event.key === "ArrowDown") {
+      if (event.key === 'ArrowDown') {
         event.preventDefault();
         highlightedIndex.value = (highlightedIndex.value + 1) % themes.length;
         debouncedPreviewTheme(themes[highlightedIndex.value]?.name);
-      } else if (event.key === "ArrowUp") {
+      } else if (event.key === 'ArrowUp') {
         event.preventDefault();
         highlightedIndex.value =
           (highlightedIndex.value - 1 + themes.length) % themes.length;
         debouncedPreviewTheme(themes[highlightedIndex.value]?.name);
-      } else if (event.key === "Enter") {
+      } else if (event.key === 'Enter') {
         event.preventDefault();
         if (
           highlightedIndex.value >= 0 &&
@@ -212,35 +220,34 @@ export function useCommandPalette() {
         ) {
           selectTheme(themes[highlightedIndex.value]); // type: Theme
         }
-      } else if (event.key === "Delete") {
-        if (selectedOption?.value.label === "favorite themes") {
-          useUserSettingsStore().updateSettings({
-            favoriteThemes:
-              useUserSettingsStore().settings.favoriteThemes.filter(
-                (t: string) => t !== themes[highlightedIndex.value]?.name,
-              ),
+      } else if (event.key === 'Delete') {
+        if (selectedOption?.value.label === 'favorite themes') {
+          userSettingsStore.updateSettings({
+            favoriteThemes: userSettingsStore.settings.favoriteThemes.filter(
+              (t: string) => t !== themes[highlightedIndex.value]?.name,
+            ),
           });
         }
-      } else if (event.key === "Escape") {
+      } else if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
         selectedOption.value = undefined;
-        query.value = "";
+        query.value = '';
         highlightedIndex.value = 0;
-        previewTheme(useUserSettingsStore().settings.theme);
+        previewTheme(userSettingsStore.settings.theme);
       }
     } else {
       // This branch is for Option selection
       const opts = filteredOptions.value;
       if (opts.length === 0) return;
-      if (event.key === "ArrowDown") {
+      if (event.key === 'ArrowDown') {
         event.preventDefault();
         highlightedIndex.value = (highlightedIndex.value + 1) % opts.length;
-      } else if (event.key === "ArrowUp") {
+      } else if (event.key === 'ArrowUp') {
         event.preventDefault();
         highlightedIndex.value =
           (highlightedIndex.value - 1 + opts.length) % opts.length;
-      } else if (event.key === "Enter") {
+      } else if (event.key === 'Enter') {
         event.preventDefault();
         if (
           highlightedIndex.value >= 0 &&
@@ -248,12 +255,12 @@ export function useCommandPalette() {
         ) {
           selectOption(opts[highlightedIndex.value]); // type: Option
         }
-      } else if (event.key === "Escape") {
+      } else if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
         if (selectedOption.value) {
           selectedOption.value = undefined;
-          query.value = "";
+          query.value = '';
           highlightedIndex.value = 0;
         } else {
           useUiStore().setCommandPaletteVisible(false);
@@ -284,10 +291,9 @@ export function useCommandPalette() {
   }
 
   function scrollToCurrentThemeIfOpen() {
-    const userSettingsStore = useUserSettingsStore();
     if (
-      selectedOption.value?.label !== "theme" &&
-      selectedOption.value?.label !== "favorite themes"
+      selectedOption.value?.label !== 'theme' &&
+      selectedOption.value?.label !== 'favorite themes'
     )
       return;
     const currentTheme = userSettingsStore.settings.theme;
@@ -316,7 +322,7 @@ export function useCommandPalette() {
   watch(
     () => selectedOption.value?.label,
     (label) => {
-      if (label === "theme") scrollToCurrentThemeIfOpen();
+      if (label === 'theme') scrollToCurrentThemeIfOpen();
     },
   );
 

@@ -1,14 +1,14 @@
 <script setup lang="ts">
 definePageMeta({
-    auth: {
-        only: "user",
-        redirectGuestTo: "/login",
-    },
+  auth: {
+    only: 'user',
+    redirectGuestTo: '/login',
+  },
 });
 
 // Page metadata
 useHead({
-    title: "Home",
+  title: 'Home',
 });
 
 // Scope (collection) lives in the header collection switcher dropdown.
@@ -17,39 +17,39 @@ const uiStore = useUiStore();
 const collectionsStore = useCollectionsStore();
 
 type FetchErrorLike = {
-    data?: { message?: string };
-    statusMessage?: string;
-    message?: string;
+  data?: { message?: string };
+  statusMessage?: string;
+  message?: string;
 };
 
 type AuthorsListResponse = {
-    data?: {
-        authors?: Array<{
-            id: string;
-            name: string;
-            bookCount: number;
-        }>;
-    };
+  data?: {
+    authors?: Array<{
+      id: string;
+      name: string;
+      bookCount: number;
+    }>;
+  };
 };
 
 type SeriesListResponse = {
-    data?: {
-        series?: Array<{
-            id: string;
-            name: string;
-            bookCount: number;
-        }>;
-    };
+  data?: {
+    series?: Array<{
+      id: string;
+      name: string;
+      bookCount: number;
+    }>;
+  };
 };
 
 type PublishersListResponse = {
-    data?: {
-        publishers?: Array<{
-            id: string;
-            name: string;
-            bookCount: number;
-        }>;
-    };
+  data?: {
+    publishers?: Array<{
+      id: string;
+      name: string;
+      bookCount: number;
+    }>;
+  };
 };
 
 const seriesHref = (id: string) => `/series/${encodeURIComponent(id)}`;
@@ -58,513 +58,454 @@ const errorMessage = ref<string | null>(null);
 
 // Provide a stable collectionId prop for the BooksInfiniteGrid (scroller lives inside component).
 const activeCollectionId = computed<string | undefined>(() => {
-    if (
-        collectionsStore.activeSelection.kind === "collection" &&
-        collectionsStore.activeSelection.collectionId
-    ) {
-        return collectionsStore.activeSelection.collectionId;
-    }
-    return undefined;
+  if (
+    collectionsStore.activeSelection.kind === 'collection' &&
+    collectionsStore.activeSelection.collectionId
+  ) {
+    return collectionsStore.activeSelection.collectionId;
+  }
+  return undefined;
 });
 
 // Books grid error handler (keeps page-level message in sync)
 function handleBooksGridError(message: string) {
-    errorMessage.value = message;
+  errorMessage.value = message;
 }
 
 // ------------------------------
 // Authors view (MVP: aggregated from /api/books)
 // ------------------------------
 type AuthorRow = {
-    id: string;
-    name: string;
-    bookCount: number;
+  id: string;
+  name: string;
+  bookCount: number;
 };
 
 const authors = ref<AuthorRow[]>([]);
 const loadingAuthors = ref(false);
-const authorQuery = ref("");
+const authorQuery = ref('');
 
 const filteredAuthors = computed(() => {
-    const q = authorQuery.value.trim().toLowerCase();
-    const list = authors.value;
-    if (!q) return list;
-    return list.filter((a) => a.name.toLowerCase().includes(q));
+  const q = authorQuery.value.trim().toLowerCase();
+  const list = authors.value;
+  if (!q) return list;
+  return list.filter((a) => a.name.toLowerCase().includes(q));
 });
 
 async function refreshAuthors() {
-    if (uiStore.libraryView !== "authors") return;
+  if (uiStore.libraryView !== 'authors') return;
 
-    loadingAuthors.value = true;
-    errorMessage.value = null;
+  loadingAuthors.value = true;
+  errorMessage.value = null;
 
-    try {
-        const query: Record<string, string> = {};
-        if (
-            collectionsStore.activeSelection.kind === "collection" &&
-            collectionsStore.activeSelection.collectionId
-        ) {
-            query.collectionId = collectionsStore.activeSelection.collectionId;
-        }
-
-        // Use dedicated list endpoint so this view isn't dependent on how many books were loaded.
-        const res = await $fetch<AuthorsListResponse>("/api/authors", {
-            method: "GET",
-            query,
-        });
-
-        const list = res?.data?.authors ?? [];
-
-        // Keep client-side sort stable/predictable (server may already sort).
-        authors.value = [...list].sort((a, b) => a.name.localeCompare(b.name));
-    } catch (err) {
-        const e = err as FetchErrorLike;
-        errorMessage.value =
-            e?.data?.message ||
-            e?.statusMessage ||
-            e?.message ||
-            "Failed to load authors";
-        authors.value = [];
-    } finally {
-        loadingAuthors.value = false;
+  try {
+    const query: Record<string, string> = {};
+    if (
+      collectionsStore.activeSelection.kind === 'collection' &&
+      collectionsStore.activeSelection.collectionId
+    ) {
+      query.collectionId = collectionsStore.activeSelection.collectionId;
     }
+
+    // Use dedicated list endpoint so this view isn't dependent on how many books were loaded.
+    const res = await $fetch<AuthorsListResponse>('/api/authors', {
+      method: 'GET',
+      query,
+    });
+
+    const list = res?.data?.authors ?? [];
+
+    // Keep client-side sort stable/predictable (server may already sort).
+    authors.value = [...list].sort((a, b) => a.name.localeCompare(b.name));
+  } catch (err) {
+    const e = err as FetchErrorLike;
+    errorMessage.value =
+      e?.data?.message ||
+      e?.statusMessage ||
+      e?.message ||
+      'Failed to load authors';
+    authors.value = [];
+  } finally {
+    loadingAuthors.value = false;
+  }
 }
 
 // ------------------------------
 // Series view (MVP: aggregated from /api/books)
 // ------------------------------
 type SeriesRow = {
-    id: string;
-    name: string;
-    bookCount: number;
+  id: string;
+  name: string;
+  bookCount: number;
 };
 
 const seriesRows = ref<SeriesRow[]>([]);
 const loadingSeries = ref(false);
-const seriesQuery = ref("");
+const seriesQuery = ref('');
 
 const filteredSeries = computed(() => {
-    const q = seriesQuery.value.trim().toLowerCase();
-    const list = seriesRows.value;
-    if (!q) return list;
-    return list.filter((s) => s.name.toLowerCase().includes(q));
+  const q = seriesQuery.value.trim().toLowerCase();
+  const list = seriesRows.value;
+  if (!q) return list;
+  return list.filter((s) => s.name.toLowerCase().includes(q));
 });
 
 async function refreshSeries() {
-    if (uiStore.libraryView !== "series") return;
+  if (uiStore.libraryView !== 'series') return;
 
-    loadingSeries.value = true;
-    errorMessage.value = null;
+  loadingSeries.value = true;
+  errorMessage.value = null;
 
-    try {
-        const query: Record<string, string> = {};
-        if (
-            collectionsStore.activeSelection.kind === "collection" &&
-            collectionsStore.activeSelection.collectionId
-        ) {
-            query.collectionId = collectionsStore.activeSelection.collectionId;
-        }
-
-        // Use dedicated list endpoint so this view isn't dependent on how many books were loaded.
-        const res = await $fetch<SeriesListResponse>("/api/series", {
-            method: "GET",
-            query,
-        });
-
-        const list = res?.data?.series ?? [];
-
-        seriesRows.value = [...list].sort((a, b) =>
-            a.name.localeCompare(b.name),
-        );
-    } catch (err) {
-        const e = err as FetchErrorLike;
-        errorMessage.value =
-            e?.data?.message ||
-            e?.statusMessage ||
-            e?.message ||
-            "Failed to load series";
-        seriesRows.value = [];
-    } finally {
-        loadingSeries.value = false;
+  try {
+    const query: Record<string, string> = {};
+    if (
+      collectionsStore.activeSelection.kind === 'collection' &&
+      collectionsStore.activeSelection.collectionId
+    ) {
+      query.collectionId = collectionsStore.activeSelection.collectionId;
     }
+
+    // Use dedicated list endpoint so this view isn't dependent on how many books were loaded.
+    const res = await $fetch<SeriesListResponse>('/api/series', {
+      method: 'GET',
+      query,
+    });
+
+    const list = res?.data?.series ?? [];
+
+    seriesRows.value = [...list].sort((a, b) => a.name.localeCompare(b.name));
+  } catch (err) {
+    const e = err as FetchErrorLike;
+    errorMessage.value =
+      e?.data?.message ||
+      e?.statusMessage ||
+      e?.message ||
+      'Failed to load series';
+    seriesRows.value = [];
+  } finally {
+    loadingSeries.value = false;
+  }
 }
 
 // ------------------------------
 // Publishers view (MVP: aggregated from /api/books)
 // ------------------------------
 type PublisherRow = {
-    id: string;
-    name: string;
-    bookCount: number;
+  id: string;
+  name: string;
+  bookCount: number;
 };
 
 const publishers = ref<PublisherRow[]>([]);
 const loadingPublishers = ref(false);
-const publisherQuery = ref("");
+const publisherQuery = ref('');
 
 const filteredPublishers = computed(() => {
-    const q = publisherQuery.value.trim().toLowerCase();
-    const list = publishers.value;
-    if (!q) return list;
-    return list.filter((p) => p.name.toLowerCase().includes(q));
+  const q = publisherQuery.value.trim().toLowerCase();
+  const list = publishers.value;
+  if (!q) return list;
+  return list.filter((p) => p.name.toLowerCase().includes(q));
 });
 
 async function refreshPublishers() {
-    if (uiStore.libraryView !== "publishers") return;
+  if (uiStore.libraryView !== 'publishers') return;
 
-    loadingPublishers.value = true;
-    errorMessage.value = null;
+  loadingPublishers.value = true;
+  errorMessage.value = null;
 
-    try {
-        const query: Record<string, string> = {};
-        if (
-            collectionsStore.activeSelection.kind === "collection" &&
-            collectionsStore.activeSelection.collectionId
-        ) {
-            query.collectionId = collectionsStore.activeSelection.collectionId;
-        }
-
-        // Use dedicated list endpoint so this view isn't dependent on how many books were loaded.
-        const res = await $fetch<PublishersListResponse>("/api/publishers", {
-            method: "GET",
-            query,
-        });
-
-        const list = res?.data?.publishers ?? [];
-
-        publishers.value = [...list].sort((a, b) =>
-            a.name.localeCompare(b.name),
-        );
-    } catch (err) {
-        const e = err as FetchErrorLike;
-        errorMessage.value =
-            e?.data?.message ||
-            e?.statusMessage ||
-            e?.message ||
-            "Failed to load publishers";
-        publishers.value = [];
-    } finally {
-        loadingPublishers.value = false;
+  try {
+    const query: Record<string, string> = {};
+    if (
+      collectionsStore.activeSelection.kind === 'collection' &&
+      collectionsStore.activeSelection.collectionId
+    ) {
+      query.collectionId = collectionsStore.activeSelection.collectionId;
     }
+
+    // Use dedicated list endpoint so this view isn't dependent on how many books were loaded.
+    const res = await $fetch<PublishersListResponse>('/api/publishers', {
+      method: 'GET',
+      query,
+    });
+
+    const list = res?.data?.publishers ?? [];
+
+    publishers.value = [...list].sort((a, b) => a.name.localeCompare(b.name));
+  } catch (err) {
+    const e = err as FetchErrorLike;
+    errorMessage.value =
+      e?.data?.message ||
+      e?.statusMessage ||
+      e?.message ||
+      'Failed to load publishers';
+    publishers.value = [];
+  } finally {
+    loadingPublishers.value = false;
+  }
 }
 
 // ------------------------------
 // UI helpers
 // ------------------------------
-const uploadModalOpen = ref(false);
-
 // Used to force-recreate the BooksInfiniteGrid (e.g. after upload) so it reloads from page 1.
 const booksGridKey = ref(0);
 
 const viewLabel = computed(() => {
-    switch (uiStore.libraryView) {
-        case "books":
-            return "Books";
-        case "authors":
-            return "Authors";
-        case "series":
-            return "Series";
-        case "publishers":
-            return "Publishers";
-        default:
-            return "Books";
-    }
+  switch (uiStore.libraryView) {
+    case 'books':
+      return 'Books';
+    case 'authors':
+      return 'Authors';
+    case 'series':
+      return 'Series';
+    case 'publishers':
+      return 'Publishers';
+    default:
+      return 'Books';
+  }
 });
 
 // When scope changes, refresh the result set for the active view.
 watch(
-    () => collectionsStore.activeSelection,
-    async () => {
-        // When scope changes, refresh the result set for the active view.
-        await refreshActiveView();
-    },
-    { deep: true },
+  () => collectionsStore.activeSelection,
+  async () => {
+    // When scope changes, refresh the result set for the active view.
+    await refreshActiveView();
+  },
+  { deep: true },
 );
 
 // When view changes, fetch only what's needed for that view.
 watch(
-    () => uiStore.libraryView,
-    async (_mode) => {
-        errorMessage.value = null;
+  () => uiStore.libraryView,
+  async (_mode) => {
+    errorMessage.value = null;
 
-        // If the user navigated back to Home while collections haven't loaded yet,
-        // non-books views can appear empty because the active collection state isn't ready.
-        // Ensure collections exist before trying to fetch view data.
-        await refreshActiveView();
-    },
+    // If the user navigated back to Home while collections haven't loaded yet,
+    // non-books views can appear empty because the active collection state isn't ready.
+    // Ensure collections exist before trying to fetch view data.
+    await refreshActiveView();
+  },
 );
 
 async function refreshActiveView() {
-    // Ensure collections are loaded so collection-scoped queries are valid after navigation.
-    if (!collectionsStore.collections.length) {
-        await collectionsStore.fetchCollections();
-    }
+  // Ensure collections are loaded so collection-scoped queries are valid after navigation.
+  if (!collectionsStore.collections.length) {
+    await collectionsStore.fetchCollections();
+  }
 
-    // Refresh whichever view is currently selected.
-    // Books view now uses BooksInfiniteGrid (it owns its own paging/observer).
-    if (uiStore.libraryView === "authors") await refreshAuthors();
-    if (uiStore.libraryView === "series") await refreshSeries();
-    if (uiStore.libraryView === "publishers") await refreshPublishers();
+  // Refresh whichever view is currently selected.
+  // Books view now uses BooksInfiniteGrid (it owns its own paging/observer).
+  if (uiStore.libraryView === 'authors') await refreshAuthors();
+  if (uiStore.libraryView === 'series') await refreshSeries();
+  if (uiStore.libraryView === 'publishers') await refreshPublishers();
 }
 
 onMounted(async () => {
-    await refreshActiveView();
+  await refreshActiveView();
 });
 </script>
 
 <template>
-    <div class="flex flex-col w-full h-full overflow-hidden">
-        <AppHeader class="w-full" @upload="uploadModalOpen = true" />
+  <div class="flex flex-col w-full h-full overflow-hidden">
+    <AppHeader class="w-full" @book-uploaded="booksGridKey++" />
 
-        <BookUploadModal
-            :open="uploadModalOpen"
-            @close="uploadModalOpen = false"
-            @uploaded="
-                () => {
-                    if (uiStore.libraryView === 'books') {
-                        booksGridKey++;
-                    }
-                }
-            "
-        />
+    <div class="flex w-full h-full overflow-hidden">
+      <!-- Sidebar = filters (placeholders for now) -->
+      <Sidebar class="hidden md:flex w-auto" />
 
-        <div class="flex w-full h-full overflow-hidden">
-            <!-- Sidebar = filters (placeholders for now) -->
-            <Sidebar class="hidden md:flex w-auto" />
-
-            <!-- Main content (fixed header + scrollable content area) -->
-            <div class="flex-1 overflow-hidden flex flex-col min-h-0">
-                <!-- Header (non-scrolling): view selector stays fixed -->
-                <div class="px-4 py-1 shrink-0 border-b border-(--sub-color)">
-                    <div class="flex items-end justify-between gap-4">
-                        <!-- View selector (mode) lives here (top-left) -->
-                        <ViewSelectorDropdown
-                            :model-value="uiStore.libraryView"
-                            @update:model-value="uiStore.setLibraryView"
-                        />
-                    </div>
-                </div>
-
-                <!-- Body -->
-                <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
-                    <!-- Render per-view. -->
-                    <div
-                        v-if="uiStore.libraryView === 'books'"
-                        class="flex flex-col flex-1 min-h-0"
-                    >
-                        <!-- Only the books grid scrolls (BooksInfiniteGrid owns the scroller) -->
-                        <BooksInfiniteGrid
-                            :key="booksGridKey"
-                            :collection-id="activeCollectionId"
-                            class="flex-1 min-h-0"
-                            @error="handleBooksGridError"
-                        />
-                    </div>
-
-                    <div
-                        v-else
-                        class="flex-1 min-h-0 overflow-auto p-4 space-y-6"
-                    >
-                        <!-- Authors -->
-                        <div v-if="uiStore.libraryView === 'authors'">
-                            <div
-                                class="flex items-center justify-between gap-3"
-                            >
-                                <div
-                                    class="text-2xl font-serif text-(--main-color)"
-                                >
-                                    Authors
-                                </div>
-
-                                <input
-                                    v-model="authorQuery"
-                                    class="px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm w-56"
-                                    placeholder="Filter authors..."
-                                    type="text"
-                                />
-                            </div>
-
-                            <div
-                                v-if="loadingAuthors"
-                                class="text-sm opacity-80"
-                            >
-                                Loading...
-                            </div>
-
-                            <div
-                                v-else-if="errorMessage"
-                                class="text-sm text-red-600"
-                            >
-                                {{ errorMessage }}
-                            </div>
-
-                            <div
-                                v-else-if="filteredAuthors.length === 0"
-                                class="text-sm opacity-80"
-                            >
-                                No authors found in the selected collection.
-                            </div>
-
-                            <div v-else class="mt-3 space-y-2">
-                                <div
-                                    v-for="a in filteredAuthors"
-                                    :key="a.id"
-                                    class="flex items-center justify-between border border-(--sub-color) rounded-md px-3 py-2 overflow-hidden"
-                                >
-                                    <div class="min-w-0">
-                                        <NuxtLink
-                                            :to="`/authors/${a.id}`"
-                                            class="truncate hover:underline text-(--main-color)"
-                                        >
-                                            {{ a.name }}
-                                        </NuxtLink>
-                                        <div class="text-xs opacity-70">
-                                            {{ a.bookCount }} book{{
-                                                a.bookCount === 1 ? "" : "s"
-                                            }}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Series -->
-                        <div v-else-if="uiStore.libraryView === 'series'">
-                            <div
-                                class="flex items-center justify-between gap-3"
-                            >
-                                <div
-                                    class="text-2xl font-serif text-(--main-color)"
-                                >
-                                    Series
-                                </div>
-
-                                <input
-                                    v-model="seriesQuery"
-                                    class="px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm w-56"
-                                    placeholder="Filter series..."
-                                    type="text"
-                                />
-                            </div>
-
-                            <div
-                                v-if="loadingSeries"
-                                class="text-sm opacity-80"
-                            >
-                                Loading...
-                            </div>
-
-                            <div
-                                v-else-if="errorMessage"
-                                class="text-sm text-red-600"
-                            >
-                                {{ errorMessage }}
-                            </div>
-
-                            <div
-                                v-else-if="filteredSeries.length === 0"
-                                class="text-sm opacity-80"
-                            >
-                                No series found in the selected collection.
-                            </div>
-
-                            <div v-else class="mt-3 space-y-2">
-                                <div
-                                    v-for="s in filteredSeries"
-                                    :key="s.id"
-                                    class="flex items-center justify-between border border-(--sub-color) rounded-md px-3 py-2 overflow-hidden"
-                                >
-                                    <div class="min-w-0">
-                                        <NuxtLink
-                                            :to="seriesHref(s.id)"
-                                            class="truncate hover:underline"
-                                        >
-                                            {{ s.name }}
-                                        </NuxtLink>
-                                        <div class="text-xs opacity-70">
-                                            {{ s.bookCount }} book{{
-                                                s.bookCount === 1 ? "" : "s"
-                                            }}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Publishers -->
-                        <div v-else-if="uiStore.libraryView === 'publishers'">
-                            <div
-                                class="flex items-center justify-between gap-3"
-                            >
-                                <div
-                                    class="text-2xl font-serif text-(--main-color)"
-                                >
-                                    Publishers
-                                </div>
-
-                                <input
-                                    v-model="publisherQuery"
-                                    class="px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm w-56"
-                                    placeholder="Filter publishers..."
-                                    type="text"
-                                />
-                            </div>
-
-                            <div
-                                v-if="loadingPublishers"
-                                class="text-sm opacity-80"
-                            >
-                                Loading...
-                            </div>
-
-                            <div
-                                v-else-if="errorMessage"
-                                class="text-sm text-red-600"
-                            >
-                                {{ errorMessage }}
-                            </div>
-
-                            <div
-                                v-else-if="filteredPublishers.length === 0"
-                                class="text-sm opacity-80"
-                            >
-                                No publishers found in the selected collection.
-                            </div>
-
-                            <div v-else class="mt-3 space-y-2">
-                                <div
-                                    v-for="p in filteredPublishers"
-                                    :key="p.id"
-                                    class="flex items-center justify-between border border-(--sub-color) rounded-md px-3 py-2 overflow-hidden"
-                                >
-                                    <div class="min-w-0">
-                                        <NuxtLink
-                                            :to="`/publishers/${p.id}`"
-                                            class="truncate hover:underline"
-                                        >
-                                            {{ p.name }}
-                                        </NuxtLink>
-                                        <div class="text-xs opacity-70">
-                                            {{ p.bookCount }} book{{
-                                                p.bookCount === 1 ? "" : "s"
-                                            }}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div v-else class="text-sm opacity-80">
-                            <div
-                                class="text-2xl font-serif text-(--main-color)"
-                            >
-                                {{ viewLabel }}
-                            </div>
-                            <div class="mt-2">Unknown view.</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+      <!-- Main content (fixed header + scrollable content area) -->
+      <div class="flex-1 overflow-hidden flex flex-col min-h-0">
+        <!-- Header (non-scrolling): view selector stays fixed -->
+        <div class="px-4 py-1 shrink-0 border-b border-(--sub-color)">
+          <div class="flex items-end justify-between gap-4">
+            <!-- View selector (mode) lives here (top-left) -->
+            <ViewSelectorDropdown
+              :model-value="uiStore.libraryView"
+              @update:model-value="uiStore.setLibraryView"
+            />
+          </div>
         </div>
+
+        <!-- Body -->
+        <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
+          <!-- Render per-view. -->
+          <div
+            v-if="uiStore.libraryView === 'books'"
+            class="flex flex-col flex-1 min-h-0"
+          >
+            <!-- Only the books grid scrolls (BooksInfiniteGrid owns the scroller) -->
+            <BooksInfiniteGrid
+              :key="booksGridKey"
+              :collection-id="activeCollectionId"
+              class="flex-1 min-h-0"
+              @error="handleBooksGridError"
+            />
+          </div>
+
+          <div v-else class="flex-1 min-h-0 overflow-auto p-4 space-y-6">
+            <!-- Authors -->
+            <div v-if="uiStore.libraryView === 'authors'">
+              <div class="flex items-center justify-between gap-3">
+                <div class="text-2xl font-serif text-(--main-color)">
+                  Authors
+                </div>
+
+                <input
+                  v-model="authorQuery"
+                  class="px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm w-56"
+                  placeholder="Filter authors..."
+                  type="text"
+                />
+              </div>
+
+              <div v-if="loadingAuthors" class="text-sm opacity-80">
+                Loading...
+              </div>
+
+              <div v-else-if="errorMessage" class="text-sm text-red-600">
+                {{ errorMessage }}
+              </div>
+
+              <div
+                v-else-if="filteredAuthors.length === 0"
+                class="text-sm opacity-80"
+              >
+                No authors found in the selected collection.
+              </div>
+
+              <div v-else class="mt-3 space-y-2">
+                <div
+                  v-for="a in filteredAuthors"
+                  :key="a.id"
+                  class="flex items-center justify-between border border-(--sub-color) rounded-md px-3 py-2 overflow-hidden"
+                >
+                  <div class="min-w-0">
+                    <NuxtLink
+                      :to="`/authors/${a.id}`"
+                      class="truncate hover:underline text-(--main-color)"
+                    >
+                      {{ a.name }}
+                    </NuxtLink>
+                    <div class="text-xs opacity-70">
+                      {{ a.bookCount }} book{{ a.bookCount === 1 ? '' : 's' }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Series -->
+            <div v-else-if="uiStore.libraryView === 'series'">
+              <div class="flex items-center justify-between gap-3">
+                <div class="text-2xl font-serif text-(--main-color)">
+                  Series
+                </div>
+
+                <input
+                  v-model="seriesQuery"
+                  class="px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm w-56"
+                  placeholder="Filter series..."
+                  type="text"
+                />
+              </div>
+
+              <div v-if="loadingSeries" class="text-sm opacity-80">
+                Loading...
+              </div>
+
+              <div v-else-if="errorMessage" class="text-sm text-red-600">
+                {{ errorMessage }}
+              </div>
+
+              <div
+                v-else-if="filteredSeries.length === 0"
+                class="text-sm opacity-80"
+              >
+                No series found in the selected collection.
+              </div>
+
+              <div v-else class="mt-3 space-y-2">
+                <div
+                  v-for="s in filteredSeries"
+                  :key="s.id"
+                  class="flex items-center justify-between border border-(--sub-color) rounded-md px-3 py-2 overflow-hidden"
+                >
+                  <div class="min-w-0">
+                    <NuxtLink
+                      :to="seriesHref(s.id)"
+                      class="truncate hover:underline"
+                    >
+                      {{ s.name }}
+                    </NuxtLink>
+                    <div class="text-xs opacity-70">
+                      {{ s.bookCount }} book{{ s.bookCount === 1 ? '' : 's' }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Publishers -->
+            <div v-else-if="uiStore.libraryView === 'publishers'">
+              <div class="flex items-center justify-between gap-3">
+                <div class="text-2xl font-serif text-(--main-color)">
+                  Publishers
+                </div>
+
+                <input
+                  v-model="publisherQuery"
+                  class="px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm w-56"
+                  placeholder="Filter publishers..."
+                  type="text"
+                />
+              </div>
+
+              <div v-if="loadingPublishers" class="text-sm opacity-80">
+                Loading...
+              </div>
+
+              <div v-else-if="errorMessage" class="text-sm text-red-600">
+                {{ errorMessage }}
+              </div>
+
+              <div
+                v-else-if="filteredPublishers.length === 0"
+                class="text-sm opacity-80"
+              >
+                No publishers found in the selected collection.
+              </div>
+
+              <div v-else class="mt-3 space-y-2">
+                <div
+                  v-for="p in filteredPublishers"
+                  :key="p.id"
+                  class="flex items-center justify-between border border-(--sub-color) rounded-md px-3 py-2 overflow-hidden"
+                >
+                  <div class="min-w-0">
+                    <NuxtLink
+                      :to="`/publishers/${p.id}`"
+                      class="truncate hover:underline"
+                    >
+                      {{ p.name }}
+                    </NuxtLink>
+                    <div class="text-xs opacity-70">
+                      {{ p.bookCount }} book{{ p.bookCount === 1 ? '' : 's' }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-else class="text-sm opacity-80">
+              <div class="text-2xl font-serif text-(--main-color)">
+                {{ viewLabel }}
+              </div>
+              <div class="mt-2">Unknown view.</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
+  </div>
 </template>

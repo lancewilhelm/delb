@@ -1,10 +1,13 @@
-import { defineStore } from "pinia";
+import { defineStore } from 'pinia';
 
-export type LibraryView = "books" | "authors" | "series" | "publishers";
+export type LibraryView = 'books' | 'authors' | 'series' | 'publishers';
 
 export const useUiStore = defineStore(
-  "ui",
+  'ui',
   () => {
+    /**
+     * Command Pallete visibility
+     */
     const commandPaletteVisible = ref(false);
     function setCommandPaletteVisible(visible: boolean) {
       commandPaletteVisible.value = visible;
@@ -14,7 +17,7 @@ export const useUiStore = defineStore(
      * Header "View" selection state.
      * This controls *what* the user is looking at (Books/Authors/Series/Publishers).
      */
-    const libraryView = ref<LibraryView>("books");
+    const libraryView = ref<LibraryView>('books');
     function setLibraryView(view: LibraryView) {
       libraryView.value = view;
     }
@@ -42,11 +45,20 @@ export const useUiStore = defineStore(
       leftSidebarCollapsed.value = !leftSidebarCollapsed.value;
     }
 
+    /**
+     * Book upload modal visibility
+     */
+    const bookUploadModalVisible = ref(false);
+    function setBookUploadModalVisible(visible: boolean) {
+      bookUploadModalVisible.value = visible;
+    }
+
     function $reset() {
       // Insert reset logic here if needed
-      libraryView.value = "books";
+      libraryView.value = 'books';
       leftSidebarWidthPx.value = 260;
       leftSidebarCollapsed.value = false;
+      bookUploadModalVisible.value = false;
     }
 
     return {
@@ -62,6 +74,9 @@ export const useUiStore = defineStore(
       leftSidebarCollapsed,
       setLeftSidebarCollapsed,
       toggleLeftSidebarCollapsed,
+
+      bookUploadModalVisible,
+      setBookUploadModalVisible,
 
       $reset,
     };
