@@ -218,7 +218,7 @@ async function uploadEpubs() {
         <icon
           name="lucide-x"
           class="scale-150 cursor-pointer opacity-80 hover:opacity-100"
-          @click="uiStore.setBookUploadModalVisible(false)"
+          @click.stop="uiStore.setBookUploadModalVisible(false)"
         />
       </div>
 
