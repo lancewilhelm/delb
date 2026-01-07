@@ -92,7 +92,7 @@ onBeforeUnmount(() => {
         <!-- Trigger -->
         <button
             ref="anchorRef"
-            class="px-1 py-0 gap-2 hover:bg-transparent!"
+            class="py-0 gap-2 hover:bg-transparent!"
             :aria-expanded="open"
             aria-haspopup="menu"
             @click="toggleDropdown"

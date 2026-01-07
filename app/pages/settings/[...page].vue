@@ -22,6 +22,9 @@ definePageMeta({
     ],
 });
 
+// Upload modal (wired to the AppHeader upload icon)
+const uploadModalOpen = ref(false);
+
 // Compute the current page based on the route parameter
 const route = useRoute();
 const currentPageName = computed(() =>
@@ -55,13 +58,13 @@ const tabs: Record<string, Tab> = {
         path: "/settings/appearance",
         admin: false,
     },
-    cloud: {
-        name: "cloud",
-        component: resolveComponent("SettingsCloud"),
-        icon: "lucide:cloud",
-        path: "/settings/cloud",
-        admin: false,
-    },
+    // cloud: {
+    //     name: "cloud",
+    //     component: resolveComponent("SettingsCloud"),
+    //     icon: "lucide:cloud",
+    //     path: "/settings/cloud",
+    //     admin: false,
+    // },
     admin: {
         name: "admin",
         component: resolveComponent("SettingsAdmin"),
@@ -76,7 +79,18 @@ const { isAdmin } = useAuth();
 
 <template>
     <div class="flex flex-col items-center w-full h-full">
-        <AppHeader class="w-full shrink-0" />
+        <AppHeader class="w-full shrink-0" @upload="uploadModalOpen = true" />
+
+        <BookUploadModal
+            :open="uploadModalOpen"
+            @close="uploadModalOpen = false"
+            @uploaded="
+                () => {
+                    // no-op on settings; closing the modal is enough for now
+                }
+            "
+        />
+
         <div
             class="flex flex-wrap justify-center gap-4 px-4 py-2 border-b border-(--sub-color) w-full settings-tab-bar"
         >
@@ -100,7 +114,7 @@ const { isAdmin } = useAuth();
                         ? tabs[currentPageName]?.component
                         : tabs.general?.component
                 "
-                class="justify-center w-full h-full max-w-[900px] p-4 pb-0"
+                class="justify-center w-full h-full max-w-225 p-4 pb-0"
             />
         </div>
     </div>

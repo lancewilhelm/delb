@@ -4,6 +4,7 @@ import {
   integer,
   real,
   uniqueIndex,
+  index,
 } from "drizzle-orm/sqlite-core";
 
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
@@ -79,19 +80,39 @@ export const verifications = sqliteTable("verifications", {
  * - Users can collaborate via collection membership + roles
  */
 
-export const collections = sqliteTable("collections", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  ownerUserId: text("owner_user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
+export const collections = sqliteTable(
+  "collections",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    ownerUserId: text("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    /**
+     * Marks a user's default "Personal" collection.
+     * - Exactly one per user (enforced at the app layer for now).
+     * - Non-deletable.
+     * - Not shareable.
+     */
+    isPersonal: integer("is_personal", { mode: "boolean" })
+      .notNull()
+      .$defaultFn(() => false),
+
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    // Helpful for quickly finding a user's personal collection (and enforcing uniqueness in app logic).
+    collectionsOwnerIsPersonalIdx: index(
+      "collections_owner_is_personal_idx",
+    ).on(t.ownerUserId, t.isPersonal),
+  }),
+);
 
 export const collectionMembers = sqliteTable("collection_members", {
   collectionId: text("collection_id")

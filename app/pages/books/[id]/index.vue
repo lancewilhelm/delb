@@ -584,7 +584,7 @@ watch(
 
                                 <div
                                     v-if="!descriptionExpanded"
-                                    class="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-(--bg-color) to-transparent"
+                                    class="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-(--bg-color) to-transparent"
                                 />
                             </div>
 

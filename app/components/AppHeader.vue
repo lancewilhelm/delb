@@ -4,6 +4,10 @@ const uiStore = useUiStore();
 const emit = defineEmits<{
     (e: "upload"): void;
 }>();
+
+function onUploadClick() {
+    emit("upload");
+}
 </script>
 
 <template>
@@ -28,12 +32,15 @@ const emit = defineEmits<{
         <div
             class="flex gap-4 items-center p-4 justify-self-end app-header-right"
         >
-            <Icon
+            <button
                 v-tooltip="'Upload book'"
-                name="lucide:upload"
+                type="button"
                 class="text-(--main-color) cursor-pointer scale-125 header-icon"
-                @click="emit('upload')"
-            />
+                aria-label="Upload book"
+                @click="onUploadClick"
+            >
+                <Icon name="lucide:upload" class="pointer-events-none" />
+            </button>
             <Icon
                 v-tooltip="'Open command palette'"
                 name="lucide:command"

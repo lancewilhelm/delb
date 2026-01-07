@@ -22,31 +22,67 @@ const errorMessage = ref<string | null>(null);
 type CollectionOption = {
     id: string;
     name: string;
+    isPersonal?: boolean;
 };
 
 const collectionsLoading = ref(false);
 const collections = ref<CollectionOption[]>([]);
 const selectedCollectionIds = ref<string[]>([]);
 
+const personalCollectionId = computed(() => {
+    return collections.value.find((c) => c.isPersonal)?.id ?? null;
+});
+
+watch(
+    () => personalCollectionId.value,
+    (id) => {
+        if (!id) return;
+        // Force Personal to always be selected.
+        if (!selectedCollectionIds.value.includes(id)) {
+            selectedCollectionIds.value = [id, ...selectedCollectionIds.value];
+        }
+    },
+);
+
 async function fetchCollections() {
     collectionsLoading.value = true;
     try {
         const res = await $fetch<{
             success: boolean;
-            data?: { collections?: Array<{ id: string; name: string }> };
+            data?: {
+                collections?: Array<{
+                    id: string;
+                    name: string;
+                    isPersonal?: boolean;
+                }>;
+            };
         }>("/api/collections", { method: "GET" });
 
         collections.value = (res?.data?.collections ?? []).map((c) => ({
             id: c.id,
             name: c.name,
+            isPersonal: Boolean(c.isPersonal),
         }));
 
         // Default selection behavior:
-        // - If nothing selected yet, pick the first available collection.
-        // (Server should ensure a "Personal" collection exists; until then this
-        // falls back to first.)
-        if (!selectedCollectionIds.value.length && collections.value.length) {
-            selectedCollectionIds.value = [collections.value[0]!.id];
+        // - Always include the user's Personal collection (non-optional)
+        // - Otherwise allow adding additional collections
+        if (collections.value.length) {
+            const personal = collections.value.find((c) => c.isPersonal);
+            const personalId = personal?.id ?? null;
+
+            if (personalId) {
+                // Ensure Personal is always selected.
+                if (!selectedCollectionIds.value.includes(personalId)) {
+                    selectedCollectionIds.value = [
+                        personalId,
+                        ...selectedCollectionIds.value,
+                    ];
+                }
+            } else if (!selectedCollectionIds.value.length) {
+                // Fallback: if Personal isn't present for some reason, pick the first.
+                selectedCollectionIds.value = [collections.value[0]!.id];
+            }
         }
     } finally {
         collectionsLoading.value = false;
@@ -148,6 +184,7 @@ async function uploadEpubs() {
         }
 
         // Send selected collection ids (multi-select).
+        // Personal is forced in the UI; server also defaults to Personal if none sent.
         for (const id of selectedCollectionIds.value) {
             form.append("collectionId", id);
         }
@@ -198,7 +235,7 @@ async function uploadEpubs() {
                 </div>
 
                 <div v-else-if="!collections.length" class="text-sm opacity-80">
-                    No collections yet. Create one, then upload.
+                    No collections available.
                 </div>
 
                 <div v-else class="space-y-1">
@@ -211,25 +248,46 @@ async function uploadEpubs() {
                             v-model="selectedCollectionIds"
                             type="checkbox"
                             :value="c.id"
-                            :disabled="uploading"
+                            :disabled="uploading || c.isPersonal"
+                            class="peer sr-only"
                         />
+                        <span
+                            class="h-5 w-5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
+                            :class="
+                                uploading || c.isPersonal
+                                    ? 'peer-checked:bg-(--sub-color) cursor-default!'
+                                    : ''
+                            "
+                        ></span>
                         <span class="truncate">{{ c.name }}</span>
+                        <span
+                            v-if="c.isPersonal"
+                            class="ml-1 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-(--sub-color) opacity-70"
+                        >
+                            Personal
+                        </span>
                     </label>
 
                     <div class="text-xs opacity-70">
-                        Defaults to your personal collection.
+                        All books will be uploaded to your Personal collection
+                        by default. You can also add them to additional
+                        collections.
                     </div>
                 </div>
             </div>
 
             <div
                 ref="dropZoneRef"
-                class="border border-dashed rounded-md p-6 flex flex-col items-center justify-center gap-3"
+                class="border border-dashed rounded-md p-6 flex flex-col items-center justify-center gap-3 cursor-pointer"
+                @click="browse"
             >
                 <div class="text-md opacity-80 text-center">
                     Drag & drop ebook files here
                 </div>
                 <icon name="lucide-book" class="scale-200 opacity-80" />
+                <div class="text-md opacity-80 text-center">
+                    Or click to browse
+                </div>
 
                 <div class="flex gap-2 items-center">
                     <input
@@ -250,14 +308,6 @@ async function uploadEpubs() {
                     />
                 </div>
             </div>
-
-            <button
-                v-tooltip="'Choose ebook files from your computer'"
-                class="px-3 py-2 bg-(--sub-color)/15"
-                @click="browse"
-            >
-                Browse…
-            </button>
 
             <div v-if="files.length" class="space-y-2">
                 <div class="text-sm font-semibold">

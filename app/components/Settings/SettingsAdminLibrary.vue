@@ -69,7 +69,7 @@ type ApiResponse =
     | { success: true; data: ImportSummary }
     | { success: false; message?: string };
 
-type CollectionOption = { id: string; name: string };
+type CollectionOption = { id: string; name: string; isPersonal?: boolean };
 
 const collectionsLoading = ref(false);
 const collections = ref<CollectionOption[]>([]);
@@ -90,17 +90,37 @@ async function fetchCollections() {
     try {
         const res = await $fetch<{
             success: boolean;
-            data?: { collections?: Array<{ id: string; name: string }> };
+            data?: {
+                collections?: Array<{
+                    id: string;
+                    name: string;
+                    isPersonal?: boolean;
+                }>;
+            };
         }>("/api/collections", { method: "GET" });
 
         collections.value = (res?.data?.collections ?? []).map((c) => ({
             id: c.id,
             name: c.name,
+            isPersonal: Boolean(c.isPersonal),
         }));
 
-        // Default selection:
-        // - if nothing selected yet, select the first collection (usually Personal)
-        if (!selectedCollectionIds.value.length && collections.value.length) {
+        // Ensure Personal is always selected (cannot be unchecked).
+        const personal = collections.value.find((c) => c.isPersonal);
+        if (personal) {
+            if (!selectedCollectionIds.value.includes(personal.id)) {
+                selectedCollectionIds.value = [
+                    personal.id,
+                    ...selectedCollectionIds.value.filter(
+                        (id) => id !== personal.id,
+                    ),
+                ];
+            }
+        } else if (
+            !selectedCollectionIds.value.length &&
+            collections.value.length
+        ) {
+            // Fallback if something is misconfigured and no personal collection is returned.
             selectedCollectionIds.value = [collections.value[0]!.id];
         }
     } finally {
@@ -214,7 +234,7 @@ async function runCalibreAction(
                         v-else-if="!collections.length"
                         class="text-sm opacity-80"
                     >
-                        No collections yet. Create one first.
+                        No collections yet.
                     </div>
 
                     <div v-else class="space-y-1">
@@ -227,14 +247,30 @@ async function runCalibreAction(
                                 v-model="selectedCollectionIds"
                                 type="checkbox"
                                 :value="c.id"
-                                :disabled="runBusy"
+                                :disabled="runBusy || c.isPersonal"
+                                class="peer sr-only"
                             />
+                            <span
+                                class="h-5 w-5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
+                                :class="
+                                    runBusy || c.isPersonal
+                                        ? 'peer-checked:bg-(--sub-color) cursor-default!'
+                                        : ''
+                                "
+                            ></span>
                             <span class="truncate">{{ c.name }}</span>
+                            <span
+                                v-if="c.isPersonal"
+                                class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-(--sub-color) opacity-70"
+                            >
+                                Personal
+                            </span>
                         </label>
 
                         <div class="text-xs opacity-70">
-                            Imported books will be added to the selected
-                            collections.
+                            All books will be imported to your Personal
+                            collection by default. Any additional checked
+                            collections will also receive the imported books.
                         </div>
                     </div>
                 </div>
@@ -252,7 +288,12 @@ async function runCalibreAction(
                         v-model="importDryRun"
                         type="checkbox"
                         :disabled="runBusy"
+                        class="peer sr-only"
                     />
+                    <span
+                        class="h-5 w-5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
+                    ></span>
+
                     <span>dry run (preview only; no changes)</span>
                 </label>
 
@@ -296,7 +337,11 @@ async function runCalibreAction(
                         v-model="rescanDryRun"
                         type="checkbox"
                         :disabled="runBusy"
+                        class="peer sr-only"
                     />
+                    <span
+                        class="h-5 w-5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
+                    ></span>
                     <span>dry run (preview only; no changes)</span>
                 </label>
 
@@ -305,7 +350,11 @@ async function runCalibreAction(
                         v-model="rescanImportNew"
                         type="checkbox"
                         :disabled="runBusy"
+                        class="peer sr-only"
                     />
+                    <span
+                        class="h-5 w-5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
+                    ></span>
                     <span>import new books discovered during rescan</span>
                 </label>
 
@@ -314,7 +363,11 @@ async function runCalibreAction(
                         v-model="rescanAttachToCollections"
                         type="checkbox"
                         :disabled="runBusy"
+                        class="peer sr-only"
                     />
+                    <span
+                        class="h-5 w-5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
+                    ></span>
                     <span
                         >also add (updated/imported) books to selected
                         collections</span

@@ -75,6 +75,7 @@ export default defineEventHandler(async (event) => {
     id: collectionId,
     name,
     ownerUserId: userId,
+    isPersonal: false,
     createdAt: now,
     updatedAt: now,
   });

@@ -67,7 +67,7 @@ const config = useRuntimeConfig();
             <div class="text-(--sub-color) italic">
                 version: {{ config.public.appVersion || "manual" }}
             </div>
-            <div class="text-(--sub-color) italic">Delb</div>
+            <div class="logo text-2xl">Delb</div>
             <NuxtLink
                 to="https://github.com/lancewilhelm/delb"
                 class="flex items-center gap-1"
@@ -76,7 +76,9 @@ const config = useRuntimeConfig();
                     name="simple-icons:github"
                     class="w-4 h-4 text-(--main-color)"
                 />
-                <span class="text-(--main-color)">Delb on GitHub</span>
+                <span class="text-(--main-color)"
+                    ><span class="logo">Delb</span> on GitHub</span
+                >
             </NuxtLink>
         </SettingsGroup>
 

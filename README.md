@@ -8,6 +8,18 @@
 
 A modern, self-hosted digital library manager built with Nuxt. Manage your ebook collection with a clean web interface.
 
+## Collections model (Personal-first)
+
+Delb uses a **Personal-first** collections model (similar to modern photo apps: “library + albums”):
+
+- Every user has a default **Personal** collection (created automatically).
+- **All uploads/imports go to Personal by default**. Books may also be added to other collections.
+- Personal is **non-deletable** and **not shareable**.
+- Other collections can be shared and act like albums: a book can appear in multiple collections without changing ownership.
+- Books are **owned by the uploader** (future direction: only the uploader can permanently delete a book).
+
+See `docs/ui-layout-philosophy.md` for the complete philosophy and UI implications.
+
 ## Calibre import (import-in-place)
 
 Delb can **import an existing Calibre library in place**.

@@ -1,7 +1,7 @@
 import path from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { cloudDb } from "~~/server/utils/db/cloud";
 import {
@@ -11,6 +11,7 @@ import {
   books,
   collectionMembers,
   collectionBooks,
+  collections,
 } from "~/utils/db/schema";
 import { logger } from "~/utils/logger";
 import { auth } from "~/utils/auth";
@@ -359,13 +360,43 @@ export default defineEventHandler(async (event) => {
   // Allow selecting one or more target collections.
   // v1: accept one or more `collectionId` fields as part of the multipart form:
   //   form.append("collectionId", "<id>")
-  const collectionIds = form
+  //
+  // New behavior:
+  // - If client provides no collectionIds, default to the user's Personal collection.
+  let collectionIds = form
     .filter((p) => p.name === "collectionId")
     .map((p) => (typeof p.data === "string" ? p.data : p.data?.toString()))
     .filter((x): x is string => typeof x === "string" && x.length > 0);
 
-  // If client didn't specify collections, fail explicitly (for now).
-  // Once you add "default personal collection" creation, you can resolve that here.
+  if (!collectionIds.length) {
+    const personal = await cloudDb
+      .select({ id: collections.id })
+      .from(collectionMembers)
+      .innerJoin(
+        collections,
+        eq(collectionMembers.collectionId, collections.id),
+      )
+      .where(
+        and(
+          eq(collectionMembers.userId, userId),
+          eq(collections.isPersonal, true),
+        ),
+      )
+      .limit(1);
+
+    const personalCollectionId = personal[0]?.id;
+
+    if (!personalCollectionId) {
+      throw createError({
+        statusCode: 400,
+        statusMessage:
+          "Personal collection not found. Please try again after your Personal collection is created.",
+      });
+    }
+
+    collectionIds = [personalCollectionId];
+  }
+
   await assertCanUploadToCollections({ userId, collectionIds });
 
   // Find all file parts (client may send multiple "file" entries)

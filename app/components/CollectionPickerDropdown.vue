@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import EditCollectionModal from "~/components/Collections/EditCollectionModal.vue";
+
 defineOptions({ name: "CollectionPickerDropdown" });
 
 const collectionsStore = useCollectionsStore();
@@ -12,6 +14,9 @@ const creating = ref(false);
 const createError = ref<string | null>(null);
 const newCollectionName = ref("");
 
+const editModalOpen = ref(false);
+const editingCollectionId = ref<string | null>(null);
+
 type FetchErrorLike = {
     data?: { message?: string };
     statusMessage?: string;
@@ -21,6 +26,12 @@ type FetchErrorLike = {
 const activeLabel = computed(() => {
     if (collectionsStore.activeSelection.kind === "all") return "All";
     return collectionsStore.activeCollection?.name ?? "Collection";
+});
+
+const editingCollection = computed(() => {
+    const id = editingCollectionId.value;
+    if (!id) return null;
+    return collectionsStore.collections.find((c) => c.id === id) ?? null;
 });
 
 function closeDropdown() {
@@ -83,6 +94,21 @@ async function createCollection() {
     } finally {
         creating.value = false;
     }
+}
+
+function openEditModal(collectionId: string) {
+    const c = collectionsStore.collections.find((x) => x.id === collectionId);
+    if (!c) return;
+
+    if (!collectionsStore.canEditCollection(c)) return;
+
+    editingCollectionId.value = collectionId;
+    editModalOpen.value = true;
+}
+
+function closeEditModal() {
+    editModalOpen.value = false;
+    editingCollectionId.value = null;
 }
 
 function selectAll() {
@@ -212,7 +238,6 @@ onBeforeUnmount(() => {
                 <button
                     v-for="c in collectionsStore.collections"
                     :key="c.id"
-                    v-tooltip="`Switch to ${c.name}`"
                     class="w-full px-3 py-2 text-left flex justify-between! gap-3 rounded-none!"
                     :class="
                         collectionsStore.activeSelection.kind ===
@@ -230,10 +255,37 @@ onBeforeUnmount(() => {
                             class="text-(--main-color) opacity-80 shrink-0"
                         />
                         <span class="truncate">{{ c.name }}</span>
+                        <span
+                            v-if="c.isPersonal"
+                            class="ml-2 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-(--sub-color) opacity-70 shrink-0"
+                        >
+                            Personal
+                        </span>
                     </div>
-                    <span class="text-[11px] opacity-60 shrink-0">{{
-                        c.role
-                    }}</span>
+
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button
+                            v-if="collectionsStore.canEditCollection(c)"
+                            v-tooltip="'Edit collection'"
+                            class="p-1 opacity-80 hover:opacity-100"
+                            type="button"
+                            @click.stop="
+                                () => {
+                                    closeDropdown();
+                                    openEditModal(c.id);
+                                }
+                            "
+                        >
+                            <Icon
+                                name="lucide:pencil"
+                                class="text-(--main-color)"
+                            />
+                        </button>
+
+                        <span class="text-[11px] opacity-60 shrink-0">{{
+                            c.role
+                        }}</span>
+                    </div>
                 </button>
 
                 <p
@@ -319,5 +371,16 @@ onBeforeUnmount(() => {
                 </div>
             </div>
         </ModalWindow>
+
+        <EditCollectionModal
+            :open="editModalOpen"
+            :collection="editingCollection"
+            @close="closeEditModal"
+            @saved="
+                () => {
+                    // no-op for now; the modal refreshes the store on save
+                }
+            "
+        />
     </div>
 </template>

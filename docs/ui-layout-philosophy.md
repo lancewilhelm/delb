@@ -2,11 +2,69 @@
 
 This document defines the **final, recommended UI layout paradigm** for Delb. It is designed to be internally consistent with Delb’s data model:
 
-- **Collections** (shareable containers / scope)
+- **Collections** (scope boundary + sharing boundary)
 - **Views** (representation modes: books vs authors vs series vs publishers)
 - **Filters** (refinements: shelves/tags/ratings/etc)
 
 The goal is to keep the mental model clean, prevent concepts from “showing up in two places”, and scale well from single-user to multi-user/shared collections.
+
+---
+
+## The collections paradigm (Personal-first)
+
+Delb uses a **Personal-first** model that mirrors how modern photo apps work (e.g. “library + albums”):
+
+- A **book always belongs to a user’s library** (their Personal collection).
+- Additional collections act like **albums**:
+  - a book can be included in multiple collections
+  - collections can be used for sharing and collaboration
+  - removing a book from a collection does *not* delete the book from the owner’s Personal library
+
+This design prevents “orphaned” books that exist in the database but cannot be reached in the UI. It also makes it easy to share books without transferring ownership.
+
+---
+
+## Personal collection (default library)
+
+Every user has exactly one **Personal** collection:
+
+- It is created automatically (users do not need to create a collection before uploading/importing).
+- It is visible in the collection picker like any other collection.
+- It is the **default upload/import target** for that user.
+- It is **non-deletable**.
+- It is **not shareable**.
+- Users may rename it, but it remains the user’s default Personal collection.
+
+### Ownership rule (important)
+
+Books are **owned by the uploader**.
+
+- A shared collection can contain books from multiple users.
+- Sharing a collection grants access to the *collection*, not ownership of the underlying books.
+- Deleting a shared collection should never delete books from users’ Personal collections.
+
+Future direction:
+- Only the uploader/owner of a book should be able to permanently delete it.
+
+---
+
+## Upload & import behavior
+
+### Uploads
+When uploading books:
+
+- Delb will **always** add uploaded books to your Personal collection.
+- You may optionally add the same upload to additional collections.
+
+In the UI this should be reflected by showing the Personal collection as **checked and not removable** (so you cannot uncheck it).
+
+### Calibre import
+When importing from Calibre:
+
+- Imported books are **always** added to the importer’s Personal collection.
+- You may optionally add imported books to additional collections.
+
+This keeps import semantics consistent with upload semantics and ensures all books remain reachable in the UI.
 
 ---
 
@@ -15,16 +73,18 @@ The goal is to keep the mental model clean, prevent concepts from “showing up 
 ### Library
 “The library” is the overall catalog a user interacts with in Delb. It contains many books and metadata, across one or more collections.
 
+In Delb, a user's Personal collection serves as their default “library home” for uploads/imports. Other collections act like albums: they can include books from one or more users without changing ownership of the underlying book.
+
 ### Collection = scope boundary
 A **collection** defines *which items exist in scope*, and who can see/edit them (sharing/collaboration).
 
 Examples:
-- `Personal`
+- `Personal` (default per-user collection; non-deletable, not shareable)
 - `Family`
 - `Book Club`
 - `Work`
 
-Collections are **shareable** and can have **members** with roles.
+Collections (other than Personal) are **shareable** and can have **members** with roles.
 
 ### View = representation mode
 A **view** defines *what kind of thing you’re looking at* in the main content area.
@@ -67,7 +127,8 @@ Nothing else should compete with it.
 
 - Contains:
   - `All` (special scope across all collections you can access)
-  - All user-visible collections (personal + shared)
+  - Your Personal collection (default, non-deletable, not shareable)
+  - Any shared collections you are a member of
   - Create/manage actions (create now, manage later)
 - This defines *which books exist in scope*.
 
