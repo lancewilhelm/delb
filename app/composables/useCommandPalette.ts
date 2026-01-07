@@ -56,6 +56,40 @@ export function useCommandPalette() {
       options: getFontFamilyOptions(),
     },
     {
+      label: "cover style",
+      icon: "lucide:book-image",
+      options: [
+        {
+          label: "toggle glossy effect",
+          icon: "mage:stars-b-fill",
+          action: () => {
+            useUserSettingsStore().updateSettings({
+              coverStyle: {
+                ...useUserSettingsStore().settings.coverStyle,
+                glossySpine:
+                  !useUserSettingsStore().settings.coverStyle.glossySpine,
+              },
+            });
+            closePalette();
+          },
+        },
+        {
+          label: "toggle rounded right corners",
+          icon: "lucide:log-in",
+          action: () => {
+            useUserSettingsStore().updateSettings({
+              coverStyle: {
+                ...useUserSettingsStore().settings.coverStyle,
+                roundedRight:
+                  !useUserSettingsStore().settings.coverStyle.roundedRight,
+              },
+            });
+            closePalette();
+          },
+        },
+      ],
+    },
+    {
       label: "settings",
       icon: "lucide:settings",
       action: () => {

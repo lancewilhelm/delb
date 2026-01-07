@@ -24,6 +24,10 @@ export interface UserSettings {
     reverseSort: boolean;
   };
   funboxModes: FunboxMode[];
+  coverStyle: {
+    glossySpine: boolean;
+    roundedRight: boolean;
+  };
 }
 
 function getDefaultSettings(): UserSettings {
@@ -35,6 +39,10 @@ function getDefaultSettings(): UserSettings {
       reverseSort: false,
     },
     funboxModes: [],
+    coverStyle: {
+      glossySpine: true,
+      roundedRight: false,
+    },
   };
 }
 

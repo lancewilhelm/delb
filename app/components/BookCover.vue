@@ -35,12 +35,23 @@ const props = withDefaults(defineProps<Props>(), {
     class: undefined,
 });
 
+const userSettingsStore = useUserSettingsStore();
+
 // Vue will merge `class` on the root automatically, but we keep a prop for explicitness.
 const hasSrc = computed(() => !!props.src);
 </script>
 
 <template>
-    <div class="cover" :class="props.class">
+    <div
+        class="cover w-full h-full rounded-sm overflow-hidden background-transparent"
+        :class="[
+            props.class,
+            userSettingsStore.settings.coverStyle.glossySpine ? 'gloss' : '',
+            userSettingsStore.settings.coverStyle.roundedRight
+                ? 'rounded-r-2xl'
+                : '',
+        ]"
+    >
         <img
             v-if="hasSrc"
             :src="props.src || undefined"
@@ -61,8 +72,6 @@ const hasSrc = computed(() => !!props.src);
 <style scoped>
 /* Reusable "3D-ish" cover styling (moved from global CSS) */
 .cover {
-    width: 100%;
-    height: 100%;
     position: relative;
     box-shadow:
         rgba(0, 0, 0, 0.15) 0px 1.1px 1.5px,
@@ -70,13 +79,10 @@ const hasSrc = computed(() => !!props.src);
         rgba(0, 0, 0, 0.08) 0px 5.8px 7.9px,
         rgba(0, 0, 0, 0.06) 0px 12.0455px 16.4px,
         rgba(0, 0, 0, 0.04) 0px 33px 45px;
-    border-radius: 3px;
-    overflow: hidden;
-    background: transparent;
 }
 
 /* Book Cover Effect */
-.cover::before {
+.gloss::before {
     content: "";
     position: absolute;
     inset: 0px;

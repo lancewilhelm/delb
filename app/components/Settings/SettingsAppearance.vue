@@ -95,6 +95,22 @@ function hexToLuminance(hex: string) {
 <template>
     <div class="w-full">
         <SettingsGroup
+            title="cover style"
+            icon="lucide:book-image"
+            description="customize the cover style"
+        >
+            <SettingsToggleItem
+                v-model="userSettingsStore.settings.coverStyle.glossySpine"
+                title="Glossy Spine"
+                description="Creates an Apple Books style glossy cover effect"
+            />
+            <SettingsToggleItem
+                v-model="userSettingsStore.settings.coverStyle.roundedRight"
+                title="Rounded Right"
+                description="Rounds the right edge of the cover like some covers in Goodreads"
+            />
+        </SettingsGroup>
+        <SettingsGroup
             title="font"
             icon="ri:font-family"
             description="customize the font style"
