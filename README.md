@@ -18,6 +18,16 @@ Delb uses a **Personal-first** collections model (similar to modern photo apps: 
 - Other collections can be shared and act like albums: a book can appear in multiple collections without changing ownership.
 - Books are **owned by the uploader** (future direction: only the uploader can permanently delete a book).
 
+### Sharing / RBAC (collections)
+
+Non-Personal collections can be shared with roles:
+
+- `owner`: can rename, manage members, transfer ownership, and delete the collection
+- `editor`: can rename and manage members
+- `viewer`: read-only access
+
+Only one `owner` is allowed per collection. Non-owners may leave a shared collection.
+
 See `docs/ui-layout-philosophy.md` for the complete philosophy and UI implications.
 
 ## Calibre import (import-in-place)
