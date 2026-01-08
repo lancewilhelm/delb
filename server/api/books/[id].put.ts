@@ -1,7 +1,7 @@
-import { and, eq, inArray } from "drizzle-orm";
-import { makeAuthorSortKey, makeTitleSortKey } from "~~/server/utils/sort/keys";
-import { moveBookStorageToCanonical } from "~~/server/utils/books/storage/move/move-book-storage";
-import { cloudDb } from "~~/server/utils/db/cloud";
+import { and, eq, inArray, sql } from 'drizzle-orm';
+import { makeAuthorSortKey, makeTitleSortKey } from '~~/server/utils/sort/keys';
+import { moveBookStorageToCanonical } from '~~/server/utils/books/storage/move/move-book-storage';
+import { cloudDb } from '~~/server/utils/db/cloud';
 import {
   authors,
   bookAuthors,
@@ -12,9 +12,10 @@ import {
   publishers,
   series,
   tags,
-} from "~/utils/db/schema";
-import { logger } from "~/utils/logger";
-import { auth } from "~/utils/auth";
+  bookIdentifiers,
+} from '~/utils/db/schema';
+import { logger } from '~/utils/logger';
+import { auth } from '~/utils/auth';
 
 type PutBookBody = {
   title?: string | null;
@@ -51,19 +52,28 @@ type PutBookBody = {
    */
   author?: string | null;
   authors?: string[] | null;
+
+  /**
+   * Identifiers:
+   * - If omitted => unchanged
+   * - If provided => replaces the identifiers for the book
+   *
+   * Lean v1: accept serialized newline list "type:value" for back-compat with UI.
+   */
+  identifiers?: string | null;
 };
 
 function isAdminRole(role: unknown): boolean {
-  return role === "admin" || role === "owner";
+  return role === 'admin' || role === 'owner';
 }
 
 function normalizeOptionalString(value: unknown): string | null | undefined {
   if (value === undefined) return undefined; // not provided
   if (value === null) return null; // explicit clear
-  if (typeof value !== "string") {
+  if (typeof value !== 'string') {
     throw createError({
       statusCode: 400,
-      statusMessage: "Invalid string value",
+      statusMessage: 'Invalid string value',
     });
   }
   // Keep lean: trim and allow empty -> null
@@ -74,10 +84,10 @@ function normalizeOptionalString(value: unknown): string | null | undefined {
 function normalizeOptionalNumber(value: unknown): number | null | undefined {
   if (value === undefined) return undefined;
   if (value === null) return null;
-  if (typeof value !== "number" || Number.isNaN(value)) {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Invalid number value",
+      statusMessage: 'Invalid number value',
     });
   }
   return value;
@@ -87,7 +97,7 @@ function normalizeOptionalStringArray(
   value: unknown,
   opts?: { fieldName?: string; normalizeSpaces?: boolean },
 ): string[] | null | undefined {
-  const fieldName = opts?.fieldName ?? "value";
+  const fieldName = opts?.fieldName ?? 'value';
   const normalizeSpaces = opts?.normalizeSpaces ?? true;
 
   if (value === undefined) return undefined;
@@ -100,11 +110,57 @@ function normalizeOptionalStringArray(
   }
 
   const cleaned = value
-    .map((v) => (typeof v === "string" ? v.trim() : ""))
-    .map((v) => (normalizeSpaces ? v.replace(/\s+/g, " ").trim() : v.trim()))
+    .map((v) => (typeof v === 'string' ? v.trim() : ''))
+    .map((v) => (normalizeSpaces ? v.replace(/\s+/g, ' ').trim() : v.trim()))
     .filter((v) => v.length > 0);
 
   return cleaned.length ? cleaned : null;
+}
+
+function normalizeIdentifierType(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, '');
+}
+
+function normalizeIdentifierValue(value: string): string {
+  // Keep simple + deterministic:
+  // - trim
+  // - remove whitespace
+  // - remove hyphens (common for ISBNs)
+  return value.trim().replace(/\s+/g, '').replace(/-/g, '');
+}
+
+function parseIdentifiersFromBody(
+  value: unknown,
+): Array<{ type: string; value: string }> | null | undefined {
+  // undefined => not provided (leave unchanged)
+  // null/empty => clear all
+  const raw = normalizeOptionalString(value);
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+
+  const lines = raw
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const out: Array<{ type: string; value: string }> = [];
+
+  for (const line of lines) {
+    const idx = line.indexOf(':');
+    if (idx <= 0) continue;
+
+    const t = normalizeIdentifierType(line.slice(0, idx));
+    const v = normalizeIdentifierValue(line.slice(idx + 1));
+
+    if (!t || !v) continue;
+    out.push({ type: t, value: v });
+  }
+
+  // Deduplicate by type, last one wins (matches unique constraint on (book_id, type))
+  const byType = new Map<string, string>();
+  for (const row of out) byType.set(row.type, row.value);
+
+  return Array.from(byType.entries()).map(([type, value]) => ({ type, value }));
 }
 
 /**
@@ -283,29 +339,29 @@ async function deleteSeriesIfUnreferenced(seriesId: string) {
  * - `author`/`authors` replaces the book's author list (ordered).
  */
 export default defineEventHandler(async (event) => {
-  logger.debug("PUT /api/books/:id");
+  logger.debug('PUT /api/books/:id');
 
   const session = await auth.api.getSession({
     headers: event.headers,
   });
 
   if (!session || !isAdminRole(session.user.role)) {
-    throw createError({ statusCode: 401, statusMessage: "Unauthorized" });
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
   }
 
   const userId = session.user.id;
 
-  const id = getRouterParam(event, "id");
+  const id = getRouterParam(event, 'id');
   if (!id) {
-    throw createError({ statusCode: 400, statusMessage: "Missing book id" });
+    throw createError({ statusCode: 400, statusMessage: 'Missing book id' });
   }
 
   const body = (await readBody(event)) as PutBookBody | null;
 
-  if (!body || typeof body !== "object") {
+  if (!body || typeof body !== 'object') {
     throw createError({
       statusCode: 400,
-      statusMessage: "Missing request body",
+      statusMessage: 'Missing request body',
     });
   }
 
@@ -320,7 +376,7 @@ export default defineEventHandler(async (event) => {
   ).filter(Boolean);
 
   if (!memberCollectionIds.length) {
-    throw createError({ statusCode: 404, statusMessage: "Book not found" });
+    throw createError({ statusCode: 404, statusMessage: 'Book not found' });
   }
 
   const visible = await cloudDb
@@ -335,7 +391,7 @@ export default defineEventHandler(async (event) => {
 
   const existingBook = visible[0]?.books;
   if (!existingBook) {
-    throw createError({ statusCode: 404, statusMessage: "Book not found" });
+    throw createError({ statusCode: 404, statusMessage: 'Book not found' });
   }
 
   // Capture previous references for orphan cleanup after mutations.
@@ -354,11 +410,11 @@ export default defineEventHandler(async (event) => {
 
   const prevAuthorIds = prevAuthorLinks
     .map((r) => r.authorId)
-    .filter((x): x is string => typeof x === "string" && x.length > 0);
+    .filter((x): x is string => typeof x === 'string' && x.length > 0);
 
   const prevTagIds = prevTagLinks
     .map((r) => r.tagId)
-    .filter((x): x is string => typeof x === "string" && x.length > 0);
+    .filter((x): x is string => typeof x === 'string' && x.length > 0);
 
   // Build a partial update set only with provided fields.
   const update: Partial<typeof books.$inferInsert> = {
@@ -371,7 +427,7 @@ export default defineEventHandler(async (event) => {
 
   const title = normalizeOptionalString((body as PutBookBody).title);
   if (title !== undefined) {
-    update.title = title ?? "";
+    update.title = title ?? '';
     update.sortTitle = makeTitleSortKey(update.title);
     shouldMoveStorage = true;
   }
@@ -428,16 +484,21 @@ export default defineEventHandler(async (event) => {
 
   // Determine tag updates (optional)
   const newTags = normalizeOptionalStringArray((body as PutBookBody).tags, {
-    fieldName: "tags",
+    fieldName: 'tags',
     normalizeSpaces: true,
   });
+
+  // Determine identifier updates (optional)
+  const newIdentifiers = parseIdentifiersFromBody(
+    (body as PutBookBody).identifiers,
+  );
 
   // Determine author updates (optional)
   const authorSingle = normalizeOptionalString((body as PutBookBody).author);
   const authorsList = normalizeOptionalStringArray(
     (body as PutBookBody).authors,
     {
-      fieldName: "authors",
+      fieldName: 'authors',
       normalizeSpaces: true,
     },
   );
@@ -453,13 +514,19 @@ export default defineEventHandler(async (event) => {
         : undefined;
 
   // Ensure there's something to update besides updatedAt.
-  const keys = Object.keys(update).filter((k) => k !== "updatedAt");
+  const keys = Object.keys(update).filter((k) => k !== 'updatedAt');
   const hasAuthorMutation = newAuthors !== undefined;
   const hasTagMutation = newTags !== undefined;
-  if (keys.length === 0 && !hasAuthorMutation && !hasTagMutation) {
+  const hasIdentifierMutation = newIdentifiers !== undefined;
+  if (
+    keys.length === 0 &&
+    !hasAuthorMutation &&
+    !hasTagMutation &&
+    !hasIdentifierMutation
+  ) {
     throw createError({
       statusCode: 400,
-      statusMessage: "No updatable fields provided",
+      statusMessage: 'No updatable fields provided',
     });
   }
 
@@ -517,7 +584,7 @@ export default defineEventHandler(async (event) => {
       const currentAuthorIds = new Set(
         currentLinks
           .map((r) => r.authorId)
-          .filter((x): x is string => typeof x === "string" && x.length > 0),
+          .filter((x): x is string => typeof x === 'string' && x.length > 0),
       );
 
       const maybeOrphanAuthorIds = Array.from(
@@ -552,7 +619,7 @@ export default defineEventHandler(async (event) => {
       const currentTagIds = new Set(
         currentLinks
           .map((r) => r.tagId)
-          .filter((x): x is string => typeof x === "string" && x.length > 0),
+          .filter((x): x is string => typeof x === 'string' && x.length > 0),
       );
 
       const maybeOrphanTagIds = Array.from(
@@ -561,6 +628,26 @@ export default defineEventHandler(async (event) => {
 
       for (const tid of maybeOrphanTagIds) {
         await deleteTagIfUnreferenced(tid);
+      }
+    }
+
+    // Replace identifiers if requested
+    if (newIdentifiers !== undefined) {
+      // Replace semantics: if null/empty => clear all identifiers
+      await cloudDb
+        .delete(bookIdentifiers)
+        .where(eq(bookIdentifiers.bookId, id));
+
+      if (newIdentifiers && newIdentifiers.length) {
+        for (const ident of newIdentifiers) {
+          await cloudDb
+            .insert(bookIdentifiers)
+            .values({ bookId: id, type: ident.type, value: ident.value })
+            .onConflictDoUpdate({
+              target: [bookIdentifiers.bookId, bookIdentifiers.type],
+              set: { value: sql`EXCLUDED.value` },
+            });
+        }
       }
     }
 
@@ -581,7 +668,7 @@ export default defineEventHandler(async (event) => {
         // Do not fail the edit if the move fails; log for investigation.
         logger.warn(
           { bookId: id, error: moveErr },
-          "PUT /api/books/:id: failed to move book storage to canonical path",
+          'PUT /api/books/:id: failed to move book storage to canonical path',
         );
       }
     }
@@ -590,18 +677,18 @@ export default defineEventHandler(async (event) => {
   } catch (error: unknown) {
     // Preserve explicit HTTP errors
     if (
-      typeof error === "object" &&
+      typeof error === 'object' &&
       error !== null &&
-      "statusCode" in error &&
+      'statusCode' in error &&
       (error as { statusCode?: unknown }).statusCode
     ) {
       throw error;
     }
 
-    logger.error(error, "PUT /api/books/:id: Error updating book");
+    logger.error(error, 'PUT /api/books/:id: Error updating book');
     throw createError({
       statusCode: 500,
-      statusMessage: "Failed to update book",
+      statusMessage: 'Failed to update book',
     });
   }
 });

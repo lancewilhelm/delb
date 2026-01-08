@@ -11,7 +11,7 @@ const emit = defineEmits<{
     class="flex justify-between items-center h-10 z-10 app-header bg-(--sub-alt-color) border-b border-t border-(--sub-color)"
   >
     <!-- Left: app/home -->
-    <div class="flex items-center gap-4 px-2 app-header-left">
+    <div class="flex items-center gap-2 sm:gap-4 px-2 app-header-left">
       <div
         class="text-(--main-color) cursor-pointer header-icon font-bold text-2xl logo"
         @click="

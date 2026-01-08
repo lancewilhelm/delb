@@ -5,68 +5,254 @@
  * and make sure `.nuxt` types are being picked up.
  */
 definePageMeta({
-    auth: {
-        only: "user",
-        redirectGuestTo: "/login",
+  auth: {
+    only: 'user',
+    redirectGuestTo: '/login',
+  },
+  middleware: [
+    async () => {
+      const auth = useAuth();
+      // Ensure we have a session/user loaded (global auth middleware doesn't enforce roles)
+      await auth.fetchSession();
+      if (!auth.isAdmin.value) {
+        return navigateTo('/', { replace: true });
+      }
     },
-    middleware: [
-        async () => {
-            const auth = useAuth();
-            // Ensure we have a session/user loaded (global auth middleware doesn't enforce roles)
-            await auth.fetchSession();
-            if (!auth.isAdmin.value) {
-                return navigateTo("/", { replace: true });
-            }
-        },
-    ],
+  ],
 });
 
 useHead({
-    title: "Edit Book",
+  title: 'Edit Book',
 });
 
+interface GoogleBookVolumeInfo {
+  title?: string;
+  authors?: string[];
+  publisher?: string;
+  publishedDate?: string;
+  description?: string;
+  industryIdentifiers?: Array<{
+    type: string;
+    identifier: string;
+  }>;
+  pageCount?: number;
+  categories?: string[];
+  imageLinks?: {
+    smallThumbnail?: string;
+    thumbnail?: string;
+  };
+  language?: string;
+}
+
+interface GoogleBookItem {
+  id: string;
+  volumeInfo: GoogleBookVolumeInfo;
+}
+
+interface ImportFields {
+  title: boolean;
+  authors: boolean;
+  description: boolean;
+  publisher: boolean;
+  published: boolean;
+  language: boolean;
+  tags: boolean;
+  cover: boolean;
+
+  // new: identifiers + series
+  identifiers: boolean;
+  series: boolean;
+  seriesIndex: boolean;
+}
+
+interface MetadataImportSelection {
+  item: GoogleBookItem;
+  fields: ImportFields;
+}
+
+function normalizeNameFromExternal(input: string): string {
+  return (input ?? '').toString().replace(/\s+/g, ' ').trim();
+}
+
+function normalizeIdentifierValue(input: string): string {
+  // keep lean: trim and strip spaces/hyphens for isbn values if user pasted formatted
+  const v = (input ?? '').toString().trim();
+  return v.replace(/[\s-]+/g, '');
+}
+
+type BookIdentifierRow = { type: string; value: string };
+
+function normalizeIdentifierType(input: string): string {
+  return (input ?? '').toString().trim().toLowerCase();
+}
+
+function parseIdentifierRows(input: string): BookIdentifierRow[] {
+  const lines = (input ?? '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const rows: BookIdentifierRow[] = [];
+
+  for (const line of lines) {
+    const idx = line.indexOf(':');
+    if (idx > 0) {
+      const t = normalizeIdentifierType(line.slice(0, idx));
+      const v = normalizeIdentifierValue(line.slice(idx + 1));
+      if (t && v) rows.push({ type: t, value: v });
+      continue;
+    }
+
+    // Allow raw ISBN pasted as a line; treat as unknown type.
+    const v = normalizeIdentifierValue(line);
+    if (v) rows.push({ type: 'isbn', value: v });
+  }
+
+  // De-dupe by (type,value) case-insensitively
+  const seen = new Set<string>();
+  const out: BookIdentifierRow[] = [];
+  for (const r of rows) {
+    const k = `${r.type}:${r.value}`.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(r);
+  }
+  return out;
+}
+
+function serializeIdentifierRows(rows: BookIdentifierRow[]): string {
+  return (rows ?? [])
+    .map(
+      (r) =>
+        `${normalizeIdentifierType(r.type)}:${normalizeIdentifierValue(r.value)}`,
+    )
+    .filter((x) => x.trim().length > 0)
+    .join('\n');
+}
+
+function extractIsbnsFromGoogle(item: GoogleBookItem): {
+  isbn10?: string;
+  isbn13?: string;
+} {
+  const ids = item.volumeInfo.industryIdentifiers ?? [];
+  const isbn13 = ids.find((x) => x.type === 'ISBN_13')?.identifier;
+  const isbn10 = ids.find((x) => x.type === 'ISBN_10')?.identifier;
+
+  return {
+    isbn10: isbn10 ? normalizeIdentifierValue(isbn10) : undefined,
+    isbn13: isbn13 ? normalizeIdentifierValue(isbn13) : undefined,
+  };
+}
+
+function uniqByLower(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of values) {
+    const cleaned = normalizeNameFromExternal(v);
+    if (!cleaned) continue;
+    const key = cleaned.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(cleaned);
+  }
+  return out;
+}
+
+function normalizeGooglePublishedDateToDateOnlyOrRaw(
+  input: string | undefined,
+): string | null {
+  const v = (input ?? '').trim();
+  if (!v) return null;
+
+  // Google Books can return:
+  // - "YYYY"
+  // - "YYYY-MM"
+  // - "YYYY-MM-DD"
+  const mDay = v.match(/^(\d{4}-\d{2}-\d{2})$/);
+  if (mDay?.[1]) return mDay[1];
+
+  const mMonth = v.match(/^(\d{4})-(\d{2})$/);
+  if (mMonth?.[1] && mMonth?.[2]) return `${mMonth[1]}-${mMonth[2]}-01`;
+
+  const mYear = v.match(/^(\d{4})$/);
+  if (mYear?.[1]) return `${mYear[1]}-01-01`;
+
+  return v;
+}
+
+function getGoogleCoverUrl(item: GoogleBookItem): string | null {
+  const raw =
+    item.volumeInfo.imageLinks?.thumbnail ||
+    item.volumeInfo.imageLinks?.smallThumbnail ||
+    null;
+
+  if (!raw) return null;
+
+  // Note: thumbnails often come with `http://` + `&edge=curl`, normalize a bit
+  return raw.replace('&edge=curl', '');
+}
+
+async function uploadCoverFromUrl(url: string): Promise<void> {
+  // IMPORTANT: Google Books cover URLs are blocked by browser CORS.
+  // Proxy through our server endpoint, then reuse the same preview/upload flow.
+  const proxied = `/api/books/metadata/cover?url=${encodeURIComponent(url)}`;
+
+  coverUrlInput.value = proxied;
+
+  await previewCoverFromUrl();
+
+  if (!selectedCoverFile.value) {
+    throw new Error('Failed to create a cover file from the URL.');
+  }
+
+  await uploadCover();
+}
+
 type Book = {
-    id: string;
-    title: string;
-    coverImagePath?: string | null;
-    description?: string | null;
-    published?: string | null;
-    language?: string | null;
+  id: string;
+  title: string;
+  coverImagePath?: string | null;
+  description?: string | null;
+  published?: string | null;
+  language?: string | null;
 
-    // related entities (denormalized by API)
-    authors?: { id: string; name: string; position?: number | null }[];
-    tags?: { id: string; name: string }[];
+  // related entities (denormalized by API)
+  authors?: { id: string; name: string; position?: number | null }[];
+  tags?: { id: string; name: string }[];
 
-    publisher?: { id: string; name: string } | null;
-    series?: { id: string; name: string; index?: number | null } | null;
+  publisher?: { id: string; name: string } | null;
+  series?: { id: string; name: string; index?: number | null } | null;
+
+  // new: identifiers (lean v1 UI)
+  identifiers?: { type: string; value: string }[];
 };
 
 type BookGetResponse = {
-    success?: boolean;
-    message?: string;
-    data?: {
-        book?: Book;
-        authors?: { id: string; name: string; position?: number | null }[];
-    };
+  success?: boolean;
+  message?: string;
+  data?: {
+    book?: Book;
+    authors?: { id: string; name: string; position?: number | null }[];
+  };
 };
 
 type SearchResponse = {
-    success?: boolean;
-    message?: string;
-    data?: {
-        results?: { id: string; name: string }[];
-    };
+  success?: boolean;
+  message?: string;
+  data?: {
+    results?: { id: string; name: string }[];
+  };
 };
 
 type NameChip = {
-    id?: string; // present when linked to an existing DB row
-    name: string;
+  id?: string; // present when linked to an existing DB row
+  name: string;
 };
 
 const route = useRoute();
 const router = useRouter();
 
-const bookId = computed(() => String(route.params.id || ""));
+const bookId = computed(() => String(route.params.id || ''));
 
 const loading = ref(false);
 const saving = ref(false);
@@ -76,12 +262,12 @@ const successMessage = ref<string | null>(null);
 const book = ref<Book | null>(null);
 
 const coverUrl = computed(() => {
-    const b = book.value;
-    if (!b?.coverImagePath) return null;
+  const b = book.value;
+  if (!b?.coverImagePath) return null;
 
-    // Stored as: library/<author>/<title>/cover.webp
-    // API expects: /api/media/covers/<path under library>
-    return `/api/media/covers/${b.coverImagePath.replace(/^library\//, "")}`;
+  // Stored as: library/<author>/<title>/cover.webp
+  // API expects: /api/media/covers/<path under library>
+  return `/api/media/covers/${b.coverImagePath.replace(/^library\//, '')}`;
 });
 
 // Cover upload UI
@@ -91,196 +277,202 @@ const coverPreviewUrl = ref<string | null>(null);
 const coverUploading = ref(false);
 
 // Cover-from-URL preview (client-side fetch)
-const coverUrlInput = ref("");
+const coverUrlInput = ref('');
 const coverUrlLoading = ref(false);
 let lastCoverUrlAbort: AbortController | null = null;
 
 function pickCoverFile() {
-    coverFileInput.value?.click();
+  coverFileInput.value?.click();
 }
 
 function revokeCoverPreviewUrl() {
-    if (coverPreviewUrl.value) {
-        URL.revokeObjectURL(coverPreviewUrl.value);
-        coverPreviewUrl.value = null;
-    }
+  if (coverPreviewUrl.value) {
+    URL.revokeObjectURL(coverPreviewUrl.value);
+    coverPreviewUrl.value = null;
+  }
 }
 
 function onCoverFileChange(e: Event) {
-    const input = e.target as HTMLInputElement | null;
-    const file = input?.files?.[0] ?? null;
+  const input = e.target as HTMLInputElement | null;
+  const file = input?.files?.[0] ?? null;
+
+  selectedCoverFile.value = file;
+
+  revokeCoverPreviewUrl();
+  coverPreviewUrl.value = file ? URL.createObjectURL(file) : null;
+}
+
+function clearSelectedCover() {
+  selectedCoverFile.value = null;
+
+  revokeCoverPreviewUrl();
+
+  if (coverFileInput.value) {
+    coverFileInput.value.value = '';
+  }
+}
+
+async function previewCoverFromUrl() {
+  const url = coverUrlInput.value.trim();
+  if (!url) return;
+
+  if (coverUrlLoading.value) return;
+
+  // Cancel any in-flight fetch
+  if (lastCoverUrlAbort) {
+    lastCoverUrlAbort.abort();
+    lastCoverUrlAbort = null;
+  }
+
+  const controller = new AbortController();
+  lastCoverUrlAbort = controller;
+
+  coverUrlLoading.value = true;
+  errorMessage.value = null;
+  successMessage.value = null;
+
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      setError(text || `Failed to fetch image (${res.status}).`);
+      return;
+    }
+
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.toLowerCase().startsWith('image/')) {
+      setError('URL did not return an image.');
+      return;
+    }
+
+    const blob = await res.blob();
+
+    // Convert to File so existing upload logic works unchanged
+    const filenameFromUrl = (() => {
+      try {
+        const u = new URL(url);
+        const base = u.pathname.split('/').filter(Boolean).pop() || '';
+        return base || 'cover';
+      } catch {
+        return 'cover';
+      }
+    })();
+
+    const file = new File([blob], filenameFromUrl, {
+      type: contentType || blob.type || 'image/*',
+    });
 
     selectedCoverFile.value = file;
 
     revokeCoverPreviewUrl();
-    coverPreviewUrl.value = file ? URL.createObjectURL(file) : null;
-}
+    coverPreviewUrl.value = URL.createObjectURL(file);
 
-function clearSelectedCover() {
-    selectedCoverFile.value = null;
-
-    revokeCoverPreviewUrl();
-
-    if (coverFileInput.value) {
-        coverFileInput.value.value = "";
-    }
-}
-
-async function previewCoverFromUrl() {
-    const url = coverUrlInput.value.trim();
-    if (!url) return;
-
-    if (coverUrlLoading.value) return;
-
-    // Cancel any in-flight fetch
-    if (lastCoverUrlAbort) {
-        lastCoverUrlAbort.abort();
-        lastCoverUrlAbort = null;
-    }
-
-    const controller = new AbortController();
-    lastCoverUrlAbort = controller;
-
-    coverUrlLoading.value = true;
-    errorMessage.value = null;
-    successMessage.value = null;
-
-    try {
-        const res = await fetch(url, { signal: controller.signal });
-
-        if (!res.ok) {
-            const text = await res.text().catch(() => "");
-            setError(text || `Failed to fetch image (${res.status}).`);
-            return;
-        }
-
-        const contentType = res.headers.get("content-type") || "";
-        if (!contentType.toLowerCase().startsWith("image/")) {
-            setError("URL did not return an image.");
-            return;
-        }
-
-        const blob = await res.blob();
-
-        // Convert to File so existing upload logic works unchanged
-        const filenameFromUrl = (() => {
-            try {
-                const u = new URL(url);
-                const base = u.pathname.split("/").filter(Boolean).pop() || "";
-                return base || "cover";
-            } catch {
-                return "cover";
-            }
-        })();
-
-        const file = new File([blob], filenameFromUrl, {
-            type: contentType || blob.type || "image/*",
-        });
-
-        selectedCoverFile.value = file;
-
-        revokeCoverPreviewUrl();
-        coverPreviewUrl.value = URL.createObjectURL(file);
-
-        setSuccess("Preview loaded. Click Upload to save.");
-    } catch (e: unknown) {
-        // Ignore abort errors
-        if (e instanceof DOMException && e.name === "AbortError") return;
-        setError(e instanceof Error ? e.message : "Failed to fetch image.");
-    } finally {
-        coverUrlLoading.value = false;
-        lastCoverUrlAbort = null;
-    }
+    setSuccess('Preview loaded. Click Upload to save.');
+  } catch (e: unknown) {
+    // Ignore abort errors
+    if (e instanceof DOMException && e.name === 'AbortError') return;
+    setError(e instanceof Error ? e.message : 'Failed to fetch image.');
+  } finally {
+    coverUrlLoading.value = false;
+    lastCoverUrlAbort = null;
+  }
 }
 
 function clearCoverUrlPreview() {
-    coverUrlInput.value = "";
-    clearSelectedCover();
+  coverUrlInput.value = '';
+  clearSelectedCover();
 }
 
 async function uploadCover() {
-    if (!book.value?.id) return;
-    if (!selectedCoverFile.value) return;
-    if (coverUploading.value) return;
+  if (!book.value?.id) return;
+  if (!selectedCoverFile.value) return;
+  if (coverUploading.value) return;
 
-    coverUploading.value = true;
-    errorMessage.value = null;
-    successMessage.value = null;
+  coverUploading.value = true;
+  errorMessage.value = null;
+  successMessage.value = null;
 
-    try {
-        const fd = new FormData();
-        fd.append("file", selectedCoverFile.value);
+  try {
+    const fd = new FormData();
+    fd.append('file', selectedCoverFile.value);
 
-        const res = await fetch(
-            `/api/books/${encodeURIComponent(book.value.id)}/cover`,
-            {
-                method: "POST",
-                body: fd,
-            },
-        );
+    const res = await fetch(
+      `/api/books/${encodeURIComponent(book.value.id)}/cover`,
+      {
+        method: 'POST',
+        body: fd,
+      },
+    );
 
-        if (!res.ok) {
-            const text = await res.text().catch(() => "");
-            setError(text || `Failed to upload cover (${res.status}).`);
-            return;
-        }
-
-        setSuccess("Cover uploaded.");
-        clearSelectedCover();
-
-        // Reload the book so `coverImagePath` refreshes
-        await loadBook();
-    } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : "Failed to upload cover.");
-    } finally {
-        coverUploading.value = false;
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      setError(text || `Failed to upload cover (${res.status}).`);
+      return;
     }
+
+    setSuccess('Cover uploaded.');
+    clearSelectedCover();
+
+    // Reload the book so `coverImagePath` refreshes
+    await loadBook();
+  } catch (e: unknown) {
+    setError(e instanceof Error ? e.message : 'Failed to upload cover.');
+  } finally {
+    coverUploading.value = false;
+  }
 }
 
 onBeforeUnmount(() => {
-    if (lastCoverUrlAbort) {
-        lastCoverUrlAbort.abort();
-        lastCoverUrlAbort = null;
-    }
+  if (lastCoverUrlAbort) {
+    lastCoverUrlAbort.abort();
+    lastCoverUrlAbort = null;
+  }
 
-    revokeCoverPreviewUrl();
+  revokeCoverPreviewUrl();
 });
 
 const form = reactive({
-    title: "",
-    description: "",
-    published: "", // date-only (YYYY-MM-DD)
-    language: "",
+  title: '',
+  description: '',
+  published: '', // date-only (YYYY-MM-DD)
+  language: '',
 
-    // Chip editors store names in the UI; server resolves/creates and links.
-    publisher: "" as string,
-    series: "" as string,
-    seriesIndex: "" as string, // keep as string for input
+  // Chip editors store names in the UI; server resolves/creates and links.
+  publisher: '' as string,
+  series: '' as string,
+  seriesIndex: '' as string, // keep as string for input
+
+  // new: identifiers (lean v1)
+  identifiers: '' as string, // serialized list (one per line) of type:value
 });
 
+const identifierTypeInput = ref('isbn13');
+const identifierValueInput = ref('');
+
 // Authors (chips + typeahead)
-const authorInput = ref("");
+const authorInput = ref('');
 const authorChips = ref<NameChip[]>([]);
 const authorSuggestions = ref<{ id: string; name: string }[]>([]);
 const authorSuggestOpen = ref(false);
 const authorSearching = ref(false);
 let authorSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
-const tagInput = ref("");
+const tagInput = ref('');
 const tagChips = ref<NameChip[]>([]);
 const tagSuggestions = ref<{ id: string; name: string }[]>([]);
 const tagSuggestOpen = ref(false);
 const tagSearching = ref(false);
 let tagSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
-const publisherInput = ref("");
+const publisherInput = ref('');
 const publisherSuggestions = ref<{ id: string; name: string }[]>([]);
 const publisherSuggestOpen = ref(false);
 const publisherSearching = ref(false);
 const publisherFocused = ref(false);
 let publisherSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
-const seriesInput = ref("");
+const seriesInput = ref('');
 const seriesSuggestions = ref<{ id: string; name: string }[]>([]);
 const seriesSuggestOpen = ref(false);
 const seriesSearching = ref(false);
@@ -288,1165 +480,1329 @@ const seriesFocused = ref(false);
 let seriesSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
 function normalizeName(name: string): string {
-    return (name ?? "").toString().replace(/\s+/g, " ").trim();
+  return (name ?? '').toString().replace(/\s+/g, ' ').trim();
 }
 
 function splitTokens(input: string): string[] {
-    // Split on commas; ignore empties
-    return (input ?? "")
-        .split(",")
-        .map((s) => normalizeName(s))
-        .filter((s) => s.length > 0);
+  // Split on commas; ignore empties
+  return (input ?? '')
+    .split(',')
+    .map((s) => normalizeName(s))
+    .filter((s) => s.length > 0);
 }
 
 function formatDateOnly(input: string): string {
-    const raw = (input ?? "").toString().trim();
-    if (!raw) return "";
+  const raw = (input ?? '').toString().trim();
+  if (!raw) return '';
 
-    // If server stored an ISO timestamp, strip to YYYY-MM-DD.
-    const isoPrefix = raw.match(/^(\d{4}-\d{2}-\d{2})/);
-    if (isoPrefix?.[1]) return isoPrefix[1];
+  // If server stored an ISO timestamp, strip to YYYY-MM-DD.
+  const isoPrefix = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoPrefix?.[1]) return isoPrefix[1];
 
-    // If someone typed slashes (YYYY/MM/DD), normalize.
-    const slash = raw.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
-    if (slash) return `${slash[1]}-${slash[2]}-${slash[3]}`;
+  // If someone typed slashes (YYYY/MM/DD), normalize.
+  const slash = raw.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
+  if (slash) return `${slash[1]}-${slash[2]}-${slash[3]}`;
 
-    // Otherwise leave it as-is (but UI hints encourage YYYY-MM-DD).
-    return raw;
+  // Otherwise leave it as-is (but UI hints encourage YYYY-MM-DD).
+  return raw;
 }
 
 /**
  * Pure chip helpers (avoid Vue template ref auto-unwrapping issues).
  */
 function chipNormalize(name: string): string {
-    return normalizeName(name);
+  return normalizeName(name);
 }
 
 function chipAdd(chips: NameChip[], name: string): NameChip[] {
-    const cleaned = chipNormalize(name);
-    if (!cleaned) return chips;
+  const cleaned = chipNormalize(name);
+  if (!cleaned) return chips;
 
-    const exists = chips.some(
-        (c) => c.name.toLowerCase() === cleaned.toLowerCase(),
-    );
-    if (exists) return chips;
+  const exists = chips.some(
+    (c) => c.name.toLowerCase() === cleaned.toLowerCase(),
+  );
+  if (exists) return chips;
 
-    return [...chips, { name: cleaned }];
+  return [...chips, { name: cleaned }];
 }
 
 function chipAddFromSuggestion(
-    chips: NameChip[],
-    suggestion: { id: string; name: string },
+  chips: NameChip[],
+  suggestion: { id: string; name: string },
 ): NameChip[] {
-    const cleaned = chipNormalize(suggestion.name);
-    if (!cleaned) return chips;
+  const cleaned = chipNormalize(suggestion.name);
+  if (!cleaned) return chips;
 
-    const exists = chips.some((c) => {
-        if (c.id && c.id === suggestion.id) return true;
-        return c.name.toLowerCase() === cleaned.toLowerCase();
-    });
-    if (exists) return chips;
+  const exists = chips.some((c) => {
+    if (c.id && c.id === suggestion.id) return true;
+    return c.name.toLowerCase() === cleaned.toLowerCase();
+  });
+  if (exists) return chips;
 
-    return [...chips, { id: suggestion.id, name: cleaned }];
+  return [...chips, { id: suggestion.id, name: cleaned }];
 }
 
 function chipRemove(chips: NameChip[], index: number): NameChip[] {
-    if (index < 0 || index >= chips.length) return chips;
-    return chips.filter((_, i) => i !== index);
+  if (index < 0 || index >= chips.length) return chips;
+  return chips.filter((_, i) => i !== index);
 }
 
 function chipCommitFromComma(
-    chips: NameChip[],
-    input: string,
+  chips: NameChip[],
+  input: string,
 ): { chips: NameChip[]; input: string; committed: boolean } {
-    if (!input.includes(",")) return { chips, input, committed: false };
+  if (!input.includes(',')) return { chips, input, committed: false };
 
-    const tokens = splitTokens(input);
-    const endsWithComma = input.trimEnd().endsWith(",");
+  const tokens = splitTokens(input);
+  const endsWithComma = input.trimEnd().endsWith(',');
 
-    if (endsWithComma) {
-        let next = chips;
-        for (const t of tokens) next = chipAdd(next, t);
-        return { chips: next, input: "", committed: true };
-    }
-
-    // commit all but last token
-    if (tokens.length <= 1) return { chips, input, committed: false };
-
+  if (endsWithComma) {
     let next = chips;
-    for (const t of tokens.slice(0, -1)) next = chipAdd(next, t);
+    for (const t of tokens) next = chipAdd(next, t);
+    return { chips: next, input: '', committed: true };
+  }
 
-    const keep = tokens[tokens.length - 1] ?? "";
-    return { chips: next, input: keep, committed: true };
+  // commit all but last token
+  if (tokens.length <= 1) return { chips, input, committed: false };
+
+  let next = chips;
+  for (const t of tokens.slice(0, -1)) next = chipAdd(next, t);
+
+  const keep = tokens[tokens.length - 1] ?? '';
+  return { chips: next, input: keep, committed: true };
 }
 
 function chipCommitOnEnter(
-    chips: NameChip[],
-    input: string,
+  chips: NameChip[],
+  input: string,
 ): { chips: NameChip[]; input: string; committed: boolean } {
-    const tokens = splitTokens(input);
-    if (!tokens.length) return { chips, input, committed: false };
+  const tokens = splitTokens(input);
+  if (!tokens.length) return { chips, input, committed: false };
 
-    let next = chips;
-    for (const t of tokens) next = chipAdd(next, t);
+  let next = chips;
+  for (const t of tokens) next = chipAdd(next, t);
 
-    return { chips: next, input: "", committed: true };
+  return { chips: next, input: '', committed: true };
 }
 
 async function fetchSuggestions(
-    endpoint: string,
-    query: string,
-    take: number,
+  endpoint: string,
+  query: string,
+  take: number,
 ): Promise<{ id: string; name: string }[]> {
-    const q = normalizeName(query);
-    if (!q) return [];
+  const q = normalizeName(query);
+  if (!q) return [];
 
-    const res = await fetch(
-        `${endpoint}?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(String(take))}`,
-        { method: "GET", headers: { Accept: "application/json" } },
-    );
-    if (!res.ok) return [];
+  const res = await fetch(
+    `${endpoint}?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(String(take))}`,
+    { method: 'GET', headers: { Accept: 'application/json' } },
+  );
+  if (!res.ok) return [];
 
-    const json = (await res.json()) as SearchResponse;
-    return (json?.data?.results ?? []).slice(0, take);
+  const json = (await res.json()) as SearchResponse;
+  return (json?.data?.results ?? []).slice(0, take);
 }
 
 async function fetchAuthorSuggestions(query: string) {
-    const q = normalizeName(query);
-    if (!q) {
-        authorSuggestions.value = [];
-        authorSuggestOpen.value = false;
-        return;
-    }
+  const q = normalizeName(query);
+  if (!q) {
+    authorSuggestions.value = [];
+    authorSuggestOpen.value = false;
+    return;
+  }
 
-    authorSearching.value = true;
-    try {
-        const results = await fetchSuggestions("/api/authors/search", q, 5);
+  authorSearching.value = true;
+  try {
+    const results = await fetchSuggestions('/api/authors/search', q, 5);
 
-        const filtered = results.filter((r) => {
-            const nm = normalizeName(r.name).toLowerCase();
-            return !authorChips.value.some(
-                (c) => (c.id && c.id === r.id) || c.name.toLowerCase() === nm,
-            );
-        });
+    const filtered = results.filter((r) => {
+      const nm = normalizeName(r.name).toLowerCase();
+      return !authorChips.value.some(
+        (c) => (c.id && c.id === r.id) || c.name.toLowerCase() === nm,
+      );
+    });
 
-        authorSuggestions.value = filtered;
-        authorSuggestOpen.value = true;
-    } finally {
-        authorSearching.value = false;
-    }
+    authorSuggestions.value = filtered;
+    authorSuggestOpen.value = true;
+  } finally {
+    authorSearching.value = false;
+  }
 }
 
 async function fetchTagSuggestions(query: string) {
-    const q = normalizeName(query);
-    if (!q) {
-        tagSuggestions.value = [];
-        tagSuggestOpen.value = false;
-        return;
-    }
+  const q = normalizeName(query);
+  if (!q) {
+    tagSuggestions.value = [];
+    tagSuggestOpen.value = false;
+    return;
+  }
 
-    tagSearching.value = true;
-    try {
-        const results = await fetchSuggestions("/api/tags/search", q, 8);
+  tagSearching.value = true;
+  try {
+    const results = await fetchSuggestions('/api/tags/search', q, 8);
 
-        const filtered = results.filter((r) => {
-            const nm = normalizeName(r.name).toLowerCase();
-            return !tagChips.value.some(
-                (c) => (c.id && c.id === r.id) || c.name.toLowerCase() === nm,
-            );
-        });
+    const filtered = results.filter((r) => {
+      const nm = normalizeName(r.name).toLowerCase();
+      return !tagChips.value.some(
+        (c) => (c.id && c.id === r.id) || c.name.toLowerCase() === nm,
+      );
+    });
 
-        tagSuggestions.value = filtered;
-        tagSuggestOpen.value = true;
-    } finally {
-        tagSearching.value = false;
-    }
+    tagSuggestions.value = filtered;
+    tagSuggestOpen.value = true;
+  } finally {
+    tagSearching.value = false;
+  }
 }
 
 async function fetchPublisherSuggestions(query: string) {
-    const q = normalizeName(query);
-    if (!q) {
-        publisherSuggestions.value = [];
-        publisherSuggestOpen.value = false;
-        return;
-    }
+  const q = normalizeName(query);
+  if (!q) {
+    publisherSuggestions.value = [];
+    publisherSuggestOpen.value = false;
+    return;
+  }
 
-    publisherSearching.value = true;
-    try {
-        const results = await fetchSuggestions("/api/publishers/search", q, 5);
-        publisherSuggestions.value = results;
-        publisherSuggestOpen.value = true;
-    } finally {
-        publisherSearching.value = false;
-    }
+  publisherSearching.value = true;
+  try {
+    const results = await fetchSuggestions('/api/publishers/search', q, 5);
+    publisherSuggestions.value = results;
+    publisherSuggestOpen.value = true;
+  } finally {
+    publisherSearching.value = false;
+  }
 }
 
 async function fetchSeriesSuggestions(query: string) {
-    const q = normalizeName(query);
-    if (!q) {
-        seriesSuggestions.value = [];
-        seriesSuggestOpen.value = false;
-        return;
-    }
+  const q = normalizeName(query);
+  if (!q) {
+    seriesSuggestions.value = [];
+    seriesSuggestOpen.value = false;
+    return;
+  }
 
-    seriesSearching.value = true;
-    try {
-        const results = await fetchSuggestions("/api/series/search", q, 5);
-        seriesSuggestions.value = results;
-        seriesSuggestOpen.value = true;
-    } finally {
-        seriesSearching.value = false;
-    }
+  seriesSearching.value = true;
+  try {
+    const results = await fetchSuggestions('/api/series/search', q, 5);
+    seriesSuggestions.value = results;
+    seriesSuggestOpen.value = true;
+  } finally {
+    seriesSearching.value = false;
+  }
 }
 
 watch(
-    () => authorInput.value,
-    (v) => {
-        const committed = chipCommitFromComma(authorChips.value, v);
-        if (committed.committed) {
-            authorChips.value = committed.chips;
-            authorInput.value = committed.input;
-            authorSuggestOpen.value = false;
-        }
+  () => authorInput.value,
+  (v) => {
+    const committed = chipCommitFromComma(authorChips.value, v);
+    if (committed.committed) {
+      authorChips.value = committed.chips;
+      authorInput.value = committed.input;
+      authorSuggestOpen.value = false;
+    }
 
-        // Debounced search for typeahead (only when there is a non-empty token being typed)
-        if (authorSearchTimer) {
-            clearTimeout(authorSearchTimer);
-            authorSearchTimer = null;
-        }
+    // Debounced search for typeahead (only when there is a non-empty token being typed)
+    if (authorSearchTimer) {
+      clearTimeout(authorSearchTimer);
+      authorSearchTimer = null;
+    }
 
-        const q = normalizeName(authorInput.value);
-        if (!q) {
-            authorSuggestions.value = [];
-            authorSuggestOpen.value = false;
-            return;
-        }
+    const q = normalizeName(authorInput.value);
+    if (!q) {
+      authorSuggestions.value = [];
+      authorSuggestOpen.value = false;
+      return;
+    }
 
-        authorSearchTimer = setTimeout(() => {
-            fetchAuthorSuggestions(q);
-        }, 250);
-    },
+    authorSearchTimer = setTimeout(() => {
+      fetchAuthorSuggestions(q);
+    }, 250);
+  },
 );
 
 watch(
-    () => tagInput.value,
-    (v) => {
-        const committed = chipCommitFromComma(tagChips.value, v);
-        if (committed.committed) {
-            tagChips.value = committed.chips;
-            tagInput.value = committed.input;
-            tagSuggestOpen.value = false;
-        }
+  () => tagInput.value,
+  (v) => {
+    const committed = chipCommitFromComma(tagChips.value, v);
+    if (committed.committed) {
+      tagChips.value = committed.chips;
+      tagInput.value = committed.input;
+      tagSuggestOpen.value = false;
+    }
 
-        if (tagSearchTimer) {
-            clearTimeout(tagSearchTimer);
-            tagSearchTimer = null;
-        }
+    if (tagSearchTimer) {
+      clearTimeout(tagSearchTimer);
+      tagSearchTimer = null;
+    }
 
-        const q = normalizeName(tagInput.value);
-        if (!q) {
-            tagSuggestions.value = [];
-            tagSuggestOpen.value = false;
-            return;
-        }
+    const q = normalizeName(tagInput.value);
+    if (!q) {
+      tagSuggestions.value = [];
+      tagSuggestOpen.value = false;
+      return;
+    }
 
-        tagSearchTimer = setTimeout(() => {
-            fetchTagSuggestions(q);
-        }, 250);
-    },
+    tagSearchTimer = setTimeout(() => {
+      fetchTagSuggestions(q);
+    }, 250);
+  },
 );
 
 watch(
-    () => publisherInput.value,
-    (v) => {
-        // Only search/show suggestions while the input is actively focused.
-        // This prevents the dropdown from opening on initial hydration when the field has a value.
-        if (!publisherFocused.value) return;
+  () => publisherInput.value,
+  (v) => {
+    // Only search/show suggestions while the input is actively focused.
+    // This prevents the dropdown from opening on initial hydration when the field has a value.
+    if (!publisherFocused.value) return;
 
-        if (publisherSearchTimer) {
-            clearTimeout(publisherSearchTimer);
-            publisherSearchTimer = null;
-        }
+    if (publisherSearchTimer) {
+      clearTimeout(publisherSearchTimer);
+      publisherSearchTimer = null;
+    }
 
-        const q = normalizeName(v);
-        if (!q) {
-            publisherSuggestions.value = [];
-            publisherSuggestOpen.value = false;
-            return;
-        }
+    const q = normalizeName(v);
+    if (!q) {
+      publisherSuggestions.value = [];
+      publisherSuggestOpen.value = false;
+      return;
+    }
 
-        publisherSearchTimer = setTimeout(() => {
-            fetchPublisherSuggestions(q);
-        }, 250);
-    },
+    publisherSearchTimer = setTimeout(() => {
+      fetchPublisherSuggestions(q);
+    }, 250);
+  },
 );
 
 watch(
-    () => seriesInput.value,
-    (v) => {
-        // Only search/show suggestions while the input is actively focused.
-        // This prevents the dropdown from opening on initial hydration when the field has a value.
-        if (!seriesFocused.value) return;
+  () => seriesInput.value,
+  (v) => {
+    // Only search/show suggestions while the input is actively focused.
+    // This prevents the dropdown from opening on initial hydration when the field has a value.
+    if (!seriesFocused.value) return;
 
-        if (seriesSearchTimer) {
-            clearTimeout(seriesSearchTimer);
-            seriesSearchTimer = null;
-        }
+    if (seriesSearchTimer) {
+      clearTimeout(seriesSearchTimer);
+      seriesSearchTimer = null;
+    }
 
-        const q = normalizeName(v);
-        if (!q) {
-            seriesSuggestions.value = [];
-            seriesSuggestOpen.value = false;
-            return;
-        }
+    const q = normalizeName(v);
+    if (!q) {
+      seriesSuggestions.value = [];
+      seriesSuggestOpen.value = false;
+      return;
+    }
 
-        seriesSearchTimer = setTimeout(() => {
-            fetchSeriesSuggestions(q);
-        }, 250);
-    },
+    seriesSearchTimer = setTimeout(() => {
+      fetchSeriesSuggestions(q);
+    }, 250);
+  },
 );
 
 onBeforeUnmount(() => {
-    if (authorSearchTimer) {
-        clearTimeout(authorSearchTimer);
-        authorSearchTimer = null;
-    }
-    if (tagSearchTimer) {
-        clearTimeout(tagSearchTimer);
-        tagSearchTimer = null;
-    }
-    if (publisherSearchTimer) {
-        clearTimeout(publisherSearchTimer);
-        publisherSearchTimer = null;
-    }
-    if (seriesSearchTimer) {
-        clearTimeout(seriesSearchTimer);
-        seriesSearchTimer = null;
-    }
+  if (authorSearchTimer) {
+    clearTimeout(authorSearchTimer);
+    authorSearchTimer = null;
+  }
+  if (tagSearchTimer) {
+    clearTimeout(tagSearchTimer);
+    tagSearchTimer = null;
+  }
+  if (publisherSearchTimer) {
+    clearTimeout(publisherSearchTimer);
+    publisherSearchTimer = null;
+  }
+  if (seriesSearchTimer) {
+    clearTimeout(seriesSearchTimer);
+    seriesSearchTimer = null;
+  }
 });
 
 function setError(msg: string) {
-    errorMessage.value = msg;
-    successMessage.value = null;
+  errorMessage.value = msg;
+  successMessage.value = null;
 }
 
 function setSuccess(msg: string) {
-    successMessage.value = msg;
-    errorMessage.value = null;
+  successMessage.value = msg;
+  errorMessage.value = null;
 }
 
 function bookToForm(b: Book) {
-    form.title = b.title ?? "";
+  form.title = b.title ?? '';
 
-    // Hydrate author chips from the ordered author list.
-    // We keep both `id` and `name` so chips can be linked to DB authors.
-    authorChips.value = (b.authors ?? [])
-        .slice()
-        .sort((a, c) => {
-            const aPos = typeof a.position === "number" ? a.position : 10_000;
-            const cPos = typeof c.position === "number" ? c.position : 10_000;
-            return aPos - cPos;
-        })
-        .map((a) => ({
-            id: a.id,
-            name: a.name,
-        }));
+  // Hydrate author chips from the ordered author list.
+  // We keep both `id` and `name` so chips can be linked to DB authors.
+  authorChips.value = (b.authors ?? [])
+    .slice()
+    .sort((a, c) => {
+      const aPos = typeof a.position === 'number' ? a.position : 10_000;
+      const cPos = typeof c.position === 'number' ? c.position : 10_000;
+      return aPos - cPos;
+    })
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+    }));
 
-    authorInput.value = "";
-    authorSuggestions.value = [];
-    authorSuggestOpen.value = false;
+  authorInput.value = '';
+  authorSuggestions.value = [];
+  authorSuggestOpen.value = false;
 
-    form.description = b.description ?? "";
-    form.published = formatDateOnly(b.published ?? "");
-    form.language = b.language ?? "";
+  form.description = b.description ?? '';
+  form.published = formatDateOnly(b.published ?? '');
+  form.language = b.language ?? '';
 
-    // Series / publisher are edited by name in the UI.
-    form.publisher = b.publisher?.name ?? "";
-    form.series = b.series?.name ?? "";
-    form.seriesIndex =
-        typeof b.series?.index === "number" && !Number.isNaN(b.series.index)
-            ? String(b.series.index)
-            : "";
+  // Series / publisher are edited by name in the UI.
+  form.publisher = b.publisher?.name ?? '';
+  form.series = b.series?.name ?? '';
+  form.seriesIndex =
+    typeof b.series?.index === 'number' && !Number.isNaN(b.series.index)
+      ? String(b.series.index)
+      : '';
 
-    // Tags (chips)
-    tagChips.value = (b.tags ?? []).map((t) => ({ id: t.id, name: t.name }));
-    tagInput.value = "";
-    tagSuggestions.value = [];
-    tagSuggestOpen.value = false;
+  // Tags (chips)
+  tagChips.value = (b.tags ?? []).map((t) => ({ id: t.id, name: t.name }));
+  tagInput.value = '';
+  tagSuggestions.value = [];
+  tagSuggestOpen.value = false;
 
-    // Single-value typeaheads
-    publisherInput.value = form.publisher;
-    seriesInput.value = form.series;
-    publisherSuggestions.value = [];
-    publisherSuggestOpen.value = false;
-    seriesSuggestions.value = [];
-    seriesSuggestOpen.value = false;
+  // Identifiers (lean v1): render as newline list
+  const ids = (b.identifiers ?? [])
+    .map((i) => ({ type: i.type, value: i.value }))
+    .filter(
+      (i) =>
+        (i.type ?? '').toString().trim().length > 0 &&
+        (i.value ?? '').toString().trim().length > 0,
+    );
+
+  form.identifiers = serializeIdentifierRows(ids);
+
+  // Single-value typeaheads
+  publisherInput.value = form.publisher;
+  seriesInput.value = form.series;
+  publisherSuggestions.value = [];
+  publisherSuggestOpen.value = false;
+  seriesSuggestions.value = [];
+  seriesSuggestOpen.value = false;
 }
 
 async function loadBook() {
-    if (!bookId.value) {
-        setError("Missing book id.");
-        return;
+  if (!bookId.value) {
+    setError('Missing book id.');
+    return;
+  }
+
+  loading.value = true;
+  errorMessage.value = null;
+  successMessage.value = null;
+
+  try {
+    const res = await fetch(`/api/books/${encodeURIComponent(bookId.value)}`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      setError(text || `Failed to load book (${res.status}).`);
+      return;
     }
 
-    loading.value = true;
-    errorMessage.value = null;
-    successMessage.value = null;
-
-    try {
-        const res = await fetch(
-            `/api/books/${encodeURIComponent(bookId.value)}`,
-            {
-                method: "GET",
-                headers: {
-                    Accept: "application/json",
-                },
-            },
-        );
-
-        if (!res.ok) {
-            const text = await res.text().catch(() => "");
-            setError(text || `Failed to load book (${res.status}).`);
-            return;
-        }
-
-        const json = (await res.json()) as BookGetResponse;
-        if (!json?.success || !json.data?.book) {
-            setError(json?.message || "Failed to load book.");
-            return;
-        }
-
-        // Ensure authors are present on the book object for form hydration.
-        const hydratedBook: Book = {
-            ...json.data.book,
-            authors: (
-                json.data.authors ??
-                json.data.book.authors ??
-                []
-            ).slice(),
-        };
-
-        book.value = hydratedBook;
-        bookToForm(hydratedBook);
-    } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : "Failed to load book.");
-    } finally {
-        loading.value = false;
+    const json = (await res.json()) as BookGetResponse;
+    if (!json?.success || !json.data?.book) {
+      setError(json?.message || 'Failed to load book.');
+      return;
     }
+
+    // Ensure authors are present on the book object for form hydration.
+    const hydratedBook: Book = {
+      ...json.data.book,
+      authors: (json.data.authors ?? json.data.book.authors ?? []).slice(),
+    };
+
+    book.value = hydratedBook;
+    bookToForm(hydratedBook);
+  } catch (e: unknown) {
+    setError(e instanceof Error ? e.message : 'Failed to load book.');
+  } finally {
+    loading.value = false;
+  }
 }
 
 function normalizeStringOrNullFromOptional(
-    input: string | null | undefined,
+  input: string | null | undefined,
 ): string | null {
-    const v = (input ?? "").toString().trim();
-    return v.length ? v : null;
+  const v = (input ?? '').toString().trim();
+  return v.length ? v : null;
 }
 
 function normalizeSeriesIndex(input: string): number | null {
-    const v = (input ?? "").trim();
-    if (!v.length) return null;
-    const n = Number(v);
-    if (Number.isNaN(n)) {
-        throw new Error("Series index must be a number.");
-    }
-    return n;
+  const v = (input ?? '').trim();
+  if (!v.length) return null;
+  const n = Number(v);
+  if (Number.isNaN(n)) {
+    throw new Error('Series index must be a number.');
+  }
+  return n;
 }
 
 function normalizeDateOnlyOrNull(input: string): string | null {
-    const v = formatDateOnly(input);
-    if (!v) return null;
+  const v = formatDateOnly(input);
+  if (!v) return null;
 
-    // Enforce date-only display/saves as YYYY-MM-DD when it looks like a date.
-    // If it doesn't match, still allow raw (lean v1), but we won't preserve timestamps.
-    const m = v.match(/^(\d{4}-\d{2}-\d{2})$/);
-    const dateOnly = m?.[1] ?? null;
-    return dateOnly ?? v;
+  // Enforce date-only display/saves as YYYY-MM-DD when it looks like a date.
+  // If it doesn't match, still allow raw (lean v1), but we won't preserve timestamps.
+  const m = v.match(/^(\d{4}-\d{2}-\d{2})$/);
+  const dateOnly = m?.[1] ?? null;
+  return dateOnly ?? v;
 }
 
 async function save() {
-    if (!book.value) return;
+  if (!book.value) return;
 
-    saving.value = true;
-    errorMessage.value = null;
-    successMessage.value = null;
+  saving.value = true;
+  errorMessage.value = null;
+  successMessage.value = null;
 
-    try {
-        // Commit any remaining typed author/tags before saving
-        {
-            const committed = chipCommitOnEnter(
-                authorChips.value,
-                authorInput.value,
-            );
-            if (committed.committed) {
-                authorChips.value = committed.chips;
-                authorInput.value = committed.input;
-                authorSuggestOpen.value = false;
-            }
-        }
-        {
-            const committed = chipCommitOnEnter(tagChips.value, tagInput.value);
-            if (committed.committed) {
-                tagChips.value = committed.chips;
-                tagInput.value = committed.input;
-                tagSuggestOpen.value = false;
-            }
-        }
-
-        const payload = {
-            title: normalizeStringOrNullFromOptional(form.title),
-            // send names (server will link/create as needed)
-            authors: authorChips.value.map((c) => c.name),
-            tags: tagChips.value.map((c) => c.name),
-
-            description: normalizeStringOrNullFromOptional(form.description),
-            published: normalizeDateOnlyOrNull(form.published),
-            language: normalizeStringOrNullFromOptional(form.language),
-
-            publisherName: normalizeStringOrNullFromOptional(form.publisher),
-            seriesName: normalizeStringOrNullFromOptional(form.series),
-            seriesIndex: normalizeSeriesIndex(form.seriesIndex),
-        };
-
-        // Title is required server-side; keep lean client-side validation
-        if (!payload.title) {
-            setError("Title is required.");
-            return;
-        }
-
-        const res = await fetch(
-            `/api/books/${encodeURIComponent(book.value.id)}`,
-            {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json",
-                    Accept: "application/json",
-                },
-                body: JSON.stringify(payload),
-            },
-        );
-
-        if (!res.ok) {
-            const text = await res.text().catch(() => "");
-            setError(text || `Failed to save (${res.status}).`);
-            return;
-        }
-
-        setSuccess("Saved.");
-
-        // After a successful save, return to the book page
-        backToBook();
-    } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : "Failed to save.");
-    } finally {
-        saving.value = false;
+  try {
+    // Commit any remaining typed author/tags before saving
+    {
+      const committed = chipCommitOnEnter(authorChips.value, authorInput.value);
+      if (committed.committed) {
+        authorChips.value = committed.chips;
+        authorInput.value = committed.input;
+        authorSuggestOpen.value = false;
+      }
     }
+    {
+      const committed = chipCommitOnEnter(tagChips.value, tagInput.value);
+      if (committed.committed) {
+        tagChips.value = committed.chips;
+        tagInput.value = committed.input;
+        tagSuggestOpen.value = false;
+      }
+    }
+
+    const payload = {
+      title: normalizeStringOrNullFromOptional(form.title),
+      // send names (server will link/create as needed)
+      authors: authorChips.value.map((c) => c.name),
+      tags: tagChips.value.map((c) => c.name),
+
+      description: normalizeStringOrNullFromOptional(form.description),
+      published: normalizeDateOnlyOrNull(form.published),
+      language: normalizeStringOrNullFromOptional(form.language),
+
+      publisherName: normalizeStringOrNullFromOptional(form.publisher),
+      seriesName: normalizeStringOrNullFromOptional(form.series),
+      seriesIndex: normalizeSeriesIndex(form.seriesIndex),
+
+      // new (server support required): book_identifiers
+      identifiers: normalizeStringOrNullFromOptional(form.identifiers),
+    };
+
+    // Title is required server-side; keep lean client-side validation
+    if (!payload.title) {
+      setError('Title is required.');
+      return;
+    }
+
+    const res = await fetch(`/api/books/${encodeURIComponent(book.value.id)}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      setError(text || `Failed to save (${res.status}).`);
+      return;
+    }
+
+    setSuccess('Saved.');
+
+    // After a successful save, return to the book page
+    backToBook();
+  } catch (e: unknown) {
+    setError(e instanceof Error ? e.message : 'Failed to save.');
+  } finally {
+    saving.value = false;
+  }
 }
 
 function resetForm() {
-    if (book.value) bookToForm(book.value);
-    errorMessage.value = null;
-    successMessage.value = null;
+  if (!book.value) return;
+  bookToForm(book.value);
 }
 
 function backToBook() {
-    router.push(`/books/${encodeURIComponent(bookId.value)}`);
+  router.push(`/books/${encodeURIComponent(bookId.value)}`);
+}
+
+// Metadata search modal
+const metadataSearchOpen = ref(false);
+const metadataSearchQuery = computed(() => book.value?.title || '');
+
+function openMetadataSearch() {
+  metadataSearchOpen.value = true;
+}
+
+function closeMetadataSearch() {
+  metadataSearchOpen.value = false;
+}
+
+async function handleMetadataSelect(selection: MetadataImportSelection) {
+  // Keep this lean: apply selected fields directly to the edit form / chips.
+  const item = selection.item;
+  const fields = selection.fields;
+
+  try {
+    // Title
+    if (fields.title && item.volumeInfo.title) {
+      form.title = item.volumeInfo.title;
+    }
+
+    // Authors (chips by name; server resolves on save)
+    if (fields.authors && item.volumeInfo.authors?.length) {
+      const names = uniqByLower(item.volumeInfo.authors);
+      authorChips.value = names.map((name) => ({ name }));
+      authorInput.value = '';
+      authorSuggestions.value = [];
+      authorSuggestOpen.value = false;
+    }
+
+    // Description
+    if (fields.description && item.volumeInfo.description) {
+      form.description = item.volumeInfo.description;
+    }
+
+    // Publisher (by name; server resolves on save)
+    if (fields.publisher && item.volumeInfo.publisher) {
+      const nm = normalizeNameFromExternal(item.volumeInfo.publisher);
+      form.publisher = nm;
+      publisherInput.value = nm;
+      publisherSuggestions.value = [];
+      publisherSuggestOpen.value = false;
+    }
+
+    // Series / Series Index:
+    // Google Books `volumeInfo` does not consistently expose series metadata in the base response.
+    // We'll wire this up once we decide on a source field (e.g. subtitle parsing, or volumeSeries via a different API).
+    // For now, keep these options in the UI but do not attempt to import from unknown fields.
+    if (fields.series) {
+      // no-op for now (no reliable source field)
+    }
+    if (fields.seriesIndex) {
+      // no-op for now (no reliable source field)
+    }
+
+    // Published (normalize to date-only when possible)
+    if (fields.published && item.volumeInfo.publishedDate) {
+      const normalized = normalizeGooglePublishedDateToDateOnlyOrRaw(
+        item.volumeInfo.publishedDate,
+      );
+      form.published = normalized ?? '';
+    }
+
+    // Language
+    if (fields.language && item.volumeInfo.language) {
+      form.language = item.volumeInfo.language;
+    }
+
+    // Tags (categories -> tags chips by name; server resolves on save)
+    if (fields.tags && item.volumeInfo.categories?.length) {
+      const tagsFromCategories = uniqByLower(item.volumeInfo.categories);
+      tagChips.value = tagsFromCategories.map((name) => ({ name }));
+      tagInput.value = '';
+      tagSuggestions.value = [];
+      tagSuggestOpen.value = false;
+    }
+
+    // Identifiers (ISBN -> form.identifiers)
+    if (fields.identifiers) {
+      const { isbn10, isbn13 } = extractIsbnsFromGoogle(item);
+
+      const existing = parseIdentifierRows(form.identifiers);
+      const next = [...existing];
+
+      if (isbn13) next.push({ type: 'isbn13', value: isbn13 });
+      if (isbn10) next.push({ type: 'isbn10', value: isbn10 });
+
+      form.identifiers = serializeIdentifierRows(next);
+    }
+
+    // Cover (download then upload via existing endpoint) — reuse URL preview flow
+    if (fields.cover) {
+      const coverUrl = getGoogleCoverUrl(item);
+      if (!coverUrl) {
+        throw new Error('No cover URL available for this result.');
+      }
+
+      errorMessage.value = null;
+      successMessage.value = null;
+
+      await uploadCoverFromUrl(coverUrl);
+      await loadBook();
+    }
+
+    setSuccess('Imported selected fields.');
+  } catch (e: unknown) {
+    setError(e instanceof Error ? e.message : 'Failed to import metadata.');
+  } finally {
+    closeMetadataSearch();
+  }
 }
 
 onMounted(() => {
-    loadBook();
+  loadBook();
 });
 
 watch(
-    () => bookId.value,
-    () => {
-        loadBook();
-    },
+  () => bookId.value,
+  () => {
+    loadBook();
+  },
 );
 </script>
 
 <template>
-    <div class="flex flex-col w-full h-full overflow-hidden">
-        <!-- Header -->
-        <AppHeader class="w-full" />
+  <div class="flex flex-col w-full h-full overflow-hidden">
+    <!-- Header -->
+    <AppHeader class="w-full" />
 
-        <!-- Content -->
-        <div class="w-full h-full p-4 overflow-auto">
-            <!-- Back button -->
-            <div class="flex items-center gap-2 mb-4 text-(--main-color)">
-                <div
-                    v-tooltip="'Back to book'"
-                    type="button"
-                    class="opacity-80 hover:opacity-100 cursor-pointer"
-                    @click="backToBook"
-                >
-                    <icon
-                        name="lucide:arrow-left"
-                        class="scale-200 translate-x-1"
-                    />
-                </div>
+    <!-- Content -->
+    <div class="w-full h-full p-4 overflow-auto">
+      <!-- Back button -->
+      <div class="flex items-center gap-2 mb-4 text-(--main-color)">
+        <div
+          v-tooltip="'Back to book'"
+          type="button"
+          class="opacity-80 hover:opacity-100 cursor-pointer"
+          @click="backToBook"
+        >
+          <icon name="lucide:arrow-left" class="scale-200 translate-x-1" />
+        </div>
+      </div>
+
+      <div v-if="loading" class="text-sm opacity-80">Loading...</div>
+
+      <div v-else-if="errorMessage" class="text-sm text-(--error-color) mb-4">
+        {{ errorMessage }}
+      </div>
+
+      <div v-else-if="!book" class="text-sm opacity-80">No book loaded.</div>
+
+      <div
+        v-else
+        class="flex flex-col md:flex-row gap-6 items-start justify-center"
+      >
+        <!-- Left column: cover preview + upload -->
+        <div
+          class="flex flex-col justify-center items-center w-full sm:w-80 shrink-0 self-center md:self-start"
+        >
+          <BookCover
+            :src="coverPreviewUrl ?? coverUrl"
+            :alt="`Cover for ${book.title}`"
+            class="w-50! sm:w-full!"
+          />
+
+          <input
+            ref="coverFileInput"
+            class="hidden"
+            type="file"
+            accept="image/*"
+            @change="onCoverFileChange"
+          />
+
+          <div class="flex flex-wrap gap-1 pt-2 justify-center">
+            <button
+              class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
+              type="button"
+              :disabled="saving || coverUrlLoading"
+              @click="pickCoverFile"
+            >
+              <icon name="lucide:image-up" class="scale-135" />
+              Choose cover
+            </button>
+
+            <button
+              v-if="selectedCoverFile"
+              class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2!"
+              type="button"
+              :disabled="saving"
+              @click="clearSelectedCover"
+            >
+              <icon name="lucide:x" class="scale-135" />
+              Clear
+            </button>
+
+            <button
+              class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
+              type="button"
+              :disabled="saving || coverUploading || !selectedCoverFile"
+              @click="uploadCover"
+            >
+              <icon
+                :name="
+                  coverUploading ? 'lucide:loader-circle' : 'lucide:upload'
+                "
+                :class="[coverUploading ? 'animate-spin' : '', 'scale-135']"
+              />
+              {{ coverUploading ? 'Uploading...' : 'Upload' }}
+            </button>
+          </div>
+
+          <div class="w-full pt-3">
+            <div class="text-xs opacity-70 mb-1 text-left">
+              Or fetch cover from URL
             </div>
-
-            <div v-if="loading" class="text-sm opacity-80">Loading...</div>
+            <div class="flex gap-2">
+              <input
+                v-model="coverUrlInput"
+                class="min-w-0 flex-1 px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                type="url"
+                placeholder="https://example.com/cover.jpg"
+                :disabled="saving || coverUploading"
+                @keydown.enter.prevent="previewCoverFromUrl"
+              />
+              <button
+                class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
+                type="button"
+                :disabled="
+                  saving ||
+                  coverUploading ||
+                  coverUrlLoading ||
+                  !coverUrlInput.trim()
+                "
+                @click="previewCoverFromUrl"
+              >
+                <icon
+                  :name="
+                    coverUrlLoading ? 'lucide:loader-circle' : 'lucide:download'
+                  "
+                  :class="[coverUrlLoading ? 'animate-spin' : '', 'scale-135']"
+                />
+                {{ coverUrlLoading ? 'Fetching...' : 'Fetch' }}
+              </button>
+              <button
+                class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
+                type="button"
+                :disabled="
+                  saving ||
+                  coverUploading ||
+                  coverUrlLoading ||
+                  (!coverUrlInput.trim() && !selectedCoverFile)
+                "
+                @click="clearCoverUrlPreview"
+              >
+                <icon name="lucide:x" class="scale-135" />
+                Clear
+              </button>
+            </div>
 
             <div
-                v-else-if="errorMessage"
-                class="text-sm text-(--error-color) mb-4"
+              v-if="coverUrlInput.trim()"
+              class="text-xs opacity-60 mt-1 text-left"
             >
-                {{ errorMessage }}
+              Press Enter to fetch. This only previews until you click Upload.
             </div>
+          </div>
 
-            <div v-else-if="!book" class="text-sm opacity-80">
-                No book loaded.
-            </div>
+          <div
+            v-if="selectedCoverFile"
+            class="text-xs opacity-70 pt-2 text-center break-all"
+          >
+            Selected: {{ selectedCoverFile.name }}
+          </div>
 
-            <div v-else class="flex flex-col md:flex-row gap-6 items-start">
-                <!-- Left column: cover preview + upload -->
-                <div
-                    class="flex flex-col justify-center items-center w-80 shrink-0"
-                >
-                    <BookCover
-                        :src="coverPreviewUrl ?? coverUrl"
-                        :alt="`Cover for ${book.title}`"
-                    />
-
-                    <input
-                        ref="coverFileInput"
-                        class="hidden"
-                        type="file"
-                        accept="image/*"
-                        @change="onCoverFileChange"
-                    />
-
-                    <div class="flex flex-wrap gap-1 pt-2 justify-center">
-                        <button
-                            class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
-                            type="button"
-                            :disabled="saving || coverUrlLoading"
-                            @click="pickCoverFile"
-                        >
-                            <icon name="lucide:image-up" class="scale-135" />
-                            Choose cover
-                        </button>
-
-                        <button
-                            v-if="selectedCoverFile"
-                            class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2!"
-                            type="button"
-                            :disabled="saving"
-                            @click="clearSelectedCover"
-                        >
-                            <icon name="lucide:x" class="scale-135" />
-                            Clear
-                        </button>
-
-                        <button
-                            class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
-                            type="button"
-                            :disabled="
-                                saving || coverUploading || !selectedCoverFile
-                            "
-                            @click="uploadCover"
-                        >
-                            <icon
-                                :name="
-                                    coverUploading
-                                        ? 'lucide:loader-circle'
-                                        : 'lucide:upload'
-                                "
-                                :class="[
-                                    coverUploading ? 'animate-spin' : '',
-                                    'scale-135',
-                                ]"
-                            />
-                            {{ coverUploading ? "Uploading..." : "Upload" }}
-                        </button>
-                    </div>
-
-                    <div class="w-full pt-3">
-                        <div class="text-xs opacity-70 mb-1 text-left">
-                            Or fetch cover from URL
-                        </div>
-                        <div class="flex gap-2">
-                            <input
-                                v-model="coverUrlInput"
-                                class="min-w-0 flex-1 px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
-                                type="url"
-                                placeholder="https://example.com/cover.jpg"
-                                :disabled="saving || coverUploading"
-                                @keydown.enter.prevent="previewCoverFromUrl"
-                            />
-                            <button
-                                class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
-                                type="button"
-                                :disabled="
-                                    saving ||
-                                    coverUploading ||
-                                    coverUrlLoading ||
-                                    !coverUrlInput.trim()
-                                "
-                                @click="previewCoverFromUrl"
-                            >
-                                <icon
-                                    :name="
-                                        coverUrlLoading
-                                            ? 'lucide:loader-circle'
-                                            : 'lucide:download'
-                                    "
-                                    :class="[
-                                        coverUrlLoading ? 'animate-spin' : '',
-                                        'scale-135',
-                                    ]"
-                                />
-                                {{ coverUrlLoading ? "Fetching..." : "Fetch" }}
-                            </button>
-                            <button
-                                class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
-                                type="button"
-                                :disabled="
-                                    saving ||
-                                    coverUploading ||
-                                    coverUrlLoading ||
-                                    (!coverUrlInput.trim() &&
-                                        !selectedCoverFile)
-                                "
-                                @click="clearCoverUrlPreview"
-                            >
-                                <icon name="lucide:x" class="scale-135" />
-                                Clear
-                            </button>
-                        </div>
-
-                        <div
-                            v-if="coverUrlInput.trim()"
-                            class="text-xs opacity-60 mt-1 text-left"
-                        >
-                            Press Enter to fetch. This only previews until you
-                            click Upload.
-                        </div>
-                    </div>
-
-                    <div
-                        v-if="selectedCoverFile"
-                        class="text-xs opacity-70 pt-2 text-center break-all"
-                    >
-                        Selected: {{ selectedCoverFile.name }}
-                    </div>
-
-                    <div class="text-xs opacity-60 pt-2 text-center">
-                        Covers are stored as
-                        <span class="font-mono">cover.webp</span>
-                        next to the book file.
-                    </div>
-                </div>
-
-                <!-- Right column: metadata fields -->
-                <div class="min-w-0 flex flex-col gap-4 grow max-w-3xl">
-                    <!-- Metadata header -->
-                    <div class="flex items-center justify-between gap-4">
-                        <div class="min-w-0">
-                            <div class="text-sm opacity-70">
-                                ID: <span class="font-mono">{{ book.id }}</span>
-                            </div>
-                        </div>
-
-                        <div class="flex gap-2 shrink-0">
-                            <button
-                                class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
-                                type="button"
-                                :disabled="saving"
-                                @click="resetForm"
-                            >
-                                Reset
-                            </button>
-
-                            <button
-                                class="px-3 py-2 rounded-md bg-(--main-color) text-(--bg-color) hover:opacity-90 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
-                                type="button"
-                                :disabled="saving"
-                                @click="save"
-                            >
-                                <span v-if="saving">Saving...</span>
-                                <span v-else>Save</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div v-if="successMessage" class="text-sm text-green-600">
-                        {{ successMessage }}
-                    </div>
-
-                    <!-- Metadata form -->
-                    <div class="grid gap-4">
-                        <!-- Title -->
-                        <div class="grid gap-2">
-                            <label class="text-sm opacity-70">Title</label>
-                            <input
-                                v-model="form.title"
-                                class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
-                                type="text"
-                                placeholder="Title"
-                            />
-                        </div>
-
-                        <!-- Authors -->
-                        <div class="grid gap-2">
-                            <label class="text-sm opacity-70">Authors</label>
-
-                            <!-- Selected author chips -->
-                            <div
-                                v-if="authorChips.length"
-                                class="flex flex-wrap gap-2"
-                            >
-                                <UiChip
-                                    v-for="(c, i) in authorChips"
-                                    :key="(c.id ?? c.name) + ':' + i"
-                                    :label="c.name"
-                                    @remove="
-                                        authorChips = chipRemove(authorChips, i)
-                                    "
-                                />
-                            </div>
-
-                            <!-- Author input + suggestions -->
-                            <div class="relative">
-                                <input
-                                    v-model="authorInput"
-                                    class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
-                                    type="text"
-                                    placeholder="Type an author name… (comma to create chips)"
-                                    @keydown.enter.prevent="
-                                        (() => {
-                                            const committed = chipCommitOnEnter(
-                                                authorChips,
-                                                authorInput,
-                                            );
-                                            if (committed.committed) {
-                                                authorChips = committed.chips;
-                                                authorInput = committed.input;
-                                                authorSuggestOpen = false;
-                                            }
-                                        })()
-                                    "
-                                    @keydown.esc="
-                                        (() => {
-                                            authorSuggestions = [];
-                                            authorSuggestOpen = false;
-                                        })()
-                                    "
-                                    @focus="
-                                        authorSuggestOpen =
-                                            !!authorSuggestions.length
-                                    "
-                                />
-
-                                <div
-                                    v-if="
-                                        authorSuggestOpen &&
-                                        (authorSearching ||
-                                            authorSuggestions.length)
-                                    "
-                                    class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
-                                >
-                                    <div
-                                        v-if="authorSearching"
-                                        class="px-3 py-2 text-sm opacity-70"
-                                    >
-                                        Searching…
-                                    </div>
-
-                                    <button
-                                        v-for="s in authorSuggestions"
-                                        :key="s.id"
-                                        type="button"
-                                        class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10"
-                                        @click="
-                                            authorChips = chipAddFromSuggestion(
-                                                authorChips,
-                                                s,
-                                            );
-                                            authorInput = '';
-                                            authorSuggestOpen = false;
-                                        "
-                                    >
-                                        {{ s.name }}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Description -->
-                        <div class="grid gap-2">
-                            <label class="text-sm opacity-70"
-                                >Description</label
-                            >
-                            <textarea
-                                v-model="form.description"
-                                class="w-full min-h-32 px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
-                                placeholder="Description (HTML/text allowed; rendering happens on the book page)"
-                            />
-                        </div>
-
-                        <!-- Series Details -->
-                        <div class="grid sm:grid-cols-2 gap-4">
-                            <!-- Series -->
-                            <div class="grid gap-2">
-                                <label class="text-sm opacity-70">
-                                    Series
-                                </label>
-
-                                <div class="relative">
-                                    <input
-                                        v-model="form.series"
-                                        class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
-                                        type="text"
-                                        placeholder="Series name"
-                                        @input="seriesInput = form.series"
-                                        @keydown.esc="
-                                            (() => {
-                                                seriesSuggestions = [];
-                                                seriesSuggestOpen = false;
-                                            })()
-                                        "
-                                        @focus="
-                                            (() => {
-                                                seriesFocused = true;
-                                                seriesSuggestOpen =
-                                                    !!seriesSuggestions.length;
-                                            })()
-                                        "
-                                        @blur="
-                                            (() => {
-                                                seriesFocused = false;
-                                                seriesSuggestOpen = false;
-                                            })()
-                                        "
-                                    />
-
-                                    <div
-                                        v-if="
-                                            seriesSuggestOpen &&
-                                            (seriesSearching ||
-                                                seriesSuggestions.length)
-                                        "
-                                        class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
-                                    >
-                                        <div
-                                            v-if="seriesSearching"
-                                            class="px-3 py-2 text-sm opacity-70"
-                                        >
-                                            Searching…
-                                        </div>
-
-                                        <button
-                                            v-for="s in seriesSuggestions"
-                                            :key="s.id"
-                                            type="button"
-                                            class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10"
-                                            @click="
-                                                form.series = s.name;
-                                                seriesInput = s.name;
-                                                seriesSuggestOpen = false;
-                                            "
-                                        >
-                                            {{ s.name }}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Series Index -->
-                            <div class="grid gap-2">
-                                <label class="text-sm opacity-70">
-                                    Series Index
-                                    <span class="opacity-60">(number)</span>
-                                </label>
-                                <input
-                                    v-model="form.seriesIndex"
-                                    class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
-                                    type="text"
-                                    inputmode="decimal"
-                                    placeholder="(blank to clear)"
-                                />
-                            </div>
-                        </div>
-
-                        <!-- Tags -->
-                        <div class="grid gap-2">
-                            <label class="text-sm opacity-70">Tags</label>
-
-                            <!-- Selected tag chips -->
-                            <div
-                                v-if="tagChips.length"
-                                class="flex flex-wrap gap-2"
-                            >
-                                <UiChip
-                                    v-for="(c, i) in tagChips"
-                                    :key="(c.id ?? c.name) + ':' + i"
-                                    :label="c.name"
-                                    @remove="tagChips = chipRemove(tagChips, i)"
-                                />
-                            </div>
-
-                            <!-- Tag input + suggestions -->
-                            <div class="relative">
-                                <input
-                                    v-model="tagInput"
-                                    class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
-                                    type="text"
-                                    placeholder="Type tags… (comma to create chips)"
-                                    @keydown.enter.prevent="
-                                        (() => {
-                                            const committed = chipCommitOnEnter(
-                                                tagChips,
-                                                tagInput,
-                                            );
-                                            if (committed.committed) {
-                                                tagChips = committed.chips;
-                                                tagInput = committed.input;
-                                                tagSuggestOpen = false;
-                                            }
-                                        })()
-                                    "
-                                    @keydown.esc="
-                                        (() => {
-                                            tagSuggestions = [];
-                                            tagSuggestOpen = false;
-                                        })()
-                                    "
-                                    @focus="
-                                        tagSuggestOpen = !!tagSuggestions.length
-                                    "
-                                />
-
-                                <div
-                                    v-if="
-                                        tagSuggestOpen &&
-                                        (tagSearching || tagSuggestions.length)
-                                    "
-                                    class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
-                                >
-                                    <div
-                                        v-if="tagSearching"
-                                        class="px-3 py-2 text-sm opacity-70"
-                                    >
-                                        Searching…
-                                    </div>
-
-                                    <button
-                                        v-for="s in tagSuggestions"
-                                        :key="s.id"
-                                        type="button"
-                                        class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10"
-                                        @click="
-                                            tagChips = chipAddFromSuggestion(
-                                                tagChips,
-                                                s,
-                                            );
-                                            tagInput = '';
-                                            tagSuggestOpen = false;
-                                        "
-                                    >
-                                        {{ s.name }}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Publishing details -->
-                        <div class="grid sm:grid-cols-2 gap-4">
-                            <!-- Publisher -->
-                            <div class="grid gap-2">
-                                <label class="text-sm opacity-70">
-                                    Publisher
-                                </label>
-
-                                <div class="relative">
-                                    <input
-                                        v-model="form.publisher"
-                                        class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
-                                        type="text"
-                                        placeholder="Publisher name"
-                                        @input="publisherInput = form.publisher"
-                                        @keydown.esc="
-                                            (() => {
-                                                publisherSuggestions = [];
-                                                publisherSuggestOpen = false;
-                                            })()
-                                        "
-                                        @focus="
-                                            (() => {
-                                                publisherFocused = true;
-                                                publisherSuggestOpen =
-                                                    !!publisherSuggestions.length;
-                                            })()
-                                        "
-                                        @blur="
-                                            (() => {
-                                                publisherFocused = false;
-                                                publisherSuggestOpen = false;
-                                            })()
-                                        "
-                                    />
-
-                                    <div
-                                        v-if="
-                                            publisherSuggestOpen &&
-                                            (publisherSearching ||
-                                                publisherSuggestions.length)
-                                        "
-                                        class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
-                                    >
-                                        <div
-                                            v-if="publisherSearching"
-                                            class="px-3 py-2 text-sm opacity-70"
-                                        >
-                                            Searching…
-                                        </div>
-
-                                        <button
-                                            v-for="s in publisherSuggestions"
-                                            :key="s.id"
-                                            type="button"
-                                            class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10"
-                                            @click="
-                                                form.publisher = s.name;
-                                                publisherInput = s.name;
-                                                publisherSuggestOpen = false;
-                                            "
-                                        >
-                                            {{ s.name }}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Published -->
-                            <div class="grid gap-2">
-                                <label class="text-sm opacity-70"
-                                    >Published</label
-                                >
-                                <input
-                                    v-model="form.published"
-                                    class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
-                                    type="date"
-                                    placeholder="YYYY-MM-DD"
-                                />
-                            </div>
-                        </div>
-
-                        <!-- Language -->
-                        <div class="grid gap-2">
-                            <label class="text-sm opacity-70">Language</label>
-                            <input
-                                v-model="form.language"
-                                class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
-                                type="text"
-                                placeholder="e.g. en"
-                            />
-                        </div>
-                    </div>
-                </div>
-            </div>
+          <div class="text-xs opacity-60 pt-2 text-center">
+            Covers are stored as
+            <span class="font-mono">cover.webp</span>
+            next to the book file.
+          </div>
         </div>
+
+        <!-- Right column: metadata fields -->
+        <div class="min-w-0 flex flex-col gap-4 grow max-w-3xl">
+          <!-- Metadata header -->
+          <div class="flex items-center justify-between gap-4">
+            <div class="min-w-0">
+              <div class="text-sm opacity-70">
+                ID: <span class="font-mono">{{ book.id }}</span>
+              </div>
+            </div>
+
+            <div class="flex gap-2 shrink-0">
+              <button
+                class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
+                type="button"
+                :disabled="saving"
+                @click="resetForm"
+              >
+                Reset
+              </button>
+
+              <button
+                class="px-3 py-2 rounded-md bg-(--main-color) text-(--bg-color) hover:bg-(--main-color)/90! text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                type="button"
+                :disabled="saving"
+                @click="save"
+              >
+                <span v-if="saving">Saving...</span>
+                <span v-else>Save</span>
+              </button>
+            </div>
+          </div>
+
+          <div v-if="successMessage" class="text-sm text-green-600">
+            {{ successMessage }}
+          </div>
+
+          <!-- Metadata form -->
+          <div class="grid gap-4">
+            <!-- Title -->
+            <div class="grid gap-2">
+              <label class="text-sm opacity-70">Title</label>
+              <input
+                v-model="form.title"
+                class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                type="text"
+                placeholder="Title"
+              />
+            </div>
+
+            <!-- Authors -->
+            <div class="grid gap-2">
+              <label class="text-sm opacity-70">Authors</label>
+
+              <!-- Selected author chips -->
+              <div v-if="authorChips.length" class="flex flex-wrap gap-2">
+                <UiChip
+                  v-for="(c, i) in authorChips"
+                  :key="(c.id ?? c.name) + ':' + i"
+                  :label="c.name"
+                  @remove="authorChips = chipRemove(authorChips, i)"
+                />
+              </div>
+
+              <!-- Author input + suggestions -->
+              <div class="relative">
+                <input
+                  v-model="authorInput"
+                  class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                  type="text"
+                  placeholder="Type an author name… (comma to create chips)"
+                  @keydown.enter.prevent="
+                    (() => {
+                      const committed = chipCommitOnEnter(
+                        authorChips,
+                        authorInput,
+                      );
+                      if (committed.committed) {
+                        authorChips = committed.chips;
+                        authorInput = committed.input;
+                        authorSuggestOpen = false;
+                      }
+                    })()
+                  "
+                  @keydown.esc="
+                    (() => {
+                      authorSuggestions = [];
+                      authorSuggestOpen = false;
+                    })()
+                  "
+                  @focus="authorSuggestOpen = !!authorSuggestions.length"
+                />
+
+                <div
+                  v-if="
+                    authorSuggestOpen &&
+                    (authorSearching || authorSuggestions.length)
+                  "
+                  class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
+                >
+                  <div
+                    v-if="authorSearching"
+                    class="px-3 py-2 text-sm opacity-70"
+                  >
+                    Searching…
+                  </div>
+
+                  <button
+                    v-for="s in authorSuggestions"
+                    :key="s.id"
+                    type="button"
+                    class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10"
+                    @click="
+                      authorChips = chipAddFromSuggestion(authorChips, s);
+                      authorInput = '';
+                      authorSuggestOpen = false;
+                    "
+                  >
+                    {{ s.name }}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Description -->
+            <div class="grid gap-2">
+              <label class="text-sm opacity-70">Description</label>
+              <textarea
+                v-model="form.description"
+                class="w-full min-h-32 px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                placeholder="Description (HTML/text allowed; rendering happens on the book page)"
+              />
+            </div>
+
+            <!-- Series Details -->
+            <div class="grid sm:grid-cols-2 gap-4">
+              <!-- Series -->
+              <div class="grid gap-2">
+                <label class="text-sm opacity-70"> Series </label>
+
+                <div class="relative">
+                  <input
+                    v-model="form.series"
+                    class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                    type="text"
+                    placeholder="Series name"
+                    @input="seriesInput = form.series"
+                    @keydown.esc="
+                      (() => {
+                        seriesSuggestions = [];
+                        seriesSuggestOpen = false;
+                      })()
+                    "
+                    @focus="
+                      (() => {
+                        seriesFocused = true;
+                        seriesSuggestOpen = !!seriesSuggestions.length;
+                      })()
+                    "
+                    @blur="
+                      (() => {
+                        seriesFocused = false;
+                        seriesSuggestOpen = false;
+                      })()
+                    "
+                  />
+
+                  <div
+                    v-if="
+                      seriesSuggestOpen &&
+                      (seriesSearching || seriesSuggestions.length)
+                    "
+                    class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
+                  >
+                    <div
+                      v-if="seriesSearching"
+                      class="px-3 py-2 text-sm opacity-70"
+                    >
+                      Searching…
+                    </div>
+
+                    <button
+                      v-for="s in seriesSuggestions"
+                      :key="s.id"
+                      type="button"
+                      class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10"
+                      @click="
+                        form.series = s.name;
+                        seriesInput = s.name;
+                        seriesSuggestOpen = false;
+                      "
+                    >
+                      {{ s.name }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Series Index -->
+              <div class="grid gap-2">
+                <label class="text-sm opacity-70">
+                  Series Index
+                  <span class="opacity-60">(number)</span>
+                </label>
+                <input
+                  v-model="form.seriesIndex"
+                  class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                  type="text"
+                  inputmode="decimal"
+                  placeholder="(blank to clear)"
+                />
+              </div>
+            </div>
+
+            <!-- Tags -->
+            <div class="grid gap-2">
+              <label class="text-sm opacity-70">Tags</label>
+
+              <!-- Selected tag chips -->
+              <div v-if="tagChips.length" class="flex flex-wrap gap-2">
+                <UiChip
+                  v-for="(c, i) in tagChips"
+                  :key="(c.id ?? c.name) + ':' + i"
+                  :label="c.name"
+                  @remove="tagChips = chipRemove(tagChips, i)"
+                />
+              </div>
+
+              <!-- Tag input + suggestions -->
+              <div class="relative">
+                <input
+                  v-model="tagInput"
+                  class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                  type="text"
+                  placeholder="Type tags… (comma to create chips)"
+                  @keydown.enter.prevent="
+                    (() => {
+                      const committed = chipCommitOnEnter(tagChips, tagInput);
+                      if (committed.committed) {
+                        tagChips = committed.chips;
+                        tagInput = committed.input;
+                        tagSuggestOpen = false;
+                      }
+                    })()
+                  "
+                  @keydown.esc="
+                    (() => {
+                      tagSuggestions = [];
+                      tagSuggestOpen = false;
+                    })()
+                  "
+                  @focus="tagSuggestOpen = !!tagSuggestions.length"
+                />
+
+                <div
+                  v-if="
+                    tagSuggestOpen && (tagSearching || tagSuggestions.length)
+                  "
+                  class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
+                >
+                  <div v-if="tagSearching" class="px-3 py-2 text-sm opacity-70">
+                    Searching…
+                  </div>
+
+                  <button
+                    v-for="s in tagSuggestions"
+                    :key="s.id"
+                    type="button"
+                    class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10"
+                    @click="
+                      tagChips = chipAddFromSuggestion(tagChips, s);
+                      tagInput = '';
+                      tagSuggestOpen = false;
+                    "
+                  >
+                    {{ s.name }}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Publishing details -->
+            <div class="grid sm:grid-cols-2 gap-4">
+              <!-- Publisher -->
+              <div class="grid gap-2">
+                <label class="text-sm opacity-70"> Publisher </label>
+
+                <div class="relative">
+                  <input
+                    v-model="form.publisher"
+                    class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                    type="text"
+                    placeholder="Publisher name"
+                    @input="publisherInput = form.publisher"
+                    @keydown.esc="
+                      (() => {
+                        publisherSuggestions = [];
+                        publisherSuggestOpen = false;
+                      })()
+                    "
+                    @focus="
+                      (() => {
+                        publisherFocused = true;
+                        publisherSuggestOpen = !!publisherSuggestions.length;
+                      })()
+                    "
+                    @blur="
+                      (() => {
+                        publisherFocused = false;
+                        publisherSuggestOpen = false;
+                      })()
+                    "
+                  />
+
+                  <div
+                    v-if="
+                      publisherSuggestOpen &&
+                      (publisherSearching || publisherSuggestions.length)
+                    "
+                    class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
+                  >
+                    <div
+                      v-if="publisherSearching"
+                      class="px-3 py-2 text-sm opacity-70"
+                    >
+                      Searching…
+                    </div>
+
+                    <button
+                      v-for="s in publisherSuggestions"
+                      :key="s.id"
+                      type="button"
+                      class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10"
+                      @click="
+                        form.publisher = s.name;
+                        publisherInput = s.name;
+                        publisherSuggestOpen = false;
+                      "
+                    >
+                      {{ s.name }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Published -->
+              <div class="grid gap-2">
+                <label class="text-sm opacity-70">Published</label>
+                <input
+                  v-model="form.published"
+                  class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                  type="date"
+                  placeholder="YYYY-MM-DD"
+                />
+              </div>
+            </div>
+
+            <!-- Identifiers (structured editor) -->
+            <div class="grid gap-2">
+              <label class="text-sm opacity-70">Identifiers</label>
+
+              <div
+                v-if="parseIdentifierRows(form.identifiers).length"
+                class="grid gap-2"
+              >
+                <div
+                  v-for="(row, idx) in parseIdentifierRows(form.identifiers)"
+                  :key="row.type + ':' + row.value + ':' + idx"
+                  class="flex items-center gap-2"
+                >
+                  <div
+                    class="px-2 py-1 rounded border border-(--sub-color) text-xs font-mono opacity-80"
+                  >
+                    {{ row.type }}
+                  </div>
+                  <div
+                    class="flex-1 min-w-0 px-2 py-1 rounded border border-(--sub-color) text-xs font-mono opacity-90 truncate"
+                  >
+                    {{ row.value }}
+                  </div>
+                  <button
+                    type="button"
+                    class="px-2 py-1 rounded border border-(--sub-color) hover:bg-(--sub-color)/10 text-xs"
+                    title="Remove"
+                    @click="
+                      (() => {
+                        const rows = parseIdentifierRows(form.identifiers);
+                        rows.splice(idx, 1);
+                        form.identifiers = serializeIdentifierRows(rows);
+                      })()
+                    "
+                  >
+                    <icon name="lucide:x" class="scale-110" />
+                  </button>
+                </div>
+              </div>
+
+              <div class="flex gap-2">
+                <input
+                  v-model="identifierTypeInput"
+                  class="w-28 px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm font-mono"
+                  type="text"
+                  placeholder="type"
+                />
+                <input
+                  v-model="identifierValueInput"
+                  class="flex-1 min-w-0 px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm font-mono"
+                  type="text"
+                  placeholder="value"
+                  @keydown.enter.prevent="
+                    (() => {
+                      const t = normalizeIdentifierType(identifierTypeInput);
+                      const v = normalizeIdentifierValue(identifierValueInput);
+                      if (!t || !v) return;
+                      const rows = parseIdentifierRows(form.identifiers);
+                      rows.push({ type: t, value: v });
+                      form.identifiers = serializeIdentifierRows(rows);
+                      identifierValueInput = '';
+                    })()
+                  "
+                />
+                <button
+                  type="button"
+                  class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
+                  @click="
+                    (() => {
+                      const t = normalizeIdentifierType(identifierTypeInput);
+                      const v = normalizeIdentifierValue(identifierValueInput);
+                      if (!t || !v) return;
+                      const rows = parseIdentifierRows(form.identifiers);
+                      rows.push({ type: t, value: v });
+                      form.identifiers = serializeIdentifierRows(rows);
+                      identifierValueInput = '';
+                    })()
+                  "
+                >
+                  Add
+                </button>
+              </div>
+
+              <div class="text-xs opacity-60">
+                Stored as type:value (e.g. isbn13:9780593820247). You can add
+                multiple identifiers.
+              </div>
+            </div>
+
+            <!-- Language -->
+            <div class="grid gap-2">
+              <label class="text-sm opacity-70">Language</label>
+              <input
+                v-model="form.language"
+                class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                type="text"
+                placeholder="e.g. en"
+              />
+            </div>
+
+            <!-- Metadata Search Button -->
+            <button
+              type="button"
+              class="w-full border border-(--sub-color) p-2 gap-2"
+              @click="openMetadataSearch"
+            >
+              <Icon name="lucide:search" class="text-xl" />
+              <span>Search for Metadata</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <!-- Metadata Search Modal -->
+    <BookMetadataSearchModal
+      :open="metadataSearchOpen"
+      :initial-query="metadataSearchQuery"
+      @close="closeMetadataSearch"
+      @select="handleMetadataSelect"
+    />
+  </div>
 </template>

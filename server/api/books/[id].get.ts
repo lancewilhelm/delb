@@ -1,9 +1,10 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
-import { cloudDb } from "~~/server/utils/db/cloud";
+import { and, asc, eq, inArray } from 'drizzle-orm';
+import { cloudDb } from '~~/server/utils/db/cloud';
 import {
   authors,
   bookAuthors,
   bookFiles,
+  bookIdentifiers,
   bookTags,
   books,
   collectionBooks,
@@ -11,12 +12,12 @@ import {
   publishers,
   series,
   tags,
-} from "~/utils/db/schema";
-import { logger } from "~/utils/logger";
-import { auth } from "~/utils/auth";
+} from '~/utils/db/schema';
+import { logger } from '~/utils/logger';
+import { auth } from '~/utils/auth';
 
 export default defineEventHandler(async (event) => {
-  logger.debug("GET /api/books/:id");
+  logger.debug('GET /api/books/:id');
 
   // Require auth (consistent with other book endpoints)
   const session = await auth.api.getSession({
@@ -24,14 +25,14 @@ export default defineEventHandler(async (event) => {
   });
 
   if (!session) {
-    throw createError({ statusCode: 401, statusMessage: "Unauthorized" });
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
   }
 
   const userId = session.user.id;
 
-  const id = getRouterParam(event, "id");
+  const id = getRouterParam(event, 'id');
   if (!id) {
-    throw createError({ statusCode: 400, statusMessage: "Missing book id" });
+    throw createError({ statusCode: 400, statusMessage: 'Missing book id' });
   }
 
   try {
@@ -47,7 +48,7 @@ export default defineEventHandler(async (event) => {
     ).filter(Boolean);
 
     if (!memberCollectionIds.length) {
-      throw createError({ statusCode: 404, statusMessage: "Book not found" });
+      throw createError({ statusCode: 404, statusMessage: 'Book not found' });
     }
 
     const visible = await cloudDb
@@ -64,7 +65,7 @@ export default defineEventHandler(async (event) => {
 
     if (!book) {
       // Use 404 to avoid leaking existence of books the user cannot access.
-      throw createError({ statusCode: 404, statusMessage: "Book not found" });
+      throw createError({ statusCode: 404, statusMessage: 'Book not found' });
     }
 
     // Publisher + Series (denormalized objects for the detail page)
@@ -126,6 +127,21 @@ export default defineEventHandler(async (event) => {
       name: t.name,
     }));
 
+    // Identifiers for this book (unordered)
+    const identifierRows = await cloudDb
+      .select({
+        type: bookIdentifiers.type,
+        value: bookIdentifiers.value,
+      })
+      .from(bookIdentifiers)
+      .where(eq(bookIdentifiers.bookId, id))
+      .orderBy(asc(bookIdentifiers.type), asc(bookIdentifiers.value));
+
+    const bookIdentifiersOut = identifierRows.map((r) => ({
+      type: r.type,
+      value: r.value,
+    }));
+
     // Files for this book (all known formats)
     const files = await cloudDb
       .select()
@@ -140,6 +156,7 @@ export default defineEventHandler(async (event) => {
           publisher,
           series: seriesOut,
           tags: bookTagsOut,
+          identifiers: bookIdentifiersOut,
         },
         authors: bookAuthorsOut,
         files,
@@ -149,18 +166,18 @@ export default defineEventHandler(async (event) => {
   } catch (error: unknown) {
     // Preserve explicit HTTP errors (401/400/404) thrown above
     if (
-      typeof error === "object" &&
+      typeof error === 'object' &&
       error !== null &&
-      "statusCode" in error &&
+      'statusCode' in error &&
       (error as { statusCode?: unknown }).statusCode
     ) {
       throw error;
     }
 
-    logger.error(error, "GET /api/books/:id: Error fetching book");
+    logger.error(error, 'GET /api/books/:id: Error fetching book');
     throw createError({
       statusCode: 500,
-      statusMessage: "Failed to fetch book",
+      statusMessage: 'Failed to fetch book',
     });
   }
 });
