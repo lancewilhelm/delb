@@ -1,13 +1,17 @@
-import { cloudDb } from "~~/server/utils/db/cloud";
-import { logger } from "~/utils/logger";
-import { userSettings, globalSettings } from "~/utils/db/schema";
-import { auth } from "~/utils/auth";
-import { eq } from "drizzle-orm";
+import { cloudDb } from '~~/server/utils/db/cloud';
+import { logger } from '~/utils/logger';
+import { userSettings, globalSettings } from '~/utils/db/schema';
+import { auth } from '~/utils/auth';
+import { eq } from 'drizzle-orm';
+import {
+  getMetadataProviderCapabilities,
+  redactGlobalSettingsForClient,
+} from '~~/server/utils/secrets/hardcover';
 
-const GLOBAL_SETTINGS_ID = "00000000-0000-0000-0000-000000000000";
+const GLOBAL_SETTINGS_ID = '00000000-0000-0000-0000-000000000000';
 
 export default defineEventHandler(async (event) => {
-  logger.debug("GET /api/settings");
+  logger.debug('GET /api/settings');
 
   // Ensure the user is authenticated
   const session = await auth.api.getSession({
@@ -18,7 +22,7 @@ export default defineEventHandler(async (event) => {
     setResponseStatus(event, 401);
     return {
       success: false,
-      message: "Unauthorized",
+      message: 'Unauthorized',
     };
   }
 
@@ -37,19 +41,32 @@ export default defineEventHandler(async (event) => {
       .where(eq(globalSettings.id, GLOBAL_SETTINGS_ID))
       .limit(1);
 
+    const capabilities = await getMetadataProviderCapabilities();
+
+    const globalSettingsRow = globalSettingsRes.length
+      ? {
+          ...globalSettingsRes[0],
+          // Redact server-only secrets (e.g. `_secrets.hardcoverToken`)
+          settings: redactGlobalSettingsForClient(
+            globalSettingsRes[0]!.settings,
+          ),
+        }
+      : null;
+
     return {
       success: true,
       data: {
         userSettings: userSettingsRes.length ? userSettingsRes[0] : null,
-        globalSettings: globalSettingsRes.length ? globalSettingsRes[0] : null,
+        globalSettings: globalSettingsRow,
+        capabilities,
       },
     };
   } catch (error) {
-    logger.error(error, "GET /api/settings: Error fetching settings");
+    logger.error(error, 'GET /api/settings: Error fetching settings');
     setResponseStatus(event, 500);
     return {
       success: false,
-      message: "Failed to fetch settings",
+      message: 'Failed to fetch settings',
     };
   }
 });

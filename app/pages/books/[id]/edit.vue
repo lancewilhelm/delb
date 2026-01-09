@@ -37,6 +37,11 @@ interface GoogleBookVolumeInfo {
   }>;
   pageCount?: number;
   categories?: string[];
+
+  // Not a standard Google Books field, but if present from other sources/mapping, we can import it.
+  series?: string;
+  seriesIndex?: number;
+
   imageLinks?: {
     smallThumbnail?: string;
     thumbnail?: string;
@@ -59,13 +64,20 @@ interface ImportFields {
   tags: boolean;
   cover: boolean;
 
-  // new: identifiers + series
+  // new: identifiers + series + pages
   identifiers: boolean;
   series: boolean;
   seriesIndex: boolean;
+  pages: boolean;
 }
 
 interface MetadataImportSelection {
+  /**
+   * The modal emits a Google-Books-shaped item for both Google Books and Hardcover.
+   * For Hardcover, the server proxy already:
+   * - filters non-author contributions (e.g. cover artists)
+   * - provides tags/genres, identifiers, series, seriesIndex, publishedDate when available
+   */
   item: GoogleBookItem;
   fields: ImportFields;
 }
@@ -437,6 +449,9 @@ const form = reactive({
   description: '',
   published: '', // date-only (YYYY-MM-DD)
   language: '',
+
+  // New: page count (optional)
+  pages: '' as string, // keep as string for input; normalized on save
 
   // Chip editors store names in the UI; server resolves/creates and links.
   publisher: '' as string,
@@ -852,6 +867,12 @@ function bookToForm(b: Book) {
   form.published = formatDateOnly(b.published ?? '');
   form.language = b.language ?? '';
 
+  // Pages (optional)
+  // NOTE: if `b.pages` exists on the API response, hydrate it; otherwise keep empty.
+  // This is safe even before the backend is updated.
+  // @ts-expect-error - `pages` may not exist on older API responses
+  form.pages = typeof b.pages === 'number' ? String(b.pages) : '';
+
   // Series / publisher are edited by name in the UI.
   form.publisher = b.publisher?.name ?? '';
   form.series = b.series?.name ?? '';
@@ -959,6 +980,19 @@ function normalizeDateOnlyOrNull(input: string): string | null {
   return dateOnly ?? v;
 }
 
+function normalizePagesOrNull(input: string): number | null {
+  const raw = (input ?? '').toString().trim();
+  if (!raw) return null;
+
+  // Accept only non-negative integers
+  if (!/^\d+$/.test(raw)) return null;
+
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) return null;
+
+  return n;
+}
+
 async function save() {
   if (!book.value) return;
 
@@ -994,6 +1028,8 @@ async function save() {
       description: normalizeStringOrNullFromOptional(form.description),
       published: normalizeDateOnlyOrNull(form.published),
       language: normalizeStringOrNullFromOptional(form.language),
+
+      pages: normalizePagesOrNull(form.pages),
 
       publisherName: normalizeStringOrNullFromOptional(form.publisher),
       seriesName: normalizeStringOrNullFromOptional(form.series),
@@ -1058,6 +1094,8 @@ function closeMetadataSearch() {
 
 async function handleMetadataSelect(selection: MetadataImportSelection) {
   // Keep this lean: apply selected fields directly to the edit form / chips.
+  // Note: Hardcover results are mapped by the modal into a Google-Books-shaped `item`,
+  // so we can treat both sources the same here.
   const item = selection.item;
   const fields = selection.fields;
 
@@ -1068,6 +1106,7 @@ async function handleMetadataSelect(selection: MetadataImportSelection) {
     }
 
     // Authors (chips by name; server resolves on save)
+    // Hardcover proxy filters out non-author contributions (e.g. cover artists) before it reaches here.
     if (fields.authors && item.volumeInfo.authors?.length) {
       const names = uniqByLower(item.volumeInfo.authors);
       authorChips.value = names.map((name) => ({ name }));
@@ -1090,15 +1129,22 @@ async function handleMetadataSelect(selection: MetadataImportSelection) {
       publisherSuggestOpen.value = false;
     }
 
-    // Series / Series Index:
-    // Google Books `volumeInfo` does not consistently expose series metadata in the base response.
-    // We'll wire this up once we decide on a source field (e.g. subtitle parsing, or volumeSeries via a different API).
-    // For now, keep these options in the UI but do not attempt to import from unknown fields.
-    if (fields.series) {
-      // no-op for now (no reliable source field)
+    // Series / Series Index
+    // Hardcover mapping can provide these via `volumeInfo.series` / `volumeInfo.seriesIndex`.
+    if (fields.series && item.volumeInfo.series) {
+      const nm = normalizeNameFromExternal(item.volumeInfo.series);
+      form.series = nm;
+      seriesInput.value = nm;
+      seriesSuggestions.value = [];
+      seriesSuggestOpen.value = false;
     }
-    if (fields.seriesIndex) {
-      // no-op for now (no reliable source field)
+    if (
+      fields.seriesIndex &&
+      typeof item.volumeInfo.seriesIndex === 'number' &&
+      !Number.isNaN(item.volumeInfo.seriesIndex)
+    ) {
+      // keep as string for input
+      form.seriesIndex = String(item.volumeInfo.seriesIndex);
     }
 
     // Published (normalize to date-only when possible)
@@ -1114,7 +1160,12 @@ async function handleMetadataSelect(selection: MetadataImportSelection) {
       form.language = item.volumeInfo.language;
     }
 
-    // Tags (categories -> tags chips by name; server resolves on save)
+    // Pages
+    if (fields.pages && typeof item.volumeInfo.pageCount === 'number') {
+      form.pages = String(item.volumeInfo.pageCount);
+    }
+
+    // Tags (categories/tags -> tag chips by name; server resolves on save)
     if (fields.tags && item.volumeInfo.categories?.length) {
       const tagsFromCategories = uniqByLower(item.volumeInfo.categories);
       tagChips.value = tagsFromCategories.map((name) => ({ name }));
@@ -1123,15 +1174,29 @@ async function handleMetadataSelect(selection: MetadataImportSelection) {
       tagSuggestOpen.value = false;
     }
 
-    // Identifiers (ISBN -> form.identifiers)
+    // Identifiers (supports ISBN + non-ISBN identifiers like Hardcover id)
     if (fields.identifiers) {
-      const { isbn10, isbn13 } = extractIsbnsFromGoogle(item);
-
       const existing = parseIdentifierRows(form.identifiers);
       const next = [...existing];
 
+      // Google Books ISBNs (when present)
+      const { isbn10, isbn13 } = extractIsbnsFromGoogle(item);
       if (isbn13) next.push({ type: 'isbn13', value: isbn13 });
       if (isbn10) next.push({ type: 'isbn10', value: isbn10 });
+
+      // Non-ISBN identifiers:
+      // The metadata modal maps provider-specific IDs into `industryIdentifiers` too.
+      // For Hardcover, it uses type "HARDCOVER" with the Hardcover book id as the identifier.
+      const ids = item.volumeInfo.industryIdentifiers ?? [];
+      for (const id of ids) {
+        const tRaw = (id?.type ?? '').toString().trim().toLowerCase();
+        const vRaw = (id?.identifier ?? '').toString().trim();
+        if (!tRaw || !vRaw) continue;
+
+        if (tRaw === 'hardcover') {
+          next.push({ type: 'hardcover', value: vRaw });
+        }
+      }
 
       form.identifiers = serializeIdentifierRows(next);
     }
@@ -1769,6 +1834,22 @@ watch(
               <div class="text-xs opacity-60">
                 Stored as type:value (e.g. isbn13:9780593820247). You can add
                 multiple identifiers.
+              </div>
+            </div>
+
+            <!-- Pages -->
+            <div class="grid gap-2">
+              <label class="text-sm opacity-70">Pages</label>
+              <input
+                v-model="form.pages"
+                class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                type="number"
+                min="0"
+                step="1"
+                placeholder="e.g. 465"
+              />
+              <div class="text-xs opacity-60">
+                Optional. Used for reading progress features (later).
               </div>
             </div>
 

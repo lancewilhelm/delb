@@ -1,18 +1,20 @@
-import { defineStore } from "pinia";
+import { defineStore } from 'pinia';
+
+export type MetadataProviderKey = 'googleBooks' | 'hardcover';
 
 export const fontFamilyOptions = [
-  "Fira Code",
-  "Geist",
-  "IBM Plex Mono",
-  "Inter",
-  "Montserrat",
-  "Nunito",
-  "Poppins",
-  "Roboto Mono",
+  'Fira Code',
+  'Geist',
+  'IBM Plex Mono',
+  'Inter',
+  'Montserrat',
+  'Nunito',
+  'Poppins',
+  'Roboto Mono',
 ] as const;
 export type FontFamily = (typeof fontFamilyOptions)[number];
 
-export const funboxModes = ["confetti", "snow"];
+export const funboxModes = ['confetti', 'snow'];
 export type FunboxMode = (typeof funboxModes)[number];
 
 export interface UserSettings {
@@ -28,11 +30,19 @@ export interface UserSettings {
     glossySpine: boolean;
     roundedRight: boolean;
   };
+
+  /**
+   * Per-user metadata search provider selection.
+   * Used by the metadata search modal to search one or more providers at once.
+   */
+  metadataSearch: {
+    providers: MetadataProviderKey[];
+  };
 }
 
 function getDefaultSettings(): UserSettings {
   return {
-    fontFamily: "Nunito",
+    fontFamily: 'Nunito',
     favoriteThemes: [],
     themeSorting: {
       sortedByName: false,
@@ -42,6 +52,11 @@ function getDefaultSettings(): UserSettings {
     coverStyle: {
       glossySpine: true,
       roundedRight: false,
+    },
+
+    metadataSearch: {
+      // Default to Google Books; Hardcover will be enabled client-side only if available.
+      providers: ['googleBooks'],
     },
   };
 }
@@ -58,7 +73,7 @@ type SettingsApiGetResponse = {
 };
 
 export const useUserSettingsStore = defineStore(
-  "userSettings",
+  'userSettings',
   () => {
     const settings = ref<UserSettings>(getDefaultSettings());
 
@@ -70,8 +85,8 @@ export const useUserSettingsStore = defineStore(
       const { session } = useAuth();
       if (!session.value) return;
 
-      await $fetch("/api/settings/user", {
-        method: "PUT",
+      await $fetch('/api/settings/user', {
+        method: 'PUT',
         body: {
           settings: settings.value,
           updatedAt: updatedAt.value,
@@ -89,8 +104,8 @@ export const useUserSettingsStore = defineStore(
       const { session } = useAuth();
       if (!session.value) return;
 
-      const res = await $fetch<SettingsApiGetResponse>("/api/settings", {
-        method: "GET",
+      const res = await $fetch<SettingsApiGetResponse>('/api/settings', {
+        method: 'GET',
       });
 
       const remote = res?.data?.userSettings;
@@ -134,7 +149,7 @@ export const useUserSettingsStore = defineStore(
         await push();
       } catch (err) {
         // Keep unsynced so a later pull/push can reconcile.
-        console.error("Failed to push user settings:", err);
+        console.error('Failed to push user settings:', err);
       }
     }
 

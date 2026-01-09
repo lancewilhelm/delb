@@ -24,6 +24,13 @@ type PutBookBody = {
   language?: string | null;
 
   /**
+   * Page count (optional).
+   * - If omitted => unchanged
+   * - If null => clears
+   */
+  pages?: number | null;
+
+  /**
    * Publisher / Series:
    * - Prefer `publisherName` / `seriesName` (server will link/create).
    * - `publisherId` / `seriesId` are still accepted for back-compat.
@@ -91,6 +98,19 @@ function normalizeOptionalNumber(value: unknown): number | null | undefined {
     });
   }
   return value;
+}
+
+function normalizeOptionalInteger(value: unknown): number | null | undefined {
+  const n = normalizeOptionalNumber(value);
+  if (n === undefined) return undefined;
+  if (n === null) return null;
+  if (!Number.isInteger(n) || n < 0) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Invalid integer value',
+    });
+  }
+  return n;
 }
 
 function normalizeOptionalStringArray(
@@ -481,6 +501,10 @@ export default defineEventHandler(async (event) => {
     (body as PutBookBody).seriesIndex,
   );
   if (seriesIndex !== undefined) update.seriesIndex = seriesIndex;
+
+  // Pages (optional)
+  const pages = normalizeOptionalInteger((body as PutBookBody).pages);
+  if (pages !== undefined) update.pages = pages;
 
   // Determine tag updates (optional)
   const newTags = normalizeOptionalStringArray((body as PutBookBody).tags, {

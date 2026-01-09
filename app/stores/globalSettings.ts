@@ -1,18 +1,25 @@
-import { defineStore } from "pinia";
+import { defineStore } from 'pinia';
 
 export interface GlobalSettings {
   allowRegistration: boolean;
   allowFileUpload: boolean;
   ollamaUrls: string[];
   lmStudioEnabled: boolean;
+
+  /**
+   * Preferred metadata provider (UI can use this to select a default source).
+   */
+  metadataProvider?: 'googleBooks' | 'hardcover';
 }
 
 function getDefaultSettings(): GlobalSettings {
   return {
     allowRegistration: false,
     allowFileUpload: false,
-    ollamaUrls: ["http://localhost:11434"],
+    ollamaUrls: ['http://localhost:11434'],
     lmStudioEnabled: false,
+
+    metadataProvider: 'googleBooks',
   };
 }
 
@@ -23,6 +30,9 @@ type GlobalSettingsApiGetResponse = {
       settings: unknown;
       updatedAt: string | number | Date;
     } | null;
+    capabilities?: {
+      hardcoverAvailable?: boolean;
+    };
   };
 };
 
@@ -39,10 +49,18 @@ type GlobalSettingsApiPutResponse = {
  * This is intentionally lightweight for a starter template.
  */
 export const useGlobalSettingsStore = defineStore(
-  "globalSettings",
+  'globalSettings',
   () => {
     const settings = ref<GlobalSettings>(getDefaultSettings());
     const updatedAt = ref<Date>(new Date(0));
+
+    /**
+     * Metadata provider capabilities returned by the server.
+     * This deliberately contains NO secrets; it's safe to persist client-side.
+     */
+    const capabilities = ref<{ hardcoverAvailable: boolean }>({
+      hardcoverAvailable: false,
+    });
 
     /**
      * Apply settings coming from the server WITHOUT triggering a push.
@@ -57,8 +75,8 @@ export const useGlobalSettingsStore = defineStore(
       const d =
         remoteUpdatedAt instanceof Date
           ? remoteUpdatedAt
-          : typeof remoteUpdatedAt === "string" ||
-              typeof remoteUpdatedAt === "number"
+          : typeof remoteUpdatedAt === 'string' ||
+              typeof remoteUpdatedAt === 'number'
             ? new Date(remoteUpdatedAt)
             : new Date();
       updatedAt.value = Number.isNaN(d.getTime()) ? new Date() : d;
@@ -72,11 +90,16 @@ export const useGlobalSettingsStore = defineStore(
       const { session } = useAuth();
       if (!session.value) return;
 
-      const res = await $fetch<GlobalSettingsApiGetResponse>("/api/settings", {
-        method: "GET",
+      const res = await $fetch<GlobalSettingsApiGetResponse>('/api/settings', {
+        method: 'GET',
       });
 
       if (!res?.success) return;
+
+      // Capabilities (safe, non-secret flags from server)
+      capabilities.value = {
+        hardcoverAvailable: !!res.data?.capabilities?.hardcoverAvailable,
+      };
 
       const remote = res.data?.globalSettings;
       if (!remote) return;
@@ -98,8 +121,8 @@ export const useGlobalSettingsStore = defineStore(
       const { isAdmin } = useAuth();
       if (!isAdmin.value) return;
 
-      await $fetch<GlobalSettingsApiPutResponse>("/api/settings/global", {
-        method: "PUT",
+      await $fetch<GlobalSettingsApiPutResponse>('/api/settings/global', {
+        method: 'PUT',
         body: {
           settings: settings.value,
         },
@@ -114,6 +137,7 @@ export const useGlobalSettingsStore = defineStore(
     return {
       settings,
       updatedAt,
+      capabilities,
       applyRemoteSettings,
       pullLatest,
       updateSettings,

@@ -1,10 +1,26 @@
 # Metadata Fetcher
 
-The metadata fetcher feature allows administrators to search for and import book metadata from external sources, starting with the Google Books API.
+The metadata fetcher feature allows administrators to search for and import book metadata from external sources.
+
+Currently supported sources:
+- Google Books (public API)
+- Hardcover (GraphQL API; requires an admin-configured token stored server-side)
 
 ## Overview
 
-When editing a book, administrators can search for and import metadata from Google's public Books API. The interface allows selective import of individual fields (title, authors, description, publisher, published date, language, tags/categories, and cover image) via checkboxes, giving users full control over what metadata to update.
+When editing a book, administrators can search for and import metadata from external sources. The interface allows selective import of individual fields (title, authors, description, publisher, published date, language, tags/categories, and cover image) via checkboxes, giving users full control over what metadata to update.
+
+## Provider Selection
+
+### Multi-provider search (modal toggles)
+
+The metadata search modal supports enabling one or more providers at the same time (currently Google Books and Hardcover). Provider selection is controlled by toggles under the search bar.
+
+This selection is remembered per-user.
+
+### Hardcover availability
+
+Hardcover is only selectable when the server has a configured Hardcover token. If not configured, the Hardcover toggle is shown as disabled (“not configured”).
 
 ## How to Use
 
@@ -26,6 +42,12 @@ When editing a book, administrators can search for and import metadata from Goog
 - ✅ Checkbox-based field selection for each result
 - ✅ Import button with visual feedback when fields are selected
 - ✅ Support for importing: title, authors, description, publisher, published date, language, tags/categories, and cover
+
+### Hardcover (Provider Setup + Server Proxy)
+- ✅ Server-side Hardcover GraphQL search endpoint
+- ✅ Admin UI for configuring Hardcover token (stored server-side; never returned to clients)
+- ✅ Metadata search modal provider toggle (disabled unless token is configured)
+- ✅ Multi-provider search (search Google Books and Hardcover together)
 
 ### Phase 2: Backend Import Logic (In Progress)
 - ⏳ Map Google Books data to internal book schema
@@ -53,6 +75,12 @@ When editing a book, administrators can search for and import metadata from Goog
 - GET endpoint accepting `q` query parameter
 - Returns raw Google Books API response
 - Maximum 20 results per search
+
+**API Endpoint: `/api/books/metadata/hardcover/search`**
+- Server-side proxy to Hardcover GraphQL API
+- GET endpoint accepting `q` query parameter
+- Requires a Hardcover token configured by an admin (stored server-side)
+- Returns mapped results (best-effort) derived from Hardcover’s `search.results` payload
 
 ### Google Books API Response Structure
 
@@ -105,9 +133,13 @@ The following Google Books API fields map to the internal schema:
 
 ### Security Considerations
 
-- The API endpoint is server-side to avoid CORS issues and potential rate limiting
-- No API key is currently required for Google Books API public access
-- The endpoint does not require authentication (relies on page-level auth)
+- Metadata endpoints are server-side to avoid CORS issues and to keep provider details off the client.
+- Google Books does not require an API key for basic usage.
+- Hardcover requires a bearer token.
+
+#### Hardcover token storage (server-side only)
+
+Delb stores the Hardcover token server-side and never returns it to clients. The client only receives a non-secret capability flag indicating whether Hardcover is available, which is used to enable/disable the Hardcover provider toggle in the metadata search modal.
 
 ## Future Enhancements
 
@@ -122,23 +154,34 @@ The following Google Books API fields map to the internal schema:
 
 To test the metadata fetcher:
 
+### Google Books
 1. Start the development server: `pnpm run dev`
 2. Log in as an admin user
 3. Navigate to any book's edit page
-4. Click the "Search for Metadata (Google Books)" button at the bottom
+4. Click the "Search for Metadata" button at the bottom
 5. Try searching for:
    - The current book title (auto-filled)
    - An ISBN (e.g., "9780593820247")
    - An author name (e.g., "Matt Dinniman")
    - A different book title (e.g., "Dungeon Crawler Carl")
 6. Verify that results display correctly with thumbnails and metadata
-7. Check/uncheck various field checkboxes on a result
-8. Verify the "Import Selected Fields" button is disabled when no fields are selected
-9. Select some fields and click "Import Selected Fields"
-10. Check the browser console for the logged import data
+
+### Hardcover (token + endpoint)
+1. Log in as an admin user
+2. Go to Admin Settings → Metadata
+3. Paste your Hardcover token (raw token or `Bearer <token>`) and click “save”
+4. In a browser (while logged in), request:
+   - `/api/books/metadata/hardcover/search?q=The%20Hobbit`
+5. Verify you receive a successful response containing a `data.results` array
+
+If the endpoint returns an error indicating the token is not configured, confirm the token was saved and that the server is reading it from server-side storage.
 
 ## Related Files
 
 - `/app/pages/books/[id]/edit.vue` - Edit book page with metadata search button
 - `/app/components/BookMetadataSearchModal.vue` - Search modal component
 - `/server/api/books/metadata/search.get.ts` - API endpoint for Google Books search
+- `/server/api/books/metadata/hardcover/search.get.ts` - API endpoint for Hardcover search (GraphQL proxy)
+- `/server/api/settings/admin/hardcover-token.put.ts` - Admin-only endpoint to set/clear Hardcover token (server-side)
+- `/app/components/Settings/SettingsAdminMetadata.vue` - Admin UI for metadata provider settings + Hardcover token (server-side)
+- `/app/components/BookMetadataSearchModal.vue` - Multi-provider search toggles (remembered per-user)
