@@ -584,6 +584,7 @@ function getIndustryIdentifiers(
   item: GoogleBookItem,
 ): Array<{ type: string; identifier: string }> {
   const ids = item.volumeInfo.industryIdentifiers ?? [];
+  console.log(ids);
   return ids
     .map((x) => ({
       type: (x.type ?? '').toString().trim(),
@@ -775,10 +776,8 @@ function getThumbnail(item: GoogleBookItem): string {
                     class="h-4 w-4 mt-0.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                   ></span>
                   <div class="flex-1 min-w-0">
-                    <div
-                      v-tooltip="'Title'"
-                      class="text-lg font-semibold truncate"
-                    >
+                    <div class="text-lg font-semibold truncate">
+                      <span class="text-xs opacity-70">Title:</span>
                       {{ result.googleItem.volumeInfo.title }}
                     </div>
                   </div>
@@ -808,10 +807,49 @@ function getThumbnail(item: GoogleBookItem): string {
                     class="h-4 w-4 mt-0.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                   ></span>
                   <div class="flex-1 min-w-0">
-                    <div class="text-sm opacity-70 truncate">
+                    <div class="text-sm truncate">
+                      <span class="text-xs opacity-60">Authors:</span>
                       {{ result.googleItem.volumeInfo.authors.join(', ') }}
                     </div>
                   </div>
+                </label>
+
+                <!-- Publisher -->
+                <label
+                  v-if="result.googleItem?.volumeInfo.publisher"
+                  class="flex items-center gap-2 cursor-pointer text-xs"
+                >
+                  <input
+                    v-model="getFields(resultKey(result)).publisher"
+                    type="checkbox"
+                    class="peer sr-only"
+                  />
+                  <span
+                    class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                  ></span>
+                  <span class="opacity-60"
+                    >Publisher:
+                    {{ result.googleItem.volumeInfo.publisher }}</span
+                  >
+                </label>
+
+                <!-- Published Date -->
+                <label
+                  v-if="result.googleItem?.volumeInfo.publishedDate"
+                  class="flex items-center gap-2 cursor-pointer"
+                >
+                  <input
+                    v-model="getFields(resultKey(result)).published"
+                    type="checkbox"
+                    class="peer sr-only"
+                  />
+                  <span
+                    class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                  ></span>
+                  <span class="opacity-60 text-xs"
+                    >Published:
+                    {{ result.googleItem.volumeInfo.publishedDate }}</span
+                  >
                 </label>
 
                 <div
@@ -821,69 +859,30 @@ function getThumbnail(item: GoogleBookItem): string {
                   {{ result.authors.join(', ') }}
                 </div>
 
-                <!-- Publisher / Published / Language / Series / Identifiers -->
-                <div
-                  v-if="result.googleItem"
-                  class="flex flex-wrap gap-x-3 gap-y-1 text-xs"
+                <!-- Language -->
+                <label
+                  v-if="result.googleItem?.volumeInfo.language"
+                  class="flex items-center gap-2 cursor-pointer"
                 >
-                  <!-- Publisher -->
-                  <label
-                    v-if="result.googleItem.volumeInfo.publisher"
-                    class="flex items-center gap-2 cursor-pointer"
+                  <input
+                    v-model="getFields(resultKey(result)).language"
+                    type="checkbox"
+                    class="peer sr-only"
+                  />
+                  <span
+                    class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                  ></span>
+                  <span class="opacity-60 text-xs"
+                    >Language: {{ result.googleItem.volumeInfo.language }}</span
                   >
-                    <input
-                      v-model="getFields(resultKey(result)).publisher"
-                      type="checkbox"
-                      class="peer sr-only"
-                    />
-                    <span
-                      class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
-                    ></span>
-                    <span class="opacity-60">{{
-                      result.googleItem.volumeInfo.publisher
-                    }}</span>
-                  </label>
+                </label>
 
-                  <!-- Published Date -->
-                  <label
-                    v-if="result.googleItem.volumeInfo.publishedDate"
-                    class="flex items-center gap-2 cursor-pointer"
-                  >
-                    <input
-                      v-model="getFields(resultKey(result)).published"
-                      type="checkbox"
-                      class="peer sr-only"
-                    />
-                    <span
-                      class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
-                    ></span>
-                    <span class="opacity-60">{{
-                      result.googleItem.volumeInfo.publishedDate
-                    }}</span>
-                  </label>
-
-                  <!-- Language -->
-                  <label
-                    v-if="result.googleItem.volumeInfo.language"
-                    class="flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <input
-                      v-model="getFields(resultKey(result)).language"
-                      type="checkbox"
-                      class="peer sr-only"
-                    />
-                    <span
-                      class="h-3.5 w-3.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
-                    ></span>
-                    <span class="opacity-60"
-                      >Lang: {{ result.googleItem.volumeInfo.language }}</span
-                    >
-                  </label>
-
+                <!-- Series & Series Index -->
+                <div class="flex gap-2">
                   <!-- Series -->
                   <label
-                    v-if="result.googleItem.volumeInfo.series"
-                    class="flex items-center gap-1.5 cursor-pointer"
+                    v-if="result.googleItem?.volumeInfo.series"
+                    class="flex items-center gap-2 cursor-pointer"
                   >
                     <input
                       v-model="getFields(resultKey(result)).series"
@@ -891,20 +890,20 @@ function getThumbnail(item: GoogleBookItem): string {
                       class="peer sr-only"
                     />
                     <span
-                      class="h-3.5 w-3.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                      class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                     ></span>
-                    <span class="opacity-60"
+                    <span class="opacity-60 text-xs"
                       >Series: {{ result.googleItem.volumeInfo.series }}</span
                     >
                   </label>
 
-                  <!-- Series Index -->
+                  <!-- Series Index-->
                   <label
                     v-if="
-                      typeof result.googleItem.volumeInfo.seriesIndex ===
+                      typeof result.googleItem?.volumeInfo.seriesIndex ===
                       'number'
                     "
-                    class="flex items-center gap-1.5 cursor-pointer"
+                    class="flex items-center gap-2 cursor-pointer"
                   >
                     <input
                       v-model="getFields(resultKey(result)).seriesIndex"
@@ -914,54 +913,69 @@ function getThumbnail(item: GoogleBookItem): string {
                     <span
                       class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                     ></span>
-                    <span class="opacity-60"
+                    <span class="opacity-60 text-xs"
                       >#{{ result.googleItem.volumeInfo.seriesIndex }}</span
                     >
                   </label>
-
-                  <!-- Identifiers (industryIdentifiers[]) -->
-                  <label
-                    v-if="
-                      result.googleItem.volumeInfo.industryIdentifiers &&
-                      result.googleItem.volumeInfo.industryIdentifiers.length
-                    "
-                    class="flex items-center gap-2 cursor-pointer"
-                  >
-                    <input
-                      v-model="getFields(resultKey(result)).identifiers"
-                      type="checkbox"
-                      class="peer sr-only"
-                    />
-                    <span
-                      class="h-4 w-4 mt-0.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
-                    ></span>
-                    <span class="opacity-60">
-                      {{ formatIndustryIdentifiers(result.googleItem) }}
-                    </span>
-                  </label>
-                  <span v-else class="opacity-60"> Identifiers: N/A </span>
-
-                  <!-- Pages (pageCount) -->
-                  <label
-                    v-if="
-                      typeof result.googleItem.volumeInfo.pageCount === 'number'
-                    "
-                    class="flex items-center gap-2 cursor-pointer"
-                  >
-                    <input
-                      v-model="getFields(resultKey(result)).pages"
-                      type="checkbox"
-                      class="peer sr-only"
-                    />
-                    <span
-                      class="h-4 w-4 mt-0.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
-                    ></span>
-                    <span class="opacity-60">
-                      Pages: {{ result.googleItem.volumeInfo.pageCount }}
-                    </span>
-                  </label>
-                  <span v-else class="opacity-60"> Pages: N/A </span>
                 </div>
+
+                <!-- Identifiers (industryIdentifiers[]) -->
+                <label
+                  v-if="
+                    result.googleItem?.volumeInfo.industryIdentifiers &&
+                    result.googleItem?.volumeInfo.industryIdentifiers.length
+                  "
+                  class="flex items-center gap-2 cursor-pointer"
+                >
+                  <input
+                    v-model="getFields(resultKey(result)).identifiers"
+                    type="checkbox"
+                    class="peer sr-only"
+                  />
+                  <span
+                    class="h-4 w-4 mt-0.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                  ></span>
+                  <span
+                    class="flex flex-wrap items-center gap-2 opacity-60 text-xs"
+                  >
+                    <span> Identfiers: </span>
+                    <span class="flex flex-wrap gap-2">
+                      <span
+                        v-for="id in result.googleItem.volumeInfo
+                          .industryIdentifiers"
+                        :key="id.identifier"
+                        class="border px-2 py-1 rounded-md"
+                      >
+                        <span class="border-r pr-1">{{ id.type }}</span>
+                        <span class="pl-1">{{ id.identifier }}</span>
+                      </span>
+                    </span>
+                  </span>
+                </label>
+                <span v-else class="opacity-60 text-xs">
+                  Identifiers: N/A
+                </span>
+
+                <!-- Pages (pageCount) -->
+                <label
+                  v-if="
+                    typeof result.googleItem?.volumeInfo.pageCount === 'number'
+                  "
+                  class="flex items-center gap-2 cursor-pointer"
+                >
+                  <input
+                    v-model="getFields(resultKey(result)).pages"
+                    type="checkbox"
+                    class="peer sr-only"
+                  />
+                  <span
+                    class="h-4 w-4 mt-0.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                  ></span>
+                  <span class="opacity-60 text-xs">
+                    Pages: {{ result.googleItem.volumeInfo.pageCount }}
+                  </span>
+                </label>
+                <span v-else class="opacity-60 text-xs"> Pages: N/A </span>
 
                 <!-- Categories/Tags -->
                 <label
@@ -980,17 +994,17 @@ function getThumbnail(item: GoogleBookItem): string {
                     class="h-4 w-4 mt-0.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                   ></span>
                   <div class="flex-1 min-w-0">
-                    <div
-                      class="text-xs opacity-60 flex items-center gap-2 flex-wrap"
-                    >
-                      Tags:
-                      <span
-                        v-for="(tag, index) in result.googleItem.volumeInfo
-                          .categories"
-                        :key="index"
-                        class="border rounded p-1"
-                        >{{ tag }}</span
-                      >
+                    <div class="text-xs opacity-60 flex items-center gap-2">
+                      <span> Tags: </span>
+                      <span class="flex flex-wrap gap-2">
+                        <span
+                          v-for="(tag, index) in result.googleItem.volumeInfo
+                            .categories"
+                          :key="index"
+                          class="border rounded p-1"
+                          >{{ tag }}</span
+                        >
+                      </span>
                     </div>
                   </div>
                 </label>
@@ -1009,7 +1023,8 @@ function getThumbnail(item: GoogleBookItem): string {
                     class="h-4 w-4 mt-0.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                   ></span>
                   <div class="flex-1 min-w-0">
-                    <div class="text-xs opacity-70">
+                    <div class="text-xs opacity-60 flex gap-2">
+                      <span>Description:</span>
                       {{ result.googleItem.volumeInfo.description }}
                     </div>
                   </div>

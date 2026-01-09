@@ -643,17 +643,18 @@ watch(
               class="grid grid-cols-[110px_1fr] gap-2"
             >
               <div class="opacity-70">Identifiers</div>
-              <div class="min-w-0 break-all opacity-80">
-                {{
-                  book.identifiers
-                    .map((i) => {
-                      const t = (i.type || '').trim();
-                      const v = (i.value || '').trim();
-                      return t && v ? `${t}: ${v}` : v || t;
-                    })
-                    .filter(Boolean)
-                    .join(' • ')
-                }}
+              <div class="min-w-0 flex flex-wrap gap-2">
+                <span
+                  v-for="(id, index) in book.identifiers"
+                  :key="index"
+                  class="border border-(--sub-color) px-2 py-1 rounded-md"
+                  ><span v-if="id.type && id.value"
+                    ><span class="border-r border-(--sub-color) pr-1">
+                      {{ id.type }}
+                    </span>
+                    <span class="pl-1">{{ id.value }}</span>
+                  </span>
+                </span>
               </div>
             </div>
           </div>
