@@ -38,6 +38,7 @@ type Book = {
   description?: string | null;
   published?: string | null;
   language?: string | null;
+  pages?: number | null;
 
   createdAt: string | number | Date;
 };
@@ -585,7 +586,7 @@ watch(
             <div class="grid grid-cols-[110px_1fr] gap-2">
               <div class="opacity-70">Publisher</div>
               <div class="min-w-0">
-                {{ book.publisher?.name ?? 'Unknown' }}
+                {{ book.publisher?.name ?? '' }}
               </div>
             </div>
 
@@ -599,6 +600,11 @@ watch(
             <div v-if="book.language" class="grid grid-cols-[110px_1fr] gap-2">
               <div class="opacity-70">Language</div>
               <div class="min-w-0">{{ book.language }}</div>
+            </div>
+
+            <div v-if="book.pages" class="grid grid-cols-[110px_1fr] gap-2">
+              <div class="opacity-70">Pages</div>
+              <div class="min-w-0">{{ book.pages }}</div>
             </div>
 
             <div class="grid grid-cols-[110px_1fr] gap-2">
