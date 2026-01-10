@@ -350,7 +350,7 @@ onBeforeUnmount(() => {
     @click="closeModal"
   >
     <div
-      class="flex flex-col backdrop-blur-lg bg-(--bg-color)/80 w-[720px] h-[600px] m-4 rounded-lg shadow-lg font-mono border border-(--sub-color)"
+      class="flex flex-col backdrop-blur-lg bg-(--bg-color)/80 w-[720px] h-[600px] m-4 md:max-w-[80%] lg:max-w-[60%] rounded-lg shadow-lg border border-(--sub-color) overflow-hidden"
       @click.stop
     >
       <div
@@ -434,7 +434,7 @@ onBeforeUnmount(() => {
                 />
                 <BookCover
                   v-else
-                  class="w-auto! aspect-2/3!"
+                  class="w-auto! aspect-2/3! shrink-0"
                   :src="coverThumbUrl(item.coverImagePath || '')"
                 />
                 <div class="flex flex-col min-w-0">
