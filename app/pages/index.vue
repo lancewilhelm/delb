@@ -491,10 +491,6 @@ onMounted(async () => {
             <!-- Authors -->
             <div v-if="uiStore.libraryView === 'authors'">
               <div class="flex items-center justify-between gap-3">
-                <div class="text-2xl font-serif text-(--main-color)">
-                  Authors
-                </div>
-
                 <input
                   v-model="authorQuery"
                   class="px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm w-56"
@@ -527,7 +523,7 @@ onMounted(async () => {
                   <div class="min-w-0">
                     <NuxtLink
                       :to="`/authors/${a.id}`"
-                      class="truncate hover:underline text-(--main-color)"
+                      class="truncate hover:underline"
                     >
                       {{ a.name }}
                     </NuxtLink>
@@ -542,10 +538,6 @@ onMounted(async () => {
             <!-- Series -->
             <div v-else-if="uiStore.libraryView === 'series'">
               <div class="flex items-center justify-between gap-3">
-                <div class="text-2xl font-serif text-(--main-color)">
-                  Series
-                </div>
-
                 <input
                   v-model="seriesQuery"
                   class="px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm w-56"
@@ -593,10 +585,6 @@ onMounted(async () => {
             <!-- Publishers -->
             <div v-else-if="uiStore.libraryView === 'publishers'">
               <div class="flex items-center justify-between gap-3">
-                <div class="text-2xl font-serif text-(--main-color)">
-                  Publishers
-                </div>
-
                 <input
                   v-model="publisherQuery"
                   class="px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm w-56"
