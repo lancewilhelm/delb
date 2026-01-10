@@ -22,9 +22,6 @@ definePageMeta({
   ],
 });
 
-// Upload modal (wired to the AppHeader upload icon)
-const uploadModalOpen = ref(false);
-
 // Compute the current page based on the route parameter
 const route = useRoute();
 const currentPageName = computed(() =>

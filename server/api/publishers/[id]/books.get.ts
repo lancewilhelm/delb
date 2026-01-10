@@ -1,5 +1,5 @@
-import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
-import { cloudDb } from "~~/server/utils/db/cloud";
+import { and, desc, eq, inArray, lt, or } from 'drizzle-orm';
+import { cloudDb } from '~~/server/utils/db/cloud';
 import {
   authors,
   bookAuthors,
@@ -8,9 +8,9 @@ import {
   collectionMembers,
   publishers,
   series,
-} from "~/utils/db/schema";
-import { logger } from "~/utils/logger";
-import { auth } from "~/utils/auth";
+} from '~/utils/db/schema';
+import { logger } from '~/utils/logger';
+import { auth } from '~/utils/auth';
 
 /**
  * GET /api/publishers/:id/books?collectionId=<optional>&limit=<n>&cursor=<opaque>
@@ -29,6 +29,9 @@ import { auth } from "~/utils/auth";
  * Response shape mirrors GET /api/books (list) enough for reuse in the UI:
  * - includes `authors` ({id,name}[]) + `authorNames` + legacy `author`
  * - includes `publisher` ({id,name}|null) and `series` ({id,name}|null)
+ *
+ * Additionally returns:
+ * - `publisher`: { id, name }
  */
 type Cursor = {
   createdAt: string;
@@ -39,22 +42,22 @@ function clampInt(
   input: unknown,
   opts: { min: number; max: number; fallback: number },
 ): number {
-  const n = Number.parseInt((input ?? "").toString(), 10);
+  const n = Number.parseInt((input ?? '').toString(), 10);
   if (!Number.isFinite(n)) return opts.fallback;
   return Math.max(opts.min, Math.min(opts.max, n));
 }
 
 function encodeCursor(c: Cursor): string {
-  return Buffer.from(JSON.stringify(c), "utf8").toString("base64url");
+  return Buffer.from(JSON.stringify(c), 'utf8').toString('base64url');
 }
 
 function decodeCursor(raw: unknown): Cursor | null {
-  if (typeof raw !== "string" || !raw.trim()) return null;
+  if (typeof raw !== 'string' || !raw.trim()) return null;
   try {
-    const json = Buffer.from(raw, "base64url").toString("utf8");
+    const json = Buffer.from(raw, 'base64url').toString('utf8');
     const parsed = JSON.parse(json) as Partial<Cursor>;
-    const createdAt = (parsed.createdAt ?? "").toString().trim();
-    const id = (parsed.id ?? "").toString().trim();
+    const createdAt = (parsed.createdAt ?? '').toString().trim();
+    const id = (parsed.id ?? '').toString().trim();
     if (!createdAt || !id) return null;
     const t = new Date(createdAt).getTime();
     if (!Number.isFinite(t)) return null;
@@ -65,7 +68,7 @@ function decodeCursor(raw: unknown): Cursor | null {
 }
 
 export default defineEventHandler(async (event) => {
-  logger.debug("GET /api/publishers/:id/books");
+  logger.debug('GET /api/publishers/:id/books');
 
   const session = await auth.api.getSession({
     headers: event.headers,
@@ -73,15 +76,15 @@ export default defineEventHandler(async (event) => {
 
   if (!session) {
     setResponseStatus(event, 401);
-    return { success: false, message: "Unauthorized" };
+    return { success: false, message: 'Unauthorized' };
   }
 
   const userId = session.user.id;
 
-  const publisherId = getRouterParam(event, "id");
+  const publisherId = getRouterParam(event, 'id');
   if (!publisherId) {
     setResponseStatus(event, 400);
-    return { success: false, message: "Missing publisher id" };
+    return { success: false, message: 'Missing publisher id' };
   }
 
   const q = getQuery(event) as {
@@ -95,17 +98,19 @@ export default defineEventHandler(async (event) => {
   const cursor = decodeCursor(q.cursor);
 
   try {
-    // Confirm publisher exists (nice UX). Still avoids leaking books the user can't access.
-    const publisherExists = await cloudDb
-      .select({ id: publishers.id })
+    // Fetch publisher metadata (nice UX). Still avoids leaking books the user can't access.
+    const publisherRow = await cloudDb
+      .select({ id: publishers.id, name: publishers.name })
       .from(publishers)
       .where(eq(publishers.id, publisherId))
       .limit(1);
 
-    if (!publisherExists.length) {
+    const publisher = publisherRow[0] ?? null;
+
+    if (!publisher) {
       throw createError({
         statusCode: 404,
-        statusMessage: "Publisher not found",
+        statusMessage: 'Publisher not found',
       });
     }
 
@@ -120,7 +125,7 @@ export default defineEventHandler(async (event) => {
     ).filter(Boolean);
 
     if (!memberCollectionIds.length) {
-      return { success: true, data: { books: [] } };
+      return { success: true, data: { publisher, books: [] } };
     }
 
     // 2) Apply optional collection scope
@@ -132,7 +137,7 @@ export default defineEventHandler(async (event) => {
 
     // If a specific collection was requested but user isn't a member, return empty
     if (!targetCollectionIds.length) {
-      return { success: true, data: { books: [] } };
+      return { success: true, data: { publisher, books: [] } };
     }
 
     // 3) Get visible book ids from those collections
@@ -146,7 +151,7 @@ export default defineEventHandler(async (event) => {
     ).filter(Boolean);
 
     if (!visibleBookIds.length) {
-      return { success: true, data: { books: [] } };
+      return { success: true, data: { publisher, books: [] } };
     }
 
     // 4) Page query: visible books from this publisher in the scoped collections.
@@ -176,10 +181,13 @@ export default defineEventHandler(async (event) => {
 
     const rows = pageRows
       .map((r) => r.book)
-      .filter((b): b is NonNullable<(typeof books)["$inferSelect"]> => !!b);
+      .filter((b): b is NonNullable<(typeof books)['$inferSelect']> => !!b);
 
     if (!rows.length) {
-      return { success: true, data: { books: [], nextCursor: null } };
+      return {
+        success: true,
+        data: { publisher, books: [], nextCursor: null },
+      };
     }
 
     const hasMore = rows.length > limit;
@@ -231,27 +239,20 @@ export default defineEventHandler(async (event) => {
 
     const seriesById = new Map(seriesRows.map((s) => [s.id, s]));
 
-    const publisherRow = (
-      await cloudDb
-        .select({ id: publishers.id, name: publishers.name })
-        .from(publishers)
-        .where(eq(publishers.id, publisherId))
-        .limit(1)
-    )[0];
-
-    const publisherOut = publisherRow ?? null;
+    // Reuse publisher metadata already fetched at the top of the handler.
+    const publisherOut = publisher;
 
     const out = page.map((b) => {
       const links = (linksByBookId.get(b.id) ?? []).slice();
       links.sort((a, c) => {
-        const aPos = typeof a.position === "number" ? a.position : 10_000;
-        const cPos = typeof c.position === "number" ? c.position : 10_000;
+        const aPos = typeof a.position === 'number' ? a.position : 10_000;
+        const cPos = typeof c.position === 'number' ? c.position : 10_000;
         return aPos - cPos;
       });
 
       const authorNames = links
         .map((l) => (l.authorId ? authorNameById.get(l.authorId) : undefined))
-        .filter((n): n is string => typeof n === "string" && n.length > 0);
+        .filter((n): n is string => typeof n === 'string' && n.length > 0);
 
       const authorsOut = links
         .map((l) => {
@@ -261,7 +262,7 @@ export default defineEventHandler(async (event) => {
         })
         .filter(
           (a): a is { id: string; name: string } =>
-            !!a && typeof a.id === "string" && typeof a.name === "string",
+            !!a && typeof a.id === 'string' && typeof a.name === 'string',
         );
 
       // Back-compat: keep the first author in `author`
@@ -290,22 +291,22 @@ export default defineEventHandler(async (event) => {
           })
         : null;
 
-    return { success: true, data: { books: out, nextCursor } };
+    return { success: true, data: { publisher, books: out, nextCursor } };
   } catch (error: unknown) {
     // Preserve explicit HTTP errors (401/400/404) thrown above
     if (
-      typeof error === "object" &&
+      typeof error === 'object' &&
       error !== null &&
-      "statusCode" in error &&
+      'statusCode' in error &&
       (error as { statusCode?: unknown }).statusCode
     ) {
       throw error;
     }
 
-    logger.error(error, "GET /api/publishers/:id/books: failed");
+    logger.error(error, 'GET /api/publishers/:id/books: failed');
     throw createError({
       statusCode: 500,
-      statusMessage: "Failed to fetch publisher books",
+      statusMessage: 'Failed to fetch publisher books',
     });
   }
 });

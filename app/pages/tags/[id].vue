@@ -15,8 +15,15 @@ type FetchErrorLike = {
 const route = useRoute();
 const collectionsStore = useCollectionsStore();
 
-const publisherParam = computed(() => String(route.params.id || '').trim());
-const publisherId = computed(() => decodeURIComponent(publisherParam.value));
+const tagParam = computed(() => String(route.params.id || '').trim());
+const tagId = computed(() => decodeURIComponent(tagParam.value));
+
+const errorMessage = ref<string | null>(null);
+const tagName = ref<string>('Tag');
+const bookCount = ref<number>(0);
+
+// Used to force-recreate the BooksInfiniteGrid (scope changes, navigation, etc.)
+const gridKey = ref(0);
 
 const activeCollectionId = computed<string | undefined>(() => {
   if (
@@ -28,20 +35,13 @@ const activeCollectionId = computed<string | undefined>(() => {
   return undefined;
 });
 
-// Keep the grid stable; force reload on collection scope change if desired later.
-const gridEndpoint = computed(
-  () => `/api/publishers/${encodeURIComponent(publisherId.value)}/books`,
-);
-
-const errorMessage = ref<string | null>(null);
-const publisherName = ref<string>('Publisher');
-
-useHead({
-  title: `${publisherName.value} · Publisher`,
+const endpoint = computed(() => {
+  if (!tagId.value) return '/api/books';
+  return `/api/tags/${encodeURIComponent(tagId.value)}/books`;
 });
 
 async function refreshHeaderName() {
-  if (!publisherId.value) return;
+  if (!tagId.value) return;
 
   // Ensure collections are loaded so scoped queries work
   if (!collectionsStore.collections.length) {
@@ -52,35 +52,33 @@ async function refreshHeaderName() {
     const query: Record<string, string | number> = { limit: 1 };
     if (activeCollectionId.value) query.collectionId = activeCollectionId.value;
 
-    // Prefer explicit publisher metadata returned by the API.
+    // Prefer explicit tag metadata returned by the API.
     const res = await $fetch<{
       data?: {
-        publisher?: { id: string; name: string } | null;
+        tag?: { id: string; name: string } | null;
       };
-    }>(gridEndpoint.value, {
+    }>(endpoint.value, {
       method: 'GET',
       query,
     });
 
-    if (res?.data?.publisher?.name) {
-      publisherName.value = res.data.publisher.name;
-    } else if (publisherId.value.startsWith('name:')) {
-      const raw = publisherId.value.slice('name:'.length);
-      publisherName.value = raw || 'Publisher';
+    if (res?.data?.tag?.name) {
+      tagName.value = res.data.tag.name;
+    } else if (tagId.value.startsWith('name:')) {
+      const raw = tagId.value.slice('name:'.length);
+      tagName.value = raw || 'Tag';
     } else {
-      publisherName.value = 'Publisher';
+      tagName.value = 'Tag';
     }
 
-    useHead({
-      title: `${publisherName.value} · Publisher`,
-    });
+    useHead({ title: `${tagName.value} · Tag` });
   } catch (err) {
     const e = err as FetchErrorLike;
     errorMessage.value =
       e?.data?.message ||
       e?.statusMessage ||
       e?.message ||
-      'Failed to load publisher';
+      'Failed to load tag';
   }
 }
 
@@ -88,18 +86,19 @@ function handleGridError(message: string) {
   errorMessage.value = message;
 }
 
-watch(
-  () => publisherId.value,
-  async () => {
-    errorMessage.value = null;
-    await refreshHeaderName();
-  },
-);
+watch(tagId, async () => {
+  errorMessage.value = null;
+  bookCount.value = 0;
+  gridKey.value++;
+  await refreshHeaderName();
+});
 
 watch(
   () => collectionsStore.activeSelection,
   async () => {
     errorMessage.value = null;
+    bookCount.value = 0;
+    gridKey.value++;
     await refreshHeaderName();
   },
   { deep: true },
@@ -114,8 +113,8 @@ onMounted(async () => {
   <div class="flex flex-col w-full h-full overflow-hidden">
     <AppHeader class="w-full" />
 
-    <!-- Fixed header + scrollable books grid -->
-    <div class="w-full h-full overflow-hidden flex flex-col min-h-0">
+    <div class="flex-1 overflow-hidden flex flex-col min-h-0">
+      <!-- Header (non-scrolling) -->
       <div class="p-4 shrink-0">
         <div class="flex items-center gap-2 text-(--main-color)">
           <NuxtLink
@@ -127,7 +126,11 @@ onMounted(async () => {
           </NuxtLink>
 
           <div class="text-2xl font-serif truncate">
-            {{ publisherName }}
+            {{ tagName }}
+          </div>
+
+          <div class="text-sm opacity-70">
+            · {{ bookCount }} book{{ bookCount === 1 ? '' : 's' }}
           </div>
         </div>
 
@@ -136,11 +139,14 @@ onMounted(async () => {
         </div>
       </div>
 
+      <!-- Body: only the books grid scrolls -->
       <BooksInfiniteGrid
-        :endpoint="gridEndpoint"
+        :key="gridKey"
+        :endpoint="endpoint"
         :collection-id="activeCollectionId"
         class="flex-1 min-h-0"
         @error="handleGridError"
+        @update:count="(n) => (bookCount = n)"
       />
     </div>
   </div>

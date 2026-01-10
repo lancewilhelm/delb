@@ -580,43 +580,6 @@ function clearAllFields(itemKey: string) {
   fields.pages = false;
 }
 
-function getIndustryIdentifiers(
-  item: GoogleBookItem,
-): Array<{ type: string; identifier: string }> {
-  const ids = item.volumeInfo.industryIdentifiers ?? [];
-  console.log(ids);
-  return ids
-    .map((x) => ({
-      type: (x.type ?? '').toString().trim(),
-      identifier: (x.identifier ?? '').toString().trim(),
-    }))
-    .filter((x) => x.type.length > 0 && x.identifier.length > 0);
-}
-
-function formatIndustryIdentifiers(item: GoogleBookItem): string {
-  const ids = getIndustryIdentifiers(item);
-
-  if (!ids.length) return 'N/A';
-
-  // Prefer ISBNs first, then show any other identifier types.
-  const order = new Map<string, number>([
-    ['ISBN_13', 1],
-    ['ISBN_10', 2],
-    ['OTHER', 999],
-  ]);
-
-  const sorted = ids.slice().sort((a, b) => {
-    const aRank = order.get(a.type) ?? order.get('OTHER')!;
-    const bRank = order.get(b.type) ?? order.get('OTHER')!;
-    if (aRank !== bRank) return aRank - bRank;
-    return (
-      a.type.localeCompare(b.type) || a.identifier.localeCompare(b.identifier)
-    );
-  });
-
-  return sorted.map((x) => `${x.type}: ${x.identifier}`).join(' • ');
-}
-
 function getThumbnail(item: GoogleBookItem): string {
   const thumb =
     item.volumeInfo.imageLinks?.thumbnail ||

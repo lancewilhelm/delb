@@ -1,5 +1,5 @@
-import { and, eq, inArray } from "drizzle-orm";
-import { cloudDb } from "~~/server/utils/db/cloud";
+import { and, eq, inArray } from 'drizzle-orm';
+import { cloudDb } from '~~/server/utils/db/cloud';
 import {
   authors,
   bookAuthors,
@@ -8,14 +8,14 @@ import {
   collectionMembers,
   publishers,
   series,
-} from "~/utils/db/schema";
-import { logger } from "~/utils/logger";
-import { auth } from "~/utils/auth";
+} from '~/utils/db/schema';
+import { logger } from '~/utils/logger';
+import { auth } from '~/utils/auth';
 
 /**
  * GET /api/series/:id/books?collectionId=<optional>
  *
- * Returns books in a given series that the current user can access.
+ * Returns books in a given series that the current user can access, plus series metadata.
  *
  * Access control:
  * - Requires an authenticated user
@@ -25,9 +25,12 @@ import { auth } from "~/utils/auth";
  * Response shape mirrors GET /api/books (list) enough for reuse in the UI:
  * - includes `authors` ({id,name}[]) + `authorNames` + legacy `author`
  * - includes `publisher` ({id,name}|null) and `series` ({id,name}|null)
+ *
+ * Additionally returns:
+ * - `series`: { id, name }
  */
 export default defineEventHandler(async (event) => {
-  logger.debug("GET /api/series/:id/books");
+  logger.debug('GET /api/series/:id/books');
 
   const session = await auth.api.getSession({
     headers: event.headers,
@@ -35,29 +38,31 @@ export default defineEventHandler(async (event) => {
 
   if (!session) {
     setResponseStatus(event, 401);
-    return { success: false, message: "Unauthorized" };
+    return { success: false, message: 'Unauthorized' };
   }
 
   const userId = session.user.id;
 
-  const seriesId = getRouterParam(event, "id");
+  const seriesId = getRouterParam(event, 'id');
   if (!seriesId) {
     setResponseStatus(event, 400);
-    return { success: false, message: "Missing series id" };
+    return { success: false, message: 'Missing series id' };
   }
 
   const { collectionId } = getQuery(event) as { collectionId?: string };
 
   try {
-    // Confirm series exists (nice UX). Still avoids leaking books the user can't access.
-    const seriesExists = await cloudDb
-      .select({ id: series.id })
+    // Fetch series metadata (nice UX). Still avoids leaking books the user can't access.
+    const seriesRow = await cloudDb
+      .select({ id: series.id, name: series.name })
       .from(series)
       .where(eq(series.id, seriesId))
       .limit(1);
 
-    if (!seriesExists.length) {
-      throw createError({ statusCode: 404, statusMessage: "Series not found" });
+    const seriesMeta = seriesRow[0] ?? null;
+
+    if (!seriesMeta) {
+      throw createError({ statusCode: 404, statusMessage: 'Series not found' });
     }
 
     // 1) Determine which collections the user can see
@@ -71,7 +76,7 @@ export default defineEventHandler(async (event) => {
     ).filter(Boolean);
 
     if (!memberCollectionIds.length) {
-      return { success: true, data: { books: [] } };
+      return { success: true, data: { series: seriesMeta, books: [] } };
     }
 
     // 2) Apply optional collection scope
@@ -83,7 +88,7 @@ export default defineEventHandler(async (event) => {
 
     // If a specific collection was requested but user isn't a member, return empty
     if (!targetCollectionIds.length) {
-      return { success: true, data: { books: [] } };
+      return { success: true, data: { series: seriesMeta, books: [] } };
     }
 
     // 3) Get visible book ids from those collections
@@ -97,17 +102,19 @@ export default defineEventHandler(async (event) => {
     ).filter(Boolean);
 
     if (!visibleBookIds.length) {
-      return { success: true, data: { books: [] } };
+      return { success: true, data: { series: seriesMeta, books: [] } };
     }
 
     // 4) Fetch books in this series that are also visible in the scoped collections
     const bookRows = await cloudDb
       .select()
       .from(books)
-      .where(and(eq(books.seriesId, seriesId), inArray(books.id, visibleBookIds)));
+      .where(
+        and(eq(books.seriesId, seriesId), inArray(books.id, visibleBookIds)),
+      );
 
     if (!bookRows.length) {
-      return { success: true, data: { books: [] } };
+      return { success: true, data: { series: seriesMeta, books: [] } };
     }
 
     const bookIds = bookRows.map((b) => b.id).filter(Boolean);
@@ -166,14 +173,14 @@ export default defineEventHandler(async (event) => {
     const out = bookRows.map((b) => {
       const links = (linksByBookId.get(b.id) ?? []).slice();
       links.sort((a, c) => {
-        const aPos = typeof a.position === "number" ? a.position : 10_000;
-        const cPos = typeof c.position === "number" ? c.position : 10_000;
+        const aPos = typeof a.position === 'number' ? a.position : 10_000;
+        const cPos = typeof c.position === 'number' ? c.position : 10_000;
         return aPos - cPos;
       });
 
       const authorNames = links
         .map((l) => (l.authorId ? authorNameById.get(l.authorId) : undefined))
-        .filter((n): n is string => typeof n === "string" && n.length > 0);
+        .filter((n): n is string => typeof n === 'string' && n.length > 0);
 
       const authorsOut = links
         .map((l) => {
@@ -183,7 +190,7 @@ export default defineEventHandler(async (event) => {
         })
         .filter(
           (a): a is { id: string; name: string } =>
-            !!a && typeof a.id === "string" && typeof a.name === "string",
+            !!a && typeof a.id === 'string' && typeof a.name === 'string',
         );
 
       // Back-compat: keep the first author in `author`
@@ -210,22 +217,22 @@ export default defineEventHandler(async (event) => {
       return bTime - aTime;
     });
 
-    return { success: true, data: { books: out } };
+    return { success: true, data: { series: seriesMeta, books: out } };
   } catch (error: unknown) {
     // Preserve explicit HTTP errors (401/400/404) thrown above
     if (
-      typeof error === "object" &&
+      typeof error === 'object' &&
       error !== null &&
-      "statusCode" in error &&
+      'statusCode' in error &&
       (error as { statusCode?: unknown }).statusCode
     ) {
       throw error;
     }
 
-    logger.error(error, "GET /api/series/:id/books: failed");
+    logger.error(error, 'GET /api/series/:id/books: failed');
     throw createError({
       statusCode: 500,
-      statusMessage: "Failed to fetch series books",
+      statusMessage: 'Failed to fetch series books',
     });
   }
 });

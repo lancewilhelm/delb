@@ -31,15 +31,18 @@ const emit = defineEmits<{
 
     <!-- Right: actions -->
     <div class="flex gap-4 items-center p-4 justify-self-end app-header-right">
-      <button
-        v-tooltip="'Upload book'"
-        type="button"
+      <Icon
+        v-tooltip="'Open global search'"
+        name="lucide:search"
         class="text-(--main-color) cursor-pointer scale-125 header-icon"
-        aria-label="Upload book"
+        @click="uiStore.setGlobalSearchVisible(!uiStore.globalSearchVisible)"
+      />
+      <Icon
+        v-tooltip="'Upload book'"
+        name="lucide:upload"
+        class="text-(--main-color) cursor-pointer scale-125 header-icon"
         @click="uiStore.setBookUploadModalVisible(true)"
-      >
-        <Icon name="lucide:upload" class="pointer-events-none" />
-      </button>
+      />
       <Icon
         v-tooltip="'Open command palette'"
         name="lucide:command"

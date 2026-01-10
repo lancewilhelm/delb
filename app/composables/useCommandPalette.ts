@@ -36,6 +36,13 @@ export function useCommandPalette() {
 
   const options = ref<Option[]>([
     {
+      label: 'search',
+      icon: 'lucide:search',
+      action: () => {
+        uiStore.setGlobalSearchVisible(true);
+      },
+    },
+    {
       label: 'upload book',
       icon: 'lucide:upload',
       action: () => {

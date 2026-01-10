@@ -575,7 +575,8 @@ watch(
               <div
                 v-for="t in book.tags ?? []"
                 :key="t.id"
-                class="inline-flex items-center px-2 py-1 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-xs"
+                class="inline-flex items-center px-2 py-1 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-xs cursor-pointer"
+                @click="navigateTo(`/tags/${encodeURIComponent(t.id)}`)"
               >
                 {{ t.name }}
               </div>

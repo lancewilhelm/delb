@@ -14,6 +14,14 @@ export const useUiStore = defineStore(
     }
 
     /**
+     * Global search modal visibility
+     */
+    const globalSearchVisible = ref(false);
+    function setGlobalSearchVisible(visible: boolean) {
+      globalSearchVisible.value = visible;
+    }
+
+    /**
      * Header "View" selection state.
      * This controls *what* the user is looking at (Books/Authors/Series/Publishers).
      */
@@ -59,11 +67,15 @@ export const useUiStore = defineStore(
       leftSidebarWidthPx.value = 260;
       leftSidebarCollapsed.value = false;
       bookUploadModalVisible.value = false;
+      globalSearchVisible.value = false;
     }
 
     return {
       commandPaletteVisible,
       setCommandPaletteVisible,
+
+      globalSearchVisible,
+      setGlobalSearchVisible,
 
       libraryView,
       setLibraryView,
