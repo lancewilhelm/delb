@@ -354,18 +354,37 @@ export const userBookStatus = sqliteTable('user_book_status', {
     .$defaultFn(() => new Date()),
 });
 
-export const bookRatings = sqliteTable('book_ratings', {
-  userId: text('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  bookId: text('book_id')
-    .notNull()
-    .references(() => books.id, { onDelete: 'cascade' }),
-  rating: integer('rating').notNull(), // scale TBD (e.g. 0-10)
-  updatedAt: integer('updated_at', { mode: 'timestamp' })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
+export const bookRatings = sqliteTable(
+  'book_ratings',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    bookId: text('book_id')
+      .notNull()
+      .references(() => books.id, { onDelete: 'cascade' }),
+
+    /**
+     * User's rating for this book.
+     *
+     * Stored as an integer "half-star" scale:
+     * - 1..10 maps to 0.5..5.0 stars
+     *
+     * (Example: 7 => 3.5 stars)
+     */
+    rating: integer('rating').notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    // Enforce one rating per (user, book).
+    bookRatingsUserBookUnique: uniqueIndex('book_ratings_user_book_unique').on(
+      t.userId,
+      t.bookId,
+    ),
+  }),
+);
 
 export const bookNotes = sqliteTable('book_notes', {
   id: text('id').primaryKey(),

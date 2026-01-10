@@ -7,6 +7,7 @@ import {
   bookIdentifiers,
   bookTags,
   books,
+  bookRatings,
   collectionBooks,
   collectionMembers,
   publishers,
@@ -148,6 +149,20 @@ export default defineEventHandler(async (event) => {
       .from(bookFiles)
       .where(eq(bookFiles.bookId, id));
 
+    // Current user's rating for this book (unique per user+book)
+    const ratingRow =
+      (
+        await cloudDb
+          .select({ rating: bookRatings.rating })
+          .from(bookRatings)
+          .where(
+            and(eq(bookRatings.bookId, id), eq(bookRatings.userId, userId)),
+          )
+          .limit(1)
+      )[0] ?? null;
+
+    const userRating = ratingRow?.rating ?? null;
+
     return {
       success: true,
       data: {
@@ -157,6 +172,7 @@ export default defineEventHandler(async (event) => {
           series: seriesOut,
           tags: bookTagsOut,
           identifiers: bookIdentifiersOut,
+          userRating,
         },
         authors: bookAuthorsOut,
         files,

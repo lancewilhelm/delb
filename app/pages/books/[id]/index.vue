@@ -16,6 +16,12 @@ type Book = {
   title: string;
   coverImagePath?: string | null;
 
+  /**
+   * Per-user rating for this book.
+   * Stored as integer half-stars (1..10 => 0.5..5.0), or null if unset.
+   */
+  userRating?: number | null;
+
   // New schema: authors are related entities (many-to-many)
   authors?: { id: string; name: string }[];
 
@@ -77,6 +83,111 @@ const showDeleteConfirm = ref(false);
 const deleting = ref(false);
 
 const descriptionExpanded = ref(false);
+
+// ------------------------------
+// Rating (per-user, half-stars)
+// ------------------------------
+// Stored as integer half-stars (1..10). `null` means unset.
+const ratingValue = ref<number | null>(null);
+const ratingHoverValue = ref<number | null>(null);
+const ratingSaving = ref(false);
+
+const effectiveRatingValue = computed(() => {
+  return ratingHoverValue.value ?? ratingValue.value;
+});
+
+function clampHalfStarInt(v: number) {
+  if (!Number.isFinite(v)) return null;
+  const n = Math.round(v);
+  if (n < 1) return 1;
+  if (n > 10) return 10;
+  return n;
+}
+
+function ratingToStarsText(v: number | null) {
+  if (!v) return 'No rating';
+  const stars = v / 2;
+  // Keep one decimal only when needed
+  const s = Number.isInteger(stars) ? String(stars) : stars.toFixed(1);
+  return `${s} / 5`;
+}
+
+function iconForStarIndex(starIndex: number, v: number | null) {
+  // starIndex is 1..5, v is half-star int 1..10 or null
+  // NOTE: Per your spec, if there is no rating we render all as "filled" in sub color.
+  if (v == null) return 'typcn:star-full-outline';
+
+  const threshold = starIndex * 2; // full star boundary in half-star units
+  if (v >= threshold) return 'typcn:star-full-outline';
+  if (v === threshold - 1) return 'typcn:star-half-outline';
+  return 'typcn:star-outline';
+}
+
+function computeHalfStarValueFromPointer(
+  e: MouseEvent,
+  starIndex: number,
+): number | null {
+  const el = e.currentTarget as HTMLElement | null;
+  if (!el) return null;
+
+  const rect = el.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const half = x < rect.width / 2 ? 1 : 2; // left=half, right=full
+  return clampHalfStarInt(starIndex * 2 - (2 - half));
+}
+
+function onRatingMouseMove(e: MouseEvent, starIndex: number) {
+  const v = computeHalfStarValueFromPointer(e, starIndex);
+  if (v == null) return;
+  ratingHoverValue.value = v;
+}
+
+function onRatingMouseLeave() {
+  ratingHoverValue.value = null;
+}
+
+async function setRating(newRating: number | null) {
+  if (!bookId.value || ratingSaving.value) return;
+
+  ratingSaving.value = true;
+  try {
+    const res = await fetch(
+      `/api/books/${encodeURIComponent(bookId.value)}/rating`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: newRating }),
+      },
+    );
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(text || `Failed to save rating (${res.status}).`);
+    }
+
+    const json = (await res.json().catch(() => null)) as {
+      success?: boolean;
+      data?: { rating?: number | null };
+    } | null;
+
+    // Server returns half-star int or null
+    const saved = (json?.data?.rating ?? null) as number | null;
+
+    ratingValue.value = saved;
+    if (book.value) book.value.userRating = saved;
+  } finally {
+    ratingSaving.value = false;
+  }
+}
+
+async function onRatingClick(e: MouseEvent, starIndex: number) {
+  const v = computeHalfStarValueFromPointer(e, starIndex);
+  if (v == null) return;
+
+  // Clicking the same value toggles it off (clear)
+  const next = ratingValue.value === v ? null : v;
+  await setRating(next);
+}
 
 function sanitizeDescriptionHtml(input: string): string {
   // Minimal, conservative sanitizer:
@@ -349,6 +460,9 @@ async function loadBook() {
 
     book.value = json?.data?.book ?? null;
 
+    // Initialize per-user rating state from API response
+    ratingValue.value = book.value?.userRating ?? null;
+
     // Allow either nested `book.authors/files` or top-level `data.authors/files`
     if (book.value) {
       if (!book.value.authors && json?.data?.authors) {
@@ -379,6 +493,8 @@ async function loadBook() {
       e?.message ||
       'Failed to load book';
     book.value = null;
+    ratingValue.value = null;
+    ratingHoverValue.value = null;
   } finally {
     loading.value = false;
   }
@@ -568,6 +684,7 @@ watch(
               </div>
             </div>
 
+            <!-- Tags -->
             <div
               v-if="(book.tags ?? []).length"
               class="flex flex-wrap gap-2 mt-3"
@@ -583,7 +700,9 @@ watch(
             </div>
           </div>
 
-          <div class="grid md:grid-cols-2 gap-2 text-sm">
+          <!-- Right lower details grid -->
+          <div class="grid lg:grid-cols-2 gap-y-2 gap-x-6 text-sm">
+            <!-- Publisher -->
             <div class="grid grid-cols-[110px_1fr] gap-2">
               <div class="opacity-70">Publisher</div>
               <div class="min-w-0">
@@ -591,6 +710,7 @@ watch(
               </div>
             </div>
 
+            <!-- Published Date -->
             <div v-if="book.published" class="grid grid-cols-[110px_1fr] gap-2">
               <div class="opacity-70">Published</div>
               <div class="min-w-0">
@@ -598,16 +718,19 @@ watch(
               </div>
             </div>
 
+            <!-- Language -->
             <div v-if="book.language" class="grid grid-cols-[110px_1fr] gap-2">
               <div class="opacity-70">Language</div>
               <div class="min-w-0">{{ book.language }}</div>
             </div>
 
+            <!-- Pages -->
             <div v-if="book.pages" class="grid grid-cols-[110px_1fr] gap-2">
               <div class="opacity-70">Pages</div>
               <div class="min-w-0">{{ book.pages }}</div>
             </div>
 
+            <!-- Date Added to Library -->
             <div class="grid grid-cols-[110px_1fr] gap-2">
               <div class="opacity-70">Added</div>
               <div class="min-w-0">
@@ -620,12 +743,13 @@ watch(
               </div>
             </div>
 
+            <!-- Book File Details -->
             <div
               v-if="book.files && book.files.length"
               class="grid grid-cols-[110px_1fr] gap-2"
             >
               <div class="opacity-70">Files</div>
-              <div class="min-w-0 break-all opacity-80">
+              <div class="min-w-0 break-all">
                 {{
                   book.files
                     .map((f) => {
@@ -639,6 +763,7 @@ watch(
               </div>
             </div>
 
+            <!-- Identifiers -->
             <div
               v-if="book.identifiers && book.identifiers.length"
               class="grid grid-cols-[110px_1fr] gap-2"
@@ -656,6 +781,60 @@ watch(
                     <span class="pl-1">{{ id.value }}</span>
                   </span>
                 </span>
+              </div>
+            </div>
+
+            <!-- Rating -->
+            <div class="grid grid-cols-[110px_1fr] gap-2">
+              <div class="opacity-70 mt-1">Rating</div>
+
+              <div>
+                <div class="flex gap-2 items-center">
+                  <div
+                    class="flex gap-0.125 select-none"
+                    role="radiogroup"
+                    aria-label="Your rating"
+                    @mouseleave="onRatingMouseLeave"
+                  >
+                    <div
+                      v-for="starIndex in 5"
+                      :key="starIndex"
+                      type="button"
+                      class="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 translate-y-0.5"
+                      :disabled="ratingSaving"
+                      :aria-label="`${starIndex} star`"
+                      @mousemove="(e) => onRatingMouseMove(e, starIndex)"
+                      @click="(e) => onRatingClick(e, starIndex)"
+                    >
+                      <Icon
+                        :name="
+                          iconForStarIndex(starIndex, effectiveRatingValue)
+                        "
+                        class="text-2xl"
+                        :class="
+                          effectiveRatingValue
+                            ? 'text-(--main-color)'
+                            : 'text-(--sub-color)'
+                        "
+                      />
+                    </div>
+                  </div>
+
+                  <div class="text-xs opacity-70 whitespace-nowrap">
+                    <span v-if="ratingSaving">Saving...</span>
+                    <span v-else>{{ ratingToStarsText(ratingValue) }}</span>
+                  </div>
+
+                  <div
+                    v-if="ratingValue != null"
+                    type="button"
+                    class="text-xs underline cursor-pointer opacity-70 hover:opacity-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                    :disabled="ratingSaving"
+                    @click="() => setRating(null)"
+                  >
+                    Clear
+                  </div>
+                </div>
               </div>
             </div>
           </div>

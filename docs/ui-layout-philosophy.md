@@ -8,6 +8,32 @@ This document defines the **final, recommended UI layout paradigm** for Delb. It
 
 The goal is to keep the mental model clean, prevent concepts from “showing up in two places”, and scale well from single-user to multi-user/shared collections.
 
+## Per-user book ratings (API + storage)
+
+Ratings are **per user**, not shared just because a book is shared in a collection.
+
+### Storage scale
+
+- Stored in `book_ratings.rating` as an integer **half-star scale**
+  - `1..10` maps to `0.5..5.0` stars (example: `7` => `3.5` stars)
+- A rating is **unique per (user, book)**.
+
+### Endpoints
+
+- `GET /api/books/:id`
+  - Returns the book detail payload and includes **`book.userRating`**:
+    - `number` (integer `1..10`) when the current user has rated the book
+    - `null` when the current user has not rated the book
+
+- `POST /api/books/:id/rating`
+  - Sets or clears the authenticated user’s rating for that book
+  - Body: `{ rating: number | null }`
+    - Send `null` (or `0`) to clear the rating
+    - Send either:
+      - stars (`0.5..5.0` in 0.5 increments), or
+      - half-star integer (`1..10`)
+  - Response: `{ success: true, data: { rating: number | null } }` where `rating` is the stored `1..10` integer or `null`
+
 ---
 
 ## The collections paradigm (Personal-first)
