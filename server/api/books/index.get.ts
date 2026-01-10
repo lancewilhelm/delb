@@ -209,13 +209,21 @@ export default defineEventHandler(async (event) => {
     // - Use date compare for createdAt (timestamp)
     const cursorWhere =
       cursor && sort === 'dateAdded'
-        ? or(
-            lt(books.createdAt, new Date(cursor.v)),
-            and(
-              eq(books.createdAt, new Date(cursor.v)),
-              lt(books.id, cursor.id),
-            ),
-          )
+        ? sortDir === 'asc'
+          ? or(
+              gt(books.createdAt, new Date(cursor.v)),
+              and(
+                eq(books.createdAt, new Date(cursor.v)),
+                gt(books.id, cursor.id),
+              ),
+            )
+          : or(
+              lt(books.createdAt, new Date(cursor.v)),
+              and(
+                eq(books.createdAt, new Date(cursor.v)),
+                lt(books.id, cursor.id),
+              ),
+            )
         : cursor && sort === 'alphabetical'
           ? sortDir === 'asc'
             ? or(
