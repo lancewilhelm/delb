@@ -24,6 +24,9 @@ type Book = {
 
   publisher?: { id: string; name: string } | null;
   series?: { id: string; name: string } | null;
+  seriesIndex?: number | null;
+
+  description?: string | null;
 
   createdAt: string | number | Date;
 };
@@ -56,6 +59,12 @@ function deriveSeriesNameFromBooks(list: Book[], id: string) {
     if (b.series?.id === id && b.series?.name) return b.series.name;
   }
   return 'Series';
+}
+
+function coverThumbUrl(coverImagePath: string) {
+  // Stored as a relative `library/...` path (typically `.../thumb.webp`)
+  // API expects: /api/media/covers/<path under library>
+  return `/api/media/covers/${coverImagePath.replace(/^library\//, '')}`;
 }
 
 async function refresh() {
@@ -135,22 +144,13 @@ watch(
     <AppHeader class="w-full" />
 
     <div class="w-full h-full p-4 overflow-auto">
-      <div class="flex items-center gap-2 mb-4 text-(--main-color)">
-        <NuxtLink
+      <div class="flex items-center gap-2 mb-2 text-(--main-color)">
+        <Icon
           v-tooltip="'Go back'"
-          to="/"
-          class="opacity-80 hover:opacity-100"
-        >
-          <Icon name="lucide:arrow-left" />
-        </NuxtLink>
-
-        <div class="text-2xl font-serif truncate">
-          {{ seriesName }}
-        </div>
-
-        <div class="text-sm opacity-70">
-          · {{ bookCount }} book{{ bookCount === 1 ? '' : 's' }}
-        </div>
+          name="lucide:arrow-left"
+          class="opacity-80 hover:opacity-100 cursor-pointer text-3xl"
+          @click="navigateTo('/')"
+        />
       </div>
 
       <div v-if="loading" class="text-sm opacity-80">Loading...</div>
@@ -163,8 +163,58 @@ watch(
         No books found for this series in your accessible collections.
       </div>
 
-      <div v-else class="flex gap-3 flex-wrap">
-        <BookThumbnail v-for="b in books" :key="b.id" :book="b" />
+      <div v-else class="flex flex-col gap-4">
+        <div class="flex items-center gap-3">
+          <div class="text-2xl sm:text-3xl font-serif truncate">
+            {{ seriesName }}
+          </div>
+          <div class="text-sm sm:text-md opacity-70 italic">
+            {{ bookCount }} book{{ bookCount === 1 ? '' : 's' }}
+          </div>
+        </div>
+        <div class="flex flex-col gap-3 flex-wrap">
+          <div
+            v-for="b in books"
+            :key="b.id"
+            :book="b"
+            class="grid grid-cols-[min-content_auto_3fr] gap-4"
+          >
+            <div class="text-xl sm:text-2xl self-center text-(--sub-color)">
+              {{ b.seriesIndex }}
+            </div>
+            <BookCover
+              :src="coverThumbUrl(b.coverImagePath ?? '')"
+              :alt="b.title"
+              :title="b.title"
+              class="cursor-pointer w-25! sm:w-40!"
+              @click="navigateTo(`/books/${b.id}`)"
+            />
+            <div class="flex flex-col">
+              <!-- Title -->
+              <div
+                class="text-xl sm:text-3xl leading-tight font-serif hover:underline cursor-pointer"
+                @click="navigateTo(`/books/${b.id}`)"
+              >
+                {{ b.title }}
+              </div>
+
+              <!-- Authors -->
+              <div class="text-md sm:text-lg font-light opacity-80 font-serif">
+                <span v-for="(a, index) in b.authors" :key="a.id">
+                  <span
+                    class="cursor-pointer hover:underline"
+                    @click="navigateTo(`/authors/${a.id}`)"
+                  >
+                    {{ a.name }}
+                  </span>
+                  <span v-if="b.authors && index < b.authors.length - 1"
+                    >,
+                  </span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
