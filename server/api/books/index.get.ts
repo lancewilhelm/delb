@@ -1,5 +1,17 @@
-import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
-import { cloudDb } from "~~/server/utils/db/cloud";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  lt,
+  or,
+  sql,
+  type SQLWrapper,
+} from 'drizzle-orm';
+
+import { cloudDb } from '~~/server/utils/db/cloud';
 import {
   authors,
   bookAuthors,
@@ -8,12 +20,21 @@ import {
   collectionMembers,
   publishers,
   series,
-} from "~/utils/db/schema";
-import { logger } from "~/utils/logger";
-import { auth } from "~/utils/auth";
+} from '~/utils/db/schema';
+import { logger } from '~/utils/logger';
+import { auth } from '~/utils/auth';
+
+type SortKey = 'dateAdded' | 'alphabetical' | 'publishedDate';
+type SortDir = 'asc' | 'desc';
 
 type Cursor = {
-  createdAt: string;
+  /**
+   * Cursor payload depends on sort key:
+   * - dateAdded: createdAt + id
+   * - alphabetical: sortTitle + id
+   * - publishedDate: published + id
+   */
+  v: string;
   id: string;
 };
 
@@ -21,34 +42,49 @@ function clampInt(
   input: unknown,
   opts: { min: number; max: number; fallback: number },
 ): number {
-  const n = Number.parseInt((input ?? "").toString(), 10);
+  const n = Number.parseInt((input ?? '').toString(), 10);
   if (!Number.isFinite(n)) return opts.fallback;
   return Math.max(opts.min, Math.min(opts.max, n));
 }
 
+function normalizeSortKey(raw: unknown): SortKey {
+  const v = (raw ?? '').toString().trim();
+  if (v === 'alphabetical') return 'alphabetical';
+  if (v === 'publishedDate') return 'publishedDate';
+  return 'dateAdded';
+}
+
+function normalizeSortDir(raw: unknown, sort: SortKey): SortDir {
+  const v = (raw ?? '').toString().trim().toLowerCase();
+  if (v === 'asc') return 'asc';
+  if (v === 'desc') return 'desc';
+
+  // Default directions
+  if (sort === 'alphabetical') return 'asc';
+  return 'desc';
+}
+
 function encodeCursor(c: Cursor): string {
-  return Buffer.from(JSON.stringify(c), "utf8").toString("base64url");
+  return Buffer.from(JSON.stringify(c), 'utf8').toString('base64url');
 }
 
 function decodeCursor(raw: unknown): Cursor | null {
-  if (typeof raw !== "string" || !raw.trim()) return null;
+  if (typeof raw !== 'string' || !raw.trim()) return null;
   try {
-    const json = Buffer.from(raw, "base64url").toString("utf8");
+    const json = Buffer.from(raw, 'base64url').toString('utf8');
     const parsed = JSON.parse(json) as Partial<Cursor>;
-    const createdAt = (parsed.createdAt ?? "").toString().trim();
-    const id = (parsed.id ?? "").toString().trim();
-    if (!createdAt || !id) return null;
-    // Validate date-ish
-    const t = new Date(createdAt).getTime();
-    if (!Number.isFinite(t)) return null;
-    return { createdAt, id };
+    const v = (parsed.v ?? '').toString();
+    const id = (parsed.id ?? '').toString().trim();
+    if (!id) return null;
+    // v may be "" (e.g. missing published), but must exist to keep cursor shape stable
+    return { v, id };
   } catch {
     return null;
   }
 }
 
 export default defineEventHandler(async (event) => {
-  logger.debug("GET /api/books");
+  logger.debug('GET /api/books');
 
   // Keep consistent with the rest of the app: require an authenticated user
   const session = await auth.api.getSession({
@@ -59,7 +95,7 @@ export default defineEventHandler(async (event) => {
     setResponseStatus(event, 401);
     return {
       success: false,
-      message: "Unauthorized",
+      message: 'Unauthorized',
     };
   }
 
@@ -69,19 +105,54 @@ export default defineEventHandler(async (event) => {
   // - collectionId=<id> fetches books only from that collection (if user is a member)
   // - omit collectionId to fetch books from all collections the user is a member of
   // - limit=<n> max page size (default 48)
-  // - cursor=<opaque> pagination cursor (createdAt+id) for infinite scroll
+  // - cursor=<opaque> pagination cursor (sort-dependent) for infinite scroll
+  // - sort=<dateAdded|alphabetical|publishedDate> (default dateAdded)
+  // - sortDir=<asc|desc> (default per sort; dateAdded desc)
   const q = getQuery(event) as {
     collectionId?: string;
     limit?: string;
     cursor?: string;
+    sort?: string;
+    sortDir?: string;
   };
 
   const collectionId = q.collectionId;
   // Allow smaller page sizes for dev/testing (small libraries, observer/manual pagination verification).
   const limit = clampInt(q.limit, { min: 1, max: 200, fallback: 48 });
+
+  const sort = normalizeSortKey(q.sort);
+  const sortDir = normalizeSortDir(q.sortDir, sort);
+
   const cursor = decodeCursor(q.cursor);
 
   try {
+    // Backfill normalized publishedAt once per process start (best-effort).
+    // This keeps sorting correct for older rows that only have `published` populated.
+    // NOTE: This is intentionally lightweight; if you want a proper migration/backfill,
+    // move this into a dedicated admin task or migration step.
+    try {
+      await cloudDb.run(sql`
+        UPDATE books
+        SET published_at =
+          CASE
+            WHEN published_at IS NOT NULL THEN published_at
+            WHEN published IS NULL OR TRIM(published) = '' THEN NULL
+            -- YYYY-MM-DD
+            WHEN published GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]' THEN strftime('%s', published) * 1000
+            -- YYYY-MM
+            WHEN published GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]' THEN strftime('%s', published || '-01') * 1000
+            -- YYYY
+            WHEN published GLOB '[0-9][0-9][0-9][0-9]' THEN strftime('%s', published || '-01-01') * 1000
+            ELSE NULL
+          END
+        WHERE published_at IS NULL
+          AND published IS NOT NULL
+          AND TRIM(published) <> '';
+      `);
+    } catch (e) {
+      logger.debug(e, 'GET /api/books: publishedAt backfill skipped/failed');
+    }
+
     // Find collections the user is a member of
     const memberships = await cloudDb
       .select({ collectionId: collectionMembers.collectionId })
@@ -121,8 +192,65 @@ export default defineEventHandler(async (event) => {
       };
     }
 
+    // Build cursor conditions + orderBy based on sort mode.
+    // NOTE: For title/published sorts we still filter the visible book set via collection_books,
+    // but sorting uses the books table fields.
+    const orderPrimary: SQLWrapper =
+      sort === 'dateAdded'
+        ? books.createdAt
+        : sort === 'alphabetical'
+          ? books.sortTitle
+          : sql`COALESCE(${books.publishedAt}, 0)`;
+
+    const orderPrimaryDesc = sortDir === 'desc';
+
+    // Cursor predicate:
+    // - Use lexicographic compare for sortTitle/published (both are TEXT)
+    // - Use date compare for createdAt (timestamp)
+    const cursorWhere =
+      cursor && sort === 'dateAdded'
+        ? or(
+            lt(books.createdAt, new Date(cursor.v)),
+            and(
+              eq(books.createdAt, new Date(cursor.v)),
+              lt(books.id, cursor.id),
+            ),
+          )
+        : cursor && sort === 'alphabetical'
+          ? sortDir === 'asc'
+            ? or(
+                gt(books.sortTitle, cursor.v),
+                and(eq(books.sortTitle, cursor.v), gt(books.id, cursor.id)),
+              )
+            : or(
+                lt(books.sortTitle, cursor.v),
+                and(eq(books.sortTitle, cursor.v), lt(books.id, cursor.id)),
+              )
+          : cursor && sort === 'publishedDate'
+            ? (() => {
+                const cursorMs = Number.parseInt(cursor.v, 10);
+                const v = Number.isFinite(cursorMs) ? cursorMs : 0;
+
+                return sortDir === 'asc'
+                  ? or(
+                      gt(sql`COALESCE(${books.publishedAt}, 0)`, v),
+                      and(
+                        eq(sql`COALESCE(${books.publishedAt}, 0)`, v),
+                        gt(books.id, cursor.id),
+                      ),
+                    )
+                  : or(
+                      lt(sql`COALESCE(${books.publishedAt}, 0)`, v),
+                      and(
+                        eq(sql`COALESCE(${books.publishedAt}, 0)`, v),
+                        lt(books.id, cursor.id),
+                      ),
+                    );
+              })()
+            : undefined;
+
     // Page query: fetch visible books via the collection link table.
-    // Sort: newest first, with deterministic tie-break by id.
+    // Sort is selectable, with deterministic tie-break by id.
     const pageRows = await cloudDb
       .select({ book: books })
       .from(books)
@@ -130,26 +258,22 @@ export default defineEventHandler(async (event) => {
       .where(
         and(
           inArray(collectionBooks.collectionId, targetCollectionIds),
-          cursor
-            ? or(
-                lt(books.createdAt, new Date(cursor.createdAt)),
-                and(
-                  eq(books.createdAt, new Date(cursor.createdAt)),
-                  lt(books.id, cursor.id),
-                ),
-              )
-            : undefined,
+          cursorWhere,
         ),
       )
       // Avoid duplicates if a book is in multiple target collections.
       // Group by book id provides a deterministic unique set in SQLite.
       .groupBy(books.id)
-      .orderBy(desc(books.createdAt), desc(books.id))
+      .orderBy(
+        orderPrimaryDesc ? desc(orderPrimary) : asc(orderPrimary),
+        // Deterministic tie-break; keep direction aligned so paging is stable
+        orderPrimaryDesc ? desc(books.id) : asc(books.id),
+      )
       .limit(limit + 1);
 
     const rows = pageRows
       .map((r) => r.book)
-      .filter((b): b is NonNullable<(typeof books)["$inferSelect"]> => !!b);
+      .filter((b): b is NonNullable<(typeof books)['$inferSelect']> => !!b);
 
     const bookIds = rows.map((b) => b.id).filter(Boolean);
 
@@ -226,14 +350,14 @@ export default defineEventHandler(async (event) => {
     const rowsWithAuthor = rows.map((b) => {
       const links = (linksByBookId.get(b.id) ?? []).slice();
       links.sort((a, c) => {
-        const aPos = typeof a.position === "number" ? a.position : 10_000;
-        const cPos = typeof c.position === "number" ? c.position : 10_000;
+        const aPos = typeof a.position === 'number' ? a.position : 10_000;
+        const cPos = typeof c.position === 'number' ? c.position : 10_000;
         return aPos - cPos;
       });
 
       const authorNames = links
         .map((l) => (l.authorId ? authorNameById.get(l.authorId) : undefined))
-        .filter((n): n is string => typeof n === "string" && n.length > 0);
+        .filter((n): n is string => typeof n === 'string' && n.length > 0);
 
       const authorsOut = links
         .map((l) => {
@@ -243,7 +367,7 @@ export default defineEventHandler(async (event) => {
         })
         .filter(
           (a): a is { id: string; name: string } =>
-            !!a && typeof a.id === "string" && typeof a.name === "string",
+            !!a && typeof a.id === 'string' && typeof a.name === 'string',
         );
 
       // Back-compat: keep the first author in `author`
@@ -274,10 +398,34 @@ export default defineEventHandler(async (event) => {
     const page = hasMore ? rowsWithAuthor.slice(0, limit) : rowsWithAuthor;
 
     const last = page[page.length - 1];
+
     const nextCursor =
-      hasMore && last?.createdAt && last?.id
+      hasMore && last?.id
         ? encodeCursor({
-            createdAt: new Date(last.createdAt).toISOString(),
+            v:
+              sort === 'dateAdded'
+                ? new Date(last.createdAt).toISOString()
+                : sort === 'alphabetical'
+                  ? (last.sortTitle ?? '')
+                  : String(
+                      Number.isFinite(
+                        Number(
+                          last.publishedAt instanceof Date
+                            ? last.publishedAt.getTime()
+                            : typeof last.publishedAt === 'number'
+                              ? last.publishedAt
+                              : 0,
+                        ),
+                      )
+                        ? Number(
+                            last.publishedAt instanceof Date
+                              ? last.publishedAt.getTime()
+                              : typeof last.publishedAt === 'number'
+                                ? last.publishedAt
+                                : 0,
+                          )
+                        : 0,
+                    ),
             id: last.id,
           })
         : null;
@@ -290,11 +438,11 @@ export default defineEventHandler(async (event) => {
       },
     };
   } catch (error) {
-    logger.error(error, "GET /api/books: Error fetching books");
+    logger.error(error, 'GET /api/books: Error fetching books');
     setResponseStatus(event, 500);
     return {
       success: false,
-      message: "Failed to fetch books",
+      message: 'Failed to fetch books',
     };
   }
 });

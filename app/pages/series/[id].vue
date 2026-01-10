@@ -51,6 +51,12 @@ const errorMessage = ref<string | null>(null);
 
 const seriesName = ref<string>('Series');
 const books = ref<Book[]>([]);
+// Sort books by seriesIndex
+const sortedBooks = computed(() => {
+  return [...books.value].sort(
+    (a, b) => (a.seriesIndex || 999) - (b.seriesIndex || 999),
+  );
+});
 
 const bookCount = computed(() => books.value.length);
 
@@ -174,7 +180,7 @@ watch(
         </div>
         <div class="flex flex-col gap-3 flex-wrap">
           <div
-            v-for="b in books"
+            v-for="b in sortedBooks"
             :key="b.id"
             :book="b"
             class="grid grid-cols-[min-content_auto_3fr] gap-4"

@@ -1,4 +1,5 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
+import { normalizePublishedAt } from '~~/server/utils/books/published';
 import { makeAuthorSortKey, makeTitleSortKey } from '~~/server/utils/sort/keys';
 import { moveBookStorageToCanonical } from '~~/server/utils/books/storage/move/move-book-storage';
 import { cloudDb } from '~~/server/utils/db/cloud';
@@ -458,7 +459,10 @@ export default defineEventHandler(async (event) => {
   if (description !== undefined) update.description = description;
 
   const published = normalizeOptionalString((body as PutBookBody).published);
-  if (published !== undefined) update.published = published;
+  if (published !== undefined) {
+    update.published = published;
+    update.publishedAt = published ? normalizePublishedAt(published) : null;
+  }
 
   const language = normalizeOptionalString((body as PutBookBody).language);
   if (language !== undefined) update.language = language;

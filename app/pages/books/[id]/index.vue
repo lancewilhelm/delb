@@ -518,13 +518,12 @@ watch(
 
     <div class="w-full h-full p-4 overflow-auto">
       <div class="flex items-center gap-2 mb-4 text-(--main-color)">
-        <NuxtLink
+        <icon
           v-tooltip="'Go back'"
-          to="/"
-          class="opacity-80 hover:opacity-100"
-        >
-          <icon name="lucide:arrow-left" class="scale-200 translate-x-1" />
-        </NuxtLink>
+          class="opacity-80 hover:opacity-100 text-3xl"
+          name="lucide:arrow-left"
+          @click="navigateTo('/')"
+        />
       </div>
 
       <div v-if="loading" class="text-sm opacity-80">Loading...</div>

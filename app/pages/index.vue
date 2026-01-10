@@ -73,6 +73,80 @@ function handleBooksGridError(message: string) {
 }
 
 // ------------------------------
+// Books sorting
+// ------------------------------
+type BooksSortOption = {
+  id: 'dateAdded' | 'alphabetical' | 'publishedDate';
+  label: string;
+};
+
+const booksSortOptions: BooksSortOption[] = [
+  { id: 'dateAdded', label: 'Date added' },
+  { id: 'alphabetical', label: 'Alphabetical' },
+  { id: 'publishedDate', label: 'Published date' },
+];
+
+const sortOpen = ref(false);
+const sortAnchorRef = ref<HTMLElement | null>(null);
+const sortPanelRef = ref<HTMLElement | null>(null);
+
+// Direction toggles by re-selecting the active sort option in the dropdown.
+
+const activeBooksSortLabel = computed(() => {
+  return (
+    booksSortOptions.find((o) => o.id === uiStore.booksSortKey)?.label ??
+    'Date added'
+  );
+});
+
+function closeSortDropdown() {
+  sortOpen.value = false;
+}
+
+function toggleSortDropdown() {
+  sortOpen.value = !sortOpen.value;
+}
+
+function selectBooksSort(sortId: BooksSortOption['id']) {
+  // Clicking the currently-active sort toggles direction.
+  if (uiStore.booksSortKey === sortId) {
+    uiStore.toggleBooksSortDirection();
+  } else {
+    uiStore.setBooksSortKey(sortId);
+  }
+  closeSortDropdown();
+}
+
+function onSortDocumentPointerDown(e: MouseEvent) {
+  if (!sortOpen.value) return;
+  const target = e.target as Node | null;
+
+  if (
+    (sortPanelRef.value && target && sortPanelRef.value.contains(target)) ||
+    (sortAnchorRef.value && target && sortAnchorRef.value.contains(target))
+  ) {
+    return;
+  }
+
+  closeSortDropdown();
+}
+
+function onSortDocumentKeyDown(e: KeyboardEvent) {
+  if (!sortOpen.value) return;
+  if (e.key === 'Escape') closeSortDropdown();
+}
+
+onMounted(() => {
+  document.addEventListener('mousedown', onSortDocumentPointerDown);
+  document.addEventListener('keydown', onSortDocumentKeyDown);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onSortDocumentPointerDown);
+  document.removeEventListener('keydown', onSortDocumentKeyDown);
+});
+
+// ------------------------------
 // Authors view (MVP: aggregated from /api/books)
 // ------------------------------
 type AuthorRow = {
@@ -301,6 +375,9 @@ async function refreshActiveView() {
   if (uiStore.libraryView === 'publishers') await refreshPublishers();
 }
 
+const booksSortKey = computed(() => uiStore.booksSortKey);
+const booksSortDir = computed(() => uiStore.booksSortDirection);
+
 onMounted(async () => {
   await refreshActiveView();
 });
@@ -324,6 +401,71 @@ onMounted(async () => {
               :model-value="uiStore.libraryView"
               @update:model-value="uiStore.setLibraryView"
             />
+
+            <!-- Books sort (only shown in Books view) -->
+            <div
+              v-if="uiStore.libraryView === 'books'"
+              class="flex items-center gap-1 self-center"
+            >
+              <div class="relative">
+                <button
+                  ref="sortAnchorRef"
+                  class="p-1 flex items-center gap-2"
+                  :aria-expanded="sortOpen"
+                  aria-haspopup="menu"
+                  @click="toggleSortDropdown"
+                >
+                  <Icon
+                    name="lucide:arrow-up-down"
+                    class="text-(--main-color) opacity-80 shrink-0"
+                  />
+                  <span class="text-sm opacity-80">{{
+                    activeBooksSortLabel
+                  }}</span>
+                  <Icon
+                    name="lucide:chevron-down"
+                    class="text-(--main-color) opacity-80 shrink-0"
+                  />
+                </button>
+
+                <div
+                  v-if="sortOpen"
+                  ref="sortPanelRef"
+                  class="absolute right-0 mt-1 w-48 border border-(--sub-color) bg-(--bg-color) rounded-md shadow-lg z-50 overflow-hidden"
+                  role="menu"
+                >
+                  <div class="px-3 py-2 border-b border-(--sub-color)">
+                    <div class="text-xs opacity-70">Sort</div>
+                  </div>
+
+                  <div>
+                    <button
+                      v-for="o in booksSortOptions"
+                      :key="o.id"
+                      class="w-full px-3 py-2 text-left flex justify-between! gap-3 rounded-none!"
+                      :class="
+                        uiStore.booksSortKey === o.id
+                          ? 'bg-(--sub-color)/20'
+                          : 'hover:bg-(--sub-color)/15'
+                      "
+                      role="menuitem"
+                      @click="selectBooksSort(o.id)"
+                    >
+                      <span class="truncate text-sm">{{ o.label }}</span>
+                      <Icon
+                        v-if="uiStore.booksSortKey === o.id"
+                        :name="
+                          uiStore.booksSortDirection === 'asc'
+                            ? 'lucide:arrow-up'
+                            : 'lucide:arrow-down'
+                        "
+                        class="text-(--main-color) opacity-80 shrink-0"
+                      />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -336,8 +478,10 @@ onMounted(async () => {
           >
             <!-- Only the books grid scrolls (BooksInfiniteGrid owns the scroller) -->
             <BooksInfiniteGrid
-              :key="booksGridKey"
+              :key="`${booksGridKey}-${booksSortKey}-${booksSortDir}`"
               :collection-id="activeCollectionId"
+              :sort="booksSortKey"
+              :sort-dir="booksSortDir"
               class="flex-1 min-h-0"
               @error="handleBooksGridError"
             />

@@ -139,6 +139,19 @@ Views (v1 UI):
 - `Series` (placeholder)
 - `Publishers` (placeholder)
 
+### Sorting (Books view)
+Sorting controls the **ordering** of the current result set within the active *collection scope* and does **not** change which items exist in scope.
+
+Current supported Books sort options (v1):
+- `dateAdded` (default) — date added to library (newest first by default)
+- `alphabetical` — title A–Z by default
+- `publishedDate` — published date (newest first by default)
+
+Server-side sorting is supported via the books list endpoint:
+- `GET /api/books?sort=<dateAdded|alphabetical|publishedDate>&sortDir=<asc|desc>`
+  - Defaults: `sort=dateAdded`, `sortDir=desc`
+  - Cursor pagination is sort-dependent; changing sort resets paging.
+
 ### Filters = refinement
 Filters narrow the result set *within the current scope + view*. Filters are always optional and stackable.
 

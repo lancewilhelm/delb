@@ -1,12 +1,13 @@
-import path from "node:path";
-import { readdir, stat } from "node:fs/promises";
+import path from 'node:path';
+import { readdir, stat } from 'node:fs/promises';
 
-import { and, eq, sql } from "drizzle-orm";
-import sharp from "sharp";
+import { and, eq, sql } from 'drizzle-orm';
+import { normalizePublishedAt } from '~~/server/utils/books/published';
+import sharp from 'sharp';
 
-import { auth } from "~/utils/auth";
-import { logger } from "~/utils/logger";
-import { cloudDb } from "~~/server/utils/db/cloud";
+import { auth } from '~/utils/auth';
+import { logger } from '~/utils/logger';
+import { cloudDb } from '~~/server/utils/db/cloud';
 import {
   authors,
   bookAuthors,
@@ -19,13 +20,13 @@ import {
   publishers,
   series,
   tags,
-} from "~/utils/db/schema";
+} from '~/utils/db/schema';
 import {
   CalibreReader,
   type CalibreBookRow,
   type CalibreFormatFile,
-} from "~~/server/utils/import/calibre/calibre-reader";
-import { makeAuthorSortKey, makeTitleSortKey } from "~~/server/utils/sort/keys";
+} from '~~/server/utils/import/calibre/calibre-reader';
+import { makeAuthorSortKey, makeTitleSortKey } from '~~/server/utils/sort/keys';
 
 type Body = {
   /**
@@ -34,7 +35,7 @@ type Body = {
    * - "rescan": Re-read Calibre `metadata.db` and refresh files/covers/metadata for previously imported books
    *   (and optionally import new books, controlled by `importNew`).
    */
-  action: "import" | "rescan";
+  action: 'import' | 'rescan';
 
   /**
    * Target collections to add imported books into.
@@ -57,7 +58,7 @@ type Body = {
 };
 
 type ImportSummary = {
-  action: Body["action"];
+  action: Body['action'];
   dryRun: boolean;
   libraryRoot: string;
   calibreDbPath: string;
@@ -106,7 +107,7 @@ type ImportSummary = {
 };
 
 function normalizeFormat(input: string): string {
-  return (input ?? "").toString().trim().toLowerCase();
+  return (input ?? '').toString().trim().toLowerCase();
 }
 
 function uniq<T>(arr: T[]): T[] {
@@ -114,7 +115,7 @@ function uniq<T>(arr: T[]): T[] {
 }
 
 function safeNonEmptyString(v: unknown): string | null {
-  const s = (v ?? "").toString().trim();
+  const s = (v ?? '').toString().trim();
   return s.length > 0 ? s : null;
 }
 
@@ -122,18 +123,18 @@ type EventWithHeaders = {
   headers: Headers | Record<string, string | string[] | undefined>;
 };
 
-function toHeadersInit(h: EventWithHeaders["headers"]): HeadersInit {
+function toHeadersInit(h: EventWithHeaders['headers']): HeadersInit {
   // `auth.api.getSession` expects `HeadersInit` (Fetch API).
   // Nitro's `event.headers` can be a `Headers` or a plain object.
   if (h instanceof Headers) return h;
 
   const pairs: Array<[string, string]> = [];
   for (const [key, value] of Object.entries(h)) {
-    if (typeof value === "string") {
+    if (typeof value === 'string') {
       pairs.push([key, value]);
     } else if (Array.isArray(value)) {
       for (const v of value) {
-        if (typeof v === "string") pairs.push([key, v]);
+        if (typeof v === 'string') pairs.push([key, v]);
       }
     }
   }
@@ -145,11 +146,11 @@ async function assertIsAdminOrOwner(event: EventWithHeaders) {
     headers: toHeadersInit(event.headers),
   });
   if (!session)
-    throw createError({ statusCode: 401, statusMessage: "Unauthorized" });
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
 
   const user = session.user;
-  if (user.role !== "admin" && user.role !== "owner") {
-    throw createError({ statusCode: 403, statusMessage: "Forbidden" });
+  if (user.role !== 'admin' && user.role !== 'owner') {
+    throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
   }
 
   return session;
@@ -167,7 +168,7 @@ async function assertCanAddToCollections(opts: {
   if (!uniqueIds.length) {
     throw createError({
       statusCode: 400,
-      statusMessage: "At least one target collection is required",
+      statusMessage: 'At least one target collection is required',
     });
   }
 
@@ -182,14 +183,14 @@ async function assertCanAddToCollections(opts: {
 
   const forbidden = uniqueIds.filter((id) => {
     const role = roleByCollectionId.get(id);
-    return role !== "owner" && role !== "editor";
+    return role !== 'owner' && role !== 'editor';
   });
 
   if (forbidden.length) {
     throw createError({
       statusCode: 403,
       statusMessage:
-        "You do not have permission to add books to one or more selected collections",
+        'You do not have permission to add books to one or more selected collections',
     });
   }
 }
@@ -222,20 +223,20 @@ async function scanBookDirForFormats(opts: {
       // Skip the common Calibre sidecar files
       const lower = filename.toLowerCase();
       if (
-        lower === "metadata.opf" ||
-        lower === "cover.jpg" ||
-        lower === "cover.jpeg" ||
-        lower === "cover.png"
+        lower === 'metadata.opf' ||
+        lower === 'cover.jpg' ||
+        lower === 'cover.jpeg' ||
+        lower === 'cover.png'
       ) {
         continue;
       }
 
-      const ext = normalizeFormat(path.extname(filename).replace(/^\./, ""));
+      const ext = normalizeFormat(path.extname(filename).replace(/^\./, ''));
       if (!ext) continue;
 
       // Keep parity with `download.get.ts` supported formats (and upload modal list).
       // You can expand this later by supporting more formats in the app.
-      const supported = ["epub", "pdf", "mobi", "azw3"];
+      const supported = ['epub', 'pdf', 'mobi', 'azw3'];
       if (!supported.includes(ext)) continue;
 
       out.push({
@@ -243,7 +244,7 @@ async function scanBookDirForFormats(opts: {
         format: ext,
         // CalibreReader (libsql) returns paths relative to the library root.
         // Delb stores paths under `library/...`.
-        relativePath: ["library", relDir, filename].join("/"),
+        relativePath: ['library', relDir, filename].join('/'),
       });
     }
 
@@ -263,7 +264,7 @@ async function fileExists(absPath: string): Promise<boolean> {
 }
 
 export default defineEventHandler(async (event) => {
-  logger.debug("POST /api/settings/admin/calibre");
+  logger.debug('POST /api/settings/admin/calibre');
 
   const session = await assertIsAdminOrOwner(event);
   const userId = session.user.id;
@@ -271,10 +272,10 @@ export default defineEventHandler(async (event) => {
   const body = (await readBody<Body>(event)) ?? ({} as Body);
 
   const action = body.action;
-  if (action !== "import" && action !== "rescan") {
+  if (action !== 'import' && action !== 'rescan') {
     throw createError({
       statusCode: 400,
-      statusMessage: "Missing or invalid `action` (import|rescan)",
+      statusMessage: 'Missing or invalid `action` (import|rescan)',
     });
   }
 
@@ -282,15 +283,15 @@ export default defineEventHandler(async (event) => {
   const importNew = !!body.importNew;
 
   // Calibre library is mounted at Delb's `library/` folder.
-  const libraryRootAbs = path.resolve(process.cwd(), "library");
-  const calibreDbPathAbs = path.resolve(libraryRootAbs, "metadata.db");
+  const libraryRootAbs = path.resolve(process.cwd(), 'library');
+  const calibreDbPathAbs = path.resolve(libraryRootAbs, 'metadata.db');
 
   // Collections:
   // - Required for import
   // - Optional for rescan
   const requestedCollectionIds = uniq(body.collectionIds ?? []).filter(Boolean);
 
-  if (action === "import") {
+  if (action === 'import') {
     await assertCanAddToCollections({
       userId,
       collectionIds: requestedCollectionIds,
@@ -305,8 +306,8 @@ export default defineEventHandler(async (event) => {
     const summary: ImportSummary = {
       action,
       dryRun,
-      libraryRoot: "library",
-      calibreDbPath: "library/metadata.db",
+      libraryRoot: 'library',
+      calibreDbPath: 'library/metadata.db',
       scanned: {
         // entity counts
         calibreBooks: snap.books.length,
@@ -421,7 +422,7 @@ export default defineEventHandler(async (event) => {
 
     const delbBookIdByCalibreBookId = new Map<number, string>();
     for (const row of existing) {
-      if (typeof row.calibreBookId === "number") {
+      if (typeof row.calibreBookId === 'number') {
         delbBookIdByCalibreBookId.set(row.calibreBookId, row.id);
       }
     }
@@ -443,8 +444,8 @@ export default defineEventHandler(async (event) => {
       name: string,
       sortName?: string | null,
     ): Promise<string> {
-      const trimmed = (name ?? "").toString().trim();
-      if (!trimmed) return "00000000-0000-0000-0000-000000000000"; // should never be used
+      const trimmed = (name ?? '').toString().trim();
+      if (!trimmed) return '00000000-0000-0000-0000-000000000000'; // should never be used
 
       const cached = authorIdByName.get(trimmed);
       if (cached) return cached;
@@ -478,8 +479,8 @@ export default defineEventHandler(async (event) => {
     }
 
     async function upsertTagByName(name: string): Promise<string> {
-      const trimmed = (name ?? "").toString().trim();
-      if (!trimmed) return "00000000-0000-0000-0000-000000000000"; // should never be used
+      const trimmed = (name ?? '').toString().trim();
+      if (!trimmed) return '00000000-0000-0000-0000-000000000000'; // should never be used
 
       const cached = tagIdByName.get(trimmed);
       if (cached) return cached;
@@ -512,8 +513,8 @@ export default defineEventHandler(async (event) => {
     }
 
     async function upsertPublisherByName(name: string): Promise<string> {
-      const trimmed = (name ?? "").toString().trim();
-      if (!trimmed) return "00000000-0000-0000-0000-000000000000"; // should never be used
+      const trimmed = (name ?? '').toString().trim();
+      if (!trimmed) return '00000000-0000-0000-0000-000000000000'; // should never be used
 
       const cached = publisherIdByName.get(trimmed);
       if (cached) return cached;
@@ -546,8 +547,8 @@ export default defineEventHandler(async (event) => {
     }
 
     async function upsertSeriesByName(name: string): Promise<string> {
-      const trimmed = (name ?? "").toString().trim();
-      if (!trimmed) return "00000000-0000-0000-0000-000000000000"; // should never be used
+      const trimmed = (name ?? '').toString().trim();
+      if (!trimmed) return '00000000-0000-0000-0000-000000000000'; // should never be used
 
       const cached = seriesIdByName.get(trimmed);
       if (cached) return cached;
@@ -588,7 +589,7 @@ export default defineEventHandler(async (event) => {
         calibreBook.calibreBookId,
       );
 
-      if (action === "rescan" && !knownDelbBookId && !importNew) {
+      if (action === 'rescan' && !knownDelbBookId && !importNew) {
         continue;
       }
 
@@ -606,7 +607,7 @@ export default defineEventHandler(async (event) => {
 
       const effectiveAuthorNames = authorNames.length
         ? authorNames
-        : ["Unknown Author"];
+        : ['Unknown Author'];
 
       // Create/book upsert
       const now = new Date();
@@ -644,6 +645,8 @@ export default defineEventHandler(async (event) => {
         safeNonEmptyString(calibreBook.timestamp) ??
         null;
 
+      const publishedAt = published ? normalizePublishedAt(published) : null;
+
       // Cover:
       // - Calibre typically stores a full-res `cover.jpg/png` in the book directory.
       // - Delb should use a lightweight `thumb.webp` almost everywhere, and only serve
@@ -658,19 +661,19 @@ export default defineEventHandler(async (event) => {
 
       for (const c of coverCandidates) {
         if (await fileExists(c.absPath)) {
-          const relDir = (calibreBook.path ?? "").toString().trim();
+          const relDir = (calibreBook.path ?? '').toString().trim();
           if (!relDir) break;
 
           const bookDirAbs = reader.resolveBookDirAbs(calibreBook);
           if (!bookDirAbs) break;
 
-          const thumbAbs = path.resolve(bookDirAbs, "thumb.webp");
-          const thumbRelPosix = ["library", relDir, "thumb.webp"].join("/");
+          const thumbAbs = path.resolve(bookDirAbs, 'thumb.webp');
+          const thumbRelPosix = ['library', relDir, 'thumb.webp'].join('/');
 
           // Generate thumb only if it doesn't already exist (keeps imports fast on re-scan)
           if (!(await fileExists(thumbAbs))) {
             try {
-              const { readFile, writeFile } = await import("node:fs/promises");
+              const { readFile, writeFile } = await import('node:fs/promises');
               const srcBytes = await readFile(c.absPath);
 
               const thumbBytes = await sharp(srcBytes)
@@ -685,7 +688,7 @@ export default defineEventHandler(async (event) => {
               // (still correct, just heavier).
               logger.warn(
                 e,
-                "calibre import: failed to generate thumb.webp; falling back to source cover path",
+                'calibre import: failed to generate thumb.webp; falling back to source cover path',
               );
               coverImagePath = c.relativePath;
               break;
@@ -703,17 +706,18 @@ export default defineEventHandler(async (event) => {
           await cloudDb
             .update(books)
             .set({
-              title: calibreBook.title || "Unknown",
+              title: calibreBook.title || 'Unknown',
               sortTitle:
                 safeNonEmptyString(calibreBook.sort) ??
-                makeTitleSortKey(calibreBook.title || ""),
+                makeTitleSortKey(calibreBook.title || ''),
               description,
               language,
               published,
+              publishedAt,
               publisherId,
               seriesId,
               seriesIndex:
-                typeof calibreBook.seriesIndex === "number"
+                typeof calibreBook.seriesIndex === 'number'
                   ? calibreBook.seriesIndex
                   : null,
               coverImagePath,
@@ -730,17 +734,18 @@ export default defineEventHandler(async (event) => {
         if (!dryRun) {
           await cloudDb.insert(books).values({
             id: newId,
-            title: calibreBook.title || "Unknown",
+            title: calibreBook.title || 'Unknown',
             sortTitle:
               safeNonEmptyString(calibreBook.sort) ??
-              makeTitleSortKey(calibreBook.title || ""),
+              makeTitleSortKey(calibreBook.title || ''),
             description,
             language,
             published,
+            publishedAt,
             publisherId,
             seriesId,
             seriesIndex:
-              typeof calibreBook.seriesIndex === "number"
+              typeof calibreBook.seriesIndex === 'number'
                 ? calibreBook.seriesIndex
                 : null,
             coverImagePath,
@@ -809,7 +814,7 @@ export default defineEventHandler(async (event) => {
         calibreIdentifiersByBookId.get(calibreBook.calibreBookId) ?? [];
       for (const ident of identifiers) {
         const type = normalizeFormat(ident.type);
-        const value = (ident.value ?? "").toString().trim();
+        const value = (ident.value ?? '').toString().trim();
         if (!type || !value) continue;
 
         if (!dryRun) {
@@ -847,12 +852,12 @@ export default defineEventHandler(async (event) => {
 
         // CalibreReader returns paths relative to the Calibre library root (e.g. "Author/Title (1)/Book.epub").
         // Delb stores paths under `library/...`.
-        const relativePath = rawRelativePath.startsWith("library/")
+        const relativePath = rawRelativePath.startsWith('library/')
           ? rawRelativePath
-          : ["library", rawRelativePath].join("/");
+          : ['library', rawRelativePath].join('/');
 
         // We only store paths under `library/...`. The download endpoint protects traversal.
-        if (!relativePath.startsWith("library/")) {
+        if (!relativePath.startsWith('library/')) {
           summary.results.warnings.push(
             `Skipping non-library path for calibreBookId=${calibreBook.calibreBookId}: ${relativePath}`,
           );
@@ -891,7 +896,7 @@ export default defineEventHandler(async (event) => {
 
       // Collections: add only if requested (import requires; rescan optional)
       if (requestedCollectionIds.length) {
-        if (action === "import") {
+        if (action === 'import') {
           // Validate permission (already did once) and add.
           for (const collectionId of requestedCollectionIds) {
             if (!dryRun) {
@@ -920,7 +925,7 @@ export default defineEventHandler(async (event) => {
               summary.results.collectionLinksAdded += 1;
             }
           }
-        } else if (action === "rescan") {
+        } else if (action === 'rescan') {
           // Rescan: if collectionIds provided, add books to those collections too.
           // (No permission check unless collectionIds provided.)
           await assertCanAddToCollections({
@@ -959,9 +964,9 @@ export default defineEventHandler(async (event) => {
     }
 
     // Light sanity warnings for missing DB / common mount mistakes
-    if (!(await reader.hasTable("books"))) {
+    if (!(await reader.hasTable('books'))) {
       summary.results.warnings.push(
-        "Calibre DB missing `books` table (unexpected).",
+        'Calibre DB missing `books` table (unexpected).',
       );
     }
     if (

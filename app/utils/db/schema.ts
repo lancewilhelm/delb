@@ -193,6 +193,16 @@ export const books = sqliteTable(
     // Metadata (shared across collections)
     description: text('description'),
     published: text('published'), // raw string (lean v1)
+    /**
+     * Normalized published date for correct sorting/filtering.
+     * Stored as a timestamp.
+     *
+     * Notes:
+     * - Many sources provide only a year or year-month; normalization should choose
+     *   a deterministic day (e.g. first of month/year) when partial.
+     * - Keep `published` as the original/raw string for display/import provenance.
+     */
+    publishedAt: integer('published_at', { mode: 'timestamp' }),
     language: text('language'), // raw string (lean v1)
 
     /**

@@ -75,7 +75,8 @@ export async function getHardcoverToken(): Promise<string> {
   const settings = (row?.settings ?? {}) as GlobalSettingsJson;
 
   const secrets = getSecretsContainer(settings);
-  const raw = typeof secrets.hardcoverToken === 'string' ? secrets.hardcoverToken : '';
+  const raw =
+    typeof secrets.hardcoverToken === 'string' ? secrets.hardcoverToken : '';
   return raw ? normalizeToken(raw) : '';
 }
 
@@ -139,12 +140,13 @@ export function redactGlobalSettingsForClient(
   settings: unknown,
 ): Record<string, unknown> {
   const obj: Record<string, unknown> =
-    settings && typeof settings === 'object' ? (settings as Record<string, unknown>) : {};
+    settings && typeof settings === 'object'
+      ? (settings as Record<string, unknown>)
+      : {};
 
   // Drop the entire `_secrets` object.
   // If you later need to expose capability flags, expose them separately (e.g. `hardcoverEnabled`).
   // Do NOT leak tokens.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { _secrets, ...rest } = obj;
 
   return rest;

@@ -1,9 +1,9 @@
-import path from "node:path";
-import { mkdir, writeFile } from "node:fs/promises";
+import path from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
 
-import { and, eq } from "drizzle-orm";
+import { and, eq } from 'drizzle-orm';
 
-import { cloudDb } from "~~/server/utils/db/cloud";
+import { cloudDb } from '~~/server/utils/db/cloud';
 import {
   authors,
   bookAuthors,
@@ -12,22 +12,23 @@ import {
   collectionMembers,
   collectionBooks,
   collections,
-} from "~/utils/db/schema";
-import { logger } from "~/utils/logger";
-import { auth } from "~/utils/auth";
+} from '~/utils/db/schema';
+import { logger } from '~/utils/logger';
+import { auth } from '~/utils/auth';
 
-import { parseEpubMetadataFromBuffer } from "~~/server/utils/books/epub";
-import { extractAndStoreEpubCover } from "~~/server/utils/books/epub-cover";
-import { resolveDataPath, toSafePathSegment } from "~~/server/utils/books/fs";
-import { makeAuthorSortKey, makeTitleSortKey } from "~~/server/utils/sort/keys";
-import { buildBookStorageRelativePath } from "~~/server/utils/books/storage/paths";
+import { parseEpubMetadataFromBuffer } from '~~/server/utils/books/epub';
+import { extractAndStoreEpubCover } from '~~/server/utils/books/epub-cover';
+import { resolveDataPath, toSafePathSegment } from '~~/server/utils/books/fs';
+import { makeAuthorSortKey, makeTitleSortKey } from '~~/server/utils/sort/keys';
+import { buildBookStorageRelativePath } from '~~/server/utils/books/storage/paths';
+import { normalizePublishedAt } from '~~/server/utils/books/published';
 
-type SupportedBookFormat = "epub" | "pdf" | "mobi" | "azw3";
+type SupportedBookFormat = 'epub' | 'pdf' | 'mobi' | 'azw3';
 const SUPPORTED_BOOK_FORMATS: ReadonlyArray<SupportedBookFormat> = [
-  "epub",
-  "pdf",
-  "mobi",
-  "azw3",
+  'epub',
+  'pdf',
+  'mobi',
+  'azw3',
 ];
 
 /**
@@ -36,8 +37,8 @@ const SUPPORTED_BOOK_FORMATS: ReadonlyArray<SupportedBookFormat> = [
  * @returns
  */
 function getExtension(filename: string): string {
-  const ext = path.extname(filename || "").toLowerCase();
-  return ext.startsWith(".") ? ext.slice(1) : ext;
+  const ext = path.extname(filename || '').toLowerCase();
+  return ext.startsWith('.') ? ext.slice(1) : ext;
 }
 
 function isSupportedBookFormat(ext: string): ext is SupportedBookFormat {
@@ -49,7 +50,7 @@ function ensureSupportedBookFormat(filename: string): SupportedBookFormat {
   if (!ext || !isSupportedBookFormat(ext)) {
     throw createError({
       statusCode: 400,
-      statusMessage: `Unsupported upload format. Supported: ${SUPPORTED_BOOK_FORMATS.map((x) => `.${x}`).join(", ")}`,
+      statusMessage: `Unsupported upload format. Supported: ${SUPPORTED_BOOK_FORMATS.map((x) => `.${x}`).join(', ')}`,
     });
   }
   return ext;
@@ -78,7 +79,7 @@ type MultipartFilePart = {
  */
 async function parseNonEpubMetadataFromBuffer(opts: {
   buffer: Buffer;
-  format: Exclude<SupportedBookFormat, "epub">;
+  format: Exclude<SupportedBookFormat, 'epub'>;
   filename: string;
   fallbackTitle: string;
 }): Promise<ParsedBookMetadata> {
@@ -91,8 +92,8 @@ async function parseNonEpubMetadataFromBuffer(opts: {
   void opts.filename;
 
   return {
-    title: opts.fallbackTitle || "Untitled",
-    author: "Unknown Author",
+    title: opts.fallbackTitle || 'Untitled',
+    author: 'Unknown Author',
   };
 }
 
@@ -106,14 +107,14 @@ async function parseBookMetadataFromBuffer(opts: {
     path.extname(opts.filename),
   );
 
-  if (opts.format === "epub") {
+  if (opts.format === 'epub') {
     const meta = await parseEpubMetadataFromBuffer(opts.buffer, {
       fallbackTitle,
     });
 
     return {
-      title: meta.title || fallbackTitle || "Untitled",
-      author: meta.author || "Unknown Author",
+      title: meta.title || fallbackTitle || 'Untitled',
+      author: meta.author || 'Unknown Author',
       description: meta.description,
       language: meta.language,
       published: meta.published,
@@ -139,7 +140,7 @@ async function assertCanUploadToCollections(opts: {
   if (!uniqueIds.length) {
     throw createError({
       statusCode: 400,
-      statusMessage: "At least one target collection is required",
+      statusMessage: 'At least one target collection is required',
     });
   }
 
@@ -154,14 +155,14 @@ async function assertCanUploadToCollections(opts: {
 
   const forbidden = uniqueIds.filter((id) => {
     const role = roleByCollectionId.get(id);
-    return role !== "owner" && role !== "editor";
+    return role !== 'owner' && role !== 'editor';
   });
 
   if (forbidden.length) {
     throw createError({
       statusCode: 403,
       statusMessage:
-        "You do not have permission to upload to one or more selected collections",
+        'You do not have permission to upload to one or more selected collections',
     });
   }
 }
@@ -203,7 +204,7 @@ async function processOneBookUpload(
   input: { userId: string; collectionIds: string[] },
 ) {
   if (!filePart.filename || !filePart.data) {
-    throw createError({ statusCode: 400, statusMessage: "Missing book file" });
+    throw createError({ statusCode: 400, statusMessage: 'Missing book file' });
   }
 
   const format = ensureSupportedBookFormat(filePart.filename);
@@ -215,10 +216,10 @@ async function processOneBookUpload(
     filename: filePart.filename,
   });
 
-  const authorName = meta.author || "Unknown Author";
-  const title = meta.title || "Untitled";
+  const authorName = meta.author || 'Unknown Author';
+  const title = meta.title || 'Untitled';
 
-  const safeTitle = toSafePathSegment(title, "Untitled");
+  const safeTitle = toSafePathSegment(title, 'Untitled');
 
   const id = crypto.randomUUID();
   const relativePath = buildBookStorageRelativePath({
@@ -226,7 +227,7 @@ async function processOneBookUpload(
     title,
     bookId: id,
     filename: `${safeTitle}.${format}`,
-    baseDir: "library",
+    baseDir: 'library',
   });
 
   const absolutePath = resolveDataPath(relativePath);
@@ -245,22 +246,22 @@ async function processOneBookUpload(
   //
   // The full-res source is served only on-demand by requesting its path.
   let coverImagePath: string | null = null;
-  if (format === "epub") {
+  if (format === 'epub') {
     try {
       const thumbRelativePath = buildBookStorageRelativePath({
         authorNames: [authorName],
         title,
         bookId: id,
-        filename: "thumb.webp",
-        baseDir: "library",
+        filename: 'thumb.webp',
+        baseDir: 'library',
       });
 
       const sourceRelativePath = buildBookStorageRelativePath({
         authorNames: [authorName],
         title,
         bookId: id,
-        filename: "source.bin",
-        baseDir: "library",
+        filename: 'source.bin',
+        baseDir: 'library',
       });
 
       const extracted = await extractAndStoreEpubCover({
@@ -277,7 +278,7 @@ async function processOneBookUpload(
     } catch (error) {
       logger.debug(
         error,
-        "POST /api/books/upload: Failed to extract cover (continuing without cover)",
+        'POST /api/books/upload: Failed to extract cover (continuing without cover)',
       );
       coverImagePath = null;
     }
@@ -286,12 +287,16 @@ async function processOneBookUpload(
   const now = new Date();
 
   // Create canonical book record
+  const published = (meta.published || null) as string | null;
+  const publishedAt = published ? normalizePublishedAt(published) : null;
+
   await cloudDb.insert(books).values({
     id,
     title,
     sortTitle: makeTitleSortKey(title),
     description: (meta.description || null) as string | null,
-    published: (meta.published || null) as string | null,
+    published,
+    publishedAt,
     language: (meta.language || null) as string | null,
     coverImagePath,
     createdByUserId: input.userId,
@@ -338,7 +343,7 @@ async function processOneBookUpload(
 }
 
 export default defineEventHandler(async (event) => {
-  logger.debug("POST /api/books/upload");
+  logger.debug('POST /api/books/upload');
 
   // Require auth (consistent with the app's home page)
   const session = await auth.api.getSession({
@@ -346,7 +351,7 @@ export default defineEventHandler(async (event) => {
   });
 
   if (!session) {
-    throw createError({ statusCode: 401, statusMessage: "Unauthorized" });
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
   }
 
   const userId = session.user.id;
@@ -354,7 +359,7 @@ export default defineEventHandler(async (event) => {
   // Parse multipart form
   const form = await readMultipartFormData(event);
   if (!form?.length) {
-    throw createError({ statusCode: 400, statusMessage: "Missing form data" });
+    throw createError({ statusCode: 400, statusMessage: 'Missing form data' });
   }
 
   // Allow selecting one or more target collections.
@@ -364,9 +369,9 @@ export default defineEventHandler(async (event) => {
   // New behavior:
   // - If client provides no collectionIds, default to the user's Personal collection.
   let collectionIds = form
-    .filter((p) => p.name === "collectionId")
-    .map((p) => (typeof p.data === "string" ? p.data : p.data?.toString()))
-    .filter((x): x is string => typeof x === "string" && x.length > 0);
+    .filter((p) => p.name === 'collectionId')
+    .map((p) => (typeof p.data === 'string' ? p.data : p.data?.toString()))
+    .filter((x): x is string => typeof x === 'string' && x.length > 0);
 
   if (!collectionIds.length) {
     const personal = await cloudDb
@@ -390,7 +395,7 @@ export default defineEventHandler(async (event) => {
       throw createError({
         statusCode: 400,
         statusMessage:
-          "Personal collection not found. Please try again after your Personal collection is created.",
+          'Personal collection not found. Please try again after your Personal collection is created.',
       });
     }
 
@@ -407,7 +412,7 @@ export default defineEventHandler(async (event) => {
   if (!fileParts.length) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Missing book file(s)",
+      statusMessage: 'Missing book file(s)',
     });
   }
 
@@ -423,7 +428,7 @@ export default defineEventHandler(async (event) => {
       const book = await processOneBookUpload(part, { userId, collectionIds });
       results.push({ success: true, book, filename: part.filename });
     } catch (err: unknown) {
-      logger.error(err, "POST /api/books/upload: Failed to process one upload");
+      logger.error(err, 'POST /api/books/upload: Failed to process one upload');
 
       const e = err as {
         data?: { message?: string };
@@ -438,7 +443,7 @@ export default defineEventHandler(async (event) => {
           e?.data?.message ||
           e?.statusMessage ||
           e?.message ||
-          "Failed to upload file",
+          'Failed to upload file',
       });
     }
   }

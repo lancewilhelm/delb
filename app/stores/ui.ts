@@ -2,6 +2,9 @@ import { defineStore } from 'pinia';
 
 export type LibraryView = 'books' | 'authors' | 'series' | 'publishers';
 
+export type BooksSortKey = 'dateAdded' | 'alphabetical' | 'publishedDate';
+export type SortDirection = 'asc' | 'desc';
+
 export const useUiStore = defineStore(
   'ui',
   () => {
@@ -28,6 +31,38 @@ export const useUiStore = defineStore(
     const libraryView = ref<LibraryView>('books');
     function setLibraryView(view: LibraryView) {
       libraryView.value = view;
+    }
+
+    /**
+     * Books "Sort" UI state.
+     * Default must be "dateAdded" (date added to library).
+     */
+    const booksSortKey = ref<BooksSortKey>('dateAdded');
+    const booksSortDirection = ref<SortDirection>('desc');
+
+    function setBooksSortKey(key: BooksSortKey) {
+      booksSortKey.value = key;
+
+      // Sensible defaults per sort mode:
+      // - dateAdded => newest first
+      // - publishedDate => newest first
+      // - alphabetical => A-Z
+      if (key === 'alphabetical') {
+        booksSortDirection.value = 'asc';
+      } else if (key === 'publishedDate') {
+        booksSortDirection.value = 'desc';
+      } else if (key === 'dateAdded') {
+        booksSortDirection.value = 'desc';
+      }
+    }
+
+    function setBooksSortDirection(dir: SortDirection) {
+      booksSortDirection.value = dir;
+    }
+
+    function toggleBooksSortDirection() {
+      booksSortDirection.value =
+        booksSortDirection.value === 'asc' ? 'desc' : 'asc';
     }
 
     /**
@@ -64,6 +99,8 @@ export const useUiStore = defineStore(
     function $reset() {
       // Insert reset logic here if needed
       libraryView.value = 'books';
+      booksSortKey.value = 'dateAdded';
+      booksSortDirection.value = 'desc';
       leftSidebarWidthPx.value = 260;
       leftSidebarCollapsed.value = false;
       bookUploadModalVisible.value = false;
@@ -79,6 +116,12 @@ export const useUiStore = defineStore(
 
       libraryView,
       setLibraryView,
+
+      booksSortKey,
+      setBooksSortKey,
+      booksSortDirection,
+      setBooksSortDirection,
+      toggleBooksSortDirection,
 
       leftSidebarWidthPx,
       setLeftSidebarWidthPx,
