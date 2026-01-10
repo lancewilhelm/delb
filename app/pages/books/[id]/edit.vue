@@ -204,22 +204,6 @@ function getGoogleCoverUrl(item: GoogleBookItem): string | null {
   return raw.replace('&edge=curl', '');
 }
 
-async function uploadCoverFromUrl(url: string): Promise<void> {
-  // IMPORTANT: Google Books cover URLs are blocked by browser CORS.
-  // Proxy through our server endpoint, then reuse the same preview/upload flow.
-  const proxied = `/api/books/metadata/cover?url=${encodeURIComponent(url)}`;
-
-  coverUrlInput.value = proxied;
-
-  await previewCoverFromUrl();
-
-  if (!selectedCoverFile.value) {
-    throw new Error('Failed to create a cover file from the URL.');
-  }
-
-  await uploadCover();
-}
-
 type Book = {
   id: string;
   title: string;
@@ -273,7 +257,13 @@ const successMessage = ref<string | null>(null);
 
 const book = ref<Book | null>(null);
 
+const coverResetPending = ref(false);
+
 const coverUrl = computed(() => {
+  // If the user has requested a reset, reflect that immediately in the edit UI,
+  // but do not persist until Save is pressed.
+  if (coverResetPending.value) return null;
+
   const b = book.value;
   if (!b?.coverImagePath) return null;
 
@@ -380,7 +370,7 @@ async function previewCoverFromUrl() {
     revokeCoverPreviewUrl();
     coverPreviewUrl.value = URL.createObjectURL(file);
 
-    setSuccess('Preview loaded. Click Upload to save.');
+    setSuccess('Preview loaded. Click Save to apply.');
   } catch (e: unknown) {
     // Ignore abort errors
     if (e instanceof DOMException && e.name === 'AbortError') return;
@@ -391,21 +381,63 @@ async function previewCoverFromUrl() {
   }
 }
 
-function clearCoverUrlPreview() {
-  coverUrlInput.value = '';
+function resetCoverPreview() {
+  // Undo any pending "clear cover" action and revert to the currently-saved cover.
+  coverResetPending.value = false;
+
+  // Also drop any pending new cover preview.
   clearSelectedCover();
 }
 
-async function uploadCover() {
+function resetSavedCover() {
+  // "Clear cover" should blank the cover in the edit screen until Save is pressed.
+  coverResetPending.value = true;
+
+  // If there was a pending new cover, drop it so the UI truly reflects "cleared".
+  clearSelectedCover();
+
+  setSuccess('Cover cleared. Click Save to apply.');
+}
+
+async function uploadPendingCoverIfAny() {
   if (!book.value?.id) return;
-  if (!selectedCoverFile.value) return;
   if (coverUploading.value) return;
 
   coverUploading.value = true;
-  errorMessage.value = null;
-  successMessage.value = null;
 
   try {
+    // If a reset was queued, persist it even if no new cover is selected.
+    // This keeps "Reset cover" as a pending edit-screen state until Save is pressed.
+    if (coverResetPending.value) {
+      const clearRes = await fetch(
+        `/api/books/${encodeURIComponent(book.value.id)}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({
+            coverImagePath: null,
+          }),
+        },
+      );
+
+      if (!clearRes.ok) {
+        const text = await clearRes.text().catch(() => '');
+        setError(text || `Failed to reset cover (${clearRes.status}).`);
+        throw new Error('Cover reset failed.');
+      }
+
+      coverResetPending.value = false;
+
+      // Reload so `coverImagePath` is consistent before applying a new upload.
+      await loadBook();
+    }
+
+    // If no cover file is selected, we're done (this may have been a reset-only save).
+    if (!selectedCoverFile.value) return;
+
     const fd = new FormData();
     fd.append('file', selectedCoverFile.value);
 
@@ -420,16 +452,13 @@ async function uploadCover() {
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       setError(text || `Failed to upload cover (${res.status}).`);
-      return;
+      throw new Error('Cover upload failed.');
     }
 
-    setSuccess('Cover uploaded.');
     clearSelectedCover();
 
     // Reload the book so `coverImagePath` refreshes
     await loadBook();
-  } catch (e: unknown) {
-    setError(e instanceof Error ? e.message : 'Failed to upload cover.');
   } finally {
     coverUploading.value = false;
   }
@@ -1060,6 +1089,9 @@ async function save() {
       return;
     }
 
+    // Upload cover (if a new one is pending) as part of Save.
+    await uploadPendingCoverIfAny();
+
     setSuccess('Saved.');
 
     // After a successful save, return to the book page
@@ -1073,6 +1105,11 @@ async function save() {
 
 function resetForm() {
   if (!book.value) return;
+
+  // Global reset should revert ALL pending changes in the edit UI, including cover changes.
+  coverResetPending.value = false;
+  resetCoverPreview();
+
   bookToForm(book.value);
 }
 
@@ -1201,18 +1238,23 @@ async function handleMetadataSelect(selection: MetadataImportSelection) {
       form.identifiers = serializeIdentifierRows(next);
     }
 
-    // Cover (download then upload via existing endpoint) — reuse URL preview flow
+    // Cover (preview only — do NOT upload automatically)
+    // This matches the "Fetch cover from URL" flow where you can clear/reset before saving.
     if (fields.cover) {
       const coverUrl = getGoogleCoverUrl(item);
       if (!coverUrl) {
         throw new Error('No cover URL available for this result.');
       }
 
+      // Reuse the existing URL preview flow, but stop short of uploading.
+      // This will populate `selectedCoverFile` + `coverPreviewUrl` and show the preview.
       errorMessage.value = null;
       successMessage.value = null;
 
-      await uploadCoverFromUrl(coverUrl);
-      await loadBook();
+      const proxied = `/api/books/metadata/cover?url=${encodeURIComponent(coverUrl)}`;
+      coverUrlInput.value = proxied;
+
+      await previewCoverFromUrl();
     }
 
     setSuccess('Imported selected fields.');
@@ -1273,6 +1315,7 @@ watch(
           <BookCover
             :src="coverPreviewUrl ?? coverUrl"
             :alt="`Cover for ${book.title}`"
+            :title="book.title"
             class="w-50! sm:w-full!"
           />
 
@@ -1286,39 +1329,39 @@ watch(
 
           <div class="flex flex-wrap gap-1 pt-2 justify-center">
             <button
+              v-tooltip="'Upload cover from computer'"
               class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
               type="button"
               :disabled="saving || coverUrlLoading"
               @click="pickCoverFile"
             >
               <icon name="lucide:image-up" class="scale-135" />
-              Choose cover
+              Upload
             </button>
 
             <button
-              v-if="selectedCoverFile"
+              v-if="selectedCoverFile || coverResetPending"
+              v-tooltip="'Reset cover to original'"
               class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2!"
               type="button"
               :disabled="saving"
-              @click="clearSelectedCover"
+              @click="resetCoverPreview"
             >
-              <icon name="lucide:x" class="scale-135" />
-              Clear
+              <icon name="ri:reset-left-line" class="scale-135" />
+              Reset
             </button>
 
             <button
-              class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
+              v-tooltip="'Trash current cover'"
+              class="px-3 py-2 rounded-md border border-(--error-color) text-(--error-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed!"
               type="button"
-              :disabled="saving || coverUploading || !selectedCoverFile"
-              @click="uploadCover"
+              :disabled="
+                saving || coverUploading || coverUrlLoading || !coverUrl
+              "
+              @click="resetSavedCover"
             >
-              <icon
-                :name="
-                  coverUploading ? 'lucide:loader-circle' : 'lucide:upload'
-                "
-                :class="[coverUploading ? 'animate-spin' : '', 'scale-135']"
-              />
-              {{ coverUploading ? 'Uploading...' : 'Upload' }}
+              <icon name="lucide:trash-2" class="scale-135" />
+              Clear
             </button>
           </div>
 
@@ -1354,27 +1397,13 @@ watch(
                 />
                 {{ coverUrlLoading ? 'Fetching...' : 'Fetch' }}
               </button>
-              <button
-                class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
-                type="button"
-                :disabled="
-                  saving ||
-                  coverUploading ||
-                  coverUrlLoading ||
-                  (!coverUrlInput.trim() && !selectedCoverFile)
-                "
-                @click="clearCoverUrlPreview"
-              >
-                <icon name="lucide:x" class="scale-135" />
-                Clear
-              </button>
             </div>
 
             <div
               v-if="coverUrlInput.trim()"
               class="text-xs opacity-60 mt-1 text-left"
             >
-              Press Enter to fetch. This only previews until you click Upload.
+              This only previews until you click Save.
             </div>
           </div>
 

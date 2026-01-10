@@ -25,6 +25,16 @@ type PutBookBody = {
   language?: string | null;
 
   /**
+   * Cover image (thumbnail path stored in DB).
+   * - If omitted => unchanged
+   * - If null => clears cover (removes `books.coverImagePath`)
+   *
+   * NOTE: This only clears the DB pointer. It does not delete any files on disk.
+   * (Disk cleanup would require a separate endpoint / deliberate behavior.)
+   */
+  coverImagePath?: string | null;
+
+  /**
    * Page count (optional).
    * - If omitted => unchanged
    * - If null => clears
@@ -467,7 +477,16 @@ export default defineEventHandler(async (event) => {
   const language = normalizeOptionalString((body as PutBookBody).language);
   if (language !== undefined) update.language = language;
 
-  // Publisher / Series by name (preferred) or id (back-compat)
+  // Cover (optional)
+  // - undefined => unchanged
+  // - null      => clear cover (DB pointer only)
+  const coverImagePath = normalizeOptionalString(
+    (body as PutBookBody).coverImagePath,
+  );
+  if (coverImagePath !== undefined) {
+    update.coverImagePath = coverImagePath;
+  }
+
   const publisherName = normalizeOptionalString(
     (body as PutBookBody).publisherName,
   );
