@@ -119,7 +119,7 @@ async function clearToken() {
           />
 
           <div class="flex items-center justify-between gap-3">
-            <div class="text-xs opacity-70 min-w-0">
+            <div class="flex gap-1 text-xs opacity-70 min-w-0">
               <span class="font-semibold">Status:</span>
               <span
                 v-if="globalSettingsStore.capabilities?.hardcoverAvailable"

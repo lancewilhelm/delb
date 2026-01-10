@@ -232,7 +232,13 @@ type BookGetResponse = {
   };
 };
 
-type SearchResponse = {
+type GoogleBooksSearchResponse = {
+  kind: string;
+  totalItems: number;
+  items?: GoogleBookItem[];
+};
+
+type NameSearchResponse = {
   success?: boolean;
   message?: string;
   data?: {
@@ -491,7 +497,7 @@ const form = reactive({
   identifiers: '' as string, // serialized list (one per line) of type:value
 });
 
-const identifierTypeInput = ref('isbn13');
+const identifierTypeInput = ref('');
 const identifierValueInput = ref('');
 
 // Authors (chips + typeahead)
@@ -643,7 +649,7 @@ async function fetchSuggestions(
   );
   if (!res.ok) return [];
 
-  const json = (await res.json()) as SearchResponse;
+  const json = (await res.json()) as NameSearchResponse;
   return (json?.data?.results ?? []).slice(0, take);
 }
 
@@ -1121,12 +1127,179 @@ function backToBook() {
 const metadataSearchOpen = ref(false);
 const metadataSearchQuery = computed(() => book.value?.title || '');
 
+/**
+ * Auto-fetch (top result) state
+ */
+const autoFetchingMetadata = ref(false);
+
 function openMetadataSearch() {
   metadataSearchOpen.value = true;
 }
 
 function closeMetadataSearch() {
   metadataSearchOpen.value = false;
+}
+
+const globalSettingsStore = useGlobalSettingsStore();
+
+async function handleAutoFetchMetadata() {
+  if (autoFetchingMetadata.value) return;
+
+  // Use the default provider from global settings, falling back to Google Books.
+
+  errorMessage.value = null;
+  successMessage.value = null;
+
+  autoFetchingMetadata.value = true;
+  try {
+    // Ensure provider choice + capability flags are current
+    await globalSettingsStore.pullLatest();
+    const provider =
+      globalSettingsStore.settings.metadataProvider ?? 'googleBooks';
+
+    const q = (metadataSearchQuery.value || '').trim();
+    if (!q) {
+      throw new Error('No title available to search.');
+    }
+
+    let item: GoogleBookItem | null = null;
+
+    if (provider === 'hardcover') {
+      // Use the same server endpoint shape as the modal, then map into a Google-like item.
+      const resp = await $fetch<{
+        success: boolean;
+        data?: {
+          results: Array<{
+            id: number | string | null;
+            title: string;
+            authors: string[];
+            cover: string | null;
+            description: string;
+            hardcover_slug: string;
+            genres?: string[];
+            identifiers?: Array<{ type: 'hardcover'; value: string }>;
+            published?: string | null;
+            pages?: number | null;
+            series?: string | null;
+            seriesIndex?: number | null;
+            publisher?: string | null;
+            language?: string | null;
+          }>;
+        };
+        message?: string;
+      }>('/api/books/metadata/hardcover/search', {
+        method: 'GET',
+        params: { q },
+      });
+
+      const top = resp?.data?.results?.[0];
+      if (!top) {
+        throw new Error('No results found.');
+      }
+
+      // Inline mapping (kept minimal/specific to current server response)
+      const categories = Array.isArray(top.genres) ? top.genres : undefined;
+      const industryIdentifiers = Array.isArray(top.identifiers)
+        ? top.identifiers
+            .map((x) => {
+              if (!x || x.type !== 'hardcover') return null;
+              const v = normalizeIdentifierValue(x.value ?? '');
+              if (!v) return null;
+              return { type: 'HARDCOVER', identifier: v };
+            })
+            .filter(
+              (x): x is { type: string; identifier: string } => x !== null,
+            )
+        : undefined;
+
+      item = {
+        id: String(top.id ?? ''),
+        volumeInfo: {
+          title: top.title || undefined,
+          authors: Array.isArray(top.authors) ? top.authors : undefined,
+          publisher:
+            typeof top.publisher === 'string' && top.publisher.trim()
+              ? top.publisher.trim()
+              : undefined,
+          publishedDate:
+            typeof top.published === 'string' && top.published.trim()
+              ? top.published.trim()
+              : undefined,
+          description: top.description || undefined,
+          industryIdentifiers:
+            industryIdentifiers && industryIdentifiers.length
+              ? industryIdentifiers
+              : undefined,
+          categories: categories && categories.length ? categories : undefined,
+          series:
+            typeof top.series === 'string' && top.series.trim()
+              ? top.series.trim()
+              : undefined,
+          seriesIndex:
+            typeof top.seriesIndex === 'number' &&
+            !Number.isNaN(top.seriesIndex)
+              ? top.seriesIndex
+              : undefined,
+          pageCount:
+            typeof top.pages === 'number' && !Number.isNaN(top.pages)
+              ? top.pages
+              : undefined,
+          imageLinks: top.cover
+            ? {
+                thumbnail: top.cover,
+              }
+            : undefined,
+          language:
+            typeof top.language === 'string' && top.language.trim()
+              ? top.language.trim()
+              : undefined,
+        },
+      };
+    } else {
+      // Default: Google Books
+      const response = await $fetch<GoogleBooksSearchResponse>(
+        '/api/books/metadata/search',
+        {
+          method: 'GET',
+          params: { q },
+        },
+      );
+
+      const items = response.items ?? [];
+      if (!items.length) {
+        throw new Error('No results found.');
+      }
+
+      item = items[0] ?? null;
+    }
+
+    if (!item) {
+      throw new Error('No results found.');
+    }
+
+    // Import everything (all fields true) from top hit
+    await handleMetadataSelect({
+      item,
+      fields: {
+        title: true,
+        authors: true,
+        description: true,
+        publisher: true,
+        published: true,
+        language: true,
+        tags: true,
+        cover: true,
+        identifiers: true,
+        series: true,
+        seriesIndex: true,
+        pages: true,
+      },
+    });
+  } catch (e: unknown) {
+    setError(e instanceof Error ? e.message : 'Failed to auto-fetch metadata.');
+  } finally {
+    autoFetchingMetadata.value = false;
+  }
 }
 
 async function handleMetadataSelect(selection: MetadataImportSelection) {
@@ -1284,15 +1457,47 @@ watch(
 
     <!-- Content -->
     <div class="w-full h-full p-4 overflow-auto">
-      <!-- Back button -->
-      <div class="flex items-center gap-2 mb-4 text-(--main-color)">
+      <div
+        class="flex items-center justify-between gap-2 mb-4 text-(--main-color)"
+      >
+        <!-- Back button -->
         <div
           v-tooltip="'Back to book'"
           type="button"
           class="opacity-80 hover:opacity-100 cursor-pointer"
           @click="backToBook"
         >
-          <icon name="lucide:arrow-left" class="scale-200 translate-x-1" />
+          <icon name="lucide:arrow-left" class="text-3xl" />
+        </div>
+
+        <!-- Metadata header -->
+        <div v-if="book" class="flex items-center justify-between gap-4">
+          <div class="min-w-0">
+            <div class="text-sm opacity-70">
+              ID: <span class="font-mono">{{ book.id }}</span>
+            </div>
+          </div>
+
+          <div class="flex gap-2 shrink-0">
+            <button
+              class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
+              type="button"
+              :disabled="saving"
+              @click="resetForm"
+            >
+              Reset
+            </button>
+
+            <button
+              class="px-3 py-2 rounded-md bg-(--main-color) text-(--bg-color) hover:bg-(--main-color)/90! text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              type="button"
+              :disabled="saving"
+              @click="save"
+            >
+              <span v-if="saving">Saving...</span>
+              <span v-else>Save</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1423,36 +1628,6 @@ watch(
 
         <!-- Right column: metadata fields -->
         <div class="min-w-0 flex flex-col gap-4 grow max-w-3xl">
-          <!-- Metadata header -->
-          <div class="flex items-center justify-between gap-4">
-            <div class="min-w-0">
-              <div class="text-sm opacity-70">
-                ID: <span class="font-mono">{{ book.id }}</span>
-              </div>
-            </div>
-
-            <div class="flex gap-2 shrink-0">
-              <button
-                class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
-                type="button"
-                :disabled="saving"
-                @click="resetForm"
-              >
-                Reset
-              </button>
-
-              <button
-                class="px-3 py-2 rounded-md bg-(--main-color) text-(--bg-color) hover:bg-(--main-color)/90! text-sm disabled:opacity-60 disabled:cursor-not-allowed"
-                type="button"
-                :disabled="saving"
-                @click="save"
-              >
-                <span v-if="saving">Saving...</span>
-                <span v-else>Save</span>
-              </button>
-            </div>
-          </div>
-
           <div v-if="successMessage" class="text-sm text-green-600">
             {{ successMessage }}
           </div>
@@ -1859,11 +2034,6 @@ watch(
                   Add
                 </button>
               </div>
-
-              <div class="text-xs opacity-60">
-                Stored as type:value (e.g. isbn13:9780593820247). You can add
-                multiple identifiers.
-              </div>
             </div>
 
             <!-- Pages -->
@@ -1877,9 +2047,6 @@ watch(
                 step="1"
                 placeholder="e.g. 465"
               />
-              <div class="text-xs opacity-60">
-                Optional. Used for reading progress features (later).
-              </div>
             </div>
 
             <!-- Language -->
@@ -1893,15 +2060,38 @@ watch(
               />
             </div>
 
-            <!-- Metadata Search Button -->
-            <button
-              type="button"
-              class="w-full border border-(--sub-color) p-2 gap-2"
-              @click="openMetadataSearch"
-            >
-              <Icon name="lucide:search" class="text-xl" />
-              <span>Search for Metadata</span>
-            </button>
+            <!-- Metadata Search Buttons -->
+            <div class="flex gap-2">
+              <!-- Metadata Search Button -->
+              <button
+                type="button"
+                class="w-full border border-(--sub-color) p-2 gap-2"
+                @click="openMetadataSearch"
+              >
+                <Icon name="lucide:search" class="text-xl" />
+                <span>Search for Metadata</span>
+              </button>
+
+              <!-- Auto-feetch Metadata Button -->
+              <button
+                type="button"
+                class="w-full border border-(--sub-color) p-2 gap-2 flex-col"
+                :disabled="autoFetchingMetadata"
+                @click="handleAutoFetchMetadata"
+              >
+                <div class="flex items-center gap-2">
+                  <Icon name="lucide:dices" class="text-xl" />
+                  <span>{{
+                    autoFetchingMetadata ? 'Auto-fetching…' : 'Auto-fetch'
+                  }}</span>
+                </div>
+                <span class="flex gap-1 text-xs opacity-70"
+                  >From
+                  {{ globalSettingsStore.settings.metadataProvider }}
+                  (default)</span
+                >
+              </button>
+            </div>
           </div>
         </div>
       </div>

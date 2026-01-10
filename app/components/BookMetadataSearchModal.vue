@@ -594,16 +594,14 @@ function getThumbnail(item: GoogleBookItem): string {
     <div class="flex flex-col gap-4 w-full!">
       <!-- Header -->
       <div
-        class="flex items-center justify-between border-b border-(--sub-color) pb-4"
+        class="flex items-center justify-between border-b border-(--sub-color) pb-2"
       >
         <div class="text-xl font-semibold">Search Book Metadata</div>
-        <button
-          type="button"
-          class="p-2 hover:bg-(--sub-color)/10 rounded-md transition-colors"
+        <Icon
+          name="lucide:x"
+          class="text-xl cursor-pointer"
           @click="emit('close')"
-        >
-          <Icon name="mdi:close" class="w-5 h-5" />
-        </button>
+        />
       </div>
 
       <!-- Search Input -->
@@ -627,27 +625,28 @@ function getThumbnail(item: GoogleBookItem): string {
       </div>
 
       <!-- Provider Toggles -->
-      <div class="flex flex-wrap gap-2 -mt-2">
-        <button
+      <div class="flex flex-wrap gap-2 -mt-2 items-center">
+        <span class="text-sm opacity-70 ml-1">Selected Providers:</span>
+        <div
           type="button"
-          class="px-3 py-1.5 rounded-md border border-(--sub-color) text-xs transition"
+          class="px-3 py-1.5 rounded-md border border-(--sub-color) text-xs transition cursor-pointer"
           :class="
             providerState.googleBooks
-              ? 'bg-(--sub-color)/15'
-              : 'hover:bg-(--sub-color)/10'
+              ? 'bg-(--main-color)/50'
+              : 'hover:bg-(--main-color)/40'
           "
           @click="toggleProvider('googleBooks')"
         >
           <span class="font-semibold">Google Books</span>
-        </button>
+        </div>
 
-        <button
+        <div
           type="button"
-          class="px-3 py-1.5 rounded-md border border-(--sub-color) text-xs transition disabled:opacity-40 disabled:cursor-not-allowed"
+          class="px-3 py-1.5 rounded-md border border-(--sub-color) text-xs transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           :class="
             providerState.hardcover
-              ? 'bg-(--sub-color)/15'
-              : 'hover:bg-(--sub-color)/10'
+              ? 'bg-(--main-color)/50'
+              : 'hover:bg-(--main-color)/40'
           "
           :disabled="!globalSettingsStore.capabilities?.hardcoverAvailable"
           @click="toggleProvider('hardcover')"
@@ -659,7 +658,7 @@ function getThumbnail(item: GoogleBookItem): string {
           >
             (not configured)
           </span>
-        </button>
+        </div>
       </div>
 
       <!-- Error Message -->
@@ -790,16 +789,16 @@ function getThumbnail(item: GoogleBookItem): string {
                   <span
                     class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                   ></span>
-                  <span class="opacity-60"
-                    >Publisher:
-                    {{ result.googleItem.volumeInfo.publisher }}</span
-                  >
+                  <div>
+                    <span class="opacity-60">Publisher:</span>
+                    {{ result.googleItem.volumeInfo.publisher }}
+                  </div>
                 </label>
 
                 <!-- Published Date -->
                 <label
                   v-if="result.googleItem?.volumeInfo.publishedDate"
-                  class="flex items-center gap-2 cursor-pointer"
+                  class="flex items-center gap-2 cursor-pointer text-xs"
                 >
                   <input
                     v-model="getFields(resultKey(result)).published"
@@ -809,10 +808,10 @@ function getThumbnail(item: GoogleBookItem): string {
                   <span
                     class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                   ></span>
-                  <span class="opacity-60 text-xs"
-                    >Published:
-                    {{ result.googleItem.volumeInfo.publishedDate }}</span
-                  >
+                  <div>
+                    <span class="opacity-60">Published:</span>
+                    {{ result.googleItem.volumeInfo.publishedDate }}
+                  </div>
                 </label>
 
                 <div
@@ -825,7 +824,7 @@ function getThumbnail(item: GoogleBookItem): string {
                 <!-- Language -->
                 <label
                   v-if="result.googleItem?.volumeInfo.language"
-                  class="flex items-center gap-2 cursor-pointer"
+                  class="flex items-center gap-2 cursor-pointer text-xs"
                 >
                   <input
                     v-model="getFields(resultKey(result)).language"
@@ -835,9 +834,10 @@ function getThumbnail(item: GoogleBookItem): string {
                   <span
                     class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                   ></span>
-                  <span class="opacity-60 text-xs"
-                    >Language: {{ result.googleItem.volumeInfo.language }}</span
-                  >
+                  <div>
+                    <span class="opacity-60">Language:</span>
+                    {{ result.googleItem.volumeInfo.language }}
+                  </div>
                 </label>
 
                 <!-- Series & Series Index -->
@@ -845,7 +845,7 @@ function getThumbnail(item: GoogleBookItem): string {
                   <!-- Series -->
                   <label
                     v-if="result.googleItem?.volumeInfo.series"
-                    class="flex items-center gap-2 cursor-pointer"
+                    class="flex items-center gap-2 cursor-pointer text-xs"
                   >
                     <input
                       v-model="getFields(resultKey(result)).series"
@@ -855,9 +855,10 @@ function getThumbnail(item: GoogleBookItem): string {
                     <span
                       class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                     ></span>
-                    <span class="opacity-60 text-xs"
-                      >Series: {{ result.googleItem.volumeInfo.series }}</span
-                    >
+                    <div>
+                      <span class="opacity-60">Series:</span>
+                      {{ result.googleItem.volumeInfo.series }}
+                    </div>
                   </label>
 
                   <!-- Series Index-->
@@ -866,7 +867,7 @@ function getThumbnail(item: GoogleBookItem): string {
                       typeof result.googleItem?.volumeInfo.seriesIndex ===
                       'number'
                     "
-                    class="flex items-center gap-2 cursor-pointer"
+                    class="flex items-center gap-2 cursor-pointer text-xs"
                   >
                     <input
                       v-model="getFields(resultKey(result)).seriesIndex"
@@ -876,9 +877,11 @@ function getThumbnail(item: GoogleBookItem): string {
                     <span
                       class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                     ></span>
-                    <span class="opacity-60 text-xs"
-                      >#{{ result.googleItem.volumeInfo.seriesIndex }}</span
-                    >
+                    <div>
+                      <span class="opacity-60">Index:</span> #{{
+                        result.googleItem.volumeInfo.seriesIndex
+                      }}
+                    </div>
                   </label>
                 </div>
 
@@ -888,7 +891,7 @@ function getThumbnail(item: GoogleBookItem): string {
                     result.googleItem?.volumeInfo.industryIdentifiers &&
                     result.googleItem?.volumeInfo.industryIdentifiers.length
                   "
-                  class="flex items-center gap-2 cursor-pointer"
+                  class="flex items-center gap-2 cursor-pointer text-xs"
                 >
                   <input
                     v-model="getFields(resultKey(result)).identifiers"
@@ -898,10 +901,8 @@ function getThumbnail(item: GoogleBookItem): string {
                   <span
                     class="h-4 w-4 mt-0.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                   ></span>
-                  <span
-                    class="flex flex-wrap items-center gap-2 opacity-60 text-xs"
-                  >
-                    <span> Identfiers: </span>
+                  <span class="flex flex-wrap items-center gap-2">
+                    <span class="opacity-60"> Identfiers: </span>
                     <span class="flex flex-wrap gap-2">
                       <span
                         v-for="id in result.googleItem.volumeInfo
@@ -924,7 +925,7 @@ function getThumbnail(item: GoogleBookItem): string {
                   v-if="
                     typeof result.googleItem?.volumeInfo.pageCount === 'number'
                   "
-                  class="flex items-center gap-2 cursor-pointer"
+                  class="flex items-center gap-2 cursor-pointer text-xs"
                 >
                   <input
                     v-model="getFields(resultKey(result)).pages"
@@ -934,9 +935,10 @@ function getThumbnail(item: GoogleBookItem): string {
                   <span
                     class="h-4 w-4 mt-0.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                   ></span>
-                  <span class="opacity-60 text-xs">
-                    Pages: {{ result.googleItem.volumeInfo.pageCount }}
-                  </span>
+                  <div>
+                    <span class="opacity-60"> Pages:</span>
+                    {{ result.googleItem.volumeInfo.pageCount }}
+                  </div>
                 </label>
                 <span v-else class="opacity-60 text-xs"> Pages: N/A </span>
 
@@ -946,7 +948,7 @@ function getThumbnail(item: GoogleBookItem): string {
                     result.googleItem?.volumeInfo.categories &&
                     result.googleItem.volumeInfo.categories.length
                   "
-                  class="flex items-center gap-2 cursor-pointer"
+                  class="flex items-center gap-2 cursor-pointer text-xs"
                 >
                   <input
                     v-model="getFields(resultKey(result)).tags"
@@ -957,8 +959,8 @@ function getThumbnail(item: GoogleBookItem): string {
                     class="h-4 w-4 mt-0.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                   ></span>
                   <div class="flex-1 min-w-0">
-                    <div class="text-xs opacity-60 flex items-center gap-2">
-                      <span> Tags: </span>
+                    <div class="text-xs flex items-center gap-2">
+                      <span class="opacity-60"> Tags: </span>
                       <span class="flex flex-wrap gap-2">
                         <span
                           v-for="(tag, index) in result.googleItem.volumeInfo
@@ -975,7 +977,7 @@ function getThumbnail(item: GoogleBookItem): string {
                 <!-- Description -->
                 <label
                   v-if="result.googleItem?.volumeInfo.description"
-                  class="flex items-start gap-2 cursor-pointer"
+                  class="flex items-start gap-2 cursor-pointer text-xs"
                 >
                   <input
                     v-model="getFields(resultKey(result)).description"
@@ -986,8 +988,8 @@ function getThumbnail(item: GoogleBookItem): string {
                     class="h-4 w-4 mt-0.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                   ></span>
                   <div class="flex-1 min-w-0">
-                    <div class="text-xs opacity-60 flex gap-2">
-                      <span>Description:</span>
+                    <div class="flex gap-2">
+                      <span class="opacity-60">Description:</span>
                       {{ result.googleItem.volumeInfo.description }}
                     </div>
                   </div>
