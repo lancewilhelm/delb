@@ -2,7 +2,6 @@ import { defineStore } from 'pinia';
 
 export interface GlobalSettings {
   allowRegistration: boolean;
-  allowFileUpload: boolean;
 
   /**
    * Preferred metadata provider (UI can use this to select a default source).
@@ -13,7 +12,6 @@ export interface GlobalSettings {
 function getDefaultSettings(): GlobalSettings {
   return {
     allowRegistration: false,
-    allowFileUpload: false,
 
     metadataProvider: 'googleBooks',
   };

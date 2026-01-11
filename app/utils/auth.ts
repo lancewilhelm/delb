@@ -1,11 +1,13 @@
-import { betterAuth } from "better-auth";
-import { admin as baAdmin } from "better-auth/plugins";
-import { APIError } from "better-auth/api";
-import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { cloudDb } from "~~/server/utils/db/cloud";
-import * as schema from "./db/schema";
-import { count, and, eq } from "drizzle-orm";
-import { ac, user, admin, owner } from "./permissions";
+import { betterAuth } from 'better-auth';
+import { admin as baAdmin } from 'better-auth/plugins';
+import { APIError } from 'better-auth/api';
+import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { cloudDb } from '~~/server/utils/db/cloud';
+import * as schema from './db/schema';
+import { count, and, eq } from 'drizzle-orm';
+import { ac, user, admin, owner } from './permissions';
+import type { GlobalSettings } from '~/stores/globalSettings';
+import { logger } from '~/utils/logger';
 
 async function ensurePersonalCollectionForUser(userId: string) {
   const existing = await cloudDb
@@ -26,7 +28,7 @@ async function ensurePersonalCollectionForUser(userId: string) {
 
   await cloudDb.insert(schema.collections).values({
     id: collectionId,
-    name: "Personal",
+    name: 'Personal',
     ownerUserId: userId,
     isPersonal: true,
     createdAt: now,
@@ -36,7 +38,7 @@ async function ensurePersonalCollectionForUser(userId: string) {
   await cloudDb.insert(schema.collectionMembers).values({
     collectionId,
     userId,
-    role: "owner",
+    role: 'owner',
     createdAt: now,
   });
 }
@@ -71,7 +73,7 @@ export const auth = betterAuth({
   baseURL: getBaseURL(),
   trustedOrigins: getTrustedOrigins(),
   advanced: {
-    cookiePrefix: "delb",
+    cookiePrefix: 'delb',
   },
   plugins: [
     baAdmin({
@@ -84,7 +86,7 @@ export const auth = betterAuth({
     }),
   ],
   database: drizzleAdapter(cloudDb, {
-    provider: "sqlite",
+    provider: 'sqlite',
     schema: {
       ...schema,
     },
@@ -93,9 +95,9 @@ export const auth = betterAuth({
   user: {
     additionalFields: {
       role: {
-        type: "string",
+        type: 'string',
         required: true,
-        defaultValue: "user",
+        defaultValue: 'user',
         input: false,
       },
     },
@@ -118,29 +120,65 @@ export const auth = betterAuth({
     user: {
       create: {
         before: async (user) => {
-          // Check if registration is allowed
-          const response = await cloudDb.select().from(schema.globalSettings);
-          const settings = response[0]?.settings as GlobalSettings;
-          const allowRegistration =
-            settings === undefined || settings.allowRegistration;
-
-          if (!allowRegistration) {
-            throw new APIError("UNAUTHORIZED", {
-              message: "Registration is closed.",
-            });
-          }
-
           // Determine if this is the first user
           const userCount = await cloudDb
             .select({ count: count() })
             .from(schema.users);
           const isFirstUser = !userCount[0] || userCount[0].count === 0;
-          const role = isFirstUser ? "owner" : "user";
+
+          // Determine whether creation is coming from admin endpoints (avoid circular auth reference)
+          let isAdminCreator = false;
+          try {
+            const event = useEvent();
+            const pathname = getRequestURL(event).pathname;
+            isAdminCreator =
+              typeof pathname === 'string' &&
+              pathname.includes('/api/auth/admin');
+          } catch (error) {
+            logger.debug({ error }, 'Failed to determine request context');
+            // no-op: assume not admin if request context cannot be determined
+          }
+
+          // Fetch global settings for registration checks
+          const response = await cloudDb.select().from(schema.globalSettings);
+          const settings = response[0]?.settings as GlobalSettings;
+
+          // Only enforce registration toggle for non-admin creators and non-first user
+          if (!isAdminCreator && !isFirstUser) {
+            const allowRegistration =
+              settings === undefined || settings.allowRegistration;
+
+            if (!allowRegistration) {
+              throw new APIError('UNAUTHORIZED', {
+                message: 'Registration is closed.',
+              });
+            }
+          }
+
+          // Determine final role:
+          // - first user is always 'owner'
+          // - admin-created users honor requested role
+          // - self-registrations are always 'user'
+          let finalRole: 'owner' | 'admin' | 'user';
+
+          if (isFirstUser) {
+            finalRole = 'owner';
+          } else if (isAdminCreator) {
+            const maybeRole = (user as { role?: unknown }).role;
+            const requestedRole =
+              typeof maybeRole === 'string' &&
+              (maybeRole === 'admin' || maybeRole === 'user')
+                ? (maybeRole as 'admin' | 'user')
+                : 'user';
+            finalRole = requestedRole;
+          } else {
+            finalRole = 'user';
+          }
 
           return {
             data: {
               ...user,
-              role,
+              role: finalRole,
             },
           };
         },
@@ -168,5 +206,5 @@ function getBaseURL() {
 function getTrustedOrigins() {
   const origins = process.env.BETTER_AUTH_TRUSTED_ORIGINS;
   if (!origins) return [];
-  return origins.split(",").map((origin) => origin.trim());
+  return origins.split(',').map((origin) => origin.trim());
 }

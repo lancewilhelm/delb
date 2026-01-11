@@ -1,48 +1,48 @@
-import tailwindcss from "@tailwindcss/vite";
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineNuxtConfig({
   future: {
     compatibilityVersion: 4,
   },
   ssr: true,
-  compatibilityDate: "2025-04-12",
+  compatibilityDate: '2025-04-12',
   devtools: { enabled: false },
   modules: [
-    "@nuxt/eslint",
-    "@nuxt/fonts",
-    "@nuxt/icon",
-    "@vueuse/nuxt",
-    "@pinia/nuxt",
-    "@nuxtjs/mdc",
-    "pinia-plugin-persistedstate/nuxt",
+    '@nuxt/eslint',
+    '@nuxt/fonts',
+    '@nuxt/icon',
+    '@vueuse/nuxt',
+    '@pinia/nuxt',
+    '@nuxtjs/mdc',
+    'pinia-plugin-persistedstate/nuxt',
   ],
   app: {
     head: {
       htmlAttrs: {
-        lang: "en",
+        lang: 'en',
       },
       link: [
         {
-          rel: "icon",
-          id: "fallback-favicon",
-          type: "image/svg+xml",
-          href: "/favicon.svg",
+          rel: 'icon',
+          id: 'fallback-favicon',
+          type: 'image/svg+xml',
+          href: '/favicon.svg',
         },
       ],
     },
   },
-  css: ["~/assets/css/main.css", "~/assets/css/hljs.css"],
+  css: ['~/assets/css/main.css', '~/assets/css/hljs.css'],
   runtimeConfig: {
-    openaiApiKey: process.env.OPENAI_API_KEY || "",
-    geminiApiKey: process.env.GEMINI_API_KEY || "",
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
+    openaiApiKey: process.env.OPENAI_API_KEY || '',
+    geminiApiKey: process.env.GEMINI_API_KEY || '',
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
     public: {
       debug: false,
-      appVersion: "",
+      appVersion: '',
     },
   },
   imports: {
-    dirs: ["utils"],
+    dirs: ['utils'],
   },
   vite: {
     plugins: [tailwindcss()],
@@ -50,8 +50,8 @@ export default defineNuxtConfig({
   icon: {
     customCollections: [
       {
-        prefix: "local",
-        dir: "./app/assets/icons",
+        prefix: 'local',
+        dir: './app/assets/icons',
       },
     ],
     clientBundle: {
@@ -60,17 +60,22 @@ export default defineNuxtConfig({
   },
   fonts: {
     families: [
-      { name: "Fira Code", provider: "google", global: true },
-      { name: "Geist", provider: "google", global: true },
-      { name: "IBM Plex Mono", provider: "google", global: true },
-      { name: "Inter", provider: "google", global: true },
-      { name: "Montserrat", provider: "google", global: true },
-      { name: "Nunito", provider: "google", global: true },
-      { name: "Poppins", provider: "google", weight: "bold", global: true },
-      { name: "Roboto Mono", provider: "google", global: true },
+      { name: 'Fira Code', provider: 'google', global: true },
+      { name: 'Geist', provider: 'google', global: true },
+      { name: 'IBM Plex Mono', provider: 'google', global: true },
+      { name: 'Inter', provider: 'google', global: true },
+      { name: 'Montserrat', provider: 'google', global: true },
+      { name: 'Nunito', provider: 'google', global: true },
+      { name: 'Poppins', provider: 'google', weight: 'bold', global: true },
+      { name: 'Roboto Mono', provider: 'google', global: true },
     ],
   },
   piniaPluginPersistedstate: {
-    key: "delb.%id",
+    key: 'delb.%id',
+  },
+  nitro: {
+    experimental: {
+      asyncContext: true,
+    },
   },
 });
