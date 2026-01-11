@@ -431,9 +431,26 @@ export const globalSettings = sqliteTable('global_settings', {
     .$defaultFn(() => new Date()),
 });
 
+/**
+ * Server-side secrets (tokens/credentials) keyed by secret id.
+ *
+ * Notes:
+ * - Secrets are NEVER returned to the client.
+ * - Use the `id` as the key, e.g.:
+ *   - "hardcoverToken"
+ */
+export const globalSecrets = sqliteTable('global_secrets', {
+  id: text('id').primaryKey(),
+  value: text('value').notNull().default(''),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
 // TYPE
 export type InsertUserSettings = InferInsertModel<typeof userSettings>;
 export type InsertGlobalSettings = InferInsertModel<typeof globalSettings>;
+export type InsertGlobalSecrets = InferInsertModel<typeof globalSecrets>;
 
 export type InsertCollection = InferInsertModel<typeof collections>;
 export type InsertCollectionMember = InferInsertModel<typeof collectionMembers>;
@@ -451,6 +468,7 @@ export type InsertBookNote = InferInsertModel<typeof bookNotes>;
 
 export type SelectUserSettings = InferSelectModel<typeof userSettings>;
 export type SelectGlobalSettings = InferSelectModel<typeof globalSettings>;
+export type SelectGlobalSecrets = InferSelectModel<typeof globalSecrets>;
 
 export type SelectCollection = InferSelectModel<typeof collections>;
 export type SelectCollectionMember = InferSelectModel<typeof collectionMembers>;

@@ -46,7 +46,9 @@ export default defineEventHandler(async (event) => {
     const globalSettingsRow = globalSettingsRes.length
       ? {
           ...globalSettingsRes[0],
-          // Redact server-only secrets (e.g. `_secrets.hardcoverToken`)
+          // Secrets (e.g. Hardcover token) are stored server-side in a separate table
+          // and are never included in this response; the client only receives
+          // non-secret settings plus capability flags.
           settings: redactGlobalSettingsForClient(
             globalSettingsRes[0]!.settings,
           ),

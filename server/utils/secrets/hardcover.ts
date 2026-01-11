@@ -1,69 +1,20 @@
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { eq } from 'drizzle-orm';
-import { globalSettings } from '~/utils/db/schema';
+import { globalSecrets } from '~/utils/db/schema';
 
 /**
  * Server-side Hardcover token storage.
  *
  * IMPORTANT:
- * - The token is stored inside the existing singleton `global_settings.settings` JSON blob
- *   under a PRIVATE, server-only key (`_secrets.hardcoverToken`).
- * - Client-facing settings should NEVER include `_secrets`.
- *   Make sure `/api/settings` redacts `_secrets` before returning global settings to the client.
- *
- * Why store here at all?
- * - This avoids introducing new tables/migrations while still keeping the token server-side.
- * - The “never sent to client” guarantee is enforced by the settings API (redaction),
- *   not by the database schema.
+ * - The token is stored in a dedicated `global_secrets` table (server-only).
+ * - Tokens are NEVER returned to the client. Clients only receive capability flags.
  */
 
-const GLOBAL_SETTINGS_ID = '00000000-0000-0000-0000-000000000000';
-
-export const HARDCOVER_SECRETS_PATH = '_secrets.hardcoverToken' as const;
-
-type GlobalSettingsJson = Record<string, unknown>;
-
-type SecretsContainer = {
-  hardcoverToken?: unknown;
-};
+export const HARDCOVER_SECRET_ID = 'hardcoverToken' as const;
 
 function normalizeToken(raw: string): string {
   // Accept raw token or "Bearer <token>"
   return raw.trim().replace(/^Bearer\s+/i, '');
-}
-
-function getSecretsContainer(settings: GlobalSettingsJson): SecretsContainer {
-  const secrets = settings._secrets;
-  if (!secrets || typeof secrets !== 'object') return {};
-  return secrets as SecretsContainer;
-}
-
-function setSecretsContainer(
-  settings: GlobalSettingsJson,
-  nextSecrets: SecretsContainer,
-): GlobalSettingsJson {
-  return {
-    ...settings,
-    _secrets: {
-      ...(typeof settings._secrets === 'object' && settings._secrets
-        ? (settings._secrets as Record<string, unknown>)
-        : {}),
-      ...nextSecrets,
-    },
-  };
-}
-
-/**
- * Returns the full raw singleton row (or null if it doesn't exist).
- */
-async function readGlobalSettingsRow() {
-  const res = await cloudDb
-    .select()
-    .from(globalSettings)
-    .where(eq(globalSettings.id, GLOBAL_SETTINGS_ID))
-    .limit(1);
-
-  return res.length ? res[0] : null;
 }
 
 /**
@@ -71,12 +22,13 @@ async function readGlobalSettingsRow() {
  * Returns empty string if not configured.
  */
 export async function getHardcoverToken(): Promise<string> {
-  const row = await readGlobalSettingsRow();
-  const settings = (row?.settings ?? {}) as GlobalSettingsJson;
+  const res = await cloudDb
+    .select()
+    .from(globalSecrets)
+    .where(eq(globalSecrets.id, HARDCOVER_SECRET_ID))
+    .limit(1);
 
-  const secrets = getSecretsContainer(settings);
-  const raw =
-    typeof secrets.hardcoverToken === 'string' ? secrets.hardcoverToken : '';
+  const raw = res.length ? (res[0]?.value ?? '') : '';
   return raw ? normalizeToken(raw) : '';
 }
 
@@ -93,40 +45,22 @@ export async function hasHardcoverToken(): Promise<boolean> {
  *
  * - `tokenRaw`: raw token or "Bearer <token>"
  * - Pass empty string to clear.
- *
- * NOTE:
- * This performs a read-modify-write of the global settings JSON.
- * If you have concurrent writers to global settings, you may want to
- * introduce a dedicated secrets table or a more robust merge strategy.
  */
 export async function setHardcoverToken(tokenRaw: string): Promise<void> {
   const normalized = normalizeToken(tokenRaw);
-
-  // Load existing settings JSON (or default empty object if none).
-  const row = await readGlobalSettingsRow();
-  const currentSettings = (row?.settings ?? {}) as GlobalSettingsJson;
-
-  const nextSettings = setSecretsContainer(currentSettings, {
-    hardcoverToken: normalized,
-  });
-
-  // Upsert the singleton row.
   const updatedAt = new Date();
 
-  // We intentionally rely on drizzle's upsert pattern used elsewhere in the project.
-  // Import is avoided here to keep this helper standalone; callers (API routes)
-  // should perform the upsert if they need conflict handling customization.
   await cloudDb
-    .insert(globalSettings)
+    .insert(globalSecrets)
     .values({
-      id: GLOBAL_SETTINGS_ID,
-      settings: nextSettings,
+      id: HARDCOVER_SECRET_ID,
+      value: normalized,
       updatedAt,
     })
     .onConflictDoUpdate({
-      target: globalSettings.id,
+      target: globalSecrets.id,
       set: {
-        settings: nextSettings,
+        value: normalized,
         updatedAt,
       },
     });
@@ -134,22 +68,16 @@ export async function setHardcoverToken(tokenRaw: string): Promise<void> {
 
 /**
  * Redact server-only secrets from a global settings JSON blob before sending to clients.
- * Use this in `/api/settings` (and anywhere else global settings are returned).
+ *
+ * With secrets now stored in `global_secrets`, this is a no-op passthrough for
+ * backwards compatibility with existing callers.
  */
 export function redactGlobalSettingsForClient(
   settings: unknown,
 ): Record<string, unknown> {
-  const obj: Record<string, unknown> =
-    settings && typeof settings === 'object'
-      ? (settings as Record<string, unknown>)
-      : {};
-
-  // Drop the entire `_secrets` object.
-  // If you later need to expose capability flags, expose them separately (e.g. `hardcoverEnabled`).
-  // Do NOT leak tokens.
-  const { _secrets, ...rest } = obj;
-
-  return rest;
+  return settings && typeof settings === 'object'
+    ? (settings as Record<string, unknown>)
+    : {};
 }
 
 /**

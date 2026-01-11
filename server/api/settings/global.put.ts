@@ -1,11 +1,16 @@
-import { cloudDb } from "~~/server/utils/db/cloud";
-import { logger } from "~/utils/logger";
-import { globalSettings } from "~/utils/db/schema";
-import { auth } from "~/utils/auth";
-import { sql } from "drizzle-orm";
+import { cloudDb } from '~~/server/utils/db/cloud';
+import { logger } from '~/utils/logger';
+import { globalSettings } from '~/utils/db/schema';
+import { auth } from '~/utils/auth';
+import { sql } from 'drizzle-orm';
 
 /**
  * Updates the singleton global settings document.
+ *
+ * Notes:
+ * - Server-side secrets (e.g. Hardcover token) are stored separately and are
+ *   never written through this endpoint.
+ * - This endpoint only updates non-secret global settings.
  *
  * Access:
  * - Requires authenticated user
@@ -17,7 +22,7 @@ import { sql } from "drizzle-orm";
  * }
  */
 export default defineEventHandler(async (event) => {
-  logger.debug("PUT /api/settings/global");
+  logger.debug('PUT /api/settings/global');
 
   // Ensure the user is authenticated
   const session = await auth.api.getSession({
@@ -25,41 +30,46 @@ export default defineEventHandler(async (event) => {
   });
 
   if (!session) {
-    logger.error("PUT /api/settings/global: Unauthorized access attempt");
+    logger.error('PUT /api/settings/global: Unauthorized access attempt');
     setResponseStatus(event, 401);
-    return { success: false, message: "Unauthorized" };
+    return { success: false, message: 'Unauthorized' };
   }
 
   const user = session.user;
 
   // Enforce admin/owner
-  if (user.role !== "admin" && user.role !== "owner") {
+  if (user.role !== 'admin' && user.role !== 'owner') {
     logger.warn(
       { userId: user.id, role: user.role },
-      "PUT /api/settings/global: Forbidden (non-admin)",
+      'PUT /api/settings/global: Forbidden (non-admin)',
     );
     setResponseStatus(event, 403);
-    return { success: false, message: "Forbidden" };
+    return { success: false, message: 'Forbidden' };
   }
 
   const body = await readBody<{ settings?: unknown }>(event);
 
   if (!body || body.settings === undefined) {
     setResponseStatus(event, 400);
-    return { success: false, message: "Missing `settings` in request body" };
+    return { success: false, message: 'Missing `settings` in request body' };
   }
 
   // We store global settings as a singleton record
-  const GLOBAL_SETTINGS_ID = "00000000-0000-0000-0000-000000000000";
+  const GLOBAL_SETTINGS_ID = '00000000-0000-0000-0000-000000000000';
 
   try {
+    const incomingSettings =
+      body.settings && typeof body.settings === 'object'
+        ? (body.settings as Record<string, unknown>)
+        : {};
+
     const updatedAt = new Date();
 
     await cloudDb
       .insert(globalSettings)
       .values({
         id: GLOBAL_SETTINGS_ID,
-        settings: body.settings,
+        settings: incomingSettings,
         updatedAt,
       })
       .onConflictDoUpdate({
@@ -72,8 +82,8 @@ export default defineEventHandler(async (event) => {
 
     return { success: true, data: { updatedAt } };
   } catch (error) {
-    logger.error(error, "PUT /api/settings/global: Error updating settings");
+    logger.error(error, 'PUT /api/settings/global: Error updating settings');
     setResponseStatus(event, 500);
-    return { success: false, message: "Internal Server Error" };
+    return { success: false, message: 'Internal Server Error' };
   }
 });
