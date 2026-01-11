@@ -108,12 +108,17 @@ export default defineEventHandler(async (event) => {
   // - cursor=<opaque> pagination cursor (sort-dependent) for infinite scroll
   // - sort=<dateAdded|alphabetical|publishedDate> (default dateAdded)
   // - sortDir=<asc|desc> (default per sort; dateAdded desc)
+  // - addedStart=<YYYY-MM-DD> optional (inclusive)
+  // - addedEnd=<YYYY-MM-DD> optional (inclusive)
   const q = getQuery(event) as {
     collectionId?: string;
     limit?: string;
     cursor?: string;
     sort?: string;
     sortDir?: string;
+    addedStart?: string;
+    addedEnd?: string;
+    debug?: string;
   };
 
   const collectionId = q.collectionId;
@@ -124,6 +129,96 @@ export default defineEventHandler(async (event) => {
   const sortDir = normalizeSortDir(q.sortDir, sort);
 
   const cursor = decodeCursor(q.cursor);
+
+  // Added date range filter (books.createdAt)
+  // Inputs are expected as YYYY-MM-DD from <input type="date">.
+  //
+  // IMPORTANT: In this app `books.createdAt` is stored as a unix timestamp in *seconds*.
+  // To make filtering reliable, we convert the incoming dates to *integer second* bounds and
+  // compare numerically against `createdAt` (after coercing it to an INTEGER in SQL).
+  //
+  // Treat:
+  // - start as inclusive at 00:00:00.000 local time
+  // - end as inclusive through 23:59:59.999 local time
+  const parseYmdLocal = (raw?: string) => {
+    const v = (raw ?? '').toString().trim();
+    if (!v) return null;
+
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+    if (!m) return null;
+
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+
+    if (
+      !Number.isFinite(y) ||
+      !Number.isFinite(mo) ||
+      !Number.isFinite(d) ||
+      mo < 1 ||
+      mo > 12 ||
+      d < 1 ||
+      d > 31
+    ) {
+      return null;
+    }
+
+    const dt = new Date(y, mo - 1, d);
+    if (!Number.isFinite(dt.getTime())) return null;
+    return dt;
+  };
+
+  const addedStartDate = parseYmdLocal(q.addedStart);
+  const addedEndDate = parseYmdLocal(q.addedEnd);
+
+  const addedStartSec = addedStartDate
+    ? Math.floor(
+        new Date(
+          addedStartDate.getFullYear(),
+          addedStartDate.getMonth(),
+          addedStartDate.getDate(),
+          0,
+          0,
+          0,
+          0,
+        ).getTime() / 1000,
+      )
+    : null;
+
+  const addedEndSec = addedEndDate
+    ? Math.floor(
+        new Date(
+          addedEndDate.getFullYear(),
+          addedEndDate.getMonth(),
+          addedEndDate.getDate(),
+          23,
+          59,
+          59,
+          999,
+        ).getTime() / 1000,
+      )
+    : null;
+
+  const debug =
+    q.debug === '1' ||
+    q.debug === 'true' ||
+    q.debug === 'yes' ||
+    q.debug === 'on';
+
+  if (debug) {
+    logger.info(
+      {
+        addedStartRaw: q.addedStart ?? null,
+        addedEndRaw: q.addedEnd ?? null,
+        addedStartParsed: addedStartDate ? addedStartDate.toString() : null,
+        addedEndParsed: addedEndDate ? addedEndDate.toString() : null,
+        addedStartSec,
+        addedEndSec,
+        tzOffsetMinutes: new Date().getTimezoneOffset(),
+      },
+      'GET /api/books: added date filter parsed',
+    );
+  }
 
   try {
     // Backfill normalized publishedAt once per process start (best-effort).
@@ -267,6 +362,14 @@ export default defineEventHandler(async (event) => {
         and(
           inArray(collectionBooks.collectionId, targetCollectionIds),
           cursorWhere,
+          // Inclusive range (numeric compare against unix-second bounds)
+          // We coerce createdAt to INTEGER to handle cases where it may be stored as TEXT.
+          addedStartSec !== null
+            ? sql`CAST(${books.createdAt} AS INTEGER) >= ${addedStartSec}`
+            : undefined,
+          addedEndSec !== null
+            ? sql`CAST(${books.createdAt} AS INTEGER) <= ${addedEndSec}`
+            : undefined,
         ),
       )
       // Avoid duplicates if a book is in multiple target collections.
@@ -278,6 +381,53 @@ export default defineEventHandler(async (event) => {
         orderPrimaryDesc ? desc(books.id) : asc(books.id),
       )
       .limit(limit + 1);
+
+    if (debug) {
+      const sample = pageRows
+        .slice(0, 5)
+        .map((r) =>
+          r?.book ? { id: r.book.id, createdAt: r.book.createdAt } : r,
+        );
+
+      logger.info(
+        {
+          returnedRows: pageRows.length,
+          limit,
+          cursor: q.cursor ?? null,
+          sort,
+          sortDir,
+          filter: { addedStartSec, addedEndSec },
+          sampleCreatedAt: sample,
+        },
+        'GET /api/books: query results sample (createdAt)',
+      );
+
+      // Additionally log count of books that would match the date filter alone (within the same collection scope)
+      try {
+        const countRows = await cloudDb
+          .select({ n: sql<number>`COUNT(*)` })
+          .from(books)
+          .innerJoin(collectionBooks, eq(collectionBooks.bookId, books.id))
+          .where(
+            and(
+              inArray(collectionBooks.collectionId, targetCollectionIds),
+              addedStartSec !== null
+                ? sql`CAST(${books.createdAt} AS INTEGER) >= ${addedStartSec}`
+                : undefined,
+              addedEndSec !== null
+                ? sql`CAST(${books.createdAt} AS INTEGER) <= ${addedEndSec}`
+                : undefined,
+            ),
+          );
+
+        logger.info(
+          { matchingCount: countRows?.[0]?.n ?? null },
+          'GET /api/books: count matching date filter within scope',
+        );
+      } catch (e) {
+        logger.info(e, 'GET /api/books: debug count query failed');
+      }
+    }
 
     const rows = pageRows
       .map((r) => r.book)

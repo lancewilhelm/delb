@@ -90,6 +90,82 @@ const sortOpen = ref(false);
 const sortAnchorRef = ref<HTMLElement | null>(null);
 const sortPanelRef = ref<HTMLElement | null>(null);
 
+// ------------------------------
+// Books filters (Added date range)
+// ------------------------------
+const filtersOpen = ref(false);
+const filterAnchorRef = ref<HTMLElement | null>(null);
+const filterPanelRef = ref<HTMLElement | null>(null);
+
+/**
+ * Date inputs are stored as YYYY-MM-DD (from <input type="date">).
+ * We send them to the server as addedStart/addedEnd query params.
+ */
+const addedStart = ref<string>('');
+const addedEnd = ref<string>('');
+
+function closeFiltersDropdown() {
+  filtersOpen.value = false;
+}
+
+function toggleFiltersDropdown() {
+  filtersOpen.value = !filtersOpen.value;
+}
+
+function clearAddedDateFilter() {
+  addedStart.value = '';
+  addedEnd.value = '';
+}
+
+const addedDateQuery = computed<Record<string, string>>(() => {
+  // Keep the endpoint stable: only include params when set
+  const q: Record<string, string> = {};
+  if (addedStart.value) q.addedStart = addedStart.value;
+  if (addedEnd.value) q.addedEnd = addedEnd.value;
+  return q;
+});
+
+const booksEndpoint = computed(() => {
+  const q = addedDateQuery.value;
+  const pairs = Object.entries(q).filter(([, v]) => typeof v === 'string' && v);
+  if (!pairs.length) return '/api/books';
+
+  const query = pairs
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join('&');
+
+  return `/api/books?${query}`;
+});
+
+function onFiltersDocumentPointerDown(e: MouseEvent) {
+  if (!filtersOpen.value) return;
+  const target = e.target as Node | null;
+
+  if (
+    (filterPanelRef.value && target && filterPanelRef.value.contains(target)) ||
+    (filterAnchorRef.value && target && filterAnchorRef.value.contains(target))
+  ) {
+    return;
+  }
+
+  closeFiltersDropdown();
+}
+
+function onFiltersDocumentKeyDown(e: KeyboardEvent) {
+  if (!filtersOpen.value) return;
+  if (e.key === 'Escape') closeFiltersDropdown();
+}
+
+onMounted(() => {
+  document.addEventListener('mousedown', onFiltersDocumentPointerDown);
+  document.addEventListener('keydown', onFiltersDocumentKeyDown);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onFiltersDocumentPointerDown);
+  document.removeEventListener('keydown', onFiltersDocumentKeyDown);
+});
+
 // Direction toggles by re-selecting the active sort option in the dropdown.
 
 const activeBooksSortLabel = computed(() => {
@@ -388,25 +464,94 @@ onMounted(async () => {
     <AppHeader class="w-full" @book-uploaded="booksGridKey++" />
 
     <div class="flex w-full h-full overflow-hidden">
-      <!-- Sidebar = filters (placeholders for now) -->
-      <Sidebar class="hidden md:flex w-auto" />
+      <!-- Sidebar intentionally removed from index page in favor of filter dropdown next to Sort -->
 
       <!-- Main content (fixed header + scrollable content area) -->
       <div class="flex-1 overflow-hidden flex flex-col min-h-0">
         <!-- Header (non-scrolling): view selector stays fixed -->
         <div class="px-4 py-1 shrink-0 border-b border-(--sub-color)">
-          <div class="flex items-end justify-between gap-4">
+          <div class="flex items-center justify-between gap-4">
             <!-- View selector (mode) lives here (top-left) -->
             <ViewSelectorDropdown
               :model-value="uiStore.libraryView"
               @update:model-value="uiStore.setLibraryView"
             />
 
-            <!-- Books sort (only shown in Books view) -->
+            <!-- Books sort + filters (only shown in Books view) -->
             <div
               v-if="uiStore.libraryView === 'books'"
               class="flex items-center gap-1 self-center"
             >
+              <!-- Filters dropdown -->
+              <div class="relative">
+                <button
+                  ref="filterAnchorRef"
+                  class="p-1 flex items-center gap-2"
+                  :aria-expanded="filtersOpen"
+                  aria-haspopup="menu"
+                  @click="toggleFiltersDropdown"
+                >
+                  <Icon
+                    name="lucide:funnel"
+                    class="text-(--main-color) opacity-80 shrink-0"
+                  />
+                  <span class="text-sm opacity-80">Filters</span>
+                  <Icon
+                    name="lucide:chevron-down"
+                    class="text-(--main-color) opacity-80 shrink-0"
+                  />
+                </button>
+
+                <div
+                  v-if="filtersOpen"
+                  ref="filterPanelRef"
+                  class="absolute right-0 mt-1 w-80 border border-(--sub-color) bg-(--bg-color) rounded-md shadow-lg z-50 overflow-hidden"
+                  role="menu"
+                >
+                  <div
+                    class="px-3 py-2 border-b border-(--sub-color) flex items-center justify-between gap-3"
+                  >
+                    <div class="text-xs opacity-70">Filters</div>
+
+                    <button
+                      class="text-xs opacity-70 hover:opacity-100"
+                      type="button"
+                      @click="clearAddedDateFilter"
+                    >
+                      Clear
+                    </button>
+                  </div>
+
+                  <div class="p-3 space-y-3">
+                    <div class="text-sm font-medium opacity-90">Added date</div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                      <label class="space-y-1">
+                        <div class="text-xs opacity-70">Start</div>
+                        <input
+                          v-model="addedStart"
+                          class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                          type="date"
+                        />
+                      </label>
+
+                      <label class="space-y-1">
+                        <div class="text-xs opacity-70">End</div>
+                        <input
+                          v-model="addedEnd"
+                          class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                          type="date"
+                        />
+                      </label>
+                    </div>
+
+                    <div class="text-xs opacity-70">
+                      Shows books added within the selected date range.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div class="relative">
                 <button
                   ref="sortAnchorRef"
@@ -478,10 +623,13 @@ onMounted(async () => {
           >
             <!-- Only the books grid scrolls (BooksInfiniteGrid owns the scroller) -->
             <BooksInfiniteGrid
-              :key="`${booksGridKey}-${booksSortKey}-${booksSortDir}`"
+              :key="`${booksGridKey}-${booksSortKey}-${booksSortDir}-${JSON.stringify(
+                addedDateQuery,
+              )}`"
               :collection-id="activeCollectionId"
               :sort="booksSortKey"
               :sort-dir="booksSortDir"
+              :endpoint="booksEndpoint"
               class="flex-1 min-h-0"
               @error="handleBooksGridError"
             />
