@@ -64,6 +64,35 @@ type BookGetResponse = {
   message?: string;
 };
 
+type CollectionRole = 'owner' | 'editor' | 'viewer';
+
+type BookCollectionsRow = {
+  id: string;
+  name: string;
+  ownerUserId: string;
+  isPersonal: boolean;
+  role: CollectionRole;
+};
+
+type BookCollectionsGetResponse = {
+  success?: boolean;
+  data?: {
+    collections?: BookCollectionsRow[];
+  };
+  message?: string;
+};
+
+type PutBookCollectionsResponse = {
+  success?: boolean;
+  data?: {
+    added?: string[];
+    removed?: string[];
+    forbidden?: string[];
+    ignoredPersonalRemovals?: string[];
+  };
+  message?: string;
+};
+
 type FetchErrorLike = {
   data?: { message?: string };
   statusMessage?: string;
@@ -83,6 +112,199 @@ const showDeleteConfirm = ref(false);
 const deleting = ref(false);
 
 const descriptionExpanded = ref(false);
+
+// ------------------------------
+// Collections (Phase 2: per-book management)
+// ------------------------------
+const collectionsStore = useCollectionsStore();
+
+const collectionsLoading = ref(false);
+const collectionsErrorMessage = ref<string | null>(null);
+
+const collectionsManageOpen = ref(false);
+const collectionsSaving = ref(false);
+const collectionsSaveError = ref<string | null>(null);
+
+const bookCollections = ref<BookCollectionsRow[]>([]);
+const desiredCollectionIds = ref<string[]>([]);
+
+const personalCollectionId = computed(() => {
+  return collectionsStore.collections.find((c) => c.isPersonal)?.id ?? null;
+});
+
+const canEditCollectionsForBook = computed(() => {
+  // Only show Manage if the user can edit at least one of the collections
+  // the book is currently in (owner/editor).
+  return bookCollections.value.some(
+    (c) => c.role === 'owner' || c.role === 'editor',
+  );
+});
+
+const editableCollections = computed(() => {
+  // Collections the user can mutate (owner/editor).
+  return (collectionsStore.collections ?? []).filter((c) =>
+    collectionsStore.canEditCollection(c),
+  );
+});
+
+const editableBookCollections = computed(() => {
+  // Collections the book is already in, but only those the user can mutate (owner/editor).
+  // NOTE: This list will *not* include the user's Personal collection unless the book is
+  // actually in it already.
+  return bookCollections.value.filter((c) => c.role !== 'viewer');
+});
+
+const addableEditableCollections = computed(() => {
+  // Other editable collections the book is NOT currently in.
+  // IMPORTANT: exclude Personal so we cannot implicitly "pull" a shared book into Personal.
+  const inSet = new Set(bookCollections.value.map((c) => c.id));
+
+  return editableCollections.value.filter((c) => {
+    if (inSet.has(c.id)) return false;
+    if (c.isPersonal) return false;
+    return true;
+  });
+});
+
+async function loadBookCollections() {
+  if (!bookId.value) return;
+
+  collectionsLoading.value = true;
+  collectionsErrorMessage.value = null;
+
+  try {
+    const res = await fetch(
+      `/api/books/${encodeURIComponent(bookId.value)}/collections`,
+      { method: 'GET' },
+    );
+
+    if (!res.ok) {
+      throw new Error(`Failed to load book collections (${res.status})`);
+    }
+
+    const json = (await res
+      .json()
+      .catch(() => null)) as BookCollectionsGetResponse | null;
+
+    bookCollections.value = json?.data?.collections ?? [];
+    desiredCollectionIds.value = bookCollections.value.map((c) => c.id);
+  } catch (err) {
+    const e = err as FetchErrorLike;
+    collectionsErrorMessage.value =
+      e?.data?.message ||
+      e?.statusMessage ||
+      e?.message ||
+      'Failed to load book collections';
+    bookCollections.value = [];
+    desiredCollectionIds.value = [];
+  } finally {
+    collectionsLoading.value = false;
+  }
+}
+
+function openCollectionsManager() {
+  collectionsSaveError.value = null;
+  collectionsManageOpen.value = true;
+
+  // Initialize from server truth: only collections the book is already in.
+  // (Do NOT force Personal into the selection.)
+  desiredCollectionIds.value = bookCollections.value.map((c) => c.id);
+}
+
+function closeCollectionsManager() {
+  collectionsManageOpen.value = false;
+  collectionsSaveError.value = null;
+}
+
+function onToggleDesiredCollection(id: string) {
+  // Toggling is used both for:
+  // - removing from a collection the book is already in
+  // - adding to another editable collection (non-personal) not currently in
+  const pid = personalCollectionId.value;
+  if (pid && id === pid) return; // cannot remove Personal (server also enforces)
+
+  const set = new Set(desiredCollectionIds.value);
+  if (set.has(id)) set.delete(id);
+  else set.add(id);
+
+  desiredCollectionIds.value = Array.from(set);
+}
+
+const collectionsDelta = computed(() => {
+  const current = new Set(bookCollections.value.map((c) => c.id));
+  const desired = new Set(desiredCollectionIds.value);
+
+  const add = Array.from(desired).filter((id) => !current.has(id));
+  const remove = Array.from(current).filter((id) => !desired.has(id));
+
+  const pid = personalCollectionId.value;
+  const removeFiltered = pid ? remove.filter((id) => id !== pid) : remove;
+
+  return { add, remove: removeFiltered };
+});
+
+const collectionsDirty = computed(() => {
+  return (
+    collectionsDelta.value.add.length > 0 ||
+    collectionsDelta.value.remove.length > 0
+  );
+});
+
+async function saveCollections() {
+  if (!bookId.value || collectionsSaving.value) return;
+
+  // IMPORTANT:
+  // Do NOT force-add Personal. The book may not belong to this user's Personal collection,
+  // and we must not implicitly add it (prevents "pulling" the book into Personal).
+  const delta = collectionsDelta.value;
+  if (!delta.add.length && !delta.remove.length) {
+    closeCollectionsManager();
+    return;
+  }
+
+  collectionsSaving.value = true;
+  collectionsSaveError.value = null;
+
+  try {
+    const res = await fetch(
+      `/api/books/${encodeURIComponent(bookId.value)}/collections`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          addCollectionIds: delta.add,
+          removeCollectionIds: delta.remove,
+        }),
+      },
+    );
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(text || `Failed to update collections (${res.status})`);
+    }
+
+    const json = (await res
+      .json()
+      .catch(() => null)) as PutBookCollectionsResponse | null;
+
+    if (!json?.success) {
+      throw new Error(json?.message || 'Failed to update collections');
+    }
+
+    // Partial success is fine: reload authoritative state.
+    await loadBookCollections();
+    closeCollectionsManager();
+  } catch (err) {
+    const e = err as FetchErrorLike;
+    collectionsSaveError.value =
+      e?.data?.message ||
+      e?.statusMessage ||
+      e?.message ||
+      'Failed to update collections';
+  } finally {
+    collectionsSaving.value = false;
+  }
+}
 
 // ------------------------------
 // Rating (per-user, half-stars)
@@ -484,6 +706,10 @@ async function loadBook() {
       errorMessage.value = 'Book not found';
     } else {
       useHead({ title: book.value.title });
+
+      // Collections require the global list (for Personal detection + editable options)
+      await collectionsStore.fetchCollections();
+      await loadBookCollections();
     }
   } catch (err) {
     const e = err as FetchErrorLike;
@@ -495,6 +721,12 @@ async function loadBook() {
     book.value = null;
     ratingValue.value = null;
     ratingHoverValue.value = null;
+
+    // Reset collections state on failure
+    bookCollections.value = [];
+    desiredCollectionIds.value = [];
+    collectionsErrorMessage.value = null;
+    collectionsSaveError.value = null;
   } finally {
     loading.value = false;
   }
@@ -597,7 +829,7 @@ watch(
               class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
               :to="`/books/${book.id}/edit`"
             >
-              <icon name="lucide:pencil" class="scale-135" />
+              <icon name="lucide:pencil" class="text-lg" />
               Edit
             </NuxtLink>
 
@@ -608,9 +840,47 @@ watch(
               :disabled="deleting"
               @click="showDeleteConfirm = true"
             >
-              <icon name="lucide:trash-2" class="scale-135" />
+              <icon name="lucide:trash-2" class="text-lg" />
               Delete
             </button>
+          </div>
+          <div
+            class="grid grid-cols-[min-content_1fr] gap-4 mt-4 w-full items-center"
+          >
+            <div class="flex gap-2 items-center">
+              <div class="font-semibold">Collections</div>
+              <icon
+                v-if="canEditCollectionsForBook"
+                name="lucide:pencil"
+                class="text-md cursor-pointer opacity-50 hover:opacity-80"
+                @click="openCollectionsManager"
+              />
+            </div>
+
+            <div v-if="collectionsLoading" class="text-sm opacity-70">
+              Loading…
+            </div>
+
+            <div
+              v-else-if="collectionsErrorMessage"
+              class="text-sm text-(--error-color)"
+            >
+              {{ collectionsErrorMessage }}
+            </div>
+
+            <div v-else class="flex flex-wrap gap-2 items-center justify-end">
+              <span
+                v-for="c in bookCollections"
+                :key="c.id"
+                class="border border-(--sub-color) px-2 py-1 rounded-md text-xs"
+              >
+                {{ c.name }}
+              </span>
+
+              <span v-if="!bookCollections.length" class="text-sm opacity-70">
+                No collections.
+              </span>
+            </div>
           </div>
         </div>
 
@@ -892,6 +1162,140 @@ watch(
       </div>
 
       <div v-else class="text-sm opacity-80">No book loaded.</div>
+
+      <!-- Bottom of the Page -->
+      <!-- Collections -->
+
+      <!-- Manage collections modal -->
+      <ModalWindow
+        :open="collectionsManageOpen"
+        @close="closeCollectionsManager"
+      >
+        <div class="flex flex-col gap-4 w-110 max-w-[90vw]">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <div class="text-lg font-semibold">Manage collections</div>
+              <div class="text-sm opacity-80">
+                Add or remove this book from collections you can edit.
+              </div>
+            </div>
+
+            <Icon
+              name="lucide:x"
+              class="text-xl cursor-pointer opacity-80 hover:opacity-100"
+              @click="closeCollectionsManager"
+            />
+          </div>
+
+          <div v-if="collectionsSaveError" class="text-sm text-(--error-color)">
+            {{ collectionsSaveError }}
+          </div>
+
+          <div class="border border-(--sub-color) rounded-lg p-3">
+            <div class="text-sm font-semibold mb-2">
+              Your editable collections
+            </div>
+
+            <div v-if="collectionsStore.loading" class="text-sm opacity-70">
+              Loading…
+            </div>
+
+            <div
+              v-else-if="!editableCollections.length"
+              class="text-sm opacity-70"
+            >
+              You don’t have any editable collections.
+            </div>
+
+            <div v-else class="flex flex-col gap-4">
+              <!-- Current memberships (editable) -->
+              <div class="flex flex-col gap-2">
+                <div class="text-sm font-semibold">In these collections</div>
+
+                <label
+                  v-for="c in editableBookCollections"
+                  :key="c.id"
+                  class="flex items-center justify-between gap-3 text-sm"
+                >
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      class="accent-(--main-color)"
+                      :checked="desiredCollectionIds.includes(c.id)"
+                      :disabled="c.isPersonal || collectionsSaving"
+                      @change="onToggleDesiredCollection(c.id)"
+                    />
+                    <span>{{ c.name }}</span>
+                    <span v-if="c.isPersonal" class="text-xs opacity-70">
+                      (Personal)
+                    </span>
+                  </div>
+
+                  <span class="text-xs opacity-70">{{ c.role }}</span>
+                </label>
+
+                <div class="text-xs opacity-70">
+                  Personal cannot be removed.
+                </div>
+              </div>
+
+              <!-- Add to other editable collections -->
+              <div class="flex flex-col gap-2">
+                <div class="text-sm font-semibold">
+                  Add to another collection
+                </div>
+
+                <div
+                  v-if="!addableEditableCollections.length"
+                  class="text-sm opacity-70"
+                >
+                  No other editable collections available.
+                </div>
+
+                <label
+                  v-for="c in addableEditableCollections"
+                  :key="c.id"
+                  class="flex items-center justify-between gap-3 text-sm"
+                >
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      class="accent-(--main-color)"
+                      :checked="desiredCollectionIds.includes(c.id)"
+                      :disabled="collectionsSaving"
+                      @change="onToggleDesiredCollection(c.id)"
+                    />
+                    <span>{{ c.name }}</span>
+                  </div>
+
+                  <span class="text-xs opacity-70">{{ c.role }}</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-2">
+            <button
+              class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
+              type="button"
+              :disabled="collectionsSaving"
+              @click="closeCollectionsManager"
+            >
+              Cancel
+            </button>
+
+            <button
+              class="px-3 py-2 rounded-md border border-(--main-color) hover:bg-(--main-color)/10 text-sm"
+              type="button"
+              :disabled="collectionsSaving || !collectionsDirty"
+              @click="saveCollections"
+            >
+              <span v-if="collectionsSaving">Saving…</span>
+              <span v-else>Save</span>
+            </button>
+          </div>
+        </div>
+      </ModalWindow>
     </div>
   </div>
 </template>
