@@ -288,7 +288,7 @@ watch(
             v-for="b in sortedBooks"
             :key="b.id"
             :book="b"
-            class="grid grid-cols-[min-content_auto_3fr] gap-4"
+            class="grid grid-cols-[30px_auto_4fr] gap-4"
           >
             <div class="text-xl sm:text-2xl self-center text-(--sub-color)">
               {{ b.seriesIndex }}
