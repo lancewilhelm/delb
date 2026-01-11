@@ -486,7 +486,7 @@ onMounted(async () => {
               <div class="relative">
                 <button
                   ref="filterAnchorRef"
-                  class="p-1 flex items-center gap-2"
+                  class="p-1 flex items-center gap-2 h-full!"
                   :aria-expanded="filtersOpen"
                   aria-haspopup="menu"
                   @click="toggleFiltersDropdown"
@@ -505,7 +505,7 @@ onMounted(async () => {
                 <div
                   v-if="filtersOpen"
                   ref="filterPanelRef"
-                  class="absolute right-0 mt-1 w-80 border border-(--sub-color) bg-(--bg-color) rounded-md shadow-lg z-50 overflow-hidden"
+                  class="absolute -right-20 sm:right-0 mt-1 w-80 border border-(--sub-color) bg-(--bg-color) rounded-md shadow-lg z-50 overflow-hidden"
                   role="menu"
                 >
                   <div

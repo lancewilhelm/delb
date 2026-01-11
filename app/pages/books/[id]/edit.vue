@@ -212,6 +212,9 @@ type Book = {
   published?: string | null;
   language?: string | null;
 
+  // New: optional page count coming from API (used by edit form reset logic)
+  pages?: number | null;
+
   // related entities (denormalized by API)
   authors?: { id: string; name: string; position?: number | null }[];
   tags?: { id: string; name: string }[];
@@ -903,9 +906,6 @@ function bookToForm(b: Book) {
   form.language = b.language ?? '';
 
   // Pages (optional)
-  // NOTE: if `b.pages` exists on the API response, hydrate it; otherwise keep empty.
-  // This is safe even before the backend is updated.
-  // @ts-expect-error - `pages` may not exist on older API responses
   form.pages = typeof b.pages === 'number' ? String(b.pages) : '';
 
   // Series / publisher are edited by name in the UI.
@@ -1636,7 +1636,24 @@ watch(
           <div class="grid gap-4">
             <!-- Title -->
             <div class="grid gap-2">
-              <label class="text-sm opacity-70">Title</label>
+              <div class="flex items-center gap-1">
+                <label
+                  class="text-sm opacity-70"
+                  :class="
+                    form.title.trim() !== (book.title ?? '').trim()
+                      ? 'text-(--error-color)'
+                      : ''
+                  "
+                  >Title</label
+                >
+                <icon
+                  v-if="form.title.trim() !== (book.title ?? '').trim()"
+                  v-tooltip="'Reset title'"
+                  name="ri:reset-left-line"
+                  class="text-(--error-color) cursor-pointer text-sm"
+                  @click="form.title = (book.title ?? '').trim()"
+                />
+              </div>
               <input
                 v-model="form.title"
                 class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
@@ -1647,7 +1664,48 @@ watch(
 
             <!-- Authors -->
             <div class="grid gap-2">
-              <label class="text-sm opacity-70">Authors</label>
+              <div class="flex items-center gap-1">
+                <label
+                  class="text-sm opacity-70"
+                  :class="
+                    authorChips
+                      .map((c) => c.name)
+                      .join(', ')
+                      .trim() !==
+                    (book.authors ?? [])
+                      .map((a) => a.name)
+                      .join(', ')
+                      .trim()
+                      ? 'text-(--error-color)'
+                      : ''
+                  "
+                  >Authors</label
+                >
+                <icon
+                  v-if="
+                    authorChips
+                      .map((c) => c.name)
+                      .join(', ')
+                      .trim() !==
+                    (book.authors ?? [])
+                      .map((a) => a.name)
+                      .join(', ')
+                      .trim()
+                  "
+                  v-tooltip="'Reset authors'"
+                  name="ri:reset-left-line"
+                  class="text-(--error-color) cursor-pointer text-sm"
+                  @click="
+                    authorChips = (book.authors ?? []).map((a) => ({
+                      id: a.id,
+                      name: a.name,
+                    }));
+                    authorInput = '';
+                    authorSuggestions = [];
+                    authorSuggestOpen = false;
+                  "
+                />
+              </div>
 
               <!-- Selected author chips -->
               <div v-if="authorChips.length" class="flex flex-wrap gap-2">
@@ -1721,7 +1779,26 @@ watch(
 
             <!-- Description -->
             <div class="grid gap-2">
-              <label class="text-sm opacity-70">Description</label>
+              <div class="flex items-center gap-1">
+                <label
+                  class="text-sm opacity-70"
+                  :class="
+                    form.description.trim() !== (book.description ?? '').trim()
+                      ? 'text-(--error-color)'
+                      : ''
+                  "
+                  >Description</label
+                >
+                <icon
+                  v-if="
+                    form.description.trim() !== (book.description ?? '').trim()
+                  "
+                  v-tooltip="'Reset description'"
+                  name="ri:reset-left-line"
+                  class="text-(--error-color) cursor-pointer text-sm"
+                  @click="form.description = (book.description ?? '').trim()"
+                />
+              </div>
               <textarea
                 v-model="form.description"
                 class="w-full min-h-32 px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
@@ -1733,7 +1810,29 @@ watch(
             <div class="grid sm:grid-cols-2 gap-4">
               <!-- Series -->
               <div class="grid gap-2">
-                <label class="text-sm opacity-70"> Series </label>
+                <div class="flex items-center gap-1">
+                  <label
+                    class="text-sm opacity-70"
+                    :class="
+                      form.series.trim() !== (book.series?.name ?? '').trim()
+                        ? 'text-(--error-color)'
+                        : ''
+                    "
+                    >Series</label
+                  >
+                  <icon
+                    v-if="
+                      form.series.trim() !== (book.series?.name ?? '').trim()
+                    "
+                    v-tooltip="'Reset series'"
+                    name="ri:reset-left-line"
+                    class="text-(--error-color) cursor-pointer text-sm"
+                    @click="
+                      form.series = (book.series?.name ?? '').trim();
+                      seriesInput = form.series;
+                    "
+                  />
+                </div>
 
                 <div class="relative">
                   <input
@@ -1795,10 +1894,34 @@ watch(
 
               <!-- Series Index -->
               <div class="grid gap-2">
-                <label class="text-sm opacity-70">
-                  Series Index
-                  <span class="opacity-60">(number)</span>
-                </label>
+                <div class="flex items-center gap-1">
+                  <label
+                    class="text-sm opacity-70"
+                    :class="
+                      form.seriesIndex.trim() !==
+                      ((book.series?.index ?? '') + '').trim()
+                        ? 'text-(--error-color)'
+                        : ''
+                    "
+                  >
+                    Series Index
+                    <span class="opacity-60">(number)</span>
+                  </label>
+                  <icon
+                    v-if="
+                      form.seriesIndex.trim() !==
+                      ((book.series?.index ?? '') + '').trim()
+                    "
+                    v-tooltip="'Reset series index'"
+                    name="ri:reset-left-line"
+                    class="text-(--error-color) cursor-pointer text-sm"
+                    @click="
+                      form.seriesIndex = (
+                        (book.series?.index ?? '') + ''
+                      ).trim()
+                    "
+                  />
+                </div>
                 <input
                   v-model="form.seriesIndex"
                   class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
@@ -1811,7 +1934,48 @@ watch(
 
             <!-- Tags -->
             <div class="grid gap-2">
-              <label class="text-sm opacity-70">Tags</label>
+              <div class="flex items-center gap-1">
+                <label
+                  class="text-sm opacity-70"
+                  :class="
+                    tagChips
+                      .map((c) => c.name)
+                      .join(', ')
+                      .trim() !==
+                    (book.tags ?? [])
+                      .map((t) => t.name)
+                      .join(', ')
+                      .trim()
+                      ? 'text-(--error-color)'
+                      : ''
+                  "
+                  >Tags</label
+                >
+                <icon
+                  v-if="
+                    tagChips
+                      .map((c) => c.name)
+                      .join(', ')
+                      .trim() !==
+                    (book.tags ?? [])
+                      .map((t) => t.name)
+                      .join(', ')
+                      .trim()
+                  "
+                  v-tooltip="'Reset tags'"
+                  name="ri:reset-left-line"
+                  class="text-(--error-color) cursor-pointer text-sm"
+                  @click="
+                    tagChips = (book.tags ?? []).map((t) => ({
+                      id: t.id,
+                      name: t.name,
+                    }));
+                    tagInput = '';
+                    tagSuggestions = [];
+                    tagSuggestOpen = false;
+                  "
+                />
+              </div>
 
               <!-- Selected tag chips -->
               <div v-if="tagChips.length" class="flex flex-wrap gap-2">
@@ -1880,7 +2044,31 @@ watch(
             <div class="grid sm:grid-cols-2 gap-4">
               <!-- Publisher -->
               <div class="grid gap-2">
-                <label class="text-sm opacity-70"> Publisher </label>
+                <div class="flex items-center gap-1">
+                  <label
+                    class="text-sm opacity-70"
+                    :class="
+                      form.publisher.trim() !==
+                      (book.publisher?.name ?? '').trim()
+                        ? 'text-(--error-color)'
+                        : ''
+                    "
+                    >Publisher</label
+                  >
+                  <icon
+                    v-if="
+                      form.publisher.trim() !==
+                      (book.publisher?.name ?? '').trim()
+                    "
+                    v-tooltip="'Reset publisher'"
+                    name="ri:reset-left-line"
+                    class="text-(--error-color) cursor-pointer text-sm"
+                    @click="
+                      form.publisher = (book.publisher?.name ?? '').trim();
+                      publisherInput = form.publisher;
+                    "
+                  />
+                </div>
 
                 <div class="relative">
                   <input
@@ -1942,7 +2130,32 @@ watch(
 
               <!-- Published -->
               <div class="grid gap-2">
-                <label class="text-sm opacity-70">Published</label>
+                <div class="flex items-center gap-1">
+                  <label
+                    class="text-sm opacity-70"
+                    :class="
+                      form.published.trim() !==
+                      (formatDateOnly(book.published ?? '') || '').trim()
+                        ? 'text-(--error-color)'
+                        : ''
+                    "
+                    >Published</label
+                  >
+                  <icon
+                    v-if="
+                      form.published.trim() !==
+                      (formatDateOnly(book.published ?? '') || '').trim()
+                    "
+                    v-tooltip="'Reset published date'"
+                    name="ri:reset-left-line"
+                    class="text-(--error-color) cursor-pointer text-sm"
+                    @click="
+                      form.published = (
+                        formatDateOnly(book.published ?? '') || ''
+                      ).trim()
+                    "
+                  />
+                </div>
                 <input
                   v-model="form.published"
                   class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
@@ -1954,7 +2167,38 @@ watch(
 
             <!-- Identifiers (structured editor) -->
             <div class="grid gap-2">
-              <label class="text-sm opacity-70">Identifiers</label>
+              <div class="flex items-center gap-1">
+                <label
+                  class="text-sm opacity-70"
+                  :class="
+                    form.identifiers.trim() !==
+                    (
+                      serializeIdentifierRows(book.identifiers ?? []) || ''
+                    ).trim()
+                      ? 'text-(--error-color)'
+                      : ''
+                  "
+                  >Identifiers</label
+                >
+                <icon
+                  v-if="
+                    form.identifiers.trim() !==
+                    (
+                      serializeIdentifierRows(book.identifiers ?? []) || ''
+                    ).trim()
+                  "
+                  v-tooltip="'Reset identifiers'"
+                  name="ri:reset-left-line"
+                  class="text-(--error-color) cursor-pointer text-sm"
+                  @click="
+                    form.identifiers = (
+                      serializeIdentifierRows(book.identifiers ?? []) || ''
+                    ).trim();
+                    identifierTypeInput = '';
+                    identifierValueInput = '';
+                  "
+                />
+              </div>
 
               <div
                 v-if="parseIdentifierRows(form.identifiers).length"
@@ -2038,20 +2282,66 @@ watch(
 
             <!-- Pages -->
             <div class="grid gap-2">
-              <label class="text-sm opacity-70">Pages</label>
+              <div class="flex items-center gap-1">
+                <label
+                  class="text-sm opacity-70"
+                  :class="
+                    form.pages.trim() !== ((book.pages ?? '') + '').trim()
+                      ? 'text-(--error-color)'
+                      : ''
+                  "
+                  >Pages</label
+                >
+                <icon
+                  v-if="form.pages.trim() !== ((book.pages ?? '') + '').trim()"
+                  v-tooltip="'Reset pages'"
+                  name="ri:reset-left-line"
+                  class="text-(--error-color) cursor-pointer text-sm"
+                  @click="form.pages = ((book.pages ?? '') + '').trim()"
+                />
+              </div>
               <input
-                v-model="form.pages"
+                :value="form.pages"
                 class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
                 type="number"
                 min="0"
                 step="1"
+                inputmode="numeric"
                 placeholder="e.g. 465"
+                @input="
+                  (() => {
+                    const el = $event.target as HTMLInputElement | null;
+                    if (!el) return;
+
+                    // Keep pages as a string in `form`, but only allow digits.
+                    // This avoids Vue/DOM number-input quirks where v-model may not update as expected.
+                    const next = (el.value ?? '').replace(/[^\d]/g, '');
+                    form.pages = next;
+                  })()
+                "
               />
             </div>
 
             <!-- Language -->
             <div class="grid gap-2">
-              <label class="text-sm opacity-70">Language</label>
+              <div class="flex items-center gap-1">
+                <label
+                  class="text-sm opacity-70"
+                  :class="
+                    form.language.trim() !== (book.language ?? '').trim()
+                      ? 'text-(--error-color)'
+                      : ''
+                  "
+                  >Language</label
+                >
+                <icon
+                  v-if="form.language.trim() !== (book.language ?? '').trim()"
+                  v-tooltip="'Reset language'"
+                  name="ri:reset-left-line"
+                  class="text-(--error-color) cursor-pointer text-sm"
+                  @click="form.language = (book.language ?? '').trim()"
+                />
+              </div>
               <input
                 v-model="form.language"
                 class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"

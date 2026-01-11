@@ -357,7 +357,7 @@ const subtitleText = computed(() =>
 
 <template>
   <ModalWindow :open="isOpen" @close="close">
-    <div class="flex flex-col gap-3 w-[380px]">
+    <div class="flex flex-col gap-3 sm:w-95">
       <div class="flex items-start justify-between gap-4">
         <div>
           <div class="text-lg font-semibold">{{ titleText }}</div>
