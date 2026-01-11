@@ -577,6 +577,7 @@ watch(
           <!-- Actions -->
           <div class="flex flex-wrap gap-1 pt-2">
             <button
+              v-if="book.files && book.files.length > 0"
               class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
               type="button"
               :disabled="downloading"
