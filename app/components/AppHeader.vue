@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import BookAddByMetadataModal from '~/components/Books/BookAddByMetadataModal.vue';
+import BookAddModal from '~/components/Books/BookAddModal.vue';
 
 const uiStore = useUiStore();
 
@@ -7,8 +7,8 @@ const emit = defineEmits<{
   (e: 'book-uploaded'): void;
 }>();
 
-function openAddByMetadata() {
-  uiStore.setBookAddByMetadataModalVisible(true);
+function openAddBook() {
+  uiStore.setAddBookModalVisible(true);
 }
 </script>
 
@@ -31,16 +31,10 @@ function openAddByMetadata() {
       </div>
       <CollectionPickerDropdown />
       <Icon
-        v-tooltip="'Upload book file'"
-        name="lucide:upload"
-        class="text-(--main-color) cursor-pointer text-xl header-icon"
-        @click="uiStore.setBookUploadModalVisible(true)"
-      />
-      <Icon
         v-tooltip="'Add book'"
-        name="lucide:plus"
+        name="lucide:book-plus"
         class="text-(--main-color) cursor-pointer text-xl header-icon"
-        @click="openAddByMetadata"
+        @click="openAddBook"
       />
     </div>
 
@@ -70,8 +64,7 @@ function openAddByMetadata() {
         @click="navigateTo('/settings')"
       />
     </div>
-    <BookUploadModal @uploaded="emit('book-uploaded')" />
-    <BookAddByMetadataModal @created="emit('book-uploaded')" />
+    <BookAddModal @book-uploaded="emit('book-uploaded')" />
   </div>
 </template>
 

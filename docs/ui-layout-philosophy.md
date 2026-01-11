@@ -94,6 +94,18 @@ Future direction:
 
 ## Upload & import behavior
 
+### Unified “Add book” modal (single collection selector)
+Delb uses a single **Add book** modal that supports two flows:
+
+- **Upload files** (EPUB/PDF/MOBI/AZW3)
+- **Add by metadata** (search + create book record)
+
+Both flows share the same **collection selection** UI and rules:
+
+- Delb will **always** add new books to your Personal collection.
+- You may optionally add the same book/upload to additional collections.
+- In the UI this should be reflected by showing the Personal collection as **checked and not removable** (so you cannot uncheck it).
+
 ### Uploads
 When uploading books:
 

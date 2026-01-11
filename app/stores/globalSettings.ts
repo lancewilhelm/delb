@@ -3,8 +3,6 @@ import { defineStore } from 'pinia';
 export interface GlobalSettings {
   allowRegistration: boolean;
   allowFileUpload: boolean;
-  ollamaUrls: string[];
-  lmStudioEnabled: boolean;
 
   /**
    * Preferred metadata provider (UI can use this to select a default source).
@@ -16,8 +14,6 @@ function getDefaultSettings(): GlobalSettings {
   return {
     allowRegistration: false,
     allowFileUpload: false,
-    ollamaUrls: ['http://localhost:11434'],
-    lmStudioEnabled: false,
 
     metadataProvider: 'googleBooks',
   };

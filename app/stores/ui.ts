@@ -89,19 +89,12 @@ export const useUiStore = defineStore(
     }
 
     /**
-     * Book upload modal visibility
+     * Unified "Add book" modal visibility.
+     * This replaces the separate upload + add-by-metadata modals.
      */
-    const bookUploadModalVisible = ref(false);
-    function setBookUploadModalVisible(visible: boolean) {
-      bookUploadModalVisible.value = visible;
-    }
-
-    /**
-     * "Add by metadata" modal visibility
-     */
-    const bookAddByMetadataModalVisible = ref(false);
-    function setBookAddByMetadataModalVisible(visible: boolean) {
-      bookAddByMetadataModalVisible.value = visible;
+    const addBookModalVisible = ref(false);
+    function setAddBookModalVisible(visible: boolean) {
+      addBookModalVisible.value = visible;
     }
 
     function $reset() {
@@ -111,8 +104,7 @@ export const useUiStore = defineStore(
       booksSortDirection.value = 'desc';
       leftSidebarWidthPx.value = 260;
       leftSidebarCollapsed.value = false;
-      bookUploadModalVisible.value = false;
-      bookAddByMetadataModalVisible.value = false;
+      addBookModalVisible.value = false;
       globalSearchVisible.value = false;
     }
 
@@ -139,11 +131,9 @@ export const useUiStore = defineStore(
       setLeftSidebarCollapsed,
       toggleLeftSidebarCollapsed,
 
-      bookUploadModalVisible,
-      setBookUploadModalVisible,
-
-      bookAddByMetadataModalVisible,
-      setBookAddByMetadataModalVisible,
+      // Unified add-book modal state (use this everywhere going forward)
+      addBookModalVisible,
+      setAddBookModalVisible,
 
       $reset,
     };

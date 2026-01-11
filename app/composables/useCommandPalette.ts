@@ -43,10 +43,10 @@ export function useCommandPalette() {
       },
     },
     {
-      label: 'upload book',
-      icon: 'lucide:upload',
+      label: 'add book',
+      icon: 'lucide:plus',
       action: () => {
-        uiStore.setBookUploadModalVisible(true);
+        uiStore.setAddBookModalVisible(true);
       },
     },
     { label: 'theme', icon: 'lucide:palette' },
