@@ -493,19 +493,21 @@ onMounted(async () => {
                 >
                   <Icon
                     name="lucide:funnel"
-                    class="text-(--main-color) opacity-80 shrink-0"
+                    class="text-(--main-color) opacity-80 shrink-0 text-xl sm:text-lg"
                   />
-                  <span class="text-sm opacity-80">Filters</span>
-                  <Icon
+                  <span class="hidden sm:block text-sm opacity-80"
+                    >Filters</span
+                  >
+                  <!-- <Icon
                     name="lucide:chevron-down"
-                    class="text-(--main-color) opacity-80 shrink-0"
-                  />
+                    class="hidden! sm:block! text-(--main-color) opacity-80 shrink-0"
+                  /> -->
                 </button>
 
                 <div
                   v-if="filtersOpen"
                   ref="filterPanelRef"
-                  class="absolute -right-20 sm:right-0 mt-1 w-80 border border-(--sub-color) bg-(--bg-color) rounded-md shadow-lg z-50 overflow-hidden"
+                  class="absolute right-0 mt-1 w-80 border border-(--sub-color) bg-(--bg-color) rounded-md shadow-lg z-50 overflow-hidden"
                   role="menu"
                 >
                   <div
@@ -552,6 +554,7 @@ onMounted(async () => {
                 </div>
               </div>
 
+              <!-- Sort -->
               <div class="relative">
                 <button
                   ref="sortAnchorRef"
@@ -562,15 +565,15 @@ onMounted(async () => {
                 >
                   <Icon
                     name="lucide:arrow-up-down"
-                    class="text-(--main-color) opacity-80 shrink-0"
+                    class="text-(--main-color) opacity-80 shrink-0 text-xl sm:text-lg"
                   />
-                  <span class="text-sm opacity-80">{{
+                  <span class="hidden sm:block text-sm opacity-80">{{
                     activeBooksSortLabel
                   }}</span>
-                  <Icon
+                  <!-- <Icon
                     name="lucide:chevron-down"
-                    class="text-(--main-color) opacity-80 shrink-0"
-                  />
+                    class="hidden! sm:block! text-(--main-color) opacity-80 shrink-0"
+                  /> -->
                 </button>
 
                 <div
