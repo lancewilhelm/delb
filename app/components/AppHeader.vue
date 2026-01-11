@@ -1,9 +1,15 @@
 <script setup lang="ts">
+import BookAddByMetadataModal from '~/components/Books/BookAddByMetadataModal.vue';
+
 const uiStore = useUiStore();
 
 const emit = defineEmits<{
   (e: 'book-uploaded'): void;
 }>();
+
+function openAddByMetadata() {
+  uiStore.setBookAddByMetadataModalVisible(true);
+}
 </script>
 
 <template>
@@ -24,6 +30,18 @@ const emit = defineEmits<{
         Delb
       </div>
       <CollectionPickerDropdown />
+      <Icon
+        v-tooltip="'Upload book'"
+        name="lucide:upload"
+        class="text-(--main-color) cursor-pointer scale-125 header-icon"
+        @click="uiStore.setBookUploadModalVisible(true)"
+      />
+      <Icon
+        v-tooltip="'Add book by metadata'"
+        name="lucide:wand-2"
+        class="text-(--main-color) cursor-pointer scale-125 header-icon"
+        @click="openAddByMetadata"
+      />
     </div>
 
     <!-- Center: Collection switcher (scope) -->
@@ -36,12 +54,6 @@ const emit = defineEmits<{
         name="lucide:search"
         class="text-(--main-color) cursor-pointer scale-125 header-icon"
         @click="uiStore.setGlobalSearchVisible(!uiStore.globalSearchVisible)"
-      />
-      <Icon
-        v-tooltip="'Upload book'"
-        name="lucide:upload"
-        class="text-(--main-color) cursor-pointer scale-125 header-icon"
-        @click="uiStore.setBookUploadModalVisible(true)"
       />
       <Icon
         v-tooltip="'Open command palette'"
@@ -59,6 +71,7 @@ const emit = defineEmits<{
       />
     </div>
     <BookUploadModal @uploaded="emit('book-uploaded')" />
+    <BookAddByMetadataModal @created="emit('book-uploaded')" />
   </div>
 </template>
 

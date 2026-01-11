@@ -96,6 +96,14 @@ export const useUiStore = defineStore(
       bookUploadModalVisible.value = visible;
     }
 
+    /**
+     * "Add by metadata" modal visibility
+     */
+    const bookAddByMetadataModalVisible = ref(false);
+    function setBookAddByMetadataModalVisible(visible: boolean) {
+      bookAddByMetadataModalVisible.value = visible;
+    }
+
     function $reset() {
       // Insert reset logic here if needed
       libraryView.value = 'books';
@@ -104,6 +112,7 @@ export const useUiStore = defineStore(
       leftSidebarWidthPx.value = 260;
       leftSidebarCollapsed.value = false;
       bookUploadModalVisible.value = false;
+      bookAddByMetadataModalVisible.value = false;
       globalSearchVisible.value = false;
     }
 
@@ -132,6 +141,9 @@ export const useUiStore = defineStore(
 
       bookUploadModalVisible,
       setBookUploadModalVisible,
+
+      bookAddByMetadataModalVisible,
+      setBookAddByMetadataModalVisible,
 
       $reset,
     };

@@ -7,8 +7,9 @@ import { auth } from '~/utils/auth';
  * Proxies an external cover image through the server to avoid browser CORS issues.
  *
  * Security:
- * - Requires authenticated session (same as other book endpoints)
  * - Allows only http/https URLs
+ * - Requires authenticated session for browser/client calls
+ * - Allows trusted internal server calls (no session) when a Nitro internal header is present
  *
  * Notes:
  * - This endpoint streams bytes back to the client with the upstream content-type.
@@ -17,9 +18,18 @@ import { auth } from '~/utils/auth';
 export default defineEventHandler(async (event) => {
   logger.debug('GET /api/books/metadata/cover');
 
-  const session = await auth.api.getSession({ headers: event.headers });
-  if (!session) {
-    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
+  // Allow server-to-server internal calls (e.g. metadata import flows) without a user session.
+  // This header is added only by our own backend code; browsers won't set it.
+  const internalHeader = event.node.req.headers['x-delb-internal'];
+  const isInternal =
+    internalHeader === '1' ||
+    (Array.isArray(internalHeader) && internalHeader[0] === '1');
+
+  if (!isInternal) {
+    const session = await auth.api.getSession({ headers: event.headers });
+    if (!session) {
+      throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
+    }
   }
 
   const q = getQuery(event);
