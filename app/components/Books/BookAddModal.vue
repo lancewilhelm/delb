@@ -72,13 +72,23 @@ async function fetchCollections() {
       const personal = collections.value.find((c) => c.isPersonal);
       const pid = personal?.id ?? null;
 
+      const collectionsStore = useCollectionsStore();
+      const currentId = collectionsStore.activeCollectionId;
+
       if (pid) {
         if (!selectedCollectionIds.value.includes(pid)) {
           selectedCollectionIds.value = [pid, ...selectedCollectionIds.value];
         }
-      } else if (!selectedCollectionIds.value.length) {
-        selectedCollectionIds.value = [collections.value[0]!.id];
       }
+
+      if (currentId && !selectedCollectionIds.value.includes(currentId)) {
+        selectedCollectionIds.value = [
+          ...selectedCollectionIds.value,
+          currentId,
+        ];
+      }
+
+      console.log(selectedCollectionIds.value);
     }
   } finally {
     collectionsLoading.value = false;
@@ -127,6 +137,8 @@ function resetPerOpen() {
 
 function close() {
   uiStore.setAddBookModalVisible(false);
+  // Clear the selected collections
+  selectedCollectionIds.value = [];
 }
 
 const isOpen = computed(() => uiStore.addBookModalVisible);
