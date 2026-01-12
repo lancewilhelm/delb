@@ -193,7 +193,10 @@ function onToggleSelect() {
           v-if="props.showSeries && props.book.series"
           class="italic opacity-70 text-sm cursor-pointer"
         >
-          <div class="flex gap-1 hover:underline" @click="onOpenBook">
+          <div
+            class="flex gap-1 hover:underline"
+            @click="navigateTo(`/series/${props.book.series.id}`)"
+          >
             {{ props.book.series.name }}
             <span v-if="props.book.seriesIndex"
               >#{{ props.book.seriesIndex }}</span
