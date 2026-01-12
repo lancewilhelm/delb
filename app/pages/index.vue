@@ -15,12 +15,311 @@ useHead({
 // View (mode) lives on this page (top-left view selector dropdown).
 const uiStore = useUiStore();
 const collectionsStore = useCollectionsStore();
+const selectionStore = useBookSelectionStore();
 
 type FetchErrorLike = {
   data?: { message?: string };
   statusMessage?: string;
   message?: string;
 };
+
+type BulkResponse = {
+  success?: boolean;
+  message?: string;
+};
+
+function refreshBooksGrid() {
+  booksGridKey.value += 1;
+}
+
+function toggleSelectMode() {
+  if (selectionStore.selectMode) {
+    selectionStore.setMode({ enabled: false });
+    return;
+  }
+
+  // Enter selection mode with the page's current scope
+  if (activeCollectionId.value) {
+    selectionStore.setMode({
+      enabled: true,
+      scope: { kind: 'collection', collectionId: activeCollectionId.value },
+    });
+  } else {
+    selectionStore.setMode({ enabled: true, scope: { kind: 'all' } });
+  }
+}
+
+function getExplicitSelectedBookIds(): string[] {
+  return Array.from(selectionStore.selectedBookIds);
+}
+
+function getExcludedBookIds(): string[] {
+  return Array.from(selectionStore.excludedBookIds);
+}
+
+function selectionIsEmpty(): boolean {
+  if (!selectionStore.selectMode) return true;
+  if (selectionStore.allSelectedInScope) return false;
+  return selectionStore.selectedBookIds.size === 0;
+}
+
+const selectedCountLabel = computed(() => {
+  if (!selectionStore.selectMode) return '';
+  if (selectionStore.allSelectedInScope) {
+    const excluded = selectionStore.excludedBookIds.size;
+    return excluded ? `All (except ${excluded})` : 'All';
+  }
+  return `${selectionStore.selectedBookIds.size}`;
+});
+
+const showActions = computed(() => {
+  if (!selectionStore.selectMode) return false;
+  if (selectionStore.allSelectedInScope) return true;
+  return selectionStore.selectedBookIds.size > 0;
+});
+
+const actionsOpen = ref(false);
+const actionsAnchorRef = ref<HTMLElement | null>(null);
+const actionsPanelRef = ref<HTMLElement | null>(null);
+
+function closeActionsDropdown() {
+  actionsOpen.value = false;
+}
+
+function toggleActionsDropdown() {
+  actionsOpen.value = !actionsOpen.value;
+}
+
+const canRemoveFromActiveCollection = computed(() => {
+  if (!activeCollectionId.value) return false;
+  const c = collectionsStore.collections.find(
+    (x) => x.id === activeCollectionId.value,
+  );
+  if (!c) return false;
+
+  // Personal collections are non-removable; hide/disable remove-from-collection bulk action.
+  if (c.isPersonal) return false;
+
+  return c.role === 'owner' || c.role === 'editor';
+});
+
+const editableNonPersonalCollections = computed(() => {
+  return collectionsStore.collections.filter((c) => {
+    const canEdit = c.role === 'owner' || c.role === 'editor';
+    if (!canEdit) return false;
+    if (c.isPersonal) return false;
+    return true;
+  });
+});
+
+const activeCollectionIdForAdd = computed<string | null>(() => {
+  return activeCollectionId.value ?? null;
+});
+
+const addModalOpen = ref(false);
+const addSubmitting = ref(false);
+const addError = ref<string | null>(null);
+
+/**
+ * Multi-target selection: allow adding the selected books to multiple collections at once.
+ * Uses the same custom checkbox pattern used elsewhere in the app.
+ */
+const addTargetCollectionIds = ref<string[]>([]);
+
+function openAddModal() {
+  addError.value = null;
+
+  // Preselect the active collection in scope (if it's addable and the user can edit it).
+  const activeId = activeCollectionIdForAdd.value;
+  if (
+    activeId &&
+    editableNonPersonalCollections.value.some((c) => c.id === activeId)
+  ) {
+    addTargetCollectionIds.value = [activeId];
+  } else {
+    addTargetCollectionIds.value = [];
+  }
+
+  addModalOpen.value = true;
+  closeActionsDropdown();
+}
+
+function closeAddModal() {
+  addModalOpen.value = false;
+  addSubmitting.value = false;
+  addError.value = null;
+  addTargetCollectionIds.value = [];
+}
+
+async function applyAddToCollection() {
+  if (addSubmitting.value) return;
+
+  addError.value = null;
+
+  const targetIds = Array.from(new Set(addTargetCollectionIds.value)).filter(
+    (id) => (id ?? '').trim(),
+  );
+
+  if (!targetIds.length) {
+    addError.value = 'Pick at least one collection.';
+    return;
+  }
+
+  if (selectionIsEmpty()) {
+    addError.value = 'Select at least one book.';
+    return;
+  }
+
+  // If "All" + allSelectedInScope, we do not have a server-backed "All scope" bulk semantic yet.
+  if (!activeCollectionId.value && selectionStore.allSelectedInScope) {
+    addError.value =
+      'Select all in All view is not supported for bulk add yet (needs a server-backed scope).';
+    return;
+  }
+
+  addSubmitting.value = true;
+
+  try {
+    // In collection scope, we can use the collection bulk endpoint (supports allInCollection + excluded).
+    if (activeCollectionId.value) {
+      const scopeId = activeCollectionId.value;
+
+      const body = selectionStore.allSelectedInScope
+        ? {
+            allInCollection: true,
+            excludedBookIds: getExcludedBookIds(),
+            addToCollectionIds: targetIds,
+          }
+        : {
+            allInCollection: false,
+            bookIds: getExplicitSelectedBookIds(),
+            addToCollectionIds: targetIds,
+          };
+
+      const res = await $fetch<BulkResponse>(
+        `/api/collections/${encodeURIComponent(scopeId)}/books/bulk`,
+        { method: 'POST', body },
+      );
+
+      if (!res?.success) {
+        throw new Error(res?.message || 'Failed to add to collection');
+      }
+    } else {
+      // All view: explicit selection only; best-effort per-book PUT.
+      // We allow multiple target collections by sending them in a single PUT per book.
+      const ids = getExplicitSelectedBookIds();
+      await Promise.allSettled(
+        ids.map((bookId) =>
+          $fetch(`/api/books/${encodeURIComponent(bookId)}/collections`, {
+            method: 'PUT',
+            body: { addCollectionIds: targetIds },
+          }),
+        ),
+      );
+    }
+
+    selectionStore.clearSelection();
+    selectionStore.setMode({ enabled: false });
+
+    closeAddModal();
+    refreshBooksGrid();
+  } catch (err: unknown) {
+    const e = err as FetchErrorLike;
+    addError.value =
+      e?.data?.message ||
+      e?.statusMessage ||
+      e?.message ||
+      'Failed to add to collection';
+  } finally {
+    addSubmitting.value = false;
+  }
+}
+
+const removeSubmitting = ref(false);
+const removeError = ref<string | null>(null);
+
+async function applyRemoveFromActiveCollection() {
+  if (removeSubmitting.value) return;
+  removeError.value = null;
+
+  const scopeId = activeCollectionId.value;
+  if (!scopeId) return;
+
+  if (!canRemoveFromActiveCollection.value) return;
+  if (selectionIsEmpty()) return;
+
+  removeSubmitting.value = true;
+
+  try {
+    const body = selectionStore.allSelectedInScope
+      ? {
+          allInCollection: true,
+          excludedBookIds: getExcludedBookIds(),
+          removeFromCollectionIds: [scopeId],
+        }
+      : {
+          allInCollection: false,
+          bookIds: getExplicitSelectedBookIds(),
+          removeFromCollectionIds: [scopeId],
+        };
+
+    const res = await $fetch<BulkResponse>(
+      `/api/collections/${encodeURIComponent(scopeId)}/books/bulk`,
+      { method: 'POST', body },
+    );
+
+    if (!res?.success)
+      throw new Error(res?.message || 'Failed to remove from collection');
+
+    selectionStore.clearSelection();
+    selectionStore.setMode({ enabled: false });
+
+    closeActionsDropdown();
+    refreshBooksGrid();
+  } catch (err: unknown) {
+    const e = err as FetchErrorLike;
+    removeError.value =
+      e?.data?.message ||
+      e?.statusMessage ||
+      e?.message ||
+      'Failed to remove from this collection';
+  } finally {
+    removeSubmitting.value = false;
+  }
+}
+
+function onDocumentPointerDownActions(e: MouseEvent) {
+  if (!actionsOpen.value) return;
+  const target = e.target as Node | null;
+
+  if (
+    (actionsPanelRef.value &&
+      target &&
+      actionsPanelRef.value.contains(target)) ||
+    (actionsAnchorRef.value &&
+      target &&
+      actionsAnchorRef.value.contains(target))
+  ) {
+    return;
+  }
+
+  closeActionsDropdown();
+}
+
+function onDocumentKeyDownActions(e: KeyboardEvent) {
+  if (!actionsOpen.value) return;
+  if (e.key === 'Escape') closeActionsDropdown();
+}
+
+onMounted(() => {
+  document.addEventListener('mousedown', onDocumentPointerDownActions);
+  document.addEventListener('keydown', onDocumentKeyDownActions);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onDocumentPointerDownActions);
+  document.removeEventListener('keydown', onDocumentKeyDownActions);
+});
 
 type AuthorsListResponse = {
   data?: {
@@ -482,6 +781,185 @@ onMounted(async () => {
               v-if="uiStore.libraryView === 'books'"
               class="flex items-center gap-1 self-center"
             >
+              <!-- Select / Actions (Books view only) -->
+              <div class="flex items-center gap-2">
+                <!-- Actions Menu -->
+                <div v-if="showActions" class="relative">
+                  <button
+                    ref="actionsAnchorRef"
+                    class="p-1 flex items-center gap-2 h-full!"
+                    type="button"
+                    aria-haspopup="menu"
+                    :aria-expanded="actionsOpen"
+                    @click="toggleActionsDropdown"
+                  >
+                    <Icon
+                      name="lucide:ellipsis"
+                      class="text-(--main-color) opacity-80 shrink-0 text-xl sm:text-lg"
+                    />
+                    <span class="hidden sm:block text-sm opacity-80"
+                      >Actions</span
+                    >
+                  </button>
+
+                  <!-- Actions Menu -->
+                  <div
+                    v-if="actionsOpen"
+                    ref="actionsPanelRef"
+                    class="absolute right-0 mt-1 w-64 border border-(--sub-color) bg-(--bg-color) rounded-md shadow-lg z-50 overflow-hidden"
+                    role="menu"
+                  >
+                    <div class="px-3 py-2 border-b border-(--sub-color)">
+                      <div class="text-xs opacity-70">Actions</div>
+                    </div>
+
+                    <div>
+                      <button
+                        class="w-full px-3 py-2 text-left flex justify-between! gap-3 rounded-none! hover:bg-(--sub-color)/15"
+                        role="menuitem"
+                        type="button"
+                        @click="openAddModal"
+                      >
+                        <span class="truncate text-sm">Add to collection…</span>
+                      </button>
+
+                      <button
+                        v-if="
+                          activeCollectionId && canRemoveFromActiveCollection
+                        "
+                        class="w-full px-3 py-2 text-left flex justify-between! gap-3 rounded-none! hover:bg-(--sub-color)/15 disabled:opacity-60 disabled:cursor-not-allowed"
+                        role="menuitem"
+                        type="button"
+                        :disabled="removeSubmitting"
+                        @click="applyRemoveFromActiveCollection"
+                      >
+                        <span class="truncate text-sm"
+                          >Remove from this collection</span
+                        >
+                        <span v-if="removeSubmitting" class="text-xs opacity-70"
+                          >…</span
+                        >
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Seclected Count -->
+                <div
+                  v-if="selectionStore.selectMode"
+                  class="text-sm opacity-70 hidden sm:block"
+                >
+                  {{ selectedCountLabel }} selected
+                </div>
+
+                <!-- Toggle Select Button -->
+                <button
+                  class="p-1 flex items-center gap-2 h-full!"
+                  type="button"
+                  @click="toggleSelectMode"
+                >
+                  <Icon
+                    :name="
+                      selectionStore.selectMode
+                        ? 'lucide:check-square'
+                        : 'lucide:layout-grid'
+                    "
+                    class="text-(--main-color) opacity-80 shrink-0 text-xl sm:text-lg"
+                  />
+                  <span class="hidden sm:block text-sm opacity-80">
+                    <span v-if="selectionStore.selectMode">Done</span>
+                    <span v-else>Select</span>
+                  </span>
+                </button>
+              </div>
+
+              <p v-if="removeError" class="text-sm text-red-600">
+                {{ removeError }}
+              </p>
+
+              <!-- Add to collection modal -->
+              <ModalWindow :open="addModalOpen" @close="closeAddModal">
+                <div class="flex flex-col gap-3 w-110 max-w-[90vw]">
+                  <div class="flex items-start justify-between gap-4">
+                    <div>
+                      <div class="text-lg font-semibold">Add to collection</div>
+                      <div class="text-sm opacity-80">
+                        Choose one or more collections to add the selected books
+                        to.
+                      </div>
+                    </div>
+
+                    <Icon
+                      v-tooltip="'Close'"
+                      name="lucide:x"
+                      class="scale-150 cursor-pointer opacity-80 hover:opacity-100"
+                      @click="closeAddModal"
+                    />
+                  </div>
+
+                  <div class="space-y-2">
+                    <div class="text-sm opacity-80">Target collections</div>
+
+                    <div
+                      v-if="!editableNonPersonalCollections.length"
+                      class="text-sm opacity-70"
+                    >
+                      You don’t have any editable (non-personal) collections.
+                    </div>
+
+                    <div v-else class="space-y-1">
+                      <label
+                        v-for="c in editableNonPersonalCollections"
+                        :key="c.id"
+                        class="flex items-center gap-2 text-sm"
+                      >
+                        <input
+                          v-model="addTargetCollectionIds"
+                          type="checkbox"
+                          :value="c.id"
+                          :disabled="addSubmitting"
+                          class="peer sr-only"
+                        />
+                        <span
+                          class="h-5 w-5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
+                          :class="
+                            addSubmitting
+                              ? 'peer-checked:bg-(--sub-color) cursor-default!'
+                              : ''
+                          "
+                        ></span>
+                        <span class="truncate">{{ c.name }}</span>
+                      </label>
+                    </div>
+
+                    <p v-if="addError" class="text-sm text-red-600">
+                      {{ addError }}
+                    </p>
+                  </div>
+
+                  <div class="flex gap-2 justify-end">
+                    <button
+                      class="px-3 py-2"
+                      type="button"
+                      :disabled="addSubmitting"
+                      @click="closeAddModal"
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      class="px-3 py-2 bg-(--main-color) text-(--bg-color) disabled:opacity-60 disabled:cursor-not-allowed"
+                      type="button"
+                      :disabled="
+                        addSubmitting || addTargetCollectionIds.length === 0
+                      "
+                      @click="applyAddToCollection"
+                    >
+                      {{ addSubmitting ? 'Adding…' : 'Add' }}
+                    </button>
+                  </div>
+                </div>
+              </ModalWindow>
               <!-- Filters dropdown -->
               <div class="relative">
                 <button
@@ -633,6 +1111,7 @@ onMounted(async () => {
               :sort="booksSortKey"
               :sort-dir="booksSortDir"
               :endpoint="booksEndpoint"
+              :selection-enabled="true"
               class="flex-1 min-h-0"
               @error="handleBooksGridError"
             />

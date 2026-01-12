@@ -72,6 +72,12 @@ const props = withDefaults(
      * Show a simple debug line with counts/cursor/limit.
      */
     debug?: boolean;
+
+    /**
+     * Phase 3: enable selection UI controls within the grid.
+     * (Actions are handled by the parent page in Phase 4.)
+     */
+    selectionEnabled?: boolean;
   }>(),
   {
     endpoint: '/api/books',
@@ -80,6 +86,7 @@ const props = withDefaults(
     rootMargin: '200px',
     bufferRows: 2,
     debug: false,
+    selectionEnabled: true,
   },
 );
 
@@ -87,6 +94,28 @@ const emit = defineEmits<{
   (e: 'error', message: string): void;
   (e: 'update:count', count: number): void;
 }>();
+
+// ------------------------------
+// Selection mode (Phase 3)
+// ------------------------------
+const selectionStore = useBookSelectionStore();
+
+const selectionScope = computed(() => {
+  if (props.collectionId) {
+    return { kind: 'collection' as const, collectionId: props.collectionId };
+  }
+  return { kind: 'all' as const };
+});
+
+// Keep selection store scope in sync with view scope changes
+watch(
+  () => selectionScope.value,
+  (s) => {
+    if (!props.selectionEnabled) return;
+    selectionStore.resetForScope(s);
+  },
+  { deep: true, immediate: true },
+);
 
 // BookThumbnail sizing assumptions (current standard)
 const BOOK_CARD_W_PX = 172;
@@ -179,6 +208,12 @@ function reset() {
   books.value = [];
   nextCursor.value = null;
   errorMessage.value = null;
+
+  // When the dataset resets (scope/sort changes), clear selection for safety.
+  if (props.selectionEnabled) {
+    selectionStore.clearSelection();
+    selectionStore.setKnownBookIdsInScope([]);
+  }
 }
 
 async function fetchPage(opts: { cursor?: string | null; append: boolean }) {
@@ -211,6 +246,11 @@ async function fetchPage(opts: { cursor?: string | null; append: boolean }) {
       }
     } else {
       books.value = page;
+    }
+
+    // Track known IDs for selection UX (Phase 3).
+    if (props.selectionEnabled) {
+      selectionStore.addKnownBookIdsInScope(page.map((b) => b.id));
     }
 
     nextCursor.value = cursor;
@@ -302,6 +342,9 @@ onBeforeUnmount(() => {
           :key="b.id"
           :book="b"
           :lock-aspect-ratio="true"
+          :selectable="props.selectionEnabled && selectionStore.selectMode"
+          :selected="selectionStore.isSelected(b.id)"
+          @toggle-select="selectionStore.toggle"
         />
       </div>
 

@@ -1,5 +1,7 @@
 # Collections sharing & RBAC (v1)
 
+> Note: This doc describes the **sharing model** and **permissions**. Bulk book editing endpoints are included below because they are tightly coupled to RBAC and scope guardrails.
+
 This document describes Delb’s **minimal** collection sharing model and role-based access control (RBAC) for collections.
 
 It builds on the “Personal-first” model described in `docs/ui-layout-philosophy.md`.
@@ -124,6 +126,39 @@ These endpoints exist to support the v1 model:
 
 - `DELETE /api/collections/:id`  
   Owner deletes the collection (non-personal only).
+
+### Bulk book actions (collection-scoped)
+
+- `POST /api/collections/:id/books/bulk`  
+  Apply bulk add/remove operations to books within the context of a **specific collection**.
+
+#### Key guardrails and RBAC
+- Caller must be an `owner` or `editor` of the **scope collection** (`:id`) to perform any bulk operation.
+- For `addToCollectionIds` / `removeFromCollectionIds`, the caller must also be an `owner` or `editor` of each **target collection** being mutated.
+- **Personal collections** are **non-removable** in bulk operations (attempts are ignored and reported as such).
+- This endpoint is intentionally **collection-scoped**. There is no “bulk across All view” server semantic.
+
+#### Request shape
+The endpoint supports two selection models:
+
+1) Explicit IDs (client enumerates selected books):
+- `allInCollection: false`
+- `bookIds: string[]`
+
+2) Scope-wide selection (do not enumerate IDs):
+- `allInCollection: true`
+- `excludedBookIds: string[]` (optional)
+
+Along with one or both operations:
+- `addToCollectionIds: string[]` (optional)
+- `removeFromCollectionIds: string[]` (optional)
+
+#### Response shape (high level)
+- `booksResolved`: how many book ids the server applied the operation to (after exclusions / scope resolution)
+- `added`: list of `{ collectionId, bookId }` pairs that were added
+- `removed`: list of `{ collectionId, bookId }` pairs that were removed
+- `forbidden`: collection ids the caller attempted to mutate without sufficient role
+- `ignoredPersonalRemovals`: collection ids that were requested for removal but were personal (non-removable)
 
 ---
 

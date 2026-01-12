@@ -29,6 +29,15 @@ const props = withDefaults(
     class?: string;
     /** Lock the aspect ratio to 3:2 */
     lockAspectRatio?: boolean;
+
+    /**
+     * Selection mode (Phase 3):
+     * - When true, clicks toggle selection instead of navigating.
+     */
+    selectable?: boolean;
+
+    /** Whether this book is currently selected (only relevant when selectable=true). */
+    selected?: boolean;
   }>(),
   {
     to: undefined,
@@ -36,6 +45,8 @@ const props = withDefaults(
     showSeries: true,
     class: '',
     lockAspectRatio: false,
+    selectable: false,
+    selected: false,
   },
 );
 
@@ -83,27 +94,73 @@ const authorLabel = computed(() => {
 
   return b.author ?? '';
 });
+
+const emit = defineEmits<{
+  /** Fired when in selection mode and the user toggles selection for this book. */
+  (e: 'toggle-select', bookId: string): void;
+}>();
+
+function onOpenBook() {
+  if (props.selectable) {
+    emit('toggle-select', props.book.id);
+    return;
+  }
+
+  navigateTo(`/books/${props.book.id}`);
+}
+
+function onToggleSelect() {
+  emit('toggle-select', props.book.id);
+}
 </script>
 
 <template>
   <div :class="['w-43', props.class]">
     <div class="flex flex-col gap-1">
-      <BookCover
-        :src="coverSrc"
-        :alt="`Cover for ${props.book.title}`"
-        :title="props.book.title"
-        class="cursor-pointer"
-        :class="lockAspectRatio ? 'aspect-2/3' : ''"
-        @click="navigateTo(`/books/${props.book.id}`)"
-      />
+      <div class="relative">
+        <BookCover
+          :src="coverSrc"
+          :alt="`Cover for ${props.book.title}`"
+          :title="props.book.title"
+          class="cursor-pointer"
+          :class="lockAspectRatio ? 'aspect-2/3' : ''"
+          @click="onOpenBook"
+        />
+
+        <!-- Selection overlay -->
+        <div
+          v-if="props.selectable"
+          class="absolute inset-0 rounded-md pointer-events-none"
+          :class="props.selected ? 'bg-(--sub-color)/25' : ''"
+        />
+
+        <!-- Selection toggle target -->
+        <button
+          v-if="props.selectable"
+          type="button"
+          class="absolute inset-0 rounded-md border border-transparent hover:border-(--sub-color)"
+          :aria-pressed="props.selected ? 'true' : 'false'"
+          :aria-label="props.selected ? 'Deselect book' : 'Select book'"
+          @click.stop="onToggleSelect"
+        >
+          <span
+            class="absolute top-2 right-2 w-6 h-6 rounded-full border flex items-center justify-center"
+            :class="
+              props.selected
+                ? 'bg-(--main-color) border-(--main-color) text-(--bg-color)'
+                : 'bg-(--bg-color)/80 border-(--sub-color) text-(--text-color)'
+            "
+          >
+            <Icon :name="props.selected ? 'lucide:check' : ''" />
+          </span>
+        </button>
+      </div>
 
       <div class="flex flex-col">
         <!-- Title -->
-        <HoverScrollText
-          ><span
-            class="cursor-pointer hover:underline"
-            @click="navigateTo(`/books/${props.book.id}`)"
-            >{{ props.book.title }}
+        <HoverScrollText>
+          <span class="cursor-pointer hover:underline" @click="onOpenBook">
+            {{ props.book.title }}
           </span>
         </HoverScrollText>
 
@@ -111,17 +168,24 @@ const authorLabel = computed(() => {
         <HoverScrollText
           v-if="props.showAuthor && authorLabel"
           class="opacity-70 cursor-pointer"
-          ><span v-for="(a, index) in book.authors" :key="a.id">
-            <span
-              class="cursor-pointer hover:underline"
-              @click="navigateTo(`/authors/${a.id}`)"
-            >
-              {{ a.name }}
-            </span>
-            <span v-if="book.authors && index < book.authors.length - 1"
-              >,
-            </span>
+        >
+          <span v-if="props.selectable" @click="onOpenBook">
+            {{ authorLabel }}
           </span>
+
+          <template v-else>
+            <span v-for="(a, index) in book.authors" :key="a.id">
+              <span
+                class="cursor-pointer hover:underline"
+                @click="navigateTo(`/authors/${a.id}`)"
+              >
+                {{ a.name }}
+              </span>
+              <span v-if="book.authors && index < book.authors.length - 1"
+                >,
+              </span>
+            </span>
+          </template>
         </HoverScrollText>
 
         <!-- Series -->
@@ -129,10 +193,7 @@ const authorLabel = computed(() => {
           v-if="props.showSeries && props.book.series"
           class="italic opacity-70 text-sm cursor-pointer"
         >
-          <div
-            class="flex gap-1 hover:underline"
-            @click="navigateTo(`/series/${props.book.series.id}`)"
-          >
+          <div class="flex gap-1 hover:underline" @click="onOpenBook">
             {{ props.book.series.name }}
             <span v-if="props.book.seriesIndex"
               >#{{ props.book.seriesIndex }}</span
