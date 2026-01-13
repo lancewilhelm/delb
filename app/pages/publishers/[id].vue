@@ -18,6 +18,13 @@ const collectionsStore = useCollectionsStore();
 const publisherParam = computed(() => String(route.params.id || '').trim());
 const publisherId = computed(() => decodeURIComponent(publisherParam.value));
 
+const errorMessage = ref<string | null>(null);
+const publisherName = ref<string>('Publisher');
+const bookCount = ref<number>(0);
+
+// Used to force-recreate the BooksInfiniteGrid (scope changes, navigation, etc.)
+const gridKey = ref(0);
+
 const activeCollectionId = computed<string | undefined>(() => {
   if (
     collectionsStore.activeSelection.kind === 'collection' &&
@@ -28,13 +35,10 @@ const activeCollectionId = computed<string | undefined>(() => {
   return undefined;
 });
 
-// Keep the grid stable; force reload on collection scope change if desired later.
-const gridEndpoint = computed(
-  () => `/api/publishers/${encodeURIComponent(publisherId.value)}/books`,
-);
-
-const errorMessage = ref<string | null>(null);
-const publisherName = ref<string>('Publisher');
+const gridEndpoint = computed(() => {
+  if (!publisherId.value) return '/api/books';
+  return `/api/publishers/${encodeURIComponent(publisherId.value)}/books`;
+});
 
 useHead({
   title: `${publisherName.value} · Publisher`,
@@ -92,6 +96,8 @@ watch(
   () => publisherId.value,
   async () => {
     errorMessage.value = null;
+    bookCount.value = 0;
+    gridKey.value++;
     await refreshHeaderName();
   },
 );
@@ -100,6 +106,8 @@ watch(
   () => collectionsStore.activeSelection,
   async () => {
     errorMessage.value = null;
+    bookCount.value = 0;
+    gridKey.value++;
     await refreshHeaderName();
   },
   { deep: true },
@@ -118,16 +126,23 @@ onMounted(async () => {
     <div class="w-full h-full overflow-hidden flex flex-col min-h-0">
       <div class="p-4 shrink-0">
         <div class="flex items-center gap-2 text-(--main-color)">
-          <NuxtLink
+          <Icon
             v-tooltip="'Go back'"
-            to="/"
-            class="opacity-80 hover:opacity-100"
-          >
-            <Icon name="lucide:arrow-left" />
-          </NuxtLink>
+            name="lucide:arrow-left"
+            class="opacity-80 hover:opacity-100 cursor-pointer text-3xl"
+            @click="$router.back()"
+          />
 
-          <div class="text-2xl font-serif truncate">
-            {{ publisherName }}
+          <div class="flex flex-col">
+            <div class="text-2xl sm:text-3xl font-serif truncate">
+              {{ publisherName }}
+            </div>
+
+            <div
+              class="text-sm sm:text-md opacity-70 italic text-(--sub-color)"
+            >
+              {{ bookCount }} book{{ bookCount === 1 ? '' : 's' }}
+            </div>
           </div>
         </div>
 
@@ -137,10 +152,12 @@ onMounted(async () => {
       </div>
 
       <BooksInfiniteGrid
+        :key="gridKey"
         :endpoint="gridEndpoint"
         :collection-id="activeCollectionId"
         class="flex-1 min-h-0"
         @error="handleGridError"
+        @update:count="(n) => (bookCount = n)"
       />
     </div>
   </div>

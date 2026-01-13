@@ -754,7 +754,7 @@ watch(
           v-tooltip="'Go back'"
           class="opacity-80 hover:opacity-100 text-3xl"
           name="lucide:arrow-left"
-          @click="navigateTo('/')"
+          @click="$router.back()"
         />
       </div>
 
@@ -766,126 +766,21 @@ watch(
 
       <div
         v-else-if="book"
-        class="flex flex-col md:flex-row gap-3 sm:gap-6 items-start"
+        class="grid sm:grid-cols-[min-content_1fr] sm:grid-rows-2 gap-x-3 gap-y-1! items-start"
       >
-        <!-- Cover (left) -->
+        <!-- Keep a consistent aspect ratio; cover itself is max 320px wide -->
+        <BookCover
+          :src="coverThumbUrl"
+          :alt="`Cover for ${book.title}`"
+          :title="book.title"
+          class="cursor-pointer w-50! sm:w-80! justify-self-center"
+          @click="openCoverViewer"
+        />
+
+        <!-- Book Details -->
         <div
-          class="flex flex-col justify-center items-center w-full sm:w-80 shrink-0 self-center md:self-start"
+          class="min-w-0 flex flex-col gap-4 sm:row-start-1 sm:col-start-2 sm:row-span-2"
         >
-          <!-- Keep a consistent aspect ratio; cover itself is max 320px wide -->
-          <BookCover
-            :src="coverThumbUrl"
-            :alt="`Cover for ${book.title}`"
-            :title="book.title"
-            class="cursor-pointer w-50! sm:w-full!"
-            @click="openCoverViewer"
-          />
-
-          <!-- Simple modal viewer for full-resolution cover -->
-          <div
-            v-if="coverViewerOpen"
-            class="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
-            @click.self="closeCoverViewer"
-          >
-            <div class="relative max-w-[95vw] max-h-[95vh]">
-              <button
-                type="button"
-                class="absolute -top-3 -right-3 bg-(--bg-color) border border-(--sub-color) rounded-full w-9 h-9 flex items-center justify-center hover:bg-(--sub-color)/10"
-                @click="closeCoverViewer"
-              >
-                <icon name="lucide:x" class="scale-135" />
-              </button>
-
-              <img
-                v-if="coverViewerSrc"
-                :src="coverViewerSrc"
-                :alt="`Cover for ${book.title}`"
-                class="block max-w-[95vw] max-h-[95vh] object-contain rounded-md"
-                @error="onCoverViewerError"
-              />
-            </div>
-          </div>
-
-          <!-- Actions -->
-          <div class="flex flex-wrap gap-1 pt-2">
-            <button
-              v-if="book.files && book.files.length > 0"
-              class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
-              type="button"
-              :disabled="downloading"
-              @click="downloadBook"
-            >
-              <icon
-                :name="
-                  downloading ? 'lucide:loader-circle' : 'lucide:book-down'
-                "
-                :class="[downloading ? 'animate-spin' : '', 'scale-135']"
-              />
-              {{ downloading ? 'Downloading...' : 'Download' }}
-            </button>
-
-            <NuxtLink
-              v-if="isAdmin"
-              class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
-              :to="`/books/${book.id}/edit`"
-            >
-              <icon name="lucide:pencil" class="text-lg" />
-              Edit
-            </NuxtLink>
-
-            <button
-              v-if="isAdmin"
-              class="px-3 py-2 rounded-md border border-(--error-color) text-(--error-color) hover:bg-(--error-color)/90! text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
-              type="button"
-              :disabled="deleting"
-              @click="showDeleteConfirm = true"
-            >
-              <icon name="lucide:trash-2" class="text-lg" />
-              Delete
-            </button>
-          </div>
-          <div
-            class="grid grid-cols-[min-content_1fr] gap-4 mt-4 w-full items-center"
-          >
-            <div class="flex gap-2 items-center">
-              <div class="font-semibold">Collections</div>
-              <icon
-                v-if="canEditCollectionsForBook"
-                name="lucide:pencil"
-                class="text-md cursor-pointer opacity-50 hover:opacity-80"
-                @click="openCollectionsManager"
-              />
-            </div>
-
-            <div v-if="collectionsLoading" class="text-sm opacity-70">
-              Loading…
-            </div>
-
-            <div
-              v-else-if="collectionsErrorMessage"
-              class="text-sm text-(--error-color)"
-            >
-              {{ collectionsErrorMessage }}
-            </div>
-
-            <div v-else class="flex flex-wrap gap-2 items-center justify-end">
-              <span
-                v-for="c in bookCollections"
-                :key="c.id"
-                class="border border-(--sub-color) px-2 py-1 rounded-md text-xs"
-              >
-                {{ c.name }}
-              </span>
-
-              <span v-if="!bookCollections.length" class="text-sm opacity-70">
-                No collections.
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Details (right) -->
-        <div class="min-w-0 flex flex-col gap-4">
           <!-- Series -->
           <div class="min-w-0 space-y-1">
             <div
@@ -1159,19 +1054,125 @@ watch(
             </div>
           </ModalWindow>
         </div>
+
+        <!-- Actions & Collections -->
+        <div class="flex flex-col items-center sm:row-start-2 sm:col-start-1">
+          <!-- Actions -->
+          <div class="flex flex-wrap gap-1 pt-2">
+            <button
+              v-if="book.files && book.files.length > 0"
+              class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
+              type="button"
+              :disabled="downloading"
+              @click="downloadBook"
+            >
+              <icon
+                :name="
+                  downloading ? 'lucide:loader-circle' : 'lucide:book-down'
+                "
+                :class="[downloading ? 'animate-spin' : '', 'scale-135']"
+              />
+              {{ downloading ? 'Downloading...' : 'Download' }}
+            </button>
+
+            <NuxtLink
+              v-if="isAdmin"
+              class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
+              :to="`/books/${book.id}/edit`"
+            >
+              <icon name="lucide:pencil" class="text-lg" />
+              Edit
+            </NuxtLink>
+
+            <button
+              v-if="isAdmin"
+              class="px-3 py-2 rounded-md border border-(--error-color) text-(--error-color) hover:bg-(--error-color)/90! text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
+              type="button"
+              :disabled="deleting"
+              @click="showDeleteConfirm = true"
+            >
+              <icon name="lucide:trash-2" class="text-lg" />
+              Delete
+            </button>
+          </div>
+
+          <!-- Collections -->
+          <div
+            class="grid grid-cols-[min-content_1fr] gap-4 mt-4 w-full items-center"
+          >
+            <div class="flex gap-2 items-center">
+              <div class="font-semibold">Collections</div>
+              <icon
+                v-if="canEditCollectionsForBook"
+                name="lucide:pencil"
+                class="text-md cursor-pointer opacity-50 hover:opacity-80"
+                @click="openCollectionsManager"
+              />
+            </div>
+
+            <div v-if="collectionsLoading" class="text-sm opacity-70">
+              Loading…
+            </div>
+
+            <div
+              v-else-if="collectionsErrorMessage"
+              class="text-sm text-(--error-color)"
+            >
+              {{ collectionsErrorMessage }}
+            </div>
+
+            <div v-else class="flex flex-wrap gap-2 items-center justify-end">
+              <span
+                v-for="c in bookCollections"
+                :key="c.id"
+                class="border border-(--sub-color) px-2 py-1 rounded-md text-xs"
+              >
+                {{ c.name }}
+              </span>
+
+              <span v-if="!bookCollections.length" class="text-sm opacity-70">
+                No collections.
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div v-else class="text-sm opacity-80">No book loaded.</div>
 
       <!-- Bottom of the Page -->
-      <!-- Collections -->
+
+      <!-- Full Res Cover Modal -->
+      <div
+        v-if="coverViewerOpen"
+        class="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+        @click.self="closeCoverViewer"
+      >
+        <div class="relative max-w-[95vw] max-h-[95vh]">
+          <button
+            type="button"
+            class="absolute -top-3 -right-3 bg-(--bg-color) border border-(--sub-color) rounded-full w-9 h-9 flex items-center justify-center hover:bg-(--sub-color)/10"
+            @click="closeCoverViewer"
+          >
+            <icon name="lucide:x" class="scale-135" />
+          </button>
+
+          <img
+            v-if="coverViewerSrc"
+            :src="coverViewerSrc"
+            :alt="`Cover for ${book.title}`"
+            class="block max-w-[95vw] max-h-[95vh] object-contain rounded-md"
+            @error="onCoverViewerError"
+          />
+        </div>
+      </div>
 
       <!-- Manage collections modal -->
       <ModalWindow
         :open="collectionsManageOpen"
         @close="closeCollectionsManager"
       >
-        <div class="flex flex-col gap-4 w-110 max-w-[90vw]">
+        <div class="flex flex-col gap-4">
           <div class="flex items-start justify-between gap-4">
             <div>
               <div class="text-lg font-semibold">Manage collections</div>

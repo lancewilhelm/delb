@@ -1120,7 +1120,7 @@ function resetForm() {
 }
 
 function backToBook() {
-  router.push(`/books/${encodeURIComponent(bookId.value)}`);
+  router.replace(`/books/${encodeURIComponent(bookId.value)}`);
 }
 
 // Metadata search modal

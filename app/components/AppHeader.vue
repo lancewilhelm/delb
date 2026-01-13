@@ -10,6 +10,8 @@ const emit = defineEmits<{
 function openAddBook() {
   uiStore.setAddBookModalVisible(true);
 }
+
+const route = useRoute();
 </script>
 
 <template>
@@ -22,7 +24,10 @@ function openAddBook() {
         class="text-(--main-color) cursor-pointer header-icon font-bold text-2xl logo"
         @click="
           () => {
-            uiStore.setLibraryView('books');
+            if (route.path === '/') {
+              uiStore.setLibraryView('books');
+            }
+            console.log(route);
             navigateTo('/');
           }
         "

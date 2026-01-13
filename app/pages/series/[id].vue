@@ -255,13 +255,21 @@ watch(
     <AppHeader class="w-full" />
 
     <div class="w-full h-full p-4 overflow-auto">
-      <div class="flex items-center gap-2 mb-2 text-(--main-color)">
+      <div class="flex items-center gap-2 mb-4 text-(--main-color)">
         <Icon
           v-tooltip="'Go back'"
           name="lucide:arrow-left"
           class="opacity-80 hover:opacity-100 cursor-pointer text-3xl"
-          @click="navigateTo('/')"
+          @click="$router.back()"
         />
+        <div v-if="books.length > 0" class="flex flex-col">
+          <div class="text-2xl sm:text-3xl font-serif truncate">
+            {{ seriesName }}
+          </div>
+          <div class="text-sm sm:text-md opacity-70 italic text-(--sub-color)">
+            {{ bookCount }} book{{ bookCount === 1 ? '' : 's' }}
+          </div>
+        </div>
       </div>
 
       <div v-if="loading" class="text-sm opacity-80">Loading...</div>
@@ -275,14 +283,6 @@ watch(
       </div>
 
       <div v-else class="flex flex-col gap-4">
-        <div class="flex items-center gap-3">
-          <div class="text-2xl sm:text-3xl font-serif truncate">
-            {{ seriesName }}
-          </div>
-          <div class="text-sm sm:text-md opacity-70 italic">
-            {{ bookCount }} book{{ bookCount === 1 ? '' : 's' }}
-          </div>
-        </div>
         <div class="flex flex-col gap-3 flex-wrap">
           <div
             v-for="b in sortedBooks"

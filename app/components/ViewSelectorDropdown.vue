@@ -1,7 +1,12 @@
 <script setup lang="ts">
 defineOptions({ name: 'ViewSelectorDropdown' });
 
-export type LibraryView = 'books' | 'authors' | 'series' | 'publishers';
+export type LibraryView =
+  | 'books'
+  | 'authors'
+  | 'series'
+  | 'publishers'
+  | 'tags';
 
 const props = withDefaults(
   defineProps<{
@@ -36,6 +41,7 @@ const views: Array<{
     icon: 'lucide:building-2',
     enabled: true,
   },
+  { id: 'tags', label: 'Tags', icon: 'lucide:tag', enabled: true },
 ];
 
 const activeView = computed(() => {

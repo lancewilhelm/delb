@@ -117,20 +117,19 @@ onMounted(async () => {
       <!-- Header (non-scrolling) -->
       <div class="p-4 shrink-0">
         <div class="flex items-center gap-2 text-(--main-color)">
-          <NuxtLink
+          <Icon
             v-tooltip="'Go back'"
-            to="/"
-            class="opacity-80 hover:opacity-100"
-          >
-            <Icon name="lucide:arrow-left" />
-          </NuxtLink>
+            name="lucide:arrow-left"
+            class="opacity-80 hover:opacity-100 cursor-pointer text-3xl"
+            @click="$router.back()"
+          />
 
-          <div class="text-2xl font-serif truncate">
+          <div class="text-2xl sm:text-3xl font-serif truncate">
             {{ tagName }}
           </div>
 
-          <div class="text-sm opacity-70">
-            · {{ bookCount }} book{{ bookCount === 1 ? '' : 's' }}
+          <div class="text-sm sm:text-md opacity-70 italic text-(--sub-color)">
+            {{ bookCount }} book{{ bookCount === 1 ? '' : 's' }}
           </div>
         </div>
 
