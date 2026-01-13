@@ -165,7 +165,7 @@ onBeforeUnmount(() => {
     <button
       ref="anchorRef"
       v-tooltip="'Switch collection'"
-      class="sm:pl-1 flex items-center gap-2"
+      class="sm:pl-1 flex items-center gap-2 px-1"
       :aria-expanded="open"
       aria-haspopup="menu"
       @click="toggleDropdown"

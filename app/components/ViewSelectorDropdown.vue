@@ -1,52 +1,44 @@
 <script setup lang="ts">
 defineOptions({ name: 'ViewSelectorDropdown' });
 
-export type LibraryView =
-  | 'books'
-  | 'authors'
-  | 'series'
-  | 'publishers'
-  | 'tags';
+type NavItem = {
+  id: string;
+  label: string;
+  to: string;
+  icon: string;
+};
 
-const props = withDefaults(
-  defineProps<{
-    modelValue?: LibraryView;
-  }>(),
+const items: NavItem[] = [
+  { id: 'books', label: 'Books', to: '/books', icon: 'lucide:book' },
+  { id: 'authors', label: 'Authors', to: '/authors', icon: 'lucide:user' },
+  { id: 'series', label: 'Series', to: '/series', icon: 'lucide:layers' },
   {
-    modelValue: 'books',
+    id: 'publishers',
+    label: 'Publishers',
+    to: '/publishers',
+    icon: 'lucide:building-2',
   },
-);
+  { id: 'tags', label: 'Tags', to: '/tags', icon: 'lucide:tag' },
+];
 
-const emit = defineEmits<{
-  (e: 'update:modelValue', value: LibraryView): void;
-}>();
+const route = useRoute();
 
 const open = ref(false);
 const anchorRef = ref<HTMLElement | null>(null);
 const panelRef = ref<HTMLElement | null>(null);
 
-const views: Array<{
-  id: LibraryView;
-  label: string;
-  icon: string;
-  enabled: boolean;
-  subtitle?: string;
-}> = [
-  { id: 'books', label: 'Books', icon: 'lucide:book', enabled: true },
-  { id: 'authors', label: 'Authors', icon: 'lucide:user', enabled: true },
-  { id: 'series', label: 'Series', icon: 'lucide:layers', enabled: true },
-  {
-    id: 'publishers',
-    label: 'Publishers',
-    icon: 'lucide:building-2',
-    enabled: true,
-  },
-  { id: 'tags', label: 'Tags', icon: 'lucide:tag', enabled: true },
-];
-
-const activeView = computed(() => {
-  return views.find((v) => v.id === props.modelValue) ?? views[0]!;
+const activeItem = computed(() => {
+  return (
+    items.find(
+      (i) => route.path === i.to || route.path.startsWith(`${i.to}/`),
+    ) ?? items[0]!
+  );
 });
+
+function isActive(item: NavItem) {
+  // Active for exact base route and nested routes (e.g. /authors/:id)
+  return route.path === item.to || route.path.startsWith(`${item.to}/`);
+}
 
 function closeDropdown() {
   open.value = false;
@@ -54,13 +46,6 @@ function closeDropdown() {
 
 function toggleDropdown() {
   open.value = !open.value;
-}
-
-function selectView(view: LibraryView) {
-  const v = views.find((x) => x.id === view);
-  if (!v?.enabled) return;
-  emit('update:modelValue', view);
-  closeDropdown();
 }
 
 function onDocumentPointerDown(e: MouseEvent) {
@@ -94,76 +79,87 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="relative">
-    <!-- Trigger -->
-    <button
-      ref="anchorRef"
-      class="py-0 px-0.5 gap-2 hover:bg-transparent!"
-      :aria-expanded="open"
-      aria-haspopup="menu"
-      @click="toggleDropdown"
-    >
-      <Icon
-        :name="activeView.icon"
-        class="text-(--main-color) opacity-90 shrink-0 text-2xl"
-      />
-      <span class="text-2xl sm:text-3xl font-serif text-(--main-color)">
-        {{ activeView.label }}
-      </span>
-      <Icon
-        name="lucide:chevron-down"
-        class="text-(--main-color) opacity-70 shrink-0"
-      />
-    </button>
+  <div class="flex items-center">
+    <!-- Mobile (default): dropdown -->
+    <div class="relative md:hidden">
+      <button
+        ref="anchorRef"
+        class="py-0 px-0.5 gap-2 hover:bg-transparent! rounded-none! active:bg-transparent! focus:bg-transparent!"
+        :aria-expanded="open"
+        aria-haspopup="menu"
+        @click="toggleDropdown"
+      >
+        <Icon
+          :name="activeItem.icon"
+          class="text-(--main-color) opacity-90 shrink-0 text-2xl"
+        />
+        <span class="text-2xl text-(--main-color)">
+          {{ activeItem.label }}
+        </span>
+        <Icon
+          name="lucide:chevron-down"
+          class="text-(--main-color) opacity-70 shrink-0"
+        />
+      </button>
 
-    <!-- Panel -->
-    <div
-      v-if="open"
-      ref="panelRef"
-      class="absolute left-0 mt-1 w-40 bg-(--bg-color) border border-(--sub-color) rounded-md shadow-lg z-50 overflow-hidden"
-      role="menu"
-    >
-      <div class="px-3 py-2 border-(--sub-color)">
-        <div class="text-xs opacity-70">View</div>
-      </div>
+      <div
+        v-if="open"
+        ref="panelRef"
+        class="absolute left-0 mt-1 w-44 bg-(--bg-color) border border-(--sub-color) rounded-md shadow-lg z-50 overflow-hidden"
+        role="menu"
+      >
+        <div class="px-3 py-2 border-(--sub-color)">
+          <div class="text-xs opacity-70">View</div>
+        </div>
 
-      <div>
-        <button
-          v-for="v in views"
-          :key="v.id"
-          class="w-full px-3 py-2 text-left justify-start! gap-3 transition rounded-none!"
-          :class="[
-            props.modelValue === v.id
-              ? 'bg-(--sub-color)/20'
-              : 'hover:bg-(--sub-color)/15',
-            !v.enabled ? 'opacity-60 cursor-not-allowed' : '',
-          ]"
-          role="menuitem"
-          :disabled="!v.enabled"
-          @click="selectView(v.id)"
-        >
-          <div class="flex items-center gap-2 min-w-0">
+        <div>
+          <NuxtLink
+            v-for="item in items"
+            :key="item.id"
+            :to="item.to"
+            class="w-full px-3 py-2 text-left justify-start! gap-3 transition rounded-none! flex items-center"
+            :class="
+              isActive(item)
+                ? 'bg-(--sub-color)/20 text-(--main-color)'
+                : 'hover:bg-(--sub-color)/15 text-(--main-color) opacity-80 hover:opacity-100'
+            "
+            role="menuitem"
+            @click="closeDropdown"
+          >
             <Icon
-              :name="v.icon"
+              :name="item.icon"
               class="text-(--main-color) opacity-80 shrink-0"
             />
-            <div class="min-w-0">
-              <div class="truncate text-sm">
-                {{ v.label }}
-              </div>
-              <div v-if="v.subtitle" class="text-xs opacity-70">
-                {{ v.subtitle }}
-              </div>
-            </div>
-          </div>
+            <span class="truncate text-sm">
+              {{ item.label }}
+            </span>
 
-          <Icon
-            v-if="props.modelValue === v.id"
-            name="lucide:check"
-            class="text-(--main-color) opacity-80 shrink-0"
-          />
-        </button>
+            <Icon
+              v-if="isActive(item)"
+              name="lucide:check"
+              class="ml-auto text-(--main-color) opacity-80 shrink-0"
+            />
+          </NuxtLink>
+        </div>
       </div>
     </div>
+
+    <!-- Desktop (sm+): inline nav -->
+    <nav aria-label="Library views" class="hidden md:flex items-center gap-0!">
+      <NuxtLink
+        v-for="item in items"
+        :key="item.id"
+        :to="item.to"
+        class="px-2 py-1 flex items-center gap-2 transition"
+        :class="
+          isActive(item)
+            ? 'bg-(--sub-color)/20 text-(--main-color)'
+            : 'hover:bg-(--sub-color)/15 text-(--main-color) opacity-80 hover:opacity-100'
+        "
+      >
+        <Icon :name="item.icon" class="shrink-0 opacity-80" />
+        <span class="text-md">{{ item.label }}</span>
+      </NuxtLink>
+    </nav>
   </div>
 </template>

@@ -752,7 +752,7 @@ watch(
       <div class="flex items-center gap-2 mb-4 text-(--main-color)">
         <icon
           v-tooltip="'Go back'"
-          class="opacity-80 hover:opacity-100 text-3xl"
+          class="opacity-80 hover:opacity-100 text-3xl cursor-pointer"
           name="lucide:arrow-left"
           @click="$router.back()"
         />
