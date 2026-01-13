@@ -29,6 +29,7 @@ export interface UserSettings {
   coverStyle: {
     glossySpine: boolean;
     roundedRight: boolean;
+    grayscale: boolean;
   };
 
   /**
@@ -52,6 +53,7 @@ function getDefaultSettings(): UserSettings {
     coverStyle: {
       glossySpine: true,
       roundedRight: false,
+      grayscale: false,
     },
 
     metadataSearch: {

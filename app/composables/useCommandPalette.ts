@@ -44,7 +44,7 @@ export function useCommandPalette() {
     },
     {
       label: 'add book',
-      icon: 'lucide:plus',
+      icon: 'lucide:book-plus',
       action: () => {
         uiStore.setAddBookModalVisible(true);
       },
@@ -98,6 +98,19 @@ export function useCommandPalette() {
                 ...userSettingsStore.settings.coverStyle,
                 roundedRight:
                   !userSettingsStore.settings.coverStyle.roundedRight,
+              },
+            });
+            closePalette();
+          },
+        },
+        {
+          label: 'toggle grayscale filter',
+          icon: 'lucide:palette',
+          action: () => {
+            userSettingsStore.updateSettings({
+              coverStyle: {
+                ...userSettingsStore.settings.coverStyle,
+                grayscale: !userSettingsStore.settings.coverStyle.grayscale,
               },
             });
             closePalette();

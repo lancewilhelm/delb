@@ -57,6 +57,9 @@ const hasSrc = computed(() => !!props.src);
       loading="lazy"
       draggable="false"
       class="w-full! h-full!"
+      :class="
+        userSettingsStore.settings.coverStyle.grayscale ? 'grayscale' : ''
+      "
     />
     <div
       v-else-if="props.showPlaceholder"
