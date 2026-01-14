@@ -222,16 +222,22 @@ The sidebar can be:
 
 #### Sidebar structure (top → bottom)
 
-##### Shelves (state)
-Single-select (radio buttons or pills):
+##### Status (per-user state)
+Single-select (radio buttons, pills, or a dropdown):
+- To be read
 - Reading
-- To Read
-- Read
+- Finished
+- DNF
 
 Allowed special behavior:
-- counts on each shelf
+- counts per status (within current scope)
 - quick transitions (later)
 - defaults (later)
+
+Notes:
+- Status is user-scoped metadata on a book (not a container like Collections).
+- Status is mutually exclusive and optional (a book may have no status).
+- Internal keys (for API/DB): `to_be_read`, `reading`, `finished`, `dnf`.
 
 ##### Tags (classification)
 Multi-select:

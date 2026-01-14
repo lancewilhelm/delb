@@ -27,6 +27,21 @@ type BulkResponse = {
   message?: string;
 };
 
+type UserBookStatus = 'to_be_read' | 'reading' | 'finished' | 'dnf';
+
+type BulkStatusResponse = {
+  success?: boolean;
+  message?: string;
+  data?: {
+    requested: number;
+    visible: number;
+    updated: number;
+    cleared: number;
+    ignoredNotVisible: number;
+    status: UserBookStatus | null;
+  };
+};
+
 function refreshBooksGrid() {
   booksGridKey.value += 1;
 }
@@ -118,6 +133,81 @@ const activeCollectionIdForAdd = computed<string | null>(() => {
 const addModalOpen = ref(false);
 const addSubmitting = ref(false);
 const addError = ref<string | null>(null);
+
+const statusModalOpen = ref(false);
+const statusSubmitting = ref(false);
+const statusError = ref<string | null>(null);
+const selectedBulkStatus = ref<UserBookStatus | null>(null);
+
+const STATUS_OPTIONS = [
+  { value: null as UserBookStatus | null, label: 'No status' },
+  { value: 'to_be_read' as const, label: 'To be read' },
+  { value: 'reading' as const, label: 'Reading' },
+  { value: 'finished' as const, label: 'Finished' },
+  { value: 'dnf' as const, label: 'DNF' },
+] as const;
+
+function openStatusModal() {
+  statusError.value = null;
+  selectedBulkStatus.value = null;
+  statusModalOpen.value = true;
+  closeActionsDropdown();
+}
+
+function closeStatusModal() {
+  statusModalOpen.value = false;
+  statusSubmitting.value = false;
+  statusError.value = null;
+  selectedBulkStatus.value = null;
+}
+
+async function applyBulkStatus() {
+  if (statusSubmitting.value) return;
+
+  statusError.value = null;
+
+  if (selectionIsEmpty()) {
+    statusError.value = 'Select at least one book.';
+    return;
+  }
+
+  // If "All" + allSelectedInScope, we do not have a server-backed "All scope" bulk semantic yet.
+  if (!activeCollectionId.value && selectionStore.allSelectedInScope) {
+    statusError.value =
+      'Select all in All view is not supported for bulk status yet (needs a server-backed scope).';
+    return;
+  }
+
+  statusSubmitting.value = true;
+
+  try {
+    const ids = getExplicitSelectedBookIds();
+
+    const res = await $fetch<BulkStatusResponse>('/api/books/bulk/status', {
+      method: 'POST',
+      body: { bookIds: ids, status: selectedBulkStatus.value },
+    });
+
+    if (!res?.success) {
+      throw new Error(res?.message || 'Failed to apply status');
+    }
+
+    selectionStore.clearSelection();
+    selectionStore.setMode({ enabled: false });
+
+    closeStatusModal();
+    refreshBooksGrid();
+  } catch (err: unknown) {
+    const e = err as FetchErrorLike;
+    statusError.value =
+      e?.data?.message ||
+      e?.statusMessage ||
+      e?.message ||
+      'Failed to apply status';
+  } finally {
+    statusSubmitting.value = false;
+  }
+}
 
 /**
  * Multi-target selection: allow adding the selected books to multiple collections at once.
@@ -562,7 +652,7 @@ onMounted(async () => {
                     class="absolute right-0 mt-1 w-64 border border-(--sub-color) bg-(--bg-color) rounded-md shadow-lg z-50 overflow-hidden"
                     role="menu"
                   >
-                    <div class="px-3 py-2 border-b border-(--sub-color)">
+                    <div class="px-2 py-1 border-b border-(--sub-color)">
                       <div class="text-xs opacity-70">Actions</div>
                     </div>
 
@@ -573,7 +663,16 @@ onMounted(async () => {
                         type="button"
                         @click="openAddModal"
                       >
-                        <span class="truncate text-sm">Add to collection…</span>
+                        <span class="truncate text-sm">Add to collection</span>
+                      </button>
+
+                      <button
+                        class="w-full px-3 py-2 text-left flex justify-between! gap-3 rounded-none! hover:bg-(--sub-color)/15"
+                        role="menuitem"
+                        type="button"
+                        @click="openStatusModal"
+                      >
+                        <span class="truncate text-sm">Set status</span>
                       </button>
 
                       <button
@@ -714,6 +813,84 @@ onMounted(async () => {
                 </div>
               </ModalWindow>
 
+              <!-- Bulk status modal -->
+              <ModalWindow :open="statusModalOpen" @close="closeStatusModal">
+                <div class="flex flex-col gap-3 w-110 max-w-[90vw]">
+                  <div class="flex items-start justify-between gap-4">
+                    <div>
+                      <div class="text-lg font-semibold">Set status</div>
+                      <div class="text-sm opacity-80">
+                        This will overwrite the status of selected books that
+                        already have one.
+                      </div>
+                    </div>
+
+                    <Icon
+                      v-tooltip="'Close'"
+                      name="lucide:x"
+                      class="scale-150 cursor-pointer opacity-80 hover:opacity-100"
+                      @click="closeStatusModal"
+                    />
+                  </div>
+
+                  <div class="space-y-2">
+                    <div class="text-sm opacity-80">Choose status</div>
+
+                    <div class="space-y-2">
+                      <label
+                        v-for="opt in STATUS_OPTIONS"
+                        :key="String(opt.value ?? '')"
+                        class="flex items-center gap-2 cursor-pointer"
+                      >
+                        <input
+                          v-model="selectedBulkStatus"
+                          type="radio"
+                          name="bulk-status"
+                          :value="opt.value"
+                          class="peer sr-only"
+                          :disabled="statusSubmitting"
+                        />
+                        <span
+                          class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                          :class="
+                            statusSubmitting
+                              ? 'peer-checked:bg-(--sub-color) cursor-default!'
+                              : ''
+                          "
+                        ></span>
+                        <div class="min-w-0">
+                          <div class="text-sm">{{ opt.label }}</div>
+                        </div>
+                      </label>
+                    </div>
+
+                    <p v-if="statusError" class="text-sm text-red-600">
+                      {{ statusError }}
+                    </p>
+                  </div>
+
+                  <div class="flex gap-2 justify-end">
+                    <button
+                      class="px-3 py-2"
+                      type="button"
+                      :disabled="statusSubmitting"
+                      @click="closeStatusModal"
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      class="px-3 py-2 bg-(--main-color) text-(--bg-color) disabled:opacity-60 disabled:cursor-not-allowed"
+                      type="button"
+                      :disabled="statusSubmitting"
+                      @click="applyBulkStatus"
+                    >
+                      {{ statusSubmitting ? 'Applying…' : 'Apply' }}
+                    </button>
+                  </div>
+                </div>
+              </ModalWindow>
+
               <!-- Filters dropdown -->
               <div class="relative">
                 <button
@@ -814,7 +991,7 @@ onMounted(async () => {
                   class="absolute right-0 mt-1 w-48 border border-(--sub-color) bg-(--bg-color) rounded-md shadow-lg z-50 overflow-hidden"
                   role="menu"
                 >
-                  <div class="px-3 py-2 border-b border-(--sub-color)">
+                  <div class="px-2 py-1 border-b border-(--sub-color)">
                     <div class="text-xs opacity-70">Sort</div>
                   </div>
 

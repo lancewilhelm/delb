@@ -2,6 +2,8 @@ import { defineStore } from 'pinia';
 
 export type MetadataProviderKey = 'googleBooks' | 'hardcover';
 
+export type BookDeleteMode = 'db_only' | 'everything';
+
 export const fontFamilyOptions = [
   'Fira Code',
   'Geist',
@@ -39,6 +41,17 @@ export interface UserSettings {
   metadataSearch: {
     providers: MetadataProviderKey[];
   };
+
+  /**
+   * Per-user default for deleting a book.
+   * - db_only: delete database rows only (leaves library folder untouched)
+   * - everything: delete database rows and remove the book folder under `library/`
+   *
+   * Used by the book detail delete confirmation modal to preselect the option.
+   */
+  bookDelete: {
+    defaultMode: BookDeleteMode;
+  };
 }
 
 function getDefaultSettings(): UserSettings {
@@ -59,6 +72,11 @@ function getDefaultSettings(): UserSettings {
     metadataSearch: {
       // Default to Google Books; Hardcover will be enabled client-side only if available.
       providers: ['googleBooks'],
+    },
+
+    // Product decision: default to deleting everything from disk to avoid orphaned library folders.
+    bookDelete: {
+      defaultMode: 'everything',
     },
   };
 }

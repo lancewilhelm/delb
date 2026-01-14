@@ -11,6 +11,8 @@ useHead({
   title: 'Book',
 });
 
+type UserBookStatus = 'to_be_read' | 'reading' | 'finished' | 'dnf';
+
 type Book = {
   id: string;
   title: string;
@@ -21,6 +23,12 @@ type Book = {
    * Stored as integer half-stars (1..10 => 0.5..5.0), or null if unset.
    */
   userRating?: number | null;
+
+  /**
+   * Per-user reading status for this book.
+   * Mutually exclusive. Null means "unset".
+   */
+  userStatus?: UserBookStatus | null;
 
   // New schema: authors are related entities (many-to-many)
   authors?: { id: string; name: string }[];
@@ -106,6 +114,79 @@ const loading = ref(false);
 const errorMessage = ref<string | null>(null);
 const book = ref<Book | null>(null);
 
+// ------------------------------
+// Status (per-user, mutually exclusive)
+// ------------------------------
+const STATUS_OPTIONS = [
+  { value: null as UserBookStatus | null, label: 'No status' },
+  { value: 'to_be_read' as const, label: 'To be read' },
+  { value: 'reading' as const, label: 'Reading' },
+  { value: 'finished' as const, label: 'Finished' },
+  { value: 'dnf' as const, label: 'DNF' },
+] as const;
+
+const statusSaving = ref(false);
+const statusErrorMessage = ref<string | null>(null);
+
+const selectedStatusValue = computed<string>({
+  get() {
+    // v-model on <select> works best with strings; use empty string for null
+    const s = book.value?.userStatus ?? null;
+    return s ?? '';
+  },
+  set(v) {
+    // local optimistic update; commit happens via saveStatus()
+    if (!book.value) return;
+    book.value.userStatus = (
+      v ? (v as UserBookStatus) : null
+    ) as UserBookStatus | null;
+  },
+});
+
+async function saveStatus(next: UserBookStatus | null) {
+  if (!bookId.value) return;
+
+  statusSaving.value = true;
+  statusErrorMessage.value = null;
+
+  try {
+    const res = await fetch(
+      `/api/books/${encodeURIComponent(bookId.value)}/status`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: next }),
+      },
+    );
+
+    const text = await res.text().catch(() => '');
+
+    const json = (text ? JSON.parse(text) : null) as {
+      success?: boolean;
+      data?: { status?: UserBookStatus | null };
+      message?: string;
+    } | null;
+
+    if (!res.ok || json?.success === false) {
+      throw new Error(json?.message || `Failed to save status (${res.status})`);
+    }
+
+    if (book.value) {
+      book.value.userStatus = (json?.data?.status ??
+        null) as UserBookStatus | null;
+    }
+  } catch (err) {
+    const e = err as FetchErrorLike;
+    statusErrorMessage.value =
+      e?.data?.message ||
+      e?.statusMessage ||
+      e?.message ||
+      'Failed to save status';
+  } finally {
+    statusSaving.value = false;
+  }
+}
+
 const { isAdmin } = useAuth();
 
 const showDeleteConfirm = ref(false);
@@ -145,25 +226,6 @@ const editableCollections = computed(() => {
   return (collectionsStore.collections ?? []).filter((c) =>
     collectionsStore.canEditCollection(c),
   );
-});
-
-const editableBookCollections = computed(() => {
-  // Collections the book is already in, but only those the user can mutate (owner/editor).
-  // NOTE: This list will *not* include the user's Personal collection unless the book is
-  // actually in it already.
-  return bookCollections.value.filter((c) => c.role !== 'viewer');
-});
-
-const addableEditableCollections = computed(() => {
-  // Other editable collections the book is NOT currently in.
-  // IMPORTANT: exclude Personal so we cannot implicitly "pull" a shared book into Personal.
-  const inSet = new Set(bookCollections.value.map((c) => c.id));
-
-  return editableCollections.value.filter((c) => {
-    if (inSet.has(c.id)) return false;
-    if (c.isPersonal) return false;
-    return true;
-  });
 });
 
 async function loadBookCollections() {
@@ -634,6 +696,19 @@ async function downloadBook() {
   }
 }
 
+type DeleteBookMode = 'db_only' | 'everything';
+
+const userSettingsStore = useUserSettingsStore();
+
+// Default to the user's saved preference (falls back to `everything` per store defaults)
+const deleteMode = ref<DeleteBookMode>(
+  (userSettingsStore.settings.bookDelete?.defaultMode as DeleteBookMode) ??
+    'everything',
+);
+
+// “Remember my choice” toggle for this modal
+const rememberDeleteChoice = ref(false);
+
 async function deleteBook() {
   if (!bookId.value || deleting.value) return;
 
@@ -641,7 +716,27 @@ async function deleteBook() {
   errorMessage.value = null;
 
   try {
-    const res = await fetch(`/api/books/${encodeURIComponent(bookId.value)}`, {
+    const url = new URL(
+      `/api/books/${encodeURIComponent(bookId.value)}`,
+      window.location.origin,
+    );
+
+    // Server-supported delete modes (query param: `mode`)
+    // - db_only:     DB rows only (no disk changes)
+    // - everything:  DB rows + delete the book folder under `library/`
+    url.searchParams.set('mode', deleteMode.value);
+
+    // Persist preference if requested
+    if (rememberDeleteChoice.value) {
+      await userSettingsStore.updateSettings({
+        bookDelete: {
+          ...userSettingsStore.settings.bookDelete,
+          defaultMode: deleteMode.value,
+        },
+      });
+    }
+
+    const res = await fetch(url.toString(), {
       method: 'DELETE',
     });
 
@@ -678,7 +773,7 @@ async function loadBook() {
       throw new Error(`Failed to load book (${res.status})`);
     }
 
-    const json = (await res.json()) as BookGetResponse;
+    const json = (await res.json().catch(() => null)) as BookGetResponse | null;
 
     book.value = json?.data?.book ?? null;
 
@@ -748,7 +843,7 @@ watch(
   <div class="flex flex-col w-full h-full overflow-hidden">
     <AppHeader class="w-full" />
 
-    <div class="w-full h-full p-4 overflow-auto">
+    <div class="flex flex-col w-full h-full p-4 pt-2 sm:pt-4 overflow-auto">
       <div class="flex items-center gap-2 mb-4 text-(--main-color)">
         <icon
           v-tooltip="'Go back'"
@@ -766,7 +861,7 @@ watch(
 
       <div
         v-else-if="book"
-        class="grid sm:grid-cols-[min-content_1fr] sm:grid-rows-2 gap-x-3 gap-y-1! items-start"
+        class="grid sm:grid-cols-[min-content_1fr] sm:grid-rows-2 gap-x-3 gap-y-1! items-start max-w-300 self-center"
       >
         <!-- Keep a consistent aspect ratio; cover itself is max 320px wide -->
         <BookCover
@@ -796,7 +891,7 @@ watch(
             </div>
 
             <!-- Title -->
-            <div class="text-4xl leading-tight font-serif">
+            <div class="text-4xl leading-tight font-serif text-(--main-color)">
               {{ book.title }}
             </div>
 
@@ -866,139 +961,144 @@ watch(
           </div>
 
           <!-- Right lower details grid -->
-          <div class="grid lg:grid-cols-2 gap-y-2 gap-x-6 text-sm">
-            <!-- Publisher -->
-            <div class="grid grid-cols-[110px_1fr] gap-2">
-              <div class="opacity-70">Publisher</div>
-              <div class="min-w-0">
-                {{ book.publisher?.name ?? '' }}
-              </div>
+          <!-- Publisher -->
+          <div class="grid grid-cols-[110px_1fr] gap-2 text-sm">
+            <div class="opacity-70">Publisher</div>
+            <div class="min-w-0">
+              {{ book.publisher?.name ?? '' }}
             </div>
+          </div>
 
-            <!-- Published Date -->
-            <div v-if="book.published" class="grid grid-cols-[110px_1fr] gap-2">
-              <div class="opacity-70">Published</div>
-              <div class="min-w-0">
-                {{ book.published.substring(0, 10) }}
-              </div>
+          <!-- Published Date -->
+          <div
+            v-if="book.published"
+            class="grid grid-cols-[110px_1fr] gap-2 text-sm"
+          >
+            <div class="opacity-70">Published</div>
+            <div class="min-w-0">
+              {{ book.published.substring(0, 10) }}
             </div>
+          </div>
 
-            <!-- Language -->
-            <div v-if="book.language" class="grid grid-cols-[110px_1fr] gap-2">
-              <div class="opacity-70">Language</div>
-              <div class="min-w-0">{{ book.language }}</div>
+          <!-- Language -->
+          <div
+            v-if="book.language"
+            class="grid grid-cols-[110px_1fr] gap-2 text-sm"
+          >
+            <div class="opacity-70">Language</div>
+            <div class="min-w-0">{{ book.language }}</div>
+          </div>
+
+          <!-- Pages -->
+          <div
+            v-if="book.pages"
+            class="grid grid-cols-[110px_1fr] gap-2 text-sm"
+          >
+            <div class="opacity-70">Pages</div>
+            <div class="min-w-0">{{ book.pages }}</div>
+          </div>
+
+          <!-- Date Added to Library -->
+          <div class="grid grid-cols-[110px_1fr] gap-2 text-sm">
+            <div class="opacity-70">Added</div>
+            <div class="min-w-0">
+              {{
+                typeof book.createdAt === 'string' ||
+                typeof book.createdAt === 'number'
+                  ? new Date(book.createdAt).toLocaleString()
+                  : new Date(book.createdAt).toLocaleString()
+              }}
             </div>
+          </div>
 
-            <!-- Pages -->
-            <div v-if="book.pages" class="grid grid-cols-[110px_1fr] gap-2">
-              <div class="opacity-70">Pages</div>
-              <div class="min-w-0">{{ book.pages }}</div>
+          <!-- Book File Details -->
+          <div
+            v-if="book.files && book.files.length"
+            class="grid grid-cols-[110px_1fr] gap-2 text-sm"
+          >
+            <div class="opacity-70">Files</div>
+            <div class="min-w-0 break-all">
+              {{
+                book.files
+                  .map((f) => {
+                    const fmt = (f.format || '').toUpperCase();
+                    const p = f.relativePath || '';
+                    return fmt ? `${fmt}: ${p}` : p;
+                  })
+                  .filter(Boolean)
+                  .join(' • ')
+              }}
             </div>
+          </div>
 
-            <!-- Date Added to Library -->
-            <div class="grid grid-cols-[110px_1fr] gap-2">
-              <div class="opacity-70">Added</div>
-              <div class="min-w-0">
-                {{
-                  typeof book.createdAt === 'string' ||
-                  typeof book.createdAt === 'number'
-                    ? new Date(book.createdAt).toLocaleString()
-                    : new Date(book.createdAt).toLocaleString()
-                }}
-              </div>
-            </div>
-
-            <!-- Book File Details -->
-            <div
-              v-if="book.files && book.files.length"
-              class="grid grid-cols-[110px_1fr] gap-2"
-            >
-              <div class="opacity-70">Files</div>
-              <div class="min-w-0 break-all">
-                {{
-                  book.files
-                    .map((f) => {
-                      const fmt = (f.format || '').toUpperCase();
-                      const p = f.relativePath || '';
-                      return fmt ? `${fmt}: ${p}` : p;
-                    })
-                    .filter(Boolean)
-                    .join(' • ')
-                }}
-              </div>
-            </div>
-
-            <!-- Identifiers -->
-            <div
-              v-if="book.identifiers && book.identifiers.length"
-              class="grid grid-cols-[110px_1fr] gap-2"
-            >
-              <div class="opacity-70">Identifiers</div>
-              <div class="min-w-0 flex flex-wrap gap-2">
-                <span
-                  v-for="(id, index) in book.identifiers"
-                  :key="index"
-                  class="border border-(--sub-color) px-2 py-1 rounded-md"
-                  ><span v-if="id.type && id.value"
-                    ><span class="border-r border-(--sub-color) pr-1">
-                      {{ id.type }}
-                    </span>
-                    <span class="pl-1">{{ id.value }}</span>
+          <!-- Identifiers -->
+          <div
+            v-if="book.identifiers && book.identifiers.length"
+            class="grid grid-cols-[110px_1fr] gap-2"
+          >
+            <div class="opacity-70">Identifiers</div>
+            <div class="min-w-0 flex flex-wrap gap-2">
+              <span
+                v-for="(id, index) in book.identifiers"
+                :key="index"
+                class="border border-(--sub-color) px-2 py-1 rounded-md"
+                ><span v-if="id.type && id.value"
+                  ><span class="border-r border-(--sub-color) pr-1">
+                    {{ id.type }}
                   </span>
+                  <span class="pl-1">{{ id.value }}</span>
                 </span>
-              </div>
+              </span>
             </div>
+          </div>
 
-            <!-- Rating -->
-            <div class="grid grid-cols-[110px_1fr] gap-2">
-              <div class="opacity-70 mt-1">Rating</div>
+          <!-- Rating -->
+          <div class="grid grid-cols-[110px_1fr] gap-2 text-sm">
+            <div class="opacity-70 mt-1">Rating</div>
 
-              <div>
-                <div class="flex gap-2 items-center">
+            <div>
+              <div class="flex gap-2 items-center">
+                <div
+                  class="flex gap-0.125 select-none"
+                  role="radiogroup"
+                  aria-label="Your rating"
+                  @mouseleave="onRatingMouseLeave"
+                >
                   <div
-                    class="flex gap-0.125 select-none"
-                    role="radiogroup"
-                    aria-label="Your rating"
-                    @mouseleave="onRatingMouseLeave"
-                  >
-                    <div
-                      v-for="starIndex in 5"
-                      :key="starIndex"
-                      type="button"
-                      class="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 translate-y-0.5"
-                      :disabled="ratingSaving"
-                      :aria-label="`${starIndex} star`"
-                      @mousemove="(e) => onRatingMouseMove(e, starIndex)"
-                      @click="(e) => onRatingClick(e, starIndex)"
-                    >
-                      <Icon
-                        :name="
-                          iconForStarIndex(starIndex, effectiveRatingValue)
-                        "
-                        class="text-2xl"
-                        :class="
-                          effectiveRatingValue
-                            ? 'text-(--main-color)'
-                            : 'text-(--sub-color)'
-                        "
-                      />
-                    </div>
-                  </div>
-
-                  <div class="text-xs opacity-70 whitespace-nowrap">
-                    <span v-if="ratingSaving">Saving...</span>
-                    <span v-else>{{ ratingToStarsText(ratingValue) }}</span>
-                  </div>
-
-                  <div
-                    v-if="ratingValue != null"
+                    v-for="starIndex in 5"
+                    :key="starIndex"
                     type="button"
-                    class="text-xs underline cursor-pointer opacity-70 hover:opacity-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                    class="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 translate-y-0.5"
                     :disabled="ratingSaving"
-                    @click="() => setRating(null)"
+                    :aria-label="`${starIndex} star`"
+                    @mousemove="(e) => onRatingMouseMove(e, starIndex)"
+                    @click="(e) => onRatingClick(e, starIndex)"
                   >
-                    Clear
+                    <Icon
+                      :name="iconForStarIndex(starIndex, effectiveRatingValue)"
+                      class="text-2xl"
+                      :class="
+                        effectiveRatingValue
+                          ? 'text-(--main-color)'
+                          : 'text-(--sub-color)'
+                      "
+                    />
                   </div>
+                </div>
+
+                <div class="text-xs opacity-70 whitespace-nowrap">
+                  <span v-if="ratingSaving">Saving...</span>
+                  <span v-else>{{ ratingToStarsText(ratingValue) }}</span>
+                </div>
+
+                <div
+                  v-if="ratingValue != null"
+                  type="button"
+                  class="text-xs underline cursor-pointer opacity-70 hover:opacity-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                  :disabled="ratingSaving"
+                  @click="() => setRating(null)"
+                >
+                  Clear
                 </div>
               </div>
             </div>
@@ -1014,8 +1114,7 @@ watch(
               </div>
 
               <div class="text-sm opacity-80">
-                This will permanently delete the database record and remove the
-                file from the books folder. This action cannot be undone.
+                Choose what to delete. This action cannot be undone.
               </div>
 
               <div class="text-sm">
@@ -1029,6 +1128,70 @@ watch(
                       .join(', ')
                   }}
                 </div>
+              </div>
+
+              <div class="text-sm space-y-3">
+                <div class="font-semibold">Delete options</div>
+
+                <!-- Option 1: DB only -->
+                <label class="flex items-start gap-2 cursor-pointer">
+                  <input
+                    v-model="deleteMode"
+                    type="radio"
+                    name="delete-mode"
+                    value="db_only"
+                    class="peer sr-only"
+                    :disabled="deleting"
+                  />
+                  <span
+                    class="h-4 w-4 mt-1 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                  ></span>
+                  <div class="min-w-0">
+                    <div class="font-medium">Database only</div>
+                    <div class="opacity-70 text-xs">
+                      Deletes the database record(s) only. The library folder
+                      and files remain on disk.
+                    </div>
+                  </div>
+                </label>
+
+                <!-- Option 2: Everything -->
+                <label class="flex items-start gap-2 cursor-pointer">
+                  <input
+                    v-model="deleteMode"
+                    type="radio"
+                    name="delete-mode"
+                    value="everything"
+                    class="peer sr-only"
+                    :disabled="deleting"
+                  />
+                  <span
+                    class="h-4 w-4 mt-1 border border-(--error-color) rounded transition peer-checked:bg-(--error-color) cursor-pointer shrink-0"
+                  ></span>
+                  <div class="min-w-0">
+                    <div class="font-medium text-(--error-color)">
+                      Everything (remove folder)
+                    </div>
+                    <div class="opacity-70 text-xs">
+                      Deletes the database record(s) and removes the book’s
+                      folder under <span class="font-mono">library/</span>.
+                    </div>
+                  </div>
+                </label>
+
+                <!-- Remember choice -->
+                <label class="flex items-center gap-2 cursor-pointer pt-1">
+                  <input
+                    v-model="rememberDeleteChoice"
+                    type="checkbox"
+                    class="peer sr-only"
+                    :disabled="deleting"
+                  />
+                  <span
+                    class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                  ></span>
+                  <span class="opacity-80 text-xs">Remember my selection</span>
+                </label>
               </div>
 
               <div class="flex gap-2 justify-end">
@@ -1048,7 +1211,13 @@ watch(
                   @click="deleteBook"
                 >
                   <span v-if="deleting">Deleting...</span>
-                  <span v-else>Yes, delete</span>
+                  <span v-else>
+                    {{
+                      deleteMode === 'db_only'
+                        ? 'Delete (DB only)'
+                        : 'Delete (Everything)'
+                    }}
+                  </span>
                 </button>
               </div>
             </div>
@@ -1096,43 +1265,91 @@ watch(
             </button>
           </div>
 
-          <!-- Collections -->
-          <div
-            class="grid grid-cols-[min-content_1fr] gap-4 mt-4 w-full items-center"
-          >
-            <div class="flex gap-2 items-center">
-              <div class="font-semibold">Collections</div>
-              <icon
-                v-if="canEditCollectionsForBook"
-                name="lucide:pencil"
-                class="text-md cursor-pointer opacity-50 hover:opacity-80"
-                @click="openCollectionsManager"
-              />
+          <!-- Status + Collections -->
+          <div class="grid gap-3 mt-4 w-full">
+            <!-- Status -->
+            <div class="grid grid-cols-[min-content_1fr] gap-4 items-center">
+              <div class="font-semibold">Status</div>
+
+              <div class="flex flex-wrap items-center justify-end gap-2">
+                <select
+                  v-model="selectedStatusValue"
+                  class="min-w-44 px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                  :disabled="statusSaving"
+                  aria-label="Your status"
+                  @change="() => saveStatus(book?.userStatus ?? null)"
+                >
+                  <option
+                    v-for="opt in STATUS_OPTIONS"
+                    :key="String(opt.value ?? '')"
+                    :value="opt.value ?? ''"
+                  >
+                    {{ opt.label }}
+                  </option>
+                </select>
+
+                <div class="text-xs opacity-70 whitespace-nowrap">
+                  <span v-if="statusSaving">Saving...</span>
+                  <span v-else-if="statusErrorMessage">{{
+                    statusErrorMessage
+                  }}</span>
+                </div>
+
+                <div
+                  v-if="book?.userStatus != null && !statusSaving"
+                  type="button"
+                  class="text-xs underline cursor-pointer opacity-70 hover:opacity-100"
+                  @click="
+                    () => {
+                      selectedStatusValue = '';
+                      saveStatus(null);
+                    }
+                  "
+                >
+                  Clear
+                </div>
+              </div>
             </div>
 
-            <div v-if="collectionsLoading" class="text-sm opacity-70">
-              Loading…
-            </div>
+            <!-- Collections -->
+            <div class="grid grid-cols-[min-content_1fr] gap-4 items-center">
+              <div class="flex gap-2 items-center">
+                <div class="font-semibold">Collections</div>
+                <icon
+                  v-if="canEditCollectionsForBook"
+                  name="lucide:pencil"
+                  class="text-md cursor-pointer opacity-50 hover:opacity-80"
+                  @click="openCollectionsManager"
+                />
+              </div>
 
-            <div
-              v-else-if="collectionsErrorMessage"
-              class="text-sm text-(--error-color)"
-            >
-              {{ collectionsErrorMessage }}
-            </div>
-
-            <div v-else class="flex flex-wrap gap-2 items-center justify-end">
-              <span
-                v-for="c in bookCollections"
-                :key="c.id"
-                class="border border-(--sub-color) px-2 py-1 rounded-md text-xs"
+              <div
+                v-if="collectionsLoading"
+                class="text-sm opacity-70 text-right"
               >
-                {{ c.name }}
-              </span>
+                Loading…
+              </div>
 
-              <span v-if="!bookCollections.length" class="text-sm opacity-70">
-                No collections.
-              </span>
+              <div
+                v-else-if="collectionsErrorMessage"
+                class="text-sm text-(--error-color) text-right"
+              >
+                {{ collectionsErrorMessage }}
+              </div>
+
+              <div v-else class="flex flex-wrap gap-2 items-center justify-end">
+                <span
+                  v-for="c in bookCollections"
+                  :key="c.id"
+                  class="border border-(--sub-color) px-2 py-1 rounded-md text-xs"
+                >
+                  {{ c.name }}
+                </span>
+
+                <span v-if="!bookCollections.length" class="text-sm opacity-70">
+                  No collections.
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -1160,7 +1377,7 @@ watch(
           <img
             v-if="coverViewerSrc"
             :src="coverViewerSrc"
-            :alt="`Cover for ${book.title}`"
+            :alt="`Cover for ${book?.title ?? 'book'}`"
             class="block max-w-[95vw] max-h-[95vh] object-contain rounded-md"
             @error="onCoverViewerError"
           />
@@ -1208,70 +1425,46 @@ watch(
               You don’t have any editable collections.
             </div>
 
-            <div v-else class="flex flex-col gap-4">
-              <!-- Current memberships (editable) -->
-              <div class="flex flex-col gap-2">
-                <div class="text-sm font-semibold">In these collections</div>
+            <div v-else class="flex flex-col gap-3">
+              <div class="text-xs opacity-70">
+                Toggle the collections you can edit. Personal cannot be removed.
+              </div>
 
-                <label
-                  v-for="c in editableBookCollections"
-                  :key="c.id"
-                  class="flex items-center justify-between gap-3 text-sm"
-                >
-                  <div class="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      class="accent-(--main-color)"
-                      :checked="desiredCollectionIds.includes(c.id)"
-                      :disabled="c.isPersonal || collectionsSaving"
-                      @change="onToggleDesiredCollection(c.id)"
-                    />
-                    <span>{{ c.name }}</span>
-                    <span v-if="c.isPersonal" class="text-xs opacity-70">
+              <label
+                v-for="c in editableCollections"
+                :key="c.id"
+                class="flex items-center justify-between gap-3 text-sm cursor-pointer"
+              >
+                <div class="flex items-center gap-2 min-w-0">
+                  <input
+                    type="checkbox"
+                    class="peer sr-only"
+                    :checked="desiredCollectionIds.includes(c.id)"
+                    :disabled="
+                      collectionsSaving ||
+                      (c.isPersonal && desiredCollectionIds.includes(c.id))
+                    "
+                    @change="onToggleDesiredCollection(c.id)"
+                  />
+                  <span
+                    class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                  ></span>
+
+                  <div class="min-w-0 flex items-center gap-2">
+                    <span class="truncate">{{ c.name }}</span>
+                    <span
+                      v-if="c.isPersonal"
+                      class="text-xs opacity-70 whitespace-nowrap"
+                    >
                       (Personal)
                     </span>
                   </div>
-
-                  <span class="text-xs opacity-70">{{ c.role }}</span>
-                </label>
-
-                <div class="text-xs opacity-70">
-                  Personal cannot be removed.
-                </div>
-              </div>
-
-              <!-- Add to other editable collections -->
-              <div class="flex flex-col gap-2">
-                <div class="text-sm font-semibold">
-                  Add to another collection
                 </div>
 
-                <div
-                  v-if="!addableEditableCollections.length"
-                  class="text-sm opacity-70"
-                >
-                  No other editable collections available.
-                </div>
-
-                <label
-                  v-for="c in addableEditableCollections"
-                  :key="c.id"
-                  class="flex items-center justify-between gap-3 text-sm"
-                >
-                  <div class="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      class="accent-(--main-color)"
-                      :checked="desiredCollectionIds.includes(c.id)"
-                      :disabled="collectionsSaving"
-                      @change="onToggleDesiredCollection(c.id)"
-                    />
-                    <span>{{ c.name }}</span>
-                  </div>
-
-                  <span class="text-xs opacity-70">{{ c.role }}</span>
-                </label>
-              </div>
+                <span class="text-xs opacity-70 whitespace-nowrap">{{
+                  c.role
+                }}</span>
+              </label>
             </div>
           </div>
 

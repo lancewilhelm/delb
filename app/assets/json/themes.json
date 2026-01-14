@@ -1167,19 +1167,5 @@
     "mainColor": "#1b1b1b",
     "subColor": "#555555",
     "textColor": "#1b1b1b"
-  },
-  {
-    "name": "notachat_light",
-    "bgColor": "#ffffff",
-    "mainColor": "#000000",
-    "subColor": "#b2b2b2",
-    "textColor": "#000000"
-  },
-  {
-    "name": "notachat_dark",
-    "bgColor": "#111",
-    "mainColor": "#eee",
-    "subColor": "#444",
-    "textColor": "#eee"
   }
 ]

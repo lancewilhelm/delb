@@ -1,9 +1,9 @@
-import path from "node:path";
-import { rm } from "node:fs/promises";
+import path from 'node:path';
+import { rm } from 'node:fs/promises';
 
-import { eq } from "drizzle-orm";
+import { eq } from 'drizzle-orm';
 
-import { cloudDb } from "~~/server/utils/db/cloud";
+import { cloudDb } from '~~/server/utils/db/cloud';
 import {
   bookFiles,
   books,
@@ -14,25 +14,91 @@ import {
   userBookStatus,
   bookRatings,
   bookNotes,
-} from "~/utils/db/schema";
-import { logger } from "~/utils/logger";
-import { auth } from "~/utils/auth";
+} from '~/utils/db/schema';
+import { logger } from '~/utils/logger';
+import { auth } from '~/utils/auth';
+
+type DeleteMode = 'db_only' | 'everything';
+
+function normalizeDeleteMode(raw: string | null | undefined): DeleteMode {
+  const v = (raw ?? '').toString().trim();
+  if (v === 'db_only' || v === 'everything') return v;
+  return 'everything';
+}
+
+function normalizePosix(p: string): string {
+  return (p ?? '')
+    .toString()
+    .replace(/\\/g, '/')
+    .replace(/\/+/g, '/')
+    .replace(/\/$/, '');
+}
+
+function resolveUnderLibrary(
+  libraryBaseAbs: string,
+  storedPath: string,
+): string {
+  // Stored paths should be under `library/...` (POSIX-style).
+  // Normalize to path relative to `<projectRoot>/library`.
+  const stored = normalizePosix(storedPath);
+  const relFromLibrary = stored
+    .replace(/^library\//, '')
+    .replace(/^library[\\/]/, '');
+  const abs = path.resolve(
+    libraryBaseAbs,
+    relFromLibrary.split('/').join(path.sep),
+  );
+
+  const relToBase = path.relative(libraryBaseAbs, abs);
+  if (relToBase.startsWith('..') || relToBase.includes(`..${path.sep}`)) {
+    throw createError({ statusCode: 400, statusMessage: 'Invalid path' });
+  }
+
+  return abs;
+}
+
+async function safeRmFile(absPath: string, logCtx: string) {
+  try {
+    await rm(absPath, { force: true });
+  } catch (e) {
+    logger.warn(e, `${logCtx}: Failed to delete file (continuing)`);
+  }
+}
+
+async function safeRmDir(absPath: string, logCtx: string) {
+  try {
+    await rm(absPath, { force: true, recursive: true });
+  } catch (e) {
+    logger.warn(e, `${logCtx}: Failed to delete directory (continuing)`);
+  }
+}
+
+/**
+ * Given any known absolute file path for this book under `<projectRoot>/library`,
+ * compute the book directory (e.g. `<projectRoot>/library/<author>/<title (id8)>`).
+ */
+function getBookDirFromKnownAbsPath(
+  libraryBaseAbs: string,
+  absPath: string,
+): string | null {
+  const relToBase = path.relative(libraryBaseAbs, absPath);
+  if (relToBase.startsWith('..') || relToBase.includes(`..${path.sep}`))
+    return null;
+  return path.dirname(absPath);
+}
 
 /**
  * DELETE /api/books/:id
  *
- * Admin-only endpoint that deletes:
- * - the canonical book row from the database
- * - associated rows (files, links, per-user state)
- * - associated files from disk under `<projectRoot>/library`
+ * Admin-only endpoint that deletes the book. Supports only 2 modes:
  *
- * Notes:
- * - File paths live in `book_files.relativePath` and cover path lives in `books.coverImagePath`
- *   (both typically prefixed with `library/...`).
- * - We resolve those safely under `<projectRoot>/library` and block path traversal.
+ * Query params:
+ * - mode=
+ *   - db_only:     DB rows only (no disk changes).
+ *   - everything:  DB rows + delete the book folder under `library/` (default).
  */
 export default defineEventHandler(async (event) => {
-  logger.debug("DELETE /api/books/:id");
+  logger.debug('DELETE /api/books/:id');
 
   // Ensure the user is authenticated and is an admin/owner
   const session = await auth.api.getSession({
@@ -41,17 +107,19 @@ export default defineEventHandler(async (event) => {
 
   if (
     !session ||
-    (session.user.role !== "admin" && session.user.role !== "owner")
+    (session.user.role !== 'admin' && session.user.role !== 'owner')
   ) {
     setResponseStatus(event, 401);
-    return { success: false, message: "Unauthorized" };
+    return { success: false, message: 'Unauthorized' };
   }
 
-  const id = getRouterParam(event, "id");
+  const id = getRouterParam(event, 'id');
   if (!id) {
     setResponseStatus(event, 400);
-    return { success: false, message: "Missing book id" };
+    return { success: false, message: 'Missing book id' };
   }
+
+  const mode = normalizeDeleteMode(getQuery(event)?.mode?.toString());
 
   try {
     // Load the book first so we know what to delete from disk
@@ -60,7 +128,7 @@ export default defineEventHandler(async (event) => {
 
     if (!book) {
       setResponseStatus(event, 404);
-      return { success: false, message: "Book not found" };
+      return { success: false, message: 'Book not found' };
     }
 
     // Load associated files (formats)
@@ -69,48 +137,47 @@ export default defineEventHandler(async (event) => {
       .from(bookFiles)
       .where(eq(bookFiles.bookId, id));
 
-    const libraryBaseAbs = path.resolve(process.cwd(), "library");
+    const libraryBaseAbs = path.resolve(process.cwd(), 'library');
 
-    const resolveUnderLibrary = (storedPath: string) => {
-      // Stored paths usually look like: "library/Author/Title/file.ext"
-      // Normalize to path relative to `<projectRoot>/library`
-      const relFromLibrary = storedPath.replace(/^library[\\/]/, "");
-      const abs = path.resolve(libraryBaseAbs, relFromLibrary);
+    // Determine the book directory (best-effort) from any available stored path.
+    // We prefer any book file path, but can fall back to coverImagePath.
+    let bookDirAbs: string | null = null;
 
-      const relToBase = path.relative(libraryBaseAbs, abs);
-      if (relToBase.startsWith("..") || relToBase.includes(`..${path.sep}`)) {
-        throw createError({ statusCode: 400, statusMessage: "Invalid path" });
-      }
-
-      return abs;
-    };
-
-    const coverAbs = book.coverImagePath
-      ? resolveUnderLibrary(book.coverImagePath)
-      : null;
-
-    // 1) Delete files from disk (best-effort)
-    if (coverAbs) {
-      try {
-        await rm(coverAbs, { force: true });
-      } catch (e) {
-        logger.warn(
-          e,
-          "DELETE /api/books/:id: Failed to delete cover (continuing)",
-        );
-      }
+    const firstFileRel =
+      fileRows.find((r) => r.relativePath)?.relativePath ?? null;
+    if (firstFileRel) {
+      const knownAbs = resolveUnderLibrary(libraryBaseAbs, firstFileRel);
+      bookDirAbs = getBookDirFromKnownAbsPath(libraryBaseAbs, knownAbs);
+    } else if (book.coverImagePath) {
+      const knownAbs = resolveUnderLibrary(libraryBaseAbs, book.coverImagePath);
+      bookDirAbs = getBookDirFromKnownAbsPath(libraryBaseAbs, knownAbs);
     }
 
-    for (const f of fileRows) {
-      if (!f.relativePath) continue;
-      const fileAbs = resolveUnderLibrary(f.relativePath);
-      try {
-        await rm(fileAbs, { force: true });
-      } catch (e) {
-        logger.warn(
-          e,
-          "DELETE /api/books/:id: Failed to delete a book file (continuing)",
+    const logCtx = `DELETE /api/books/:id (${mode})`;
+
+    // 1) Delete on-disk artifacts (best-effort)
+    //
+    // Only delete disk content when mode=everything.
+    // `db_only` intentionally leaves the library folder untouched.
+    if (mode === 'everything') {
+      // Remove files we know about (best-effort)
+      for (const f of fileRows) {
+        if (!f.relativePath) continue;
+        const fileAbs = resolveUnderLibrary(libraryBaseAbs, f.relativePath);
+        await safeRmFile(fileAbs, logCtx);
+      }
+
+      if (book.coverImagePath) {
+        const coverAbs = resolveUnderLibrary(
+          libraryBaseAbs,
+          book.coverImagePath,
         );
+        await safeRmFile(coverAbs, logCtx);
+      }
+
+      // Finally remove the entire folder if we can determine it
+      if (bookDirAbs) {
+        await safeRmDir(bookDirAbs, logCtx);
       }
     }
 
@@ -129,20 +196,20 @@ export default defineEventHandler(async (event) => {
     // 3) Delete the canonical book row
     await cloudDb.delete(books).where(eq(books.id, id));
 
-    return { success: true };
+    return { success: true, data: { mode } };
   } catch (error: unknown) {
     // Preserve explicit HTTP errors
     if (
-      typeof error === "object" &&
+      typeof error === 'object' &&
       error !== null &&
-      "statusCode" in error &&
+      'statusCode' in error &&
       (error as { statusCode?: unknown }).statusCode
     ) {
       throw error;
     }
 
-    logger.error(error, "DELETE /api/books/:id: Error deleting book");
+    logger.error(error, 'DELETE /api/books/:id: Error deleting book');
     setResponseStatus(event, 500);
-    return { success: false, message: "Internal server error" };
+    return { success: false, message: 'Internal server error' };
   }
 });

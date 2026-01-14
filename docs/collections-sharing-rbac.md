@@ -8,6 +8,48 @@ It builds on the “Personal-first” model described in `docs/ui-layout-philoso
 
 ---
 
+## Important open question: “re-sharing” books into your own collections
+
+Delb’s core model is:
+
+- **Collections are the visibility boundary.**
+- Books are “visible” to a user if they exist in **at least one** collection the user is a member of.
+
+However, the UI/UX goal is also:
+
+- A user who can see a book (because it exists in a shared collection) should be able to add that book to **other collections they can edit** (including their own collections).
+
+This introduces an RBAC/UX edge case that is **not fully specified yet**:
+
+### Edge case: access revoked from the original shared collection
+Scenario:
+1. User **A** shares collection **C_shared** with user **B** (B can view or edit it).
+2. Book **X** is in **C_shared**, so **B** can see book **X**.
+3. While B still has access, B adds book **X** to another collection they can edit (e.g. **C_b_personal** or another shared collection **C_other**).
+4. Later, A removes B from **C_shared**.
+
+Question:
+- Should B still be able to access book **X** via **C_b_personal** / **C_other**?
+
+There are two defensible policies:
+
+**Policy 1 (sticky re-share):**  
+If B successfully adds X to a collection B can edit at the time of the action, then X remains visible via that other collection even after access to the original source collection is revoked.
+
+**Policy 2 (non-sticky / provenance-bounded):**  
+Visibility is strictly bounded to the original sharing boundary; if access to the collection that “introduced” the book is revoked, any derived links should be removed or become invalid.
+
+v1 stance:
+- Delb currently leans toward a “visibility via any accessible collection” rule, which implies **Policy 1**.
+- If/when this becomes a problem, we may need to introduce provenance tracking (e.g. “book access grants” or “link source collection”) to support Policy 2, or introduce explicit ownership constraints.
+
+Until this is formalized, treat this as a known RBAC edge case to revisit when:
+- you add stricter ownership semantics,
+- you add book-level sharing permissions,
+- or you introduce “unlink from source” / “revoke derived access” features.
+
+---
+
 ## Quick mental model
 
 - A **collection** is a *sharing boundary* and a *visibility boundary*.

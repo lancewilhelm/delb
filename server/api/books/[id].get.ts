@@ -13,6 +13,8 @@ import {
   publishers,
   series,
   tags,
+  userBookStatus,
+  USER_BOOK_STATUSES,
 } from '~/utils/db/schema';
 import { logger } from '~/utils/logger';
 import { auth } from '~/utils/auth';
@@ -163,6 +165,27 @@ export default defineEventHandler(async (event) => {
 
     const userRating = ratingRow?.rating ?? null;
 
+    // Current user's status for this book (mutually exclusive per user+book)
+    const statusRow =
+      (
+        await cloudDb
+          .select({ status: userBookStatus.status })
+          .from(userBookStatus)
+          .where(
+            and(
+              eq(userBookStatus.bookId, id),
+              eq(userBookStatus.userId, userId),
+            ),
+          )
+          .limit(1)
+      )[0] ?? null;
+
+    const statusRaw = statusRow?.status ?? null;
+    const userStatus =
+      statusRaw && (USER_BOOK_STATUSES as readonly string[]).includes(statusRaw)
+        ? statusRaw
+        : null;
+
     return {
       success: true,
       data: {
@@ -173,6 +196,7 @@ export default defineEventHandler(async (event) => {
           tags: bookTagsOut,
           identifiers: bookIdentifiersOut,
           userRating,
+          userStatus,
         },
         authors: bookAuthorsOut,
         files,

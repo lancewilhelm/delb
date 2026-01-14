@@ -9,6 +9,27 @@ import {
 
 import type { InferInsertModel, InferSelectModel } from 'drizzle-orm';
 
+/**
+ * Canonical, built-in per-user book statuses (v1).
+ *
+ * Notes:
+ * - Stored as strings for forward compatibility with "custom statuses" later.
+ * - API should validate against this list for now.
+ * - UI copy should prefer human labels:
+ *   - to_be_read => "To be read"
+ *   - reading => "Reading"
+ *   - finished => "Finished"
+ *   - dnf => "DNF"
+ */
+export const USER_BOOK_STATUSES = [
+  'to_be_read',
+  'reading',
+  'finished',
+  'dnf',
+] as const;
+
+export type UserBookStatusValue = (typeof USER_BOOK_STATUSES)[number];
+
 // Users table for better-auth
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
@@ -351,18 +372,36 @@ export const bookFiles = sqliteTable(
  * - notes
  */
 
-export const userBookStatus = sqliteTable('user_book_status', {
-  userId: text('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  bookId: text('book_id')
-    .notNull()
-    .references(() => books.id, { onDelete: 'cascade' }),
-  status: text('status').notNull(), // "to_read" | "reading" | "read"
-  updatedAt: integer('updated_at', { mode: 'timestamp' })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
+export const userBookStatus = sqliteTable(
+  'user_book_status',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    bookId: text('book_id')
+      .notNull()
+      .references(() => books.id, { onDelete: 'cascade' }),
+
+    // v1 built-ins: "to_be_read" | "reading" | "finished" | "dnf"
+    // Stored as text to allow future custom statuses without a migration to an enum type.
+    status: text('status').notNull(),
+
+    updatedAt: integer('updated_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    // Enforce one (mutually exclusive) status per (user, book).
+    userBookStatusUserBookUnique: uniqueIndex(
+      'user_book_status_user_book_unique',
+    ).on(t.userId, t.bookId),
+    // Helpful for filtering "shelf pages" / sidebar filters later.
+    userBookStatusUserStatusIdx: index('user_book_status_user_status_idx').on(
+      t.userId,
+      t.status,
+    ),
+  }),
+);
 
 export const bookRatings = sqliteTable(
   'book_ratings',

@@ -190,8 +190,8 @@ onBeforeUnmount(() => {
       class="absolute left-0 mt-2 w-72 border border-(--sub-color) bg-(--bg-color) rounded-md shadow-lg z-50 overflow-hidden"
       role="menu"
     >
-      <div class="px-3 py-2 border-b border-(--sub-color)">
-        <div class="text-md opacity-70">Collection</div>
+      <div class="px-2 py-1 border-b border-(--sub-color)">
+        <div class="text-sm opacity-70">Collection</div>
       </div>
 
       <div class="max-h-80 overflow-auto">
