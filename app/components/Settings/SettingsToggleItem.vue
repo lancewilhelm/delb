@@ -22,7 +22,7 @@ function toggle() {
   <div
     class="w-full grid grid-cols-[1fr_min-content] grid-rows-2 items-center gap-2"
   >
-    <div v-if="title" class="row-start-1 col-start-1 font-semibold">
+    <div v-if="title" class="row-start-1 col-start-1">
       {{ title }}
     </div>
     <div
@@ -33,14 +33,14 @@ function toggle() {
     </div>
     <button
       :class="[
-        'flex col-start-2 row-span-2 w-[60px] border-2! border-(--sub-alt-color)! bg-(--bg-color)! rounded-full! p-0!',
+        'flex col-start-2 row-span-2 w-15 border-2! border-(--sub-alt-color)! bg-(--bg-color)! rounded-full! p-0!',
         model ? 'justify-end! bg-(--main-color)!' : 'justify-start!',
       ]"
       @click.stop="toggle"
     >
       <div
         :class="[
-          'w-[30px] h-[30px] border-4 rounded-full',
+          'w-7.5 h-7.5 border-4 rounded-full',
           model
             ? ' bg-(--bg-color) border-(--main-color)'
             : 'bg-(--main-color) border-(--bg-color)',

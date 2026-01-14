@@ -16,6 +16,7 @@ const sortedByName = computed(
 const reverseSort = computed(
   () => userSettingsStore.settings.themeSorting.reverseSort,
 );
+
 function handleSortChange(target: string) {
   let tempSortedByName, tempReverseSort;
   if (target === 'name') {
@@ -38,6 +39,55 @@ function handleSortChange(target: string) {
     },
   });
 }
+
+// ------------------------------
+// Book grid appearance controls
+// ------------------------------
+const gridCoverSizePresets = [
+  { label: 'Small (140px)', px: 140 },
+  { label: 'Medium (172px)', px: 172 },
+  { label: 'Large (200px)', px: 200 },
+] as const;
+
+const gridCoverSizingIsDynamic = computed<boolean>({
+  get() {
+    const bookGrid = userSettingsStore.settings.bookGrid;
+    return bookGrid?.dynamicCoverSizing;
+  },
+  set(isDynamic) {
+    const bookGrid = userSettingsStore.settings.bookGrid;
+    userSettingsStore.updateSettings({
+      bookGrid: {
+        ...(bookGrid ?? { coverWidthPresetPx: 172, dynamicCoverSizing: true }),
+        dynamicCoverSizing: isDynamic ? true : false,
+      },
+    });
+  },
+});
+
+const gridCoverPresetLabelValue = computed<string>({
+  get() {
+    const bookGrid = userSettingsStore.settings.bookGrid;
+    const px = Number.isFinite(bookGrid?.coverWidthPresetPx)
+      ? bookGrid.coverWidthPresetPx
+      : 172;
+
+    const preset = gridCoverSizePresets.find((p) => p.px === px);
+    return preset?.label ?? `Custom (${px}px)`;
+  },
+  set(label) {
+    const preset = gridCoverSizePresets.find((p) => p.label === label);
+    if (!preset) return;
+
+    const bookGrid = userSettingsStore.settings.bookGrid;
+    userSettingsStore.updateSettings({
+      bookGrid: {
+        ...(bookGrid ?? { coverSizing: 'static', coverWidthPresetPx: 172 }),
+        coverWidthPresetPx: preset.px,
+      },
+    });
+  },
+});
 
 const allThemes = computed(() =>
   JSON.parse(JSON.stringify(themesList)).sort((a: Theme, b: Theme) => {
@@ -113,6 +163,26 @@ function hexToLuminance(hex: string) {
         description="Applies a grayscale filter to the cover"
       />
     </SettingsGroup>
+
+    <SettingsGroup
+      title="book grid"
+      icon="lucide:layout-grid"
+      description="customize grid cover sizing"
+    >
+      <SettingsToggleItem
+        v-model="gridCoverSizingIsDynamic"
+        title="Dynamic cover sizing"
+        description="When enabled, covers grow/shrink together to fill the row. When disabled, covers keep a fixed width."
+      />
+      <SettingsSelectItem
+        :value="gridCoverPresetLabelValue"
+        :options="gridCoverSizePresets.map((p) => p.label)"
+        title="Cover size"
+        description="Sets the minimum cover width used by the grid (default: 172px)"
+        @select="(label: string) => (gridCoverPresetLabelValue = label)"
+      />
+    </SettingsGroup>
+
     <SettingsGroup
       title="font"
       icon="ri:font-family"

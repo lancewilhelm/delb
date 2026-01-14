@@ -115,7 +115,7 @@ function onToggleSelect() {
 </script>
 
 <template>
-  <div :class="['w-43', props.class]">
+  <div :class="['w-full', props.class]">
     <div class="flex flex-col gap-1">
       <div class="relative">
         <BookCover

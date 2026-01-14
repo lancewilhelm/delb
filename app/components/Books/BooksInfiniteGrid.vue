@@ -118,9 +118,38 @@ watch(
 );
 
 // BookThumbnail sizing assumptions (current standard)
-const BOOK_CARD_W_PX = 172;
-const BOOK_CARD_H_PX = 310;
-const BOOK_GRID_GAP_PX = 12;
+// Height is derived from 2:3 aspect ratio using the configured cover width.
+const bookGridGapPx = computed<number>(() => {
+  const raw = userSettingsStore.settings.bookGrid?.gap;
+  return Number.isFinite(raw) ? Math.max(0, Math.trunc(raw)) : 12;
+});
+
+const userSettingsStore = useUserSettingsStore();
+
+const gridCoverWidthPresetPx = computed<number>(() => {
+  const raw = userSettingsStore.settings.bookGrid?.coverWidthPresetPx;
+  return Number.isFinite(raw) ? Math.max(80, Math.trunc(raw)) : 172;
+});
+
+const bookCardHeightPx = computed<number>(() => {
+  // 2:3 aspect ratio => height = width * (3/2)
+  const w = gridCoverWidthPresetPx.value;
+  return Math.max(1, Math.trunc(w * (3 / 2)));
+});
+
+const gridStyle = computed<Record<string, string>>(() => {
+  const w = gridCoverWidthPresetPx.value;
+  const cols = userSettingsStore.settings.bookGrid?.dynamicCoverSizing
+    ? `repeat(auto-fit, minmax(${w}px, 1fr))`
+    : `repeat(auto-fill, ${w}px)`;
+
+  return {
+    display: 'grid',
+    gridTemplateColumns: cols,
+    gap: `${bookGridGapPx.value}px`,
+    alignItems: 'start',
+  };
+});
 
 function clampInt(
   n: number,
@@ -155,14 +184,18 @@ const limit = computed(() => {
   const w = container.clientWidth;
   const h = container.clientHeight;
 
+  const cardW = gridCoverWidthPresetPx.value;
+
   const cols = Math.max(
     1,
-    Math.floor((w + BOOK_GRID_GAP_PX) / (BOOK_CARD_W_PX + BOOK_GRID_GAP_PX)),
+    Math.floor((w + bookGridGapPx.value) / (cardW + bookGridGapPx.value)),
   );
+
+  const cardH = bookCardHeightPx.value;
 
   const rows = Math.max(
     1,
-    Math.ceil((h + BOOK_GRID_GAP_PX) / (BOOK_CARD_H_PX + BOOK_GRID_GAP_PX)) +
+    Math.ceil((h + bookGridGapPx.value) / (cardH + bookGridGapPx.value)) +
       props.bufferRows,
   );
 
@@ -336,7 +369,7 @@ onBeforeUnmount(() => {
         No books yet. Use Upload in the header to add one.
       </div>
 
-      <div v-else class="flex gap-3 flex-wrap">
+      <div v-else class="w-full" :style="gridStyle">
         <BookThumbnail
           v-for="b in books"
           :key="b.id"

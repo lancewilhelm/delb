@@ -35,6 +35,18 @@ export interface UserSettings {
   };
 
   /**
+   * Grid appearance options (book grid view).
+   * - coverSizing: "static" keeps fixed-width thumbnails (current behavior)
+   * - coverSizing: "dynamic" makes thumbnails expand/shrink to fill row width
+   * - coverWidthPresetPx: base width used by grid layout (default: 172px)
+   */
+  bookGrid: {
+    dynamicCoverSizing: boolean;
+    coverWidthPresetPx: number;
+    gap: number;
+  };
+
+  /**
    * Per-user metadata search provider selection.
    * Used by the metadata search modal to search one or more providers at once.
    */
@@ -67,6 +79,12 @@ function getDefaultSettings(): UserSettings {
       glossySpine: true,
       roundedRight: false,
       grayscale: false,
+    },
+
+    bookGrid: {
+      dynamicCoverSizing: true,
+      coverWidthPresetPx: 172,
+      gap: 12,
     },
 
     metadataSearch: {

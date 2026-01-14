@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from "vue";
+import { ref, onMounted, onBeforeUnmount } from 'vue';
 
 defineProps<{
   value: string;
@@ -8,7 +8,7 @@ defineProps<{
   description?: string;
 }>();
 
-const emit = defineEmits(["select"]);
+const emit = defineEmits(['select']);
 
 const popupVisible = ref(false);
 const popupRef = ref<HTMLElement | null>(null);
@@ -20,22 +20,22 @@ function handleClickOutside(event: MouseEvent) {
   }
 }
 function handleEscapeKey(event: KeyboardEvent) {
-  if (event.key === "Escape") {
+  if (event.key === 'Escape') {
     popupVisible.value = false;
   }
 }
 
 onMounted(() => {
-  document.addEventListener("mousedown", handleClickOutside);
-  document.addEventListener("keydown", handleEscapeKey);
+  document.addEventListener('mousedown', handleClickOutside);
+  document.addEventListener('keydown', handleEscapeKey);
 });
 onBeforeUnmount(() => {
-  document.removeEventListener("mousedown", handleClickOutside);
-  document.removeEventListener("keydown", handleEscapeKey);
+  document.removeEventListener('mousedown', handleClickOutside);
+  document.removeEventListener('keydown', handleEscapeKey);
 });
 
 function selectOption(option: string) {
-  emit("select", option);
+  emit('select', option);
   popupVisible.value = false;
 }
 </script>
@@ -47,7 +47,7 @@ function selectOption(option: string) {
     <div
       v-if="title"
       :class="[
-        'row-start-1 col-start-1 settings-select-item-title',
+        'row-start-1 col-start-1 settings-item-title',
         !description && 'row-span-2',
       ]"
     >
@@ -55,7 +55,7 @@ function selectOption(option: string) {
     </div>
     <div
       v-if="description"
-      class="row-start-2 col-start-1 italic settings-select-item-description"
+      class="row-start-2 col-start-1 italic font-light text-sm settings-item-description"
     >
       {{ description }}
     </div>
@@ -70,7 +70,7 @@ function selectOption(option: string) {
       @keydown.esc.prevent.stop="popupVisible = false"
     >
       <div class="flex-1 truncate settings-select-item-value">
-        {{ value || "Select option" }}
+        {{ value || 'Select option' }}
       </div>
       <Icon
         name="lucide:chevron-down"
