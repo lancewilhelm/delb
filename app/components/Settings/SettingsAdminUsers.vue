@@ -156,7 +156,7 @@ function canEditUser(user: UserWithRole) {
 
 <template>
   <div class="w-full">
-    <SettingsGroup title="users" icon="lucide:users">
+    <SettingsUIGroup title="users" icon="lucide:users">
       <div class="w-full mt-4 overflow-x-auto">
         <table class="min-w-full">
           <thead class="bg-(--sub-color) text-(--main-color)">
@@ -268,13 +268,13 @@ function canEditUser(user: UserWithRole) {
           add user
         </button>
       </div>
-    </SettingsGroup>
-    <SettingsGroup title="allow registration" icon="lucide:lock">
+    </SettingsUIGroup>
+    <SettingsUIGroup title="allow registration" icon="lucide:lock">
       <SettingsToggleItem
         v-model="allowRegistration"
         description="allow users to register themselves at /register"
       />
-    </SettingsGroup>
+    </SettingsUIGroup>
 
     <!-- Create User Modal -->
     <ModalWindow

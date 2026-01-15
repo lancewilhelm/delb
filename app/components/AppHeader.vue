@@ -27,7 +27,6 @@ const route = useRoute();
             if (route.path === '/') {
               uiStore.setLibraryView('books');
             }
-            console.log(route);
             navigateTo('/');
           }
         "

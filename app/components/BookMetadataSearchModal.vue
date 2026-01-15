@@ -529,14 +529,14 @@ function importMetadata(result: SearchResult) {
   // Emit the selection with field info
   emit('select', selectedData);
 
-  console.log('Importing metadata:', {
-    source: result.source,
-    book: item.volumeInfo.title,
-    selectedFields: Object.entries(fields)
-      .filter(([_, selected]) => selected)
-      .map(([field]) => field),
-    data: item,
-  });
+  // console.log('Importing metadata:', {
+  //   source: result.source,
+  //   book: item.volumeInfo.title,
+  //   selectedFields: Object.entries(fields)
+  //     .filter(([_, selected]) => selected)
+  //     .map(([field]) => field),
+  //   data: item,
+  // });
 }
 
 function selectAllFields(itemId: string, item: GoogleBookItem) {

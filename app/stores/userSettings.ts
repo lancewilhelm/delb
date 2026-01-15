@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { useDebounceFn } from '@vueuse/core';
 
 export type MetadataProviderKey = 'googleBooks' | 'hardcover';
 
@@ -44,6 +45,9 @@ export interface UserSettings {
     dynamicCoverSizing: boolean;
     coverWidthPresetPx: number;
     gap: number;
+    showTitle: boolean;
+    showAuthors: boolean;
+    showSeries: boolean;
   };
 
   /**
@@ -85,6 +89,9 @@ function getDefaultSettings(): UserSettings {
       dynamicCoverSizing: true,
       coverWidthPresetPx: 172,
       gap: 12,
+      showTitle: true,
+      showAuthors: true,
+      showSeries: true,
     },
 
     metadataSearch: {
@@ -174,21 +181,49 @@ export const useUserSettingsStore = defineStore(
     }
 
     /**
-     * Local user intent update: optimistic update + push to server.
+     * Debounced push to avoid spamming the API (e.g. sliders/range inputs).
+     * Note: This only affects *network writes*; local state updates remain immediate.
      */
-    async function updateSettings(updated: Partial<UserSettings>) {
-      if (!updated || Object.keys(updated).length === 0) return;
-
-      settings.value = { ...settings.value, ...updated };
-      updatedAt.value = new Date();
-      synced.value = false;
-
+    const debouncedPush = useDebounceFn(async () => {
       try {
         await push();
       } catch (err) {
         // Keep unsynced so a later pull/push can reconcile.
         console.error('Failed to push user settings:', err);
       }
+    }, 400);
+
+    /**
+     * Force an immediate push (useful on "commit" style interactions).
+     */
+    async function flushPush() {
+      try {
+        await push();
+      } catch (err) {
+        // Keep unsynced so a later pull/push can reconcile.
+        console.error('Failed to push user settings:', err);
+      }
+    }
+
+    /**
+     * Local user intent update: optimistic update + debounced push to server.
+     */
+    async function updateSettings(
+      updated: Partial<UserSettings>,
+      opts?: { immediate?: boolean },
+    ) {
+      if (!updated || Object.keys(updated).length === 0) return;
+
+      settings.value = { ...settings.value, ...updated };
+      updatedAt.value = new Date();
+      synced.value = false;
+
+      if (opts?.immediate) {
+        await flushPush();
+        return;
+      }
+
+      debouncedPush();
     }
 
     const updatedAt = ref<Date>(new Date(0));
@@ -205,6 +240,7 @@ export const useUserSettingsStore = defineStore(
       updatedAt,
       synced,
       updateSettings,
+      flushPush,
       applyRemoteSettings,
       pull,
       push,

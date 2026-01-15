@@ -112,6 +112,15 @@ function onOpenBook() {
 function onToggleSelect() {
   emit('toggle-select', props.book.id);
 }
+
+const userSettingsStore = useUserSettingsStore();
+
+const showAnyMetadata = computed(
+  () =>
+    userSettingsStore.settings.bookGrid.showTitle ||
+    userSettingsStore.settings.bookGrid.showAuthors ||
+    userSettingsStore.settings.bookGrid.showSeries,
+);
 </script>
 
 <template>
@@ -156,9 +165,9 @@ function onToggleSelect() {
         </button>
       </div>
 
-      <div class="flex flex-col">
+      <div v-if="showAnyMetadata" class="flex flex-col">
         <!-- Title -->
-        <HoverScrollText>
+        <HoverScrollText v-if="userSettingsStore.settings.bookGrid.showTitle">
           <span class="cursor-pointer hover:underline" @click="onOpenBook">
             {{ props.book.title }}
           </span>
@@ -166,7 +175,7 @@ function onToggleSelect() {
 
         <!-- Authors -->
         <HoverScrollText
-          v-if="props.showAuthor && authorLabel"
+          v-if="userSettingsStore.settings.bookGrid.showAuthors && authorLabel"
           class="opacity-70 cursor-pointer"
         >
           <span v-if="props.selectable" @click="onOpenBook">
@@ -190,7 +199,9 @@ function onToggleSelect() {
 
         <!-- Series -->
         <HoverScrollText
-          v-if="props.showSeries && props.book.series"
+          v-if="
+            userSettingsStore.settings.bookGrid.showSeries && props.book.series
+          "
           class="italic opacity-70 text-sm cursor-pointer"
         >
           <div

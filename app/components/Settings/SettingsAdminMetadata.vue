@@ -67,7 +67,7 @@ async function clearToken() {
 </script>
 
 <template>
-  <SettingsGroup
+  <SettingsUIGroup
     title="metadata providers"
     icon="lucide:book-open"
     description="configure external metadata sources (Hardcover, Google Books, etc.)"
@@ -170,5 +170,5 @@ async function clearToken() {
         </div>
       </div>
     </div>
-  </SettingsGroup>
+  </SettingsUIGroup>
 </template>

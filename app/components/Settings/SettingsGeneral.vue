@@ -38,7 +38,7 @@ const config = useRuntimeConfig();
 </script>
 <template>
   <div class="w-full">
-    <SettingsGroup title="credentials" icon="lucide:lock">
+    <SettingsUIGroup title="credentials" icon="lucide:lock">
       <div class="flex items-center gap-2">
         <button
           class="flex items-center gap-1 px-4 py-2 text-left rounded-lg bg-(--sub-alt-color)"
@@ -54,8 +54,12 @@ const config = useRuntimeConfig();
           password updated
         </div>
       </div>
-    </SettingsGroup>
-    <SettingsGroup title="about" icon="lucide:info" class="flex flex-col gap-2">
+    </SettingsUIGroup>
+    <SettingsUIGroup
+      title="about"
+      icon="lucide:info"
+      class="flex flex-col gap-2"
+    >
       <DelbLogo fill="var(--main-color)" />
       <div class="text-(--sub-color) italic">
         version: {{ config.public.appVersion || 'manual' }}
@@ -73,7 +77,7 @@ const config = useRuntimeConfig();
           ><span class="logo">Delb</span> on GitHub</span
         >
       </NuxtLink>
-    </SettingsGroup>
+    </SettingsUIGroup>
 
     <!-- Change Password Modal -->
     <ModalWindow

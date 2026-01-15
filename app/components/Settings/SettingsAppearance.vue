@@ -10,84 +10,142 @@ interface Theme {
 }
 
 const userSettingsStore = useUserSettingsStore();
-const sortedByName = computed(
-  () => userSettingsStore.settings.themeSorting.sortedByName,
-);
-const reverseSort = computed(
-  () => userSettingsStore.settings.themeSorting.reverseSort,
-);
 
-function handleSortChange(target: string) {
-  let tempSortedByName, tempReverseSort;
-  if (target === 'name') {
-    if (!sortedByName.value) {
-      tempSortedByName = true;
-    } else {
-      tempReverseSort = !reverseSort.value;
-    }
-  } else {
-    if (sortedByName.value) {
-      tempSortedByName = false;
-    } else {
-      tempReverseSort = !reverseSort.value;
-    }
-  }
-  userSettingsStore.updateSettings({
-    themeSorting: {
-      sortedByName: tempSortedByName ?? sortedByName.value,
-      reverseSort: tempReverseSort ?? reverseSort.value,
-    },
-  });
-}
+// ------------------------------
+// Cover Style controls
+// ------------------------------
+const coverStyleGlossy = computed<boolean>({
+  get() {
+    return userSettingsStore.settings.coverStyle.glossySpine;
+  },
+  set(value) {
+    userSettingsStore.updateSettings({
+      coverStyle: {
+        ...userSettingsStore.settings.coverStyle,
+        glossySpine: value,
+      },
+    });
+  },
+});
+
+const coverStyleRoundedRight = computed<boolean>({
+  get() {
+    return userSettingsStore.settings.coverStyle.roundedRight;
+  },
+  set(value) {
+    userSettingsStore.updateSettings({
+      coverStyle: {
+        ...userSettingsStore.settings.coverStyle,
+        roundedRight: value,
+      },
+    });
+  },
+});
+
+const coverStyleGrayscale = computed<boolean>({
+  get() {
+    return userSettingsStore.settings.coverStyle.grayscale;
+  },
+  set(value) {
+    userSettingsStore.updateSettings({
+      coverStyle: {
+        ...userSettingsStore.settings.coverStyle,
+        grayscale: value,
+      },
+    });
+  },
+});
 
 // ------------------------------
 // Book grid appearance controls
 // ------------------------------
-const gridCoverSizePresets = [
-  { label: 'Small (140px)', px: 140 },
-  { label: 'Medium (172px)', px: 172 },
-  { label: 'Large (200px)', px: 200 },
-] as const;
-
-const gridCoverSizingIsDynamic = computed<boolean>({
+const gridCoverDynamicSizing = computed<boolean>({
   get() {
-    const bookGrid = userSettingsStore.settings.bookGrid;
-    return bookGrid?.dynamicCoverSizing;
+    return userSettingsStore.settings.bookGrid.dynamicCoverSizing;
   },
-  set(isDynamic) {
-    const bookGrid = userSettingsStore.settings.bookGrid;
+  set(value) {
     userSettingsStore.updateSettings({
       bookGrid: {
-        ...(bookGrid ?? { coverWidthPresetPx: 172, dynamicCoverSizing: true }),
-        dynamicCoverSizing: isDynamic ? true : false,
+        ...userSettingsStore.settings.bookGrid,
+        dynamicCoverSizing: value,
       },
     });
   },
 });
 
-const gridCoverPresetLabelValue = computed<string>({
+const gridCoverSizeValue = computed<number>({
   get() {
-    const bookGrid = userSettingsStore.settings.bookGrid;
-    const px = Number.isFinite(bookGrid?.coverWidthPresetPx)
-      ? bookGrid.coverWidthPresetPx
-      : 172;
-
-    const preset = gridCoverSizePresets.find((p) => p.px === px);
-    return preset?.label ?? `Custom (${px}px)`;
+    return userSettingsStore.settings.bookGrid.coverWidthPresetPx;
   },
-  set(label) {
-    const preset = gridCoverSizePresets.find((p) => p.label === label);
-    if (!preset) return;
-
-    const bookGrid = userSettingsStore.settings.bookGrid;
+  set(value) {
     userSettingsStore.updateSettings({
       bookGrid: {
-        ...(bookGrid ?? { coverSizing: 'static', coverWidthPresetPx: 172 }),
-        coverWidthPresetPx: preset.px,
+        ...userSettingsStore.settings.bookGrid,
+        coverWidthPresetPx: value,
       },
     });
   },
 });
+
+const gridCoverGapValue = computed<number>({
+  get() {
+    return userSettingsStore.settings.bookGrid.gap;
+  },
+  set(value) {
+    userSettingsStore.updateSettings({
+      bookGrid: {
+        ...userSettingsStore.settings.bookGrid,
+        gap: value,
+      },
+    });
+  },
+});
+
+const gridCoverShowTitle = computed<boolean>({
+  get() {
+    return userSettingsStore.settings.bookGrid.showTitle;
+  },
+  set(value) {
+    userSettingsStore.updateSettings({
+      bookGrid: {
+        ...userSettingsStore.settings.bookGrid,
+        showTitle: value,
+      },
+    });
+  },
+});
+
+const gridCoverShowAuthors = computed<boolean>({
+  get() {
+    return userSettingsStore.settings.bookGrid.showAuthors;
+  },
+  set(value) {
+    userSettingsStore.updateSettings({
+      bookGrid: {
+        ...userSettingsStore.settings.bookGrid,
+        showAuthors: value,
+      },
+    });
+  },
+});
+
+const gridCoverShowSeries = computed<boolean>({
+  get() {
+    return userSettingsStore.settings.bookGrid.showSeries;
+  },
+  set(value) {
+    userSettingsStore.updateSettings({
+      bookGrid: {
+        ...userSettingsStore.settings.bookGrid,
+        showSeries: value,
+      },
+    });
+  },
+});
+
+// ------------------------------
+// Theme items
+// ------------------------------
 
 const allThemes = computed(() =>
   JSON.parse(JSON.stringify(themesList)).sort((a: Theme, b: Theme) => {
@@ -138,59 +196,115 @@ function hexToLuminance(hex: string) {
   };
   return 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
 }
+
+const sortedByName = computed(
+  () => userSettingsStore.settings.themeSorting.sortedByName,
+);
+const reverseSort = computed(
+  () => userSettingsStore.settings.themeSorting.reverseSort,
+);
+
+function handleSortChange(target: string) {
+  let tempSortedByName, tempReverseSort;
+  if (target === 'name') {
+    if (!sortedByName.value) {
+      tempSortedByName = true;
+    } else {
+      tempReverseSort = !reverseSort.value;
+    }
+  } else {
+    if (sortedByName.value) {
+      tempSortedByName = false;
+    } else {
+      tempReverseSort = !reverseSort.value;
+    }
+  }
+  userSettingsStore.updateSettings({
+    themeSorting: {
+      sortedByName: tempSortedByName ?? sortedByName.value,
+      reverseSort: tempReverseSort ?? reverseSort.value,
+    },
+  });
+}
 </script>
 
 <template>
   <div class="w-full">
-    <SettingsGroup
+    <SettingsUIGroup
       title="cover style"
       icon="lucide:book-image"
       description="customize the cover style"
     >
-      <SettingsToggleItem
-        v-model="userSettingsStore.settings.coverStyle.glossySpine"
+      <SettingsUIToggle
+        v-model="coverStyleGlossy"
         title="Glossy Spine"
         description="Creates an Apple Books style glossy cover effect"
       />
-      <SettingsToggleItem
-        v-model="userSettingsStore.settings.coverStyle.roundedRight"
+      <SettingsUIToggle
+        v-model="coverStyleRoundedRight"
         title="Rounded Right"
         description="Rounds the right edge of the cover like some covers in Goodreads"
       />
-      <SettingsToggleItem
-        v-model="userSettingsStore.settings.coverStyle.grayscale"
+      <SettingsUIToggle
+        v-model="coverStyleGrayscale"
         title="Grayscale"
         description="Applies a grayscale filter to the cover"
       />
-    </SettingsGroup>
+    </SettingsUIGroup>
 
-    <SettingsGroup
+    <SettingsUIGroup
       title="book grid"
       icon="lucide:layout-grid"
       description="customize grid cover sizing"
     >
-      <SettingsToggleItem
-        v-model="gridCoverSizingIsDynamic"
+      <SettingsUIToggle
+        v-model="gridCoverDynamicSizing"
         title="Dynamic cover sizing"
         description="When enabled, covers grow/shrink together to fill the row. When disabled, covers keep a fixed width."
       />
-      <SettingsSelectItem
-        :value="gridCoverPresetLabelValue"
-        :options="gridCoverSizePresets.map((p) => p.label)"
+      <SettingsUISlider
+        v-model="gridCoverSizeValue"
         title="Cover size"
         description="Sets the minimum cover width used by the grid (default: 172px)"
-        @select="(label: string) => (gridCoverPresetLabelValue = label)"
+        :min="100"
+        :max="250"
+        :value-input="true"
+        :suffix="'px'"
       />
-    </SettingsGroup>
+      <SettingsUISlider
+        v-model="gridCoverGapValue"
+        title="Cover gap"
+        description="Sets the distance between cover thumbnails (default: 12px)"
+        :min="2"
+        :max="100"
+        :value-input="true"
+        :suffix="'px'"
+      />
+      <SettingsUIToggle
+        v-model="gridCoverShowTitle"
+        title="Show Book Title"
+        description="Show the book title under the cover"
+      />
+      <SettingsUIToggle
+        v-model="gridCoverShowAuthors"
+        title="Show Book Authors"
+        description="Show the book authors under the cover"
+      />
+      <SettingsUIToggle
+        v-model="gridCoverShowSeries"
+        title="Show Book Series"
+        description="Show the book series under the cover"
+      />
+    </SettingsUIGroup>
 
-    <SettingsGroup
+    <SettingsUIGroup
       title="font"
       icon="ri:font-family"
       description="customize the font style"
     >
       <SettingsAppearanceFonts />
-    </SettingsGroup>
-    <SettingsGroup title="themes" icon="lucide:palette">
+    </SettingsUIGroup>
+    <SettingsUIGroup title="themes" icon="lucide:palette">
       <div class="w-full flex gap-2 mb-4">
         <button
           :class="[
@@ -241,13 +355,13 @@ function hexToLuminance(hex: string) {
           />
         </button>
       </div>
-      <SettingsSubGroup
+      <SettingsUISubGroup
         v-if="favoriteThemes.length"
         title="favorite themes"
         icon="lucide:star"
       >
         <div class="grid grid-cols-2 md:grid-cols-3 gap-2 w-full">
-          <SettingsThemeItem
+          <SettingsUITheme
             v-for="theme in favoriteThemes"
             :key="theme.name"
             :theme="theme"
@@ -262,10 +376,10 @@ function hexToLuminance(hex: string) {
             "
           />
         </div>
-      </SettingsSubGroup>
-      <SettingsSubGroup title="themes" icon="lucide:palette">
+      </SettingsUISubGroup>
+      <SettingsUISubGroup title="themes" icon="lucide:palette">
         <div class="grid grid-cols-2 md:grid-cols-3 gap-2 w-full">
-          <SettingsThemeItem
+          <SettingsUITheme
             v-for="theme in allThemes"
             :key="theme.name"
             :theme="theme"
@@ -282,8 +396,8 @@ function hexToLuminance(hex: string) {
             "
           />
         </div>
-      </SettingsSubGroup>
-    </SettingsGroup>
+      </SettingsUISubGroup>
+    </SettingsUIGroup>
   </div>
 </template>
 

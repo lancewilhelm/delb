@@ -93,6 +93,130 @@ input {
   padding: 0.5em;
 }
 
+/* --- Slider (SettingsUISlider) ------------------------------------------ */
+
+:root {
+  /* tweak these to taste */
+  --slider-track-height: 6px;
+  --slider-thumb-size: 16px;
+
+  --slider-track-bg: color-mix(in srgb, var(--sub-alt-color) 85%, black);
+  --slider-fill-bg: var(--main-color);
+  --slider-thumb-bg: var(--text-color);
+  --slider-thumb-ring: color-mix(in srgb, var(--main-color) 65%, transparent);
+}
+
+/* IMPORTANT:
+   input { padding: ... } applies to range too unless overridden.
+   We override padding+background so the slider can render correctly. */
+.slider[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+
+  width: 180px; /* you can also make this w-full via Tailwind if you prefer */
+  height: var(--slider-track-height);
+
+  padding: 0;
+  background: transparent;
+  border-radius: 999px;
+
+  /* helps with vertical alignment in flex rows */
+  display: block;
+}
+
+/* Track: WebKit (Chrome/Safari) */
+.slider[type='range']::-webkit-slider-runnable-track {
+  height: var(--slider-track-height);
+  background: var(--slider-track-bg);
+  border-radius: 999px;
+}
+
+/* Thumb: WebKit */
+.slider[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+
+  width: var(--slider-thumb-size);
+  height: var(--slider-thumb-size);
+  border-radius: 999px;
+
+  background: var(--slider-thumb-bg);
+  border: 2px solid var(--slider-fill-bg);
+
+  /* align thumb to track */
+  margin-top: calc((var(--slider-track-height) - var(--slider-thumb-size)) / 2);
+
+  box-shadow:
+    0 0 0 3px var(--slider-thumb-ring),
+    0 6px 12px rgba(0, 0, 0, 0.25);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+
+  cursor: grab;
+}
+
+.slider[type='range']:hover::-webkit-slider-thumb {
+  transform: scale(1.06);
+}
+
+.slider[type='range']:active::-webkit-slider-thumb {
+  transform: scale(0.98);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--slider-fill-bg) 70%, transparent),
+    0 4px 10px rgba(0, 0, 0, 0.28);
+  cursor: grabbing;
+}
+
+/* Track: Firefox */
+.slider[type='range']::-moz-range-track {
+  height: var(--slider-track-height);
+  background: var(--slider-track-bg);
+  border-radius: 999px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* Filled portion: Firefox (nice touch) */
+.slider[type='range']::-moz-range-progress {
+  height: var(--slider-track-height);
+  background: var(--slider-fill-bg);
+  border-radius: 999px;
+}
+
+/* Thumb: Firefox */
+.slider[type='range']::-moz-range-thumb {
+  width: var(--slider-thumb-size);
+  height: var(--slider-thumb-size);
+  border-radius: 999px;
+
+  background: var(--slider-thumb-bg);
+  border: 2px solid var(--slider-fill-bg);
+
+  box-shadow:
+    0 0 0 3px var(--slider-thumb-ring),
+    0 6px 12px rgba(0, 0, 0, 0.25);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+
+  cursor: grab;
+}
+
+.slider[type='range']:hover::-moz-range-thumb {
+  transform: scale(1.06);
+}
+
+.slider[type='range']:active::-moz-range-thumb {
+  transform: scale(0.98);
+  cursor: grabbing;
+}
+
+/* Keyboard accessibility */
+.slider[type='range']:focus-visible {
+  outline: 2px solid var(--main-color);
+  outline-offset: 4px;
+}
+
 textarea {
   background-color: var(--sub-alt-color);
   border-radius: var(--border-radius);

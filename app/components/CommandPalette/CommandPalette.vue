@@ -22,23 +22,23 @@ const {
 // --- Keybinding for palette open/close
 const route = useRoute();
 function handleKeyDown(event: KeyboardEvent) {
-  if (["/login", "/register"].includes(route.path)) return;
+  if (['/login', '/register'].includes(route.path)) return;
   const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
   const cmdOrCtrl = isMac ? event.metaKey : event.ctrlKey;
-  if (cmdOrCtrl && event.shiftKey && event.key.toLowerCase() === "p") {
+  if (cmdOrCtrl && event.shiftKey && event.key.toLowerCase() === 'p') {
     event.preventDefault();
     uiStore.setCommandPaletteVisible(!uiStore.commandPaletteVisible);
     nextTick(() => inputRef.value?.focus());
-  } else if (event.key === "Escape") {
+  } else if (event.key === 'Escape') {
     closePalette();
   }
 }
 onMounted(() => {
-  window.addEventListener("keydown", handleKeyDown);
+  window.addEventListener('keydown', handleKeyDown);
   if (inputRef.value) inputRef.value.focus();
 });
 
-onBeforeUnmount(() => window.removeEventListener("keydown", handleKeyDown));
+onBeforeUnmount(() => window.removeEventListener('keydown', handleKeyDown));
 
 watch(
   () => uiStore.commandPaletteVisible,
@@ -65,7 +65,7 @@ watch(
     "
   >
     <div
-      class="flex flex-col backdrop-blur-lg bg-(--bg-color)/80 w-[600px] h-[600px] m-4 rounded-lg shadow-lg font-mono command-palette border border-(--sub-color)"
+      class="flex flex-col backdrop-blur-lg bg-(--bg-color)/80 w-150 h-150 m-4 rounded-lg shadow-lg font-mono command-palette border border-(--sub-color)"
       @click.stop
     >
       <div
@@ -140,6 +140,25 @@ watch(
               }
             "
           />
+        </div>
+        <div
+          v-else-if="
+            selectedOption?.slider !== undefined &&
+            selectedOption?.slider !== null
+          "
+          class="flex flex-col w-full px-4 py-2 gap-2"
+        >
+          {{ selectedOption.label }}
+          <div class="flex items-center gap-4 w-full">
+            <input
+              v-model.number="selectedOption.slider.model"
+              class="slider w-full!"
+              type="range"
+              :min="selectedOption.slider.min"
+              :max="selectedOption.slider.max"
+            />
+            {{ selectedOption.slider.model }}{{ selectedOption.slider.suffix }}
+          </div>
         </div>
         <div v-else ref="optionsRef" class="overflow-y-auto">
           <div

@@ -9,12 +9,20 @@ interface Theme {
   textColor: string;
 }
 
+interface Slider {
+  model: unknown;
+  min: number;
+  max: number;
+  suffix: string;
+}
+
 export interface Option {
   label: string;
   icon?: string;
   action?: () => void;
   options?: Option[];
   active?: boolean | Ref<boolean>;
+  slider?: Slider | null;
 }
 
 export function useCommandPalette() {
@@ -119,6 +127,105 @@ export function useCommandPalette() {
       ],
     },
     {
+      label: 'book grid',
+      icon: 'lucide:grid',
+      options: [
+        {
+          label: 'toggle dynamic cover size',
+          icon: 'lucide:arrow-left-right',
+          action: () => {
+            userSettingsStore.updateSettings({
+              bookGrid: {
+                ...userSettingsStore.settings.bookGrid,
+                dynamicCoverSizing:
+                  !userSettingsStore.settings.bookGrid.dynamicCoverSizing,
+              },
+            });
+            closePalette();
+          },
+        },
+        {
+          label: 'min cover size',
+          icon: 'lucide:ruler-dimension-line',
+          slider: {
+            model: computed({
+              get: () => userSettingsStore.settings.bookGrid.coverWidthPresetPx,
+              set: (v: number) => {
+                userSettingsStore.updateSettings({
+                  bookGrid: {
+                    ...userSettingsStore.settings.bookGrid,
+                    coverWidthPresetPx: Math.round(v),
+                  },
+                });
+              },
+            }),
+            min: 100,
+            max: 250,
+            suffix: 'px',
+          },
+        },
+        {
+          label: 'gap between covers',
+          icon: 'lucide:align-horizontal-space-around',
+          slider: {
+            model: computed({
+              get: () => userSettingsStore.settings.bookGrid.gap,
+              set: (v: number) => {
+                userSettingsStore.updateSettings({
+                  bookGrid: {
+                    ...userSettingsStore.settings.bookGrid,
+                    gap: Math.round(v),
+                  },
+                });
+              },
+            }),
+            min: 2,
+            max: 100,
+            suffix: 'px',
+          },
+        },
+        {
+          label: 'toggle book title',
+          icon: 'lucide:book-a',
+          action: () => {
+            userSettingsStore.updateSettings({
+              bookGrid: {
+                ...userSettingsStore.settings.bookGrid,
+                showTitle: !userSettingsStore.settings.bookGrid.showTitle,
+              },
+            });
+            closePalette();
+          },
+        },
+        {
+          label: 'toggle book authors',
+          icon: 'lucide:user',
+          action: () => {
+            userSettingsStore.updateSettings({
+              bookGrid: {
+                ...userSettingsStore.settings.bookGrid,
+                showAuthors: !userSettingsStore.settings.bookGrid.showAuthors,
+              },
+            });
+            closePalette();
+          },
+        },
+        {
+          label: 'toggle book series',
+          icon: 'lucide:layers',
+          action: () => {
+            userSettingsStore.updateSettings({
+              bookGrid: {
+                ...userSettingsStore.settings.bookGrid,
+                showSeries: !userSettingsStore.settings.bookGrid.showSeries,
+              },
+            });
+            closePalette();
+          },
+        },
+      ],
+    },
+    {
       label: 'settings',
       icon: 'lucide:settings',
       action: () => {
@@ -193,6 +300,9 @@ export function useCommandPalette() {
       selectedOption.value = option;
       query.value = '';
       highlightedIndex.value = 0;
+    } else if (option.slider) {
+      selectedOption.value = option;
+      query.value = '';
     }
   }
 

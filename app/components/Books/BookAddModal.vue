@@ -87,8 +87,6 @@ async function fetchCollections() {
           currentId,
         ];
       }
-
-      console.log(selectedCollectionIds.value);
     }
   } finally {
     collectionsLoading.value = false;

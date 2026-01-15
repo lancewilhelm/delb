@@ -79,7 +79,7 @@ const { isAdmin } = useAuth();
     <AppHeader class="w-full shrink-0" />
 
     <div
-      class="flex flex-wrap justify-center gap-4 px-4 py-2 border-b border-(--sub-color) w-full settings-tab-bar"
+      class="flex flex-wrap justify-center gap-4 px-4 py-2 border-b border-(--sub-color) w-full bg-(--sub-alt-color) settings-tab-bar"
     >
       <SettingsTabBarItem
         v-for="tab in Object.values(tabs).filter((t) => !t.admin || isAdmin)"

@@ -45,7 +45,7 @@ const tabs: Record<string, Tab> = {
     class="flex flex-col items-center h-full overflow-hidden w-screen max-w-screen pt-0!"
   >
     <div
-      class="flex justify-center gap-4 px-4 py-2 border-b border-(--sub-color) w-screen"
+      class="flex justify-center gap-4 px-4 py-2 border-b border-(--sub-color) w-screen bg-(--sub-alt-color)"
     >
       <SettingsTabBarItem
         v-for="tab in Object.values(tabs)"
