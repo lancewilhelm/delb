@@ -7,10 +7,10 @@ export function useDynamicFavicon() {
 
   return computed(() => {
     const themeName =
-      userSettings.settings.theme &&
+      userSettings.activeSettings.theme &&
       route.path !== "/login" &&
       route.path !== "/register"
-        ? userSettings.settings.theme
+        ? userSettings.activeSettings.theme
         : "guage";
 
     const theme = themeList.find((t) => t.name === themeName);

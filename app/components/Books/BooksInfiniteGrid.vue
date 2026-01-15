@@ -120,14 +120,14 @@ watch(
 // BookThumbnail sizing assumptions (current standard)
 // Height is derived from 2:3 aspect ratio using the configured cover width.
 const bookGridGapPx = computed<number>(() => {
-  const raw = userSettingsStore.settings.bookGrid?.gap;
+  const raw = userSettingsStore.activeSettings.bookGrid?.gap;
   return Number.isFinite(raw) ? Math.max(0, Math.trunc(raw)) : 12;
 });
 
 const userSettingsStore = useUserSettingsStore();
 
 const gridCoverWidthPresetPx = computed<number>(() => {
-  const raw = userSettingsStore.settings.bookGrid?.coverWidthPresetPx;
+  const raw = userSettingsStore.activeSettings.bookGrid?.coverWidthPresetPx;
   return Number.isFinite(raw) ? Math.max(80, Math.trunc(raw)) : 172;
 });
 
@@ -139,7 +139,7 @@ const bookCardHeightPx = computed<number>(() => {
 
 const gridStyle = computed<Record<string, string>>(() => {
   const w = gridCoverWidthPresetPx.value;
-  const cols = userSettingsStore.settings.bookGrid?.dynamicCoverSizing
+  const cols = userSettingsStore.activeSettings.bookGrid?.dynamicCoverSizing
     ? `repeat(auto-fit, minmax(${w}px, 1fr))`
     : `repeat(auto-fill, ${w}px)`;
 

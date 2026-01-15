@@ -702,7 +702,7 @@ const userSettingsStore = useUserSettingsStore();
 
 // Default to the user's saved preference (falls back to `everything` per store defaults)
 const deleteMode = ref<DeleteBookMode>(
-  (userSettingsStore.settings.bookDelete?.defaultMode as DeleteBookMode) ??
+  (userSettingsStore.activeSettings.bookDelete?.defaultMode as DeleteBookMode) ??
     'everything',
 );
 
@@ -730,7 +730,7 @@ async function deleteBook() {
     if (rememberDeleteChoice.value) {
       await userSettingsStore.updateSettings({
         bookDelete: {
-          ...userSettingsStore.settings.bookDelete,
+          ...userSettingsStore.activeSettings.bookDelete,
           defaultMode: deleteMode.value,
         },
       });

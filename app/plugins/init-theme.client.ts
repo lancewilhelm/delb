@@ -1,7 +1,7 @@
 export default defineNuxtPlugin(() => {
   const userSettings = useUserSettingsStore();
   watch(
-    () => userSettings.settings.theme,
+    () => userSettings.activeSettings.theme,
     (theme) => {
       if (!theme) return;
       loadTheme(theme);

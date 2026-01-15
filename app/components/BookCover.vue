@@ -46,8 +46,8 @@ const hasSrc = computed(() => !!props.src);
     class="cover w-full h-full rounded-sm overflow-hidden background-transparent"
     :class="[
       props.class,
-      userSettingsStore.settings.coverStyle.glossySpine ? 'gloss' : '',
-      userSettingsStore.settings.coverStyle.roundedRight ? 'rounded-r-2xl' : '',
+      userSettingsStore.activeSettings.coverStyle.glossySpine ? 'gloss' : '',
+      userSettingsStore.activeSettings.coverStyle.roundedRight ? 'rounded-r-2xl' : '',
     ]"
   >
     <img
@@ -58,7 +58,7 @@ const hasSrc = computed(() => !!props.src);
       draggable="false"
       class="w-full! h-full!"
       :class="
-        userSettingsStore.settings.coverStyle.grayscale ? 'grayscale' : ''
+        userSettingsStore.activeSettings.coverStyle.grayscale ? 'grayscale' : ''
       "
     />
     <div

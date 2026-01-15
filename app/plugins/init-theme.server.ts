@@ -6,8 +6,8 @@ export default defineNuxtPlugin(() => {
   const userSettings = useUserSettingsStore(); // SSR-compatible
 
   const theme =
-    userSettings.settings.theme && isLoggedIn
-      ? userSettings.settings.theme
+    userSettings.activeSettings.theme && isLoggedIn
+      ? userSettings.activeSettings.theme
       : "guage";
 
   useHead({

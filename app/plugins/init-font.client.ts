@@ -1,7 +1,7 @@
 export default defineNuxtPlugin(() => {
   const userSettings = useUserSettingsStore();
   watch(
-    () => userSettings.settings.fontFamily,
+    () => userSettings.activeSettings.fontFamily,
     (family) => {
       useHead({
         style: [

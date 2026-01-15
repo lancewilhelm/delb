@@ -24,7 +24,7 @@ const userSettingsStore = useUserSettingsStore();
     :style="{
       backgroundColor: theme.bgColor,
       borderColor:
-        isHovered || userSettingsStore.settings.theme === theme.name
+        isHovered || userSettingsStore.activeSettings.theme === theme.name
           ? theme.mainColor
           : 'var(--bg-color)',
       color: theme.textColor,
@@ -42,7 +42,7 @@ const userSettingsStore = useUserSettingsStore();
         @click.stop="
           userSettingsStore.updateSettings({
             favoriteThemes: [
-              ...(userSettingsStore.settings.favoriteThemes || []),
+              ...(userSettingsStore.activeSettings.favoriteThemes || []),
               theme.name,
             ],
           })
@@ -55,7 +55,7 @@ const userSettingsStore = useUserSettingsStore();
         :style="{ text: theme.textColor }"
         @click.stop="
           userSettingsStore.updateSettings({
-            favoriteThemes: userSettingsStore.settings.favoriteThemes.filter(
+            favoriteThemes: userSettingsStore.activeSettings.favoriteThemes.filter(
               (t: string) => t !== theme.name,
             ),
           })
