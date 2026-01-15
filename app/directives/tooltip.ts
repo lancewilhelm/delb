@@ -1,6 +1,6 @@
-import type { Directive, DirectiveBinding } from "vue";
+import type { Directive, DirectiveBinding } from 'vue';
 
-type TooltipSide = "top" | "right" | "bottom" | "left";
+type TooltipSide = 'top' | 'right' | 'bottom' | 'left';
 
 export type TooltipBindingValue =
   | string
@@ -53,6 +53,11 @@ type TooltipState = {
   tooltipEl: HTMLDivElement | null;
   contentEl: HTMLDivElement | null;
 
+  /**
+   * The last tooltip text we rendered (used for cleanup logic).
+   */
+  lastText: string;
+
   open: boolean;
 
   showTimer: number | null;
@@ -69,10 +74,10 @@ type TooltipState = {
   cleanupFns: Array<() => void>;
 };
 
-const TOOLTIP_STATE = Symbol("tooltip");
+const TOOLTIP_STATE = Symbol('tooltip');
 
 const DEFAULTS = {
-  side: "top" as TooltipSide,
+  side: 'top' as TooltipSide,
   offset: 8,
   viewportPadding: 8,
   showDelay: 500,
@@ -82,7 +87,7 @@ const DEFAULTS = {
 };
 
 function isBrowser(): boolean {
-  return typeof window !== "undefined" && typeof document !== "undefined";
+  return typeof window !== 'undefined' && typeof document !== 'undefined';
 }
 
 function normalizeBinding(value: TooltipBindingValue | undefined | null): {
@@ -96,7 +101,7 @@ function normalizeBinding(value: TooltipBindingValue | undefined | null): {
   interactive: boolean;
   autoFlip: boolean;
 } {
-  if (typeof value === "string") {
+  if (typeof value === 'string') {
     return {
       text: value,
       side: DEFAULTS.side,
@@ -110,9 +115,9 @@ function normalizeBinding(value: TooltipBindingValue | undefined | null): {
     };
   }
 
-  const v = value ?? { text: "" };
+  const v = value ?? { text: '' };
   return {
-    text: v.text ?? "",
+    text: v.text ?? '',
     side: v.side ?? DEFAULTS.side,
     offset: v.offset ?? DEFAULTS.offset,
     viewportPadding: v.viewportPadding ?? DEFAULTS.viewportPadding,
@@ -125,7 +130,7 @@ function normalizeBinding(value: TooltipBindingValue | undefined | null): {
 }
 
 function nextId(): string {
-  if (!isBrowser()) return "tooltip-ssr";
+  if (!isBrowser()) return 'tooltip-ssr';
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const w = window as any;
   w.__delbTooltipId = (w.__delbTooltipId ?? 0) + 1;
@@ -178,27 +183,27 @@ function chooseBestSide(args: {
   const needW = tooltipRect.width;
 
   const fits = (side: TooltipSide) => {
-    if (side === "top") return spaceTop >= needH;
-    if (side === "bottom") return spaceBottom >= needH;
-    if (side === "left") return spaceLeft >= needW;
+    if (side === 'top') return spaceTop >= needH;
+    if (side === 'bottom') return spaceBottom >= needH;
+    if (side === 'left') return spaceLeft >= needW;
     return spaceRight >= needW;
   };
 
   if (fits(preferred)) return preferred;
 
   const opposite: Record<TooltipSide, TooltipSide> = {
-    top: "bottom",
-    bottom: "top",
-    left: "right",
-    right: "left",
+    top: 'bottom',
+    bottom: 'top',
+    left: 'right',
+    right: 'left',
   };
 
   const candidates: TooltipSide[] = [
     opposite[preferred],
-    "top",
-    "bottom",
-    "left",
-    "right",
+    'top',
+    'bottom',
+    'left',
+    'right',
   ];
 
   for (const c of candidates) {
@@ -236,13 +241,13 @@ function computePosition(args: {
   let x = 0;
   let y = 0;
 
-  if (side === "top") {
+  if (side === 'top') {
     x = targetRect.left + targetRect.width / 2 - tooltipRect.width / 2;
     y = targetRect.top - tooltipRect.height - offset;
-  } else if (side === "bottom") {
+  } else if (side === 'bottom') {
     x = targetRect.left + targetRect.width / 2 - tooltipRect.width / 2;
     y = targetRect.bottom + offset;
-  } else if (side === "left") {
+  } else if (side === 'left') {
     x = targetRect.left - tooltipRect.width - offset;
     y = targetRect.top + targetRect.height / 2 - tooltipRect.height / 2;
   } else {
@@ -261,18 +266,18 @@ function ensureTooltipEl(state: TooltipState): void {
   if (!isBrowser()) return;
   if (state.tooltipEl) return;
 
-  const el = document.createElement("div");
-  el.className = "tooltip";
-  el.setAttribute("role", "tooltip");
-  el.setAttribute("data-state", "closed");
+  const el = document.createElement('div');
+  el.className = 'tooltip';
+  el.setAttribute('role', 'tooltip');
+  el.setAttribute('data-state', 'closed');
 
   el.id = state.id;
 
-  const content = document.createElement("div");
-  content.className = "tooltip-content";
+  const content = document.createElement('div');
+  content.className = 'tooltip-content';
 
-  const text = document.createElement("span");
-  text.textContent = "";
+  const text = document.createElement('span');
+  text.textContent = '';
 
   content.appendChild(text);
   el.appendChild(content);
@@ -286,8 +291,8 @@ function ensureTooltipEl(state: TooltipState): void {
 function setOpen(state: TooltipState, open: boolean): void {
   if (!state.tooltipEl) return;
   state.open = open;
-  state.tooltipEl.setAttribute("data-state", open ? "open" : "closed");
-  state.tooltipEl.style.display = open ? "" : "none";
+  state.tooltipEl.setAttribute('data-state', open ? 'open' : 'closed');
+  state.tooltipEl.style.display = open ? '' : 'none';
 }
 
 function updateTooltipContentAndOptions(
@@ -298,26 +303,61 @@ function updateTooltipContentAndOptions(
   ensureTooltipEl(state);
   if (!state.tooltipEl) return;
 
-  // aria-describedby
-  if (options.text.trim().length > 0) {
-    el.setAttribute("aria-describedby", state.id);
+  const nextText = options.text ?? '';
+  const hasText = nextText.trim().length > 0;
+
+  // aria-describedby / aria-label
+  //
+  // Prefer `aria-describedby` for naturally-focusable or explicitly focusable targets.
+  // Some components (notably icon renderers) may set `aria-hidden="true"` on their
+  // internal DOM. If we also make that element focusable (via tabindex), browsers
+  // will warn/block aria-hidden when it (or its descendants) retains focus.
+  //
+  // If the target is aria-hidden, fall back to `aria-label` so we don't wire up
+  // aria-describedby to an element that is explicitly hidden from AT.
+  const isAriaHidden =
+    el.getAttribute('aria-hidden') === 'true' ||
+    // typings don't include `inert` on HTMLElement in older TS libs; read attribute
+    el.hasAttribute('inert');
+
+  if (hasText) {
+    if (isAriaHidden) {
+      el.removeAttribute('aria-describedby');
+      // Only set aria-label if the element doesn't already have an accessible name.
+      if (
+        !el.hasAttribute('aria-label') &&
+        !el.hasAttribute('aria-labelledby') &&
+        !el.getAttribute('title')
+      ) {
+        el.setAttribute('aria-label', nextText);
+      }
+    } else {
+      el.setAttribute('aria-describedby', state.id);
+    }
   } else {
-    el.removeAttribute("aria-describedby");
+    el.removeAttribute('aria-describedby');
+
+    // Best-effort cleanup:
+    // only remove aria-label if it matches the previously rendered tooltip text.
+    if (el.getAttribute('aria-label') === state.lastText) {
+      el.removeAttribute('aria-label');
+    }
   }
 
   // content
-  const textNode = state.contentEl?.querySelector("span");
-  if (textNode) textNode.textContent = options.text;
+  const textNode = state.contentEl?.querySelector('span');
+  if (textNode) textNode.textContent = nextText;
+  state.lastText = nextText;
 
   // maxWidth
   if (options.maxWidth) {
     state.tooltipEl.style.maxWidth = options.maxWidth;
   } else {
-    state.tooltipEl.style.removeProperty("max-width");
+    state.tooltipEl.style.removeProperty('max-width');
   }
 
   // interactive toggle (pointer-events)
-  state.tooltipEl.style.pointerEvents = options.interactive ? "auto" : "none";
+  state.tooltipEl.style.pointerEvents = options.interactive ? 'auto' : 'none';
 }
 
 function reposition(el: HTMLElement, state: TooltipState): void {
@@ -336,9 +376,9 @@ function reposition(el: HTMLElement, state: TooltipState): void {
   const prevDisplay = state.tooltipEl.style.display;
   const prevOpacity = state.tooltipEl.style.opacity;
 
-  state.tooltipEl.style.display = "";
-  state.tooltipEl.style.opacity = "0";
-  state.tooltipEl.setAttribute("data-state", "open");
+  state.tooltipEl.style.display = '';
+  state.tooltipEl.style.opacity = '0';
+  state.tooltipEl.setAttribute('data-state', 'open');
 
   // Tooltip may wrap based on content/maxWidth; allow layout
   const tooltipRect = state.tooltipEl.getBoundingClientRect();
@@ -362,13 +402,13 @@ function reposition(el: HTMLElement, state: TooltipState): void {
     tooltipRect,
   });
 
-  state.tooltipEl.style.setProperty("--tooltip-x", `${x}px`);
-  state.tooltipEl.style.setProperty("--tooltip-y", `${y}px`);
+  state.tooltipEl.style.setProperty('--tooltip-x', `${x}px`);
+  state.tooltipEl.style.setProperty('--tooltip-y', `${y}px`);
 
   // Restore visible state according to current open flag
   state.tooltipEl.style.opacity = prevOpacity;
   state.tooltipEl.style.display = prevDisplay;
-  state.tooltipEl.setAttribute("data-state", state.open ? "open" : "closed");
+  state.tooltipEl.setAttribute('data-state', state.open ? 'open' : 'closed');
 }
 
 function attachRepositionListeners(el: HTMLElement, state: TooltipState): void {
@@ -386,21 +426,21 @@ function attachRepositionListeners(el: HTMLElement, state: TooltipState): void {
   const onResize = cb;
   const onScroll = cb;
 
-  window.addEventListener("resize", onResize, { passive: true });
+  window.addEventListener('resize', onResize, { passive: true });
 
   for (const p of parents) {
     if (p === window) {
-      window.addEventListener("scroll", onScroll, { passive: true });
+      window.addEventListener('scroll', onScroll, { passive: true });
     } else {
-      (p as Element).addEventListener("scroll", onScroll, { passive: true });
+      (p as Element).addEventListener('scroll', onScroll, { passive: true });
       state.cleanupFns.push(() =>
-        (p as Element).removeEventListener("scroll", onScroll),
+        (p as Element).removeEventListener('scroll', onScroll),
       );
     }
   }
 
-  state.cleanupFns.push(() => window.removeEventListener("resize", onResize));
-  state.cleanupFns.push(() => window.removeEventListener("scroll", onScroll));
+  state.cleanupFns.push(() => window.removeEventListener('resize', onResize));
+  state.cleanupFns.push(() => window.removeEventListener('scroll', onScroll));
 }
 
 function detachRepositionListeners(state: TooltipState): void {
@@ -455,17 +495,17 @@ function cleanup(state: TooltipState, el?: HTMLElement): void {
   state.showTimer = null;
   state.hideTimer = null;
 
-  if (el) el.removeAttribute("aria-describedby");
+  if (el) el.removeAttribute('aria-describedby');
 
   // remove listeners
   if (state.onEnter && el)
-    el.removeEventListener("pointerenter", state.onEnter);
+    el.removeEventListener('pointerenter', state.onEnter);
   if (state.onLeave && el)
-    el.removeEventListener("pointerleave", state.onLeave);
-  if (state.onFocus && el) el.removeEventListener("focus", state.onFocus);
-  if (state.onBlur && el) el.removeEventListener("blur", state.onBlur);
+    el.removeEventListener('pointerleave', state.onLeave);
+  if (state.onFocus && el) el.removeEventListener('focus', state.onFocus);
+  if (state.onBlur && el) el.removeEventListener('blur', state.onBlur);
   if (state.onPointerDown) {
-    document.removeEventListener("pointerdown", state.onPointerDown, true);
+    document.removeEventListener('pointerdown', state.onPointerDown, true);
   }
 
   for (const fn of state.cleanupFns) fn();
@@ -500,6 +540,8 @@ function getOrCreateState(el: HTMLElement): TooltipState {
 
     tooltipEl: null,
     contentEl: null,
+
+    lastText: '',
 
     open: false,
 
@@ -548,18 +590,18 @@ function bindEvents(el: HTMLElement, state: TooltipState): void {
     hide(state);
   };
 
-  el.addEventListener("pointerenter", state.onEnter);
-  el.addEventListener("pointerleave", state.onLeave);
+  el.addEventListener('pointerenter', state.onEnter);
+  el.addEventListener('pointerleave', state.onLeave);
 
   // Support keyboard users
-  el.addEventListener("focus", state.onFocus);
-  el.addEventListener("blur", state.onBlur);
+  el.addEventListener('focus', state.onFocus);
+  el.addEventListener('blur', state.onBlur);
 
-  document.addEventListener("pointerdown", state.onPointerDown, true);
+  document.addEventListener('pointerdown', state.onPointerDown, true);
 
   state.cleanupFns.push(() => {
     if (state.onPointerDown) {
-      document.removeEventListener("pointerdown", state.onPointerDown, true);
+      document.removeEventListener('pointerdown', state.onPointerDown, true);
     }
   });
 }
@@ -592,17 +634,23 @@ const tooltipDirective: Directive<HTMLElement, TooltipBindingValue> = {
 
     const state = getOrCreateState(el);
 
-    // Make sure element can receive focus for accessibility if it's not naturally focusable
+    // Make sure element can receive focus for accessibility if it's not naturally focusable.
+    //
+    // IMPORTANT: Do not add `tabindex` to elements that are `aria-hidden="true"` (common
+    // for decorative icon spans). Focus + aria-hidden triggers browser warnings and
+    // hides focus from assistive technology users.
+    const isAriaHidden = el.getAttribute('aria-hidden') === 'true';
     if (
-      !el.hasAttribute("tabindex") &&
+      !isAriaHidden &&
+      !el.hasAttribute('tabindex') &&
       !(el instanceof HTMLButtonElement) &&
       !(el instanceof HTMLAnchorElement) &&
-      el.getAttribute("role") !== "button" &&
-      el.getAttribute("role") !== "link"
+      el.getAttribute('role') !== 'button' &&
+      el.getAttribute('role') !== 'link'
     ) {
       // Only add tabindex if tooltip text exists; keep it minimal
       const options = normalizeBinding(binding.value);
-      if (options.text.trim()) el.setAttribute("tabindex", "0");
+      if (options.text.trim()) el.setAttribute('tabindex', '0');
     }
 
     bindEvents(el, state);
