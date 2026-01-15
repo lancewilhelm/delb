@@ -6,8 +6,8 @@ export default defineNuxtPlugin(() => {
 
   // Use user's setting or fallback
   const fontFamily =
-    userSettings.settings.fontFamily && isLoggedIn
-      ? userSettings.settings.fontFamily
+    userSettings.activeSettings.fontFamily && isLoggedIn
+      ? userSettings.activeSettings.fontFamily
       : "Geist, sans-serif";
 
   useHead({

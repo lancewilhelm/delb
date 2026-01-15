@@ -21,10 +21,10 @@ const emit = defineEmits<{
 const userSettingsStore = useUserSettingsStore();
 
 const isFavorite = computed(() =>
-  userSettingsStore.settings.favoriteThemes.includes(props.theme.name),
+  userSettingsStore.activeSettings.favoriteThemes.includes(props.theme.name),
 );
 const isCurrentTheme = computed(
-  () => userSettingsStore.settings.theme === props.theme.name,
+  () => userSettingsStore.activeSettings.theme === props.theme.name,
 );
 
 function handleClick() {

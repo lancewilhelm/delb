@@ -116,14 +116,14 @@ watch(
             "
             :theme="theme"
             :highlighted="highlightedIndex === i"
-            :selected="userSettingsStore.settings.theme === theme.name"
+            :selected="userSettingsStore.activeSettings.theme === theme.name"
             @select="selectTheme"
             @preview="debouncedPreviewTheme"
             @add-favorite="
               () => {
                 userSettingsStore.updateSettings({
                   favoriteThemes: [
-                    ...(userSettingsStore.settings.favoriteThemes || []),
+                    ...(userSettingsStore.activeSettings.favoriteThemes || []),
                     theme.name,
                   ],
                 });
@@ -133,7 +133,7 @@ watch(
               () => {
                 userSettingsStore.updateSettings({
                   favoriteThemes:
-                    userSettingsStore.settings.favoriteThemes.filter(
+                    userSettingsStore.activeSettings.favoriteThemes.filter(
                       (t: string) => t !== theme.name,
                     ),
                 });

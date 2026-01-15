@@ -20,7 +20,7 @@ export type FontFamily = (typeof fontFamilyOptions)[number];
 export const funboxModes = ['confetti', 'snow'];
 export type FunboxMode = (typeof funboxModes)[number];
 
-export interface UserSettings {
+export interface BaseUserSettings {
   theme?: string;
   fontFamily: FontFamily;
   favoriteThemes: string[];
@@ -70,6 +70,15 @@ export interface UserSettings {
   };
 }
 
+export interface MobileSettingsConfig {
+  enabled: boolean;
+  overrides: Partial<BaseUserSettings>;
+}
+
+export interface UserSettings extends BaseUserSettings {
+  mobile: MobileSettingsConfig;
+}
+
 function getDefaultSettings(): UserSettings {
   return {
     fontFamily: 'Nunito',
@@ -103,6 +112,10 @@ function getDefaultSettings(): UserSettings {
     bookDelete: {
       defaultMode: 'everything',
     },
+    mobile: {
+      enabled: false,
+      overrides: {},
+    },
   };
 }
 
@@ -117,10 +130,139 @@ type SettingsApiGetResponse = {
   };
 };
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function arraysEqual<T>(left: T[], right: T[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
+}
+
+function mergeRecord(
+  base: Record<string, unknown>,
+  overrides: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...base };
+
+  for (const [key, overrideValue] of Object.entries(overrides)) {
+    const baseValue = base[key];
+    if (isPlainObject(baseValue) && isPlainObject(overrideValue)) {
+      merged[key] = mergeRecord(baseValue, overrideValue);
+      continue;
+    }
+    merged[key] = overrideValue;
+  }
+
+  return merged;
+}
+
+function applyOverrides(
+  base: BaseUserSettings,
+  overrides: Partial<BaseUserSettings>,
+): BaseUserSettings {
+  return mergeRecord(
+    base as Record<string, unknown>,
+    overrides as Record<string, unknown>,
+  ) as BaseUserSettings;
+}
+
+function diffRecord(
+  base: Record<string, unknown>,
+  next: Record<string, unknown>,
+): Record<string, unknown> {
+  const diff: Record<string, unknown> = {};
+
+  for (const [key, nextValue] of Object.entries(next)) {
+    const baseValue = base[key];
+
+    if (Array.isArray(nextValue) && Array.isArray(baseValue)) {
+      if (!arraysEqual(nextValue, baseValue)) {
+        diff[key] = nextValue;
+      }
+      continue;
+    }
+
+    if (isPlainObject(nextValue) && isPlainObject(baseValue)) {
+      const nested = diffRecord(baseValue, nextValue);
+      if (Object.keys(nested).length > 0) {
+        diff[key] = nested;
+      }
+      continue;
+    }
+
+    if (nextValue !== baseValue) {
+      diff[key] = nextValue;
+    }
+  }
+
+  return diff;
+}
+
+function diffSettings(
+  base: BaseUserSettings,
+  next: BaseUserSettings,
+): Partial<BaseUserSettings> {
+  return diffRecord(
+    base as Record<string, unknown>,
+    next as Record<string, unknown>,
+  ) as Partial<BaseUserSettings>;
+}
+
+function normalizeSettings(remote: Partial<UserSettings>): UserSettings {
+  const defaults = getDefaultSettings();
+
+  return {
+    ...defaults,
+    ...remote,
+    themeSorting: {
+      ...defaults.themeSorting,
+      ...remote.themeSorting,
+    },
+    coverStyle: {
+      ...defaults.coverStyle,
+      ...remote.coverStyle,
+    },
+    bookGrid: {
+      ...defaults.bookGrid,
+      ...remote.bookGrid,
+    },
+    metadataSearch: {
+      ...defaults.metadataSearch,
+      ...remote.metadataSearch,
+    },
+    bookDelete: {
+      ...defaults.bookDelete,
+      ...remote.bookDelete,
+    },
+    mobile: {
+      ...defaults.mobile,
+      ...remote.mobile,
+      overrides: remote.mobile?.overrides ?? defaults.mobile.overrides,
+    },
+  };
+}
+
+function getBaseSettings(settings: UserSettings): BaseUserSettings {
+  const { mobile, ...base } = settings;
+  return base;
+}
+
 export const useUserSettingsStore = defineStore(
   'userSettings',
   () => {
     const settings = ref<UserSettings>(getDefaultSettings());
+    const isMobile = useIsMobileDevice();
+    const activeSettings = computed<BaseUserSettings>(() => {
+      const base = getBaseSettings(settings.value);
+      if (settings.value.mobile.enabled && isMobile.value) {
+        return applyOverrides(base, settings.value.mobile.overrides);
+      }
+      return base;
+    });
+    const usingMobileOverrides = computed(
+      () => settings.value.mobile.enabled && isMobile.value,
+    );
 
     /**
      * Push the full user settings blob to the server.
@@ -173,7 +315,7 @@ export const useUserSettingsStore = defineStore(
     ) {
       if (!remote || Object.keys(remote).length === 0) return;
 
-      settings.value = { ...settings.value, ...remote };
+      settings.value = normalizeSettings({ ...settings.value, ...remote });
       updatedAt.value = remoteUpdatedAt
         ? new Date(remoteUpdatedAt)
         : new Date();
@@ -209,12 +351,65 @@ export const useUserSettingsStore = defineStore(
      * Local user intent update: optimistic update + debounced push to server.
      */
     async function updateSettings(
-      updated: Partial<UserSettings>,
+      updated: Partial<BaseUserSettings>,
       opts?: { immediate?: boolean },
     ) {
       if (!updated || Object.keys(updated).length === 0) return;
 
-      settings.value = { ...settings.value, ...updated };
+      const baseSettings = getBaseSettings(settings.value);
+      const nextBaseSettings = usingMobileOverrides.value
+        ? baseSettings
+        : ({ ...baseSettings, ...updated } as BaseUserSettings);
+      const currentMobileActive = applyOverrides(
+        baseSettings,
+        settings.value.mobile.overrides,
+      );
+      const nextMobileActive = usingMobileOverrides.value
+        ? ({ ...currentMobileActive, ...updated } as BaseUserSettings)
+        : currentMobileActive;
+      const nextOverrides = diffSettings(nextBaseSettings, nextMobileActive);
+
+      settings.value = normalizeSettings({
+        ...settings.value,
+        ...nextBaseSettings,
+        mobile: {
+          ...settings.value.mobile,
+          overrides: nextOverrides,
+        },
+      });
+      updatedAt.value = new Date();
+      synced.value = false;
+
+      if (opts?.immediate) {
+        await flushPush();
+        return;
+      }
+
+      debouncedPush();
+    }
+
+    async function updateMobileSettings(
+      updated: Partial<MobileSettingsConfig>,
+      opts?: { immediate?: boolean },
+    ) {
+      if (!updated || Object.keys(updated).length === 0) return;
+
+      const baseSettings = getBaseSettings(settings.value);
+      const currentMobileActive = applyOverrides(
+        baseSettings,
+        settings.value.mobile.overrides,
+      );
+      const nextOverrides =
+        updated.overrides ?? diffSettings(baseSettings, currentMobileActive);
+
+      settings.value = normalizeSettings({
+        ...settings.value,
+        mobile: {
+          ...settings.value.mobile,
+          ...updated,
+          overrides: nextOverrides,
+        },
+      });
       updatedAt.value = new Date();
       synced.value = false;
 
@@ -237,9 +432,12 @@ export const useUserSettingsStore = defineStore(
 
     return {
       settings,
+      activeSettings,
+      usingMobileOverrides,
       updatedAt,
       synced,
       updateSettings,
+      updateMobileSettings,
       flushPush,
       applyRemoteSettings,
       pull,

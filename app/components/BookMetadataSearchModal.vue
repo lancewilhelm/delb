@@ -254,7 +254,7 @@ const providerState = reactive<Record<MetadataProviderKey, boolean>>({
 });
 
 function hydrateProvidersFromUserSettings() {
-  const saved = userSettingsStore.settings.metadataSearch?.providers;
+  const saved = userSettingsStore.activeSettings.metadataSearch?.providers;
   if (Array.isArray(saved) && saved.length) {
     providerState.googleBooks = saved.includes('googleBooks');
     providerState.hardcover = saved.includes('hardcover');

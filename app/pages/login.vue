@@ -32,8 +32,8 @@ async function handleSubmit() {
 
     // Load the theme
     const userSettingsStore = useUserSettingsStore();
-    if (userSettingsStore.settings.theme) {
-        loadTheme(userSettingsStore.settings.theme);
+    if (userSettingsStore.activeSettings.theme) {
+        loadTheme(userSettingsStore.activeSettings.theme);
     }
 
     // Navigate to the home page

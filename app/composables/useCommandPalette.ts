@@ -90,8 +90,8 @@ export function useCommandPalette() {
           action: () => {
             userSettingsStore.updateSettings({
               coverStyle: {
-                ...userSettingsStore.settings.coverStyle,
-                glossySpine: !userSettingsStore.settings.coverStyle.glossySpine,
+                ...userSettingsStore.activeSettings.coverStyle,
+                glossySpine: !userSettingsStore.activeSettings.coverStyle.glossySpine,
               },
             });
             closePalette();
@@ -103,9 +103,9 @@ export function useCommandPalette() {
           action: () => {
             userSettingsStore.updateSettings({
               coverStyle: {
-                ...userSettingsStore.settings.coverStyle,
+                ...userSettingsStore.activeSettings.coverStyle,
                 roundedRight:
-                  !userSettingsStore.settings.coverStyle.roundedRight,
+                  !userSettingsStore.activeSettings.coverStyle.roundedRight,
               },
             });
             closePalette();
@@ -117,8 +117,8 @@ export function useCommandPalette() {
           action: () => {
             userSettingsStore.updateSettings({
               coverStyle: {
-                ...userSettingsStore.settings.coverStyle,
-                grayscale: !userSettingsStore.settings.coverStyle.grayscale,
+                ...userSettingsStore.activeSettings.coverStyle,
+                grayscale: !userSettingsStore.activeSettings.coverStyle.grayscale,
               },
             });
             closePalette();
@@ -136,9 +136,9 @@ export function useCommandPalette() {
           action: () => {
             userSettingsStore.updateSettings({
               bookGrid: {
-                ...userSettingsStore.settings.bookGrid,
+                ...userSettingsStore.activeSettings.bookGrid,
                 dynamicCoverSizing:
-                  !userSettingsStore.settings.bookGrid.dynamicCoverSizing,
+                  !userSettingsStore.activeSettings.bookGrid.dynamicCoverSizing,
               },
             });
             closePalette();
@@ -149,11 +149,11 @@ export function useCommandPalette() {
           icon: 'lucide:ruler-dimension-line',
           slider: {
             model: computed({
-              get: () => userSettingsStore.settings.bookGrid.coverWidthPresetPx,
+              get: () => userSettingsStore.activeSettings.bookGrid.coverWidthPresetPx,
               set: (v: number) => {
                 userSettingsStore.updateSettings({
                   bookGrid: {
-                    ...userSettingsStore.settings.bookGrid,
+                    ...userSettingsStore.activeSettings.bookGrid,
                     coverWidthPresetPx: Math.round(v),
                   },
                 });
@@ -169,11 +169,11 @@ export function useCommandPalette() {
           icon: 'lucide:align-horizontal-space-around',
           slider: {
             model: computed({
-              get: () => userSettingsStore.settings.bookGrid.gap,
+              get: () => userSettingsStore.activeSettings.bookGrid.gap,
               set: (v: number) => {
                 userSettingsStore.updateSettings({
                   bookGrid: {
-                    ...userSettingsStore.settings.bookGrid,
+                    ...userSettingsStore.activeSettings.bookGrid,
                     gap: Math.round(v),
                   },
                 });
@@ -190,8 +190,8 @@ export function useCommandPalette() {
           action: () => {
             userSettingsStore.updateSettings({
               bookGrid: {
-                ...userSettingsStore.settings.bookGrid,
-                showTitle: !userSettingsStore.settings.bookGrid.showTitle,
+                ...userSettingsStore.activeSettings.bookGrid,
+                showTitle: !userSettingsStore.activeSettings.bookGrid.showTitle,
               },
             });
             closePalette();
@@ -203,8 +203,8 @@ export function useCommandPalette() {
           action: () => {
             userSettingsStore.updateSettings({
               bookGrid: {
-                ...userSettingsStore.settings.bookGrid,
-                showAuthors: !userSettingsStore.settings.bookGrid.showAuthors,
+                ...userSettingsStore.activeSettings.bookGrid,
+                showAuthors: !userSettingsStore.activeSettings.bookGrid.showAuthors,
               },
             });
             closePalette();
@@ -216,8 +216,8 @@ export function useCommandPalette() {
           action: () => {
             userSettingsStore.updateSettings({
               bookGrid: {
-                ...userSettingsStore.settings.bookGrid,
-                showSeries: !userSettingsStore.settings.bookGrid.showSeries,
+                ...userSettingsStore.activeSettings.bookGrid,
+                showSeries: !userSettingsStore.activeSettings.bookGrid.showSeries,
               },
             });
             closePalette();
@@ -249,7 +249,7 @@ export function useCommandPalette() {
   const filteredThemes = computed<Theme[]>(() => {
     if (selectedOption.value?.label === 'favorite themes') {
       const favoriteThemes = allThemes.value.filter((t) => {
-        const settings = userSettingsStore.settings;
+        const settings = userSettingsStore.activeSettings;
         return settings.favoriteThemes?.includes(t.name);
       });
       if (!query.value) {
@@ -315,7 +315,7 @@ export function useCommandPalette() {
   function previewTheme(theme?: string) {
     if (!theme) {
       hoveredTheme.value = null;
-      loadTheme(userSettingsStore.settings.theme);
+      loadTheme(userSettingsStore.activeSettings.theme);
     } else {
       hoveredTheme.value = theme;
       loadTheme(theme);
@@ -353,7 +353,7 @@ export function useCommandPalette() {
       } else if (event.key === 'Delete') {
         if (selectedOption?.value.label === 'favorite themes') {
           userSettingsStore.updateSettings({
-            favoriteThemes: userSettingsStore.settings.favoriteThemes.filter(
+            favoriteThemes: userSettingsStore.activeSettings.favoriteThemes.filter(
               (t: string) => t !== themes[highlightedIndex.value]?.name,
             ),
           });
@@ -364,7 +364,7 @@ export function useCommandPalette() {
         selectedOption.value = undefined;
         query.value = '';
         highlightedIndex.value = 0;
-        previewTheme(userSettingsStore.settings.theme);
+        previewTheme(userSettingsStore.activeSettings.theme);
       }
     } else {
       // This branch is for Option selection
@@ -426,7 +426,7 @@ export function useCommandPalette() {
       selectedOption.value?.label !== 'favorite themes'
     )
       return;
-    const currentTheme = userSettingsStore.settings.theme;
+    const currentTheme = userSettingsStore.activeSettings.theme;
     const idx = filteredThemes.value.findIndex((t) => t.name === currentTheme);
     if (idx !== -1) {
       highlightedIndex.value = idx;
@@ -495,7 +495,7 @@ export function useCommandPalette() {
 // --- Helper Functions
 function addCurrentThemeToFavorites() {
   const userSettingsStore = useUserSettingsStore();
-  const settings = userSettingsStore.settings;
+  const settings = userSettingsStore.activeSettings;
   if (!settings.theme) return;
   if (settings.favoriteThemes?.includes(settings.theme)) return;
 
@@ -512,6 +512,6 @@ function getFontFamilyOptions() {
       userSettingsStore.updateSettings({ fontFamily: font });
       useUiStore().setCommandPaletteVisible(false);
     },
-    active: computed(() => userSettingsStore.settings.fontFamily === font),
+    active: computed(() => userSettingsStore.activeSettings.fontFamily === font),
   }));
 }
