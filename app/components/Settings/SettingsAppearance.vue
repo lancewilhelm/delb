@@ -12,146 +12,47 @@ interface Theme {
 const userSettingsStore = useUserSettingsStore();
 const isMobileDevice = useIsMobileDevice();
 
-const separateMobileSettings = computed<boolean>({
-  get() {
-    return userSettingsStore.settings.mobile.enabled;
-  },
-  set(value) {
-    userSettingsStore.updateMobileSettings({ enabled: value });
-  },
-});
+const separateMobileSettings =
+  userSettingsStore.mobileSettingRef<boolean>('enabled');
 
 // ------------------------------
 // Cover Style controls
 // ------------------------------
-const coverStyleGlossy = computed<boolean>({
-  get() {
-    return userSettingsStore.activeSettings.coverStyle.glossySpine;
-  },
-  set(value) {
-    userSettingsStore.updateSettings({
-      coverStyle: {
-        ...userSettingsStore.activeSettings.coverStyle,
-        glossySpine: value,
-      },
-    });
-  },
-});
+const coverStyleGlossy = userSettingsStore.settingRef<boolean>(
+  'coverStyle.glossySpine',
+);
 
-const coverStyleRoundedRight = computed<boolean>({
-  get() {
-    return userSettingsStore.activeSettings.coverStyle.roundedRight;
-  },
-  set(value) {
-    userSettingsStore.updateSettings({
-      coverStyle: {
-        ...userSettingsStore.activeSettings.coverStyle,
-        roundedRight: value,
-      },
-    });
-  },
-});
+const coverStyleRoundedRight = userSettingsStore.settingRef<boolean>(
+  'coverStyle.roundedRight',
+);
 
-const coverStyleGrayscale = computed<boolean>({
-  get() {
-    return userSettingsStore.activeSettings.coverStyle.grayscale;
-  },
-  set(value) {
-    userSettingsStore.updateSettings({
-      coverStyle: {
-        ...userSettingsStore.activeSettings.coverStyle,
-        grayscale: value,
-      },
-    });
-  },
-});
+const coverStyleGrayscale = userSettingsStore.settingRef<boolean>(
+  'coverStyle.grayscale',
+);
 
 // ------------------------------
 // Book grid appearance controls
 // ------------------------------
-const gridCoverDynamicSizing = computed<boolean>({
-  get() {
-    return userSettingsStore.activeSettings.bookGrid.dynamicCoverSizing;
-  },
-  set(value) {
-    userSettingsStore.updateSettings({
-      bookGrid: {
-        ...userSettingsStore.activeSettings.bookGrid,
-        dynamicCoverSizing: value,
-      },
-    });
-  },
-});
+const gridCoverDynamicSizing = userSettingsStore.settingRef<boolean>(
+  'bookGrid.dynamicCoverSizing',
+);
 
-const gridCoverSizeValue = computed<number>({
-  get() {
-    return userSettingsStore.activeSettings.bookGrid.coverWidthPresetPx;
-  },
-  set(value) {
-    userSettingsStore.updateSettings({
-      bookGrid: {
-        ...userSettingsStore.activeSettings.bookGrid,
-        coverWidthPresetPx: value,
-      },
-    });
-  },
-});
+const gridCoverSizeValue = userSettingsStore.settingRef<number>(
+  'bookGrid.coverWidthPresetPx',
+);
 
-const gridCoverGapValue = computed<number>({
-  get() {
-    return userSettingsStore.activeSettings.bookGrid.gap;
-  },
-  set(value) {
-    userSettingsStore.updateSettings({
-      bookGrid: {
-        ...userSettingsStore.activeSettings.bookGrid,
-        gap: value,
-      },
-    });
-  },
-});
+const gridCoverGapValue = userSettingsStore.settingRef<number>('bookGrid.gap');
 
-const gridCoverShowTitle = computed<boolean>({
-  get() {
-    return userSettingsStore.activeSettings.bookGrid.showTitle;
-  },
-  set(value) {
-    userSettingsStore.updateSettings({
-      bookGrid: {
-        ...userSettingsStore.activeSettings.bookGrid,
-        showTitle: value,
-      },
-    });
-  },
-});
+const gridCoverShowTitle =
+  userSettingsStore.settingRef<boolean>('bookGrid.showTitle');
 
-const gridCoverShowAuthors = computed<boolean>({
-  get() {
-    return userSettingsStore.activeSettings.bookGrid.showAuthors;
-  },
-  set(value) {
-    userSettingsStore.updateSettings({
-      bookGrid: {
-        ...userSettingsStore.activeSettings.bookGrid,
-        showAuthors: value,
-      },
-    });
-  },
-});
+const gridCoverShowAuthors = userSettingsStore.settingRef<boolean>(
+  'bookGrid.showAuthors',
+);
 
-const gridCoverShowSeries = computed<boolean>({
-  get() {
-    return userSettingsStore.activeSettings.bookGrid.showSeries;
-  },
-  set(value) {
-    userSettingsStore.updateSettings({
-      bookGrid: {
-        ...userSettingsStore.activeSettings.bookGrid,
-        showSeries: value,
-      },
-    });
-  },
-});
+const gridCoverShowSeries = userSettingsStore.settingRef<boolean>(
+  'bookGrid.showSeries',
+);
 
 // ------------------------------
 // Theme items
@@ -175,7 +76,9 @@ const favoriteThemes = computed(() =>
   JSON.parse(JSON.stringify(themesList))
     .filter((theme: Theme) => {
       if (!userSettingsStore.activeSettings.favoriteThemes) return false;
-      return userSettingsStore.activeSettings.favoriteThemes.includes(theme.name);
+      return userSettingsStore.activeSettings.favoriteThemes.includes(
+        theme.name,
+      );
     })
     .sort((a: Theme, b: Theme) => {
       if (sortedByName.value) {
@@ -248,7 +151,7 @@ function handleSortChange(target: string) {
       <SettingsUIToggle
         v-model="separateMobileSettings"
         title="Separate mobile settings"
-        description="When enabled, mobile devices can override the defaults while we keep only the differences to save cookie space."
+        description="When enabled, mobile devices can override the defaults with a full mobile-specific copy."
       />
       <div
         v-if="separateMobileSettings && isMobileDevice"
@@ -411,7 +314,9 @@ function handleSortChange(target: string) {
             :key="theme.name"
             :theme="theme"
             :is-favorite="
-              userSettingsStore.activeSettings.favoriteThemes?.includes(theme.name)
+              userSettingsStore.activeSettings.favoriteThemes?.includes(
+                theme.name,
+              )
             "
             @click="
               () => {

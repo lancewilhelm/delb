@@ -30,3 +30,6 @@ data/
 # library storage (keep folder via placeholder file: library/.gitkeep)
 library/
 !library/.gitkeep
+
+# Agents for llm coding
+AGENTS.md

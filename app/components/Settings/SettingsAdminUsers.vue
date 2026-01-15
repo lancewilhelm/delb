@@ -270,7 +270,7 @@ function canEditUser(user: UserWithRole) {
       </div>
     </SettingsUIGroup>
     <SettingsUIGroup title="allow registration" icon="lucide:lock">
-      <SettingsToggleItem
+      <SettingsUIToggle
         v-model="allowRegistration"
         description="allow users to register themselves at /register"
       />

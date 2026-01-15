@@ -72,6 +72,7 @@ export default defineNuxtConfig({
   },
   piniaPluginPersistedstate: {
     key: 'delb.%id',
+    storage: 'localStorage',
   },
   nitro: {
     experimental: {

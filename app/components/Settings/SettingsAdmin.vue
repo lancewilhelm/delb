@@ -63,7 +63,7 @@ const tabs: Record<string, Tab> = {
             ? tabs[currentPageName]?.component
             : tabs.users?.component
         "
-        class="justify-center w-full max-w-[900px] p-4"
+        class="justify-center w-full max-w-225 pt-4"
       />
     </div>
   </div>

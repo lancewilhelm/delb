@@ -1,7 +1,7 @@
-import { defu } from "defu";
-import type { RouteLocationRaw } from "vue-router";
-import { adminClient } from "better-auth/client/plugins";
-import { createAuthClient } from "better-auth/vue";
+import { defu } from 'defu';
+import type { RouteLocationRaw } from 'vue-router';
+import { adminClient } from 'better-auth/client/plugins';
+import { createAuthClient } from 'better-auth/vue';
 
 export const typedClient = createAuthClient({
   plugins: [adminClient()],
@@ -30,19 +30,19 @@ export function useAuth() {
   const options = defu(
     useRuntimeConfig().public.auth as Partial<RuntimeAuthConfig>,
     {
-      redirectUserTo: "/",
-      redirectGuestTo: "/login",
+      redirectUserTo: '/',
+      redirectGuestTo: '/login',
     },
   );
-  const session = useState<Session | null>("auth:session", () => null);
-  const user = useState<User | null>("auth:user", () => null);
+  const session = useState<Session | null>('auth:session', () => null);
+  const user = useState<User | null>('auth:user', () => null);
   const sessionFetching = import.meta.server
     ? ref(false)
-    : useState("auth:sessionFetching", () => false);
+    : useState('auth:sessionFetching', () => false);
 
   const fetchSession = async () => {
     if (sessionFetching.value) {
-      console.log("already fetching session");
+      console.log('already fetching session');
       return;
     }
     sessionFetching.value = true;
@@ -58,7 +58,7 @@ export function useAuth() {
   };
 
   if (import.meta.client) {
-    client.$store.listen("$sessionSignal", async (signal) => {
+    client.$store.listen('$sessionSignal', async (signal) => {
       if (!signal) return;
       await fetchSession();
     });
@@ -68,7 +68,7 @@ export function useAuth() {
     const res = await client.signOut();
     session.value = null;
     user.value = null;
-    loadTheme("guage");
+    loadTheme('guage');
 
     // Reset all stores
     const userSettingsStore = useUserSettingsStore();
@@ -78,18 +78,19 @@ export function useAuth() {
     globalSettingsStore.$reset();
     uiStore.$reset();
 
-    // Clear the cookies
+    // Clear persisted local storage
     const storesToClear = [
-      "delb.userSettings",
-      "delb.globalSettings",
-      "delb.ui",
+      'delb.userSettings',
+      'delb.globalSettings',
+      'delb.ui',
     ];
-    for (const store of storesToClear) {
-      const cookie = useCookie(store);
-      cookie.value = null;
+    if (import.meta.client) {
+      for (const store of storesToClear) {
+        localStorage.removeItem(store);
+      }
     }
 
-    await navigateTo("/login", { replace: true });
+    await navigateTo('/login', { replace: true });
 
     return res;
   }
@@ -103,7 +104,7 @@ export function useAuth() {
     admin: client.admin,
     isAdmin: computed(() => {
       if (!user.value) return false;
-      return user.value.role === "admin" || user.value.role === "owner";
+      return user.value.role === 'admin' || user.value.role === 'owner';
     }),
     changePassword: client.changePassword,
     changeEmail: client.changeEmail,
