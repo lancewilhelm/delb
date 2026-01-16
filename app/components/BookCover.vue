@@ -47,7 +47,10 @@ const hasSrc = computed(() => !!props.src);
     :class="[
       props.class,
       userSettingsStore.activeSettings.coverStyle.glossySpine ? 'gloss' : '',
-      userSettingsStore.activeSettings.coverStyle.roundedRight ? 'rounded-r-2xl' : '',
+      userSettingsStore.activeSettings.coverStyle.roundedRight
+        ? 'rounded-r-2xl'
+        : '',
+      userSettingsStore.activeSettings.coverStyle.grayscale ? 'grayscale' : '',
     ]"
   >
     <img
@@ -57,9 +60,6 @@ const hasSrc = computed(() => !!props.src);
       loading="lazy"
       draggable="false"
       class="w-full! h-full!"
-      :class="
-        userSettingsStore.activeSettings.coverStyle.grayscale ? 'grayscale' : ''
-      "
     />
     <div
       v-else-if="props.showPlaceholder"

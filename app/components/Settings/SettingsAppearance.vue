@@ -12,8 +12,15 @@ interface Theme {
 const userSettingsStore = useUserSettingsStore();
 const isMobileDevice = useIsMobileDevice();
 
+// ------------------------------
+// Mobile settings
+// ------------------------------
 const separateMobileSettings =
   userSettingsStore.mobileSettingRef<boolean>('enabled');
+
+const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
+  'mobileSpecific.searchButton',
+);
 
 // ------------------------------
 // Cover Style controls
@@ -224,6 +231,18 @@ function handleSortChange(target: string) {
         v-model="gridCoverShowSeries"
         title="Show Book Series"
         description="Show the book series under the cover"
+      />
+    </SettingsUIGroup>
+
+    <SettingsUIGroup
+      title="mobile specific settings"
+      icon="lucide:smartphone"
+      description="Settings for mobile devices"
+    >
+      <SettingsUIToggle
+        v-model="mobileSearchButton"
+        title="Mobile search button"
+        description="On mobile devices, show a search button in the bottom right instead of in the header"
       />
     </SettingsUIGroup>
 

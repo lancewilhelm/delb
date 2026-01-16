@@ -12,6 +12,12 @@ function openAddBook() {
 }
 
 const route = useRoute();
+
+const isMobileDevice = useIsMobileDevice();
+const userSettingsStore = useUserSettingsStore();
+const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
+  'mobileSpecific.searchButton',
+);
 </script>
 
 <template>
@@ -48,6 +54,7 @@ const route = useRoute();
     <!-- Right: actions -->
     <div class="flex gap-3 items-center p-4 justify-self-end app-header-right">
       <Icon
+        v-if="!isMobileDevice || !mobileSearchButton"
         v-tooltip="'Open global search'"
         name="lucide:search"
         class="text-(--main-color) cursor-pointer text-xl header-icon"
@@ -69,6 +76,19 @@ const route = useRoute();
       />
     </div>
     <BookAddModal @book-uploaded="emit('book-uploaded')" />
+
+    <!-- Mobile: Search button at bottom right of scren -->
+    <div
+      v-if="isMobileDevice && mobileSearchButton"
+      class="absolute bottom-7 right-7 p-4 bg-(--sub-alt-color)/80 border border-(--sub-color) z-1000 rounded-full flex items-center justify-center"
+      @click="uiStore.setGlobalSearchVisible(!uiStore.globalSearchVisible)"
+    >
+      <Icon
+        v-tooltip="'Open global search'"
+        name="lucide:search"
+        class="text-(--main-color) cursor-pointer text-2xl"
+      />
+    </div>
   </div>
 </template>
 

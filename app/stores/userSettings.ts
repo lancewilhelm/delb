@@ -68,10 +68,17 @@ export interface BaseUserSettings {
   bookDelete: {
     defaultMode: BookDeleteMode;
   };
+
+  /**
+   * Mobile specific settings here, not to be confused with mobile
+   * (this will inevitably be confusing and need changing)
+   * TODO: Change this name to something not confusing
+   */
 }
 
 export interface MobileSettingsConfig {
   enabled: boolean;
+  searchButton: boolean;
   settings: BaseUserSettings;
 }
 
@@ -118,6 +125,7 @@ function getDefaultSettings(): UserSettings {
     ...base,
     mobile: {
       enabled: false,
+      searchButton: true,
       settings: cloneValue(base),
     },
   };
@@ -213,6 +221,7 @@ function normalizeSettings(remote: Partial<UserSettings>): UserSettings {
     ...merged,
     mobile: {
       enabled: !!mobileBase.enabled,
+      searchButton: !!mobileBase.searchButton,
       settings: mobileSettings,
     },
   };

@@ -16,6 +16,10 @@ interface Slider {
   suffix: string;
 }
 
+interface Toggle {
+  model: unknown;
+}
+
 export interface Option {
   label: string;
   icon?: string;
@@ -23,6 +27,7 @@ export interface Option {
   options?: Option[];
   active?: boolean | Ref<boolean>;
   slider?: Slider | null;
+  toggle?: Toggle | null;
 }
 
 export function useCommandPalette() {
@@ -85,43 +90,30 @@ export function useCommandPalette() {
       icon: 'lucide:book-image',
       options: [
         {
-          label: 'toggle glossy effect',
+          label: 'glossy effect',
           icon: 'mage:stars-b-fill',
-          action: () => {
-            userSettingsStore.updateSettings({
-              coverStyle: {
-                ...userSettingsStore.activeSettings.coverStyle,
-                glossySpine: !userSettingsStore.activeSettings.coverStyle.glossySpine,
-              },
-            });
-            closePalette();
+          toggle: {
+            model: userSettingsStore.settingRef<boolean>(
+              'coverStyle.glossySpine',
+            ),
           },
         },
         {
-          label: 'toggle rounded right corners',
+          label: 'rounded right corners',
           icon: 'lucide:log-in',
-          action: () => {
-            userSettingsStore.updateSettings({
-              coverStyle: {
-                ...userSettingsStore.activeSettings.coverStyle,
-                roundedRight:
-                  !userSettingsStore.activeSettings.coverStyle.roundedRight,
-              },
-            });
-            closePalette();
+          toggle: {
+            model: userSettingsStore.settingRef<boolean>(
+              'coverStyle.roundedRight',
+            ),
           },
         },
         {
-          label: 'toggle grayscale filter',
+          label: 'grayscale filter',
           icon: 'lucide:palette',
-          action: () => {
-            userSettingsStore.updateSettings({
-              coverStyle: {
-                ...userSettingsStore.activeSettings.coverStyle,
-                grayscale: !userSettingsStore.activeSettings.coverStyle.grayscale,
-              },
-            });
-            closePalette();
+          toggle: {
+            model: userSettingsStore.settingRef<boolean>(
+              'coverStyle.grayscale',
+            ),
           },
         },
       ],
@@ -131,17 +123,12 @@ export function useCommandPalette() {
       icon: 'lucide:grid',
       options: [
         {
-          label: 'toggle dynamic cover size',
+          label: 'dynamic cover size',
           icon: 'lucide:arrow-left-right',
-          action: () => {
-            userSettingsStore.updateSettings({
-              bookGrid: {
-                ...userSettingsStore.activeSettings.bookGrid,
-                dynamicCoverSizing:
-                  !userSettingsStore.activeSettings.bookGrid.dynamicCoverSizing,
-              },
-            });
-            closePalette();
+          toggle: {
+            model: userSettingsStore.settingRef<boolean>(
+              'bookGrid.dynamicCoverSizing',
+            ),
           },
         },
         {
@@ -149,7 +136,8 @@ export function useCommandPalette() {
           icon: 'lucide:ruler-dimension-line',
           slider: {
             model: computed({
-              get: () => userSettingsStore.activeSettings.bookGrid.coverWidthPresetPx,
+              get: () =>
+                userSettingsStore.activeSettings.bookGrid.coverWidthPresetPx,
               set: (v: number) => {
                 userSettingsStore.updateSettings({
                   bookGrid: {
@@ -185,42 +173,41 @@ export function useCommandPalette() {
           },
         },
         {
-          label: 'toggle book title',
+          label: 'book title',
           icon: 'lucide:book-a',
-          action: () => {
-            userSettingsStore.updateSettings({
-              bookGrid: {
-                ...userSettingsStore.activeSettings.bookGrid,
-                showTitle: !userSettingsStore.activeSettings.bookGrid.showTitle,
-              },
-            });
-            closePalette();
+          toggle: {
+            model: userSettingsStore.settingRef<boolean>('bookGrid.showTitle'),
           },
         },
         {
-          label: 'toggle book authors',
+          label: 'book authors',
           icon: 'lucide:user',
-          action: () => {
-            userSettingsStore.updateSettings({
-              bookGrid: {
-                ...userSettingsStore.activeSettings.bookGrid,
-                showAuthors: !userSettingsStore.activeSettings.bookGrid.showAuthors,
-              },
-            });
-            closePalette();
+          toggle: {
+            model: userSettingsStore.settingRef<boolean>(
+              'bookGrid.showAuthors',
+            ),
           },
         },
         {
-          label: 'toggle book series',
+          label: 'book series',
           icon: 'lucide:layers',
-          action: () => {
-            userSettingsStore.updateSettings({
-              bookGrid: {
-                ...userSettingsStore.activeSettings.bookGrid,
-                showSeries: !userSettingsStore.activeSettings.bookGrid.showSeries,
-              },
-            });
-            closePalette();
+          toggle: {
+            model: userSettingsStore.settingRef<boolean>('bookGrid.showSeries'),
+          },
+        },
+      ],
+    },
+    {
+      label: 'mobile',
+      icon: 'lucide:smartphone',
+      options: [
+        {
+          label: 'search button',
+          icon: 'lucide:search',
+          toggle: {
+            model: userSettingsStore.mobileSettingRef<boolean>(
+              'mobileSpecific.searchButton',
+            ),
           },
         },
       ],
@@ -291,7 +278,9 @@ export function useCommandPalette() {
 
     if (option.action) {
       option.action();
-      closePalette();
+      // closePalette();
+    } else if (option.toggle) {
+      option.toggle.model = !option.toggle.model;
     } else if (option.options) {
       selectedOption.value = option;
       query.value = '';
@@ -353,9 +342,10 @@ export function useCommandPalette() {
       } else if (event.key === 'Delete') {
         if (selectedOption?.value.label === 'favorite themes') {
           userSettingsStore.updateSettings({
-            favoriteThemes: userSettingsStore.activeSettings.favoriteThemes.filter(
-              (t: string) => t !== themes[highlightedIndex.value]?.name,
-            ),
+            favoriteThemes:
+              userSettingsStore.activeSettings.favoriteThemes.filter(
+                (t: string) => t !== themes[highlightedIndex.value]?.name,
+              ),
           });
         }
       } else if (event.key === 'Escape') {
@@ -512,6 +502,8 @@ function getFontFamilyOptions() {
       userSettingsStore.updateSettings({ fontFamily: font });
       useUiStore().setCommandPaletteVisible(false);
     },
-    active: computed(() => userSettingsStore.activeSettings.fontFamily === font),
+    active: computed(
+      () => userSettingsStore.activeSettings.fontFamily === font,
+    ),
   }));
 }

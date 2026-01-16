@@ -165,7 +165,7 @@ watch(
             v-for="(option, i) in filteredOptions"
             :key="i"
             :ref="(el) => setOptionRef(el as HTMLElement, i)"
-            class="h-9 cursor-pointer px-3 py-1 hover:bg-(--sub-alt-color) flex items-center gap-2 command-palette-option"
+            class="h-9 cursor-pointer px-3 py-1 hover:bg-(--sub-alt-color) flex items-center justify-between command-palette-option"
             :class="[
               highlightedIndex === i
                 ? 'bg-(--sub-color) text-(--text-color)'
@@ -173,9 +173,20 @@ watch(
             ]"
             @click="selectOption(option)"
           >
-            <Icon v-if="option.icon" :name="option.icon" class="scale-125" />
-            {{ option.label }}
-            <Icon v-if="option.active" name="lucide:check" class="scale-125" />
+            <div class="flex items-center gap-2">
+              <Icon v-if="option.icon" :name="option.icon" class="scale-125" />
+              {{ option.label }}
+              <Icon
+                v-if="option.active"
+                name="lucide:check"
+                class="scale-125"
+              />
+            </div>
+            <Icon
+              v-if="option.toggle"
+              :name="option.toggle.model ? 'ri:toggle-fill' : 'ri:toggle-line'"
+              class="text-3xl"
+            />
           </div>
           <div v-if="filteredOptions.length === 0" class="p-3">no results</div>
         </div>
