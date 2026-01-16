@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { ComponentPublicInstance } from 'vue';
 /* eslint-disable vue/require-default-prop */
 defineOptions({ name: 'BooksInfiniteGrid' });
 
@@ -119,12 +120,12 @@ watch(
 
 // BookThumbnail sizing assumptions (current standard)
 // Height is derived from 2:3 aspect ratio using the configured cover width.
+const userSettingsStore = useUserSettingsStore();
+
 const bookGridGapPx = computed<number>(() => {
   const raw = userSettingsStore.activeSettings.bookGrid?.gap;
   return Number.isFinite(raw) ? Math.max(0, Math.trunc(raw)) : 12;
 });
-
-const userSettingsStore = useUserSettingsStore();
 
 const gridCoverWidthPresetPx = computed<number>(() => {
   const raw = userSettingsStore.activeSettings.bookGrid?.coverWidthPresetPx;
@@ -161,6 +162,87 @@ function clampInt(
 
 const scrollContainerRef = ref<HTMLElement | null>(null);
 const sentinelRef = ref<HTMLElement | null>(null);
+const scrollTop = ref(0);
+const containerSize = ref({ width: 0, height: 0 });
+const measuredRowHeight = ref<number | null>(null);
+const gridItemRefs = ref<HTMLElement[]>([]);
+
+let measureRaf: number | null = null;
+let measureTimer: number | null = null;
+
+let resizeObserver: ResizeObserver | null = null;
+const layoutKey = ref<string | null>(null);
+
+onBeforeUpdate(() => {
+  gridItemRefs.value = [];
+});
+
+function setGridItemRef(el: Element | ComponentPublicInstance | null) {
+  if (!el) return;
+  const resolved =
+    el instanceof HTMLElement
+      ? el
+      : (el as ComponentPublicInstance).$el instanceof HTMLElement
+        ? (el as ComponentPublicInstance).$el
+        : null;
+  if (!resolved) return;
+  gridItemRefs.value.push(resolved);
+}
+
+function updateMeasuredRowHeight() {
+  const items = gridItemRefs.value;
+  if (!items.length) return;
+
+  const rects = items.map((el) => el.getBoundingClientRect());
+  const firstTop = Math.min(...rects.map((r) => r.top));
+  const firstRowRects = rects.filter((r) => Math.abs(r.top - firstTop) < 1);
+
+  if (!firstRowRects.length) return;
+
+  const maxHeight = Math.max(...firstRowRects.map((r) => r.height));
+  if (maxHeight > 0 && maxHeight !== measuredRowHeight.value) {
+    measuredRowHeight.value = maxHeight;
+  }
+}
+
+function scheduleRowHeightMeasure(opts: { debounceMs?: number } = {}) {
+  const debounceMs = opts.debounceMs ?? 0;
+
+  if (measureTimer !== null) {
+    window.clearTimeout(measureTimer);
+    measureTimer = null;
+  }
+
+  const schedule = () => {
+    if (measureRaf !== null) return;
+    measureRaf = requestAnimationFrame(() => {
+      measureRaf = null;
+      updateMeasuredRowHeight();
+    });
+  };
+
+  if (debounceMs > 0) {
+    measureTimer = window.setTimeout(schedule, debounceMs);
+    return;
+  }
+
+  schedule();
+}
+
+function updateContainerSize() {
+  const container = scrollContainerRef.value;
+  if (!container) return;
+  containerSize.value = {
+    width: container.clientWidth,
+    height: container.clientHeight,
+  };
+}
+
+function onScroll() {
+  const container = scrollContainerRef.value;
+  if (!container) return;
+  scrollTop.value = container.scrollTop;
+}
 
 const books = ref<Book[]>([]);
 const nextCursor = ref<string | null>(null);
@@ -171,36 +253,134 @@ const hasMore = computed(() => Boolean(nextCursor.value));
 
 watch(
   () => books.value.length,
-  (n) => {
+  async (n) => {
     emit('update:count', n);
+
+    if (!n) {
+      measuredRowHeight.value = null;
+      return;
+    }
+
+    await nextTick();
+    scheduleRowHeightMeasure();
   },
-  { immediate: true },
+  { immediate: true, flush: 'post' },
 );
 
-const limit = computed(() => {
-  const container = scrollContainerRef.value;
-  if (!container) return 48;
-
-  const w = container.clientWidth;
-  const h = container.clientHeight;
+const gridColumns = computed(() => {
+  const w = containerSize.value.width;
+  if (!w) return 1;
 
   const cardW = gridCoverWidthPresetPx.value;
+  const gap = bookGridGapPx.value;
 
-  const cols = Math.max(
-    1,
-    Math.floor((w + bookGridGapPx.value) / (cardW + bookGridGapPx.value)),
-  );
+  return Math.max(1, Math.floor((w + gap) / (cardW + gap)));
+});
 
-  const cardH = bookCardHeightPx.value;
+const limit = computed(() => {
+  const w = containerSize.value.width;
+  const h = containerSize.value.height;
+  if (!w || !h) return 48;
+
+  const cols = gridColumns.value;
+  const gap = bookGridGapPx.value;
+
+  const cardH = measuredRowHeight.value ?? bookCardHeightPx.value;
 
   const rows = Math.max(
     1,
-    Math.ceil((h + bookGridGapPx.value) / (cardH + bookGridGapPx.value)) +
-      props.bufferRows,
+    Math.ceil((h + gap) / (cardH + gap)) + props.bufferRows,
   );
 
   return clampInt(cols * rows, { min: 1, max: 200, fallback: 48 });
 });
+
+const gridMetrics = computed(() => {
+  const h = containerSize.value.height;
+
+  const gap = bookGridGapPx.value;
+  const rowHeight = (measuredRowHeight.value ?? bookCardHeightPx.value) + gap;
+
+  const cols = gridColumns.value;
+  const totalRows = books.value.length
+    ? Math.ceil(books.value.length / cols)
+    : 0;
+
+  const totalHeight = totalRows > 0 ? totalRows * rowHeight - gap : 0;
+
+  const overscan = Math.max(0, props.bufferRows);
+  const viewportTop = scrollTop.value;
+  const viewportBottom = viewportTop + h;
+
+  const startRow = totalRows
+    ? Math.max(0, Math.floor(viewportTop / rowHeight) - overscan)
+    : 0;
+
+  const endRow = totalRows
+    ? Math.min(totalRows, Math.ceil(viewportBottom / rowHeight) + overscan)
+    : 0;
+
+  const startIndex = startRow * cols;
+  const endIndex = Math.min(books.value.length, endRow * cols);
+
+  return {
+    cols,
+    rowHeight,
+    totalRows,
+    totalHeight,
+    startRow,
+    endRow,
+    startIndex,
+    endIndex,
+    offsetY: startRow * rowHeight,
+  };
+});
+
+const visibleBooks = computed(() =>
+  books.value.slice(gridMetrics.value.startIndex, gridMetrics.value.endIndex),
+);
+
+watch(
+  () => [
+    gridMetrics.value.startRow,
+    gridColumns.value,
+    containerSize.value.width,
+  ],
+  async () => {
+    await nextTick();
+    scheduleRowHeightMeasure({ debounceMs: 60 });
+  },
+  { flush: 'post' },
+);
+
+watch(
+  () => [
+    userSettingsStore.activeSettings.bookGrid?.showTitle,
+    userSettingsStore.activeSettings.bookGrid?.showAuthors,
+    userSettingsStore.activeSettings.bookGrid?.showSeries,
+    userSettingsStore.activeSettings.bookGrid?.coverWidthPresetPx,
+    userSettingsStore.activeSettings.bookGrid?.dynamicCoverSizing,
+    userSettingsStore.activeSettings.bookGrid?.gap,
+  ],
+  async () => {
+    await nextTick();
+    scheduleRowHeightMeasure({ debounceMs: 80 });
+  },
+  { flush: 'post' },
+);
+
+const gridSpacerStyle = computed<Record<string, string>>(() => ({
+  position: 'relative',
+  height: `${gridMetrics.value.totalHeight}px`,
+}));
+
+const gridOffsetStyle = computed<Record<string, string>>(() => ({
+  position: 'absolute',
+  top: '0',
+  left: '0',
+  right: '0',
+  transform: `translateY(${gridMetrics.value.offsetY}px)`,
+}));
 
 let io: IntersectionObserver | null = null;
 
@@ -241,6 +421,11 @@ function reset() {
   books.value = [];
   nextCursor.value = null;
   errorMessage.value = null;
+
+  if (scrollContainerRef.value) {
+    scrollContainerRef.value.scrollTop = 0;
+    scrollTop.value = 0;
+  }
 
   // When the dataset resets (scope/sort changes), clear selection for safety.
   if (props.selectionEnabled) {
@@ -327,28 +512,65 @@ watch(
   },
 );
 
-// If limit changes (resize/layout), restart paging to avoid mixed chunk sizes
+// If layout changes (columns/height), restart paging to avoid mixed chunk sizes
 watch(
-  () => limit.value,
-  async () => {
-    // Only act once mounted and when we have a real container size
+  [() => gridColumns.value, () => containerSize.value.height],
+  async ([cols, height]) => {
     if (!scrollContainerRef.value) return;
+    if (!books.value.length) return;
+
+    const key = `${cols}x${height}`;
+    if (layoutKey.value === key) return;
+    layoutKey.value = key;
+
     await loadFirstPage();
   },
+  { flush: 'post' },
 );
 
 onMounted(async () => {
+  await nextTick();
+  updateContainerSize();
+  onScroll();
+
+  const initialKey = `${gridColumns.value}x${containerSize.value.height}`;
+  layoutKey.value = initialKey;
+
+  if (scrollContainerRef.value && typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => {
+      updateContainerSize();
+    });
+    resizeObserver.observe(scrollContainerRef.value);
+  }
+
+  window.addEventListener('resize', updateContainerSize);
+
   await loadFirstPage();
 });
 
 onBeforeUnmount(() => {
   teardownObserver();
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+  }
+
+  if (measureTimer !== null) {
+    window.clearTimeout(measureTimer);
+    measureTimer = null;
+  }
+  if (measureRaf !== null) {
+    cancelAnimationFrame(measureRaf);
+    measureRaf = null;
+  }
+
+  window.removeEventListener('resize', updateContainerSize);
 });
 </script>
 
 <template>
   <!-- This component owns the scroll container so the view selector (outside) does not scroll. -->
-  <div ref="scrollContainerRef" class="flex-1 overflow-auto">
+  <div ref="scrollContainerRef" class="flex-1 overflow-auto" @scroll="onScroll">
     <div class="px-4 py-4">
       <div v-if="errorMessage" class="text-sm text-red-600 mb-3">
         {{ errorMessage }}
@@ -369,16 +591,22 @@ onBeforeUnmount(() => {
         No books yet. Use Upload in the header to add one.
       </div>
 
-      <div v-else class="w-full" :style="gridStyle">
-        <BookThumbnail
-          v-for="b in books"
-          :key="b.id"
-          :book="b"
-          :lock-aspect-ratio="true"
-          :selectable="props.selectionEnabled && selectionStore.selectMode"
-          :selected="selectionStore.isSelected(b.id)"
-          @toggle-select="selectionStore.toggle"
-        />
+      <div v-else class="w-full">
+        <div class="relative w-full" :style="gridSpacerStyle">
+          <div class="w-full" :style="[gridStyle, gridOffsetStyle]">
+            <div v-for="b in visibleBooks" :key="b.id" :ref="setGridItemRef">
+              <BookThumbnail
+                :book="b"
+                :lock-aspect-ratio="true"
+                :selectable="
+                  props.selectionEnabled && selectionStore.selectMode
+                "
+                :selected="selectionStore.isSelected(b.id)"
+                @toggle-select="selectionStore.toggle"
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
       <div

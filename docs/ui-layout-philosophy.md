@@ -164,6 +164,9 @@ Server-side sorting is supported via the books list endpoint:
   - Defaults: `sort=dateAdded`, `sortDir=desc`
   - Cursor pagination is sort-dependent; changing sort resets paging.
 
+### Paginated, virtualized book grids
+Book grids use cursor pagination on the API and virtualized rendering in the client. Pagination keeps payloads and memory bounded, while virtualization keeps DOM size stable as users scroll through large libraries.
+
 ### Filters = refinement
 Filters narrow the result set *within the current scope + view*. Filters are always optional and stackable.
 

@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, or } from 'drizzle-orm';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
   authors,
@@ -13,7 +13,7 @@ import { logger } from '~/utils/logger';
 import { auth } from '~/utils/auth';
 
 /**
- * GET /api/series/:id/books?collectionId=<optional>
+ * GET /api/series/:id/books?collectionId=<optional>&limit=<n>&cursor=<opaque>
  *
  * Returns books in a given series that the current user can access, plus series metadata.
  *
@@ -22,6 +22,10 @@ import { auth } from '~/utils/auth';
  * - Only returns books that exist in collections the user is a member of
  * - Optional `collectionId` further scopes results to that one collection (if user is a member)
  *
+ * Pagination:
+ * - Cursor-based pagination using (createdAt,id) ordering (newest first)
+ * - Returns `nextCursor` when more results exist
+ *
  * Response shape mirrors GET /api/books (list) enough for reuse in the UI:
  * - includes `authors` ({id,name}[]) + `authorNames` + legacy `author`
  * - includes `publisher` ({id,name}|null) and `series` ({id,name}|null)
@@ -29,6 +33,40 @@ import { auth } from '~/utils/auth';
  * Additionally returns:
  * - `series`: { id, name }
  */
+type Cursor = {
+  createdAt: string;
+  id: string;
+};
+
+function clampInt(
+  input: unknown,
+  opts: { min: number; max: number; fallback: number },
+): number {
+  const n = Number.parseInt((input ?? '').toString(), 10);
+  if (!Number.isFinite(n)) return opts.fallback;
+  return Math.max(opts.min, Math.min(opts.max, n));
+}
+
+function encodeCursor(c: Cursor): string {
+  return Buffer.from(JSON.stringify(c), 'utf8').toString('base64url');
+}
+
+function decodeCursor(raw: unknown): Cursor | null {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  try {
+    const json = Buffer.from(raw, 'base64url').toString('utf8');
+    const parsed = JSON.parse(json) as Partial<Cursor>;
+    const createdAt = (parsed.createdAt ?? '').toString().trim();
+    const id = (parsed.id ?? '').toString().trim();
+    if (!createdAt || !id) return null;
+    const t = new Date(createdAt).getTime();
+    if (!Number.isFinite(t)) return null;
+    return { createdAt, id };
+  } catch {
+    return null;
+  }
+}
+
 export default defineEventHandler(async (event) => {
   logger.debug('GET /api/series/:id/books');
 
@@ -49,7 +87,15 @@ export default defineEventHandler(async (event) => {
     return { success: false, message: 'Missing series id' };
   }
 
-  const { collectionId } = getQuery(event) as { collectionId?: string };
+  const q = getQuery(event) as {
+    collectionId?: string;
+    limit?: string;
+    cursor?: string;
+  };
+
+  const collectionId = q.collectionId;
+  const limit = clampInt(q.limit, { min: 1, max: 200, fallback: 48 });
+  const cursor = decodeCursor(q.cursor);
 
   try {
     // Fetch series metadata (nice UX). Still avoids leaking books the user can't access.
@@ -76,7 +122,10 @@ export default defineEventHandler(async (event) => {
     ).filter(Boolean);
 
     if (!memberCollectionIds.length) {
-      return { success: true, data: { series: seriesMeta, books: [] } };
+      return {
+        success: true,
+        data: { series: seriesMeta, books: [], nextCursor: null },
+      };
     }
 
     // 2) Apply optional collection scope
@@ -88,38 +137,54 @@ export default defineEventHandler(async (event) => {
 
     // If a specific collection was requested but user isn't a member, return empty
     if (!targetCollectionIds.length) {
-      return { success: true, data: { series: seriesMeta, books: [] } };
+      return {
+        success: true,
+        data: { series: seriesMeta, books: [], nextCursor: null },
+      };
     }
 
-    // 3) Get visible book ids from those collections
-    const visibleBookLinks = await cloudDb
-      .select({ bookId: collectionBooks.bookId })
-      .from(collectionBooks)
-      .where(inArray(collectionBooks.collectionId, targetCollectionIds));
-
-    const visibleBookIds = Array.from(
-      new Set(visibleBookLinks.map((r) => r.bookId)),
-    ).filter(Boolean);
-
-    if (!visibleBookIds.length) {
-      return { success: true, data: { series: seriesMeta, books: [] } };
-    }
-
-    // 4) Fetch books in this series that are also visible in the scoped collections
-    const bookRows = await cloudDb
-      .select()
+    // 3) Page query: visible books in this series within scoped collections.
+    // Sort: newest first, deterministic by id. Cursor is (createdAt,id).
+    const pageRows = await cloudDb
+      .select({ book: books })
       .from(books)
+      .innerJoin(collectionBooks, eq(collectionBooks.bookId, books.id))
       .where(
-        and(eq(books.seriesId, seriesId), inArray(books.id, visibleBookIds)),
-      );
+        and(
+          eq(books.seriesId, seriesId),
+          inArray(collectionBooks.collectionId, targetCollectionIds),
+          cursor
+            ? or(
+                lt(books.createdAt, new Date(cursor.createdAt)),
+                and(
+                  eq(books.createdAt, new Date(cursor.createdAt)),
+                  lt(books.id, cursor.id),
+                ),
+              )
+            : undefined,
+        ),
+      )
+      .groupBy(books.id)
+      .orderBy(desc(books.createdAt), desc(books.id))
+      .limit(limit + 1);
 
-    if (!bookRows.length) {
-      return { success: true, data: { series: seriesMeta, books: [] } };
+    const rows = pageRows
+      .map((r) => r.book)
+      .filter((b): b is NonNullable<(typeof books)['$inferSelect']> => !!b);
+
+    if (!rows.length) {
+      return {
+        success: true,
+        data: { series: seriesMeta, books: [], nextCursor: null },
+      };
     }
 
-    const bookIds = bookRows.map((b) => b.id).filter(Boolean);
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
 
-    // 5) Attach authors (ordered)
+    const bookIds = page.map((b) => b.id).filter(Boolean);
+
+    // 4) Attach authors (ordered)
     const allAuthorLinks = await cloudDb
       .select({
         bookId: bookAuthors.bookId,
@@ -149,9 +214,9 @@ export default defineEventHandler(async (event) => {
       linksByBookId.set(link.bookId, list);
     }
 
-    // 6) Attach publisher + series display info (series is constant but returned for list parity)
+    // 5) Attach publisher + series display info (series is constant but returned for list parity)
     const publisherIds = Array.from(
-      new Set(bookRows.map((b) => b.publisherId).filter(Boolean)),
+      new Set(page.map((b) => b.publisherId).filter(Boolean)),
     ) as string[];
 
     const publisherRows = publisherIds.length
@@ -161,16 +226,10 @@ export default defineEventHandler(async (event) => {
           .where(inArray(publishers.id, publisherIds))
       : [];
 
-    const seriesRows = await cloudDb
-      .select({ id: series.id, name: series.name })
-      .from(series)
-      .where(eq(series.id, seriesId))
-      .limit(1);
-
     const publisherById = new Map(publisherRows.map((p) => [p.id, p]));
-    const seriesOut = seriesRows[0] ?? null;
+    const seriesOut = seriesMeta;
 
-    const out = bookRows.map((b) => {
+    const out = page.map((b) => {
       const links = (linksByBookId.get(b.id) ?? []).slice();
       links.sort((a, c) => {
         const aPos = typeof a.position === 'number' ? a.position : 10_000;
@@ -210,14 +269,19 @@ export default defineEventHandler(async (event) => {
       };
     });
 
-    // Keep previous behavior: newest first
-    out.sort((a, b) => {
-      const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return bTime - aTime;
-    });
+    const last = out[out.length - 1];
+    const nextCursor =
+      hasMore && last?.createdAt && last?.id
+        ? encodeCursor({
+            createdAt: new Date(last.createdAt).toISOString(),
+            id: last.id,
+          })
+        : null;
 
-    return { success: true, data: { series: seriesMeta, books: out } };
+    return {
+      success: true,
+      data: { series: seriesMeta, books: out, nextCursor },
+    };
   } catch (error: unknown) {
     // Preserve explicit HTTP errors (401/400/404) thrown above
     if (
