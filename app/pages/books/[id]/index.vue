@@ -635,6 +635,12 @@ const downloadUrl = computed(() => {
   return `/api/books/${encodeURIComponent(bookId.value)}/download`;
 });
 
+const hasEpub = computed(() => {
+  return (book.value?.files ?? []).some(
+    (f) => (f.format || '').toLowerCase() === 'epub',
+  );
+});
+
 const downloading = ref(false);
 
 function guessDownloadFilename(b: Book) {
@@ -702,8 +708,8 @@ const userSettingsStore = useUserSettingsStore();
 
 // Default to the user's saved preference (falls back to `everything` per store defaults)
 const deleteMode = ref<DeleteBookMode>(
-  (userSettingsStore.activeSettings.bookDelete?.defaultMode as DeleteBookMode) ??
-    'everything',
+  (userSettingsStore.activeSettings.bookDelete
+    ?.defaultMode as DeleteBookMode) ?? 'everything',
 );
 
 // “Remember my choice” toggle for this modal
@@ -1227,7 +1233,16 @@ watch(
         <!-- Actions & Collections -->
         <div class="flex flex-col items-center sm:row-start-2 sm:col-start-1">
           <!-- Actions -->
-          <div class="flex flex-wrap gap-1 pt-2">
+          <div class="flex flex-wrap gap-1 pt-2 items-center justify-center">
+            <NuxtLink
+              v-if="hasEpub"
+              class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
+              :to="`/books/${book.id}/read`"
+            >
+              <icon name="lucide:book-open" class="text-lg" />
+              Read
+            </NuxtLink>
+
             <button
               v-if="book.files && book.files.length > 0"
               class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"

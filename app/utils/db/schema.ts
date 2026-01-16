@@ -403,6 +403,43 @@ export const userBookStatus = sqliteTable(
   }),
 );
 
+export const userBookReadingPosition = sqliteTable(
+  'user_book_reading_position',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    bookId: text('book_id')
+      .notNull()
+      .references(() => books.id, { onDelete: 'cascade' }),
+
+    /**
+     * EPUB.js location (CFI string or other serialized location).
+     * Store as text for flexibility across reader implementations.
+     */
+    location: text('location').notNull(),
+
+    /**
+     * Optional progress percentage (0..100) for quick display.
+     * Keep nullable because some locations may not provide progress.
+     */
+    progress: real('progress'),
+
+    updatedAt: integer('updated_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    // Enforce one position per (user, book).
+    userBookReadingPositionUserBookUnique: uniqueIndex(
+      'user_book_reading_position_user_book_unique',
+    ).on(t.userId, t.bookId),
+    userBookReadingPositionUserIdx: index(
+      'user_book_reading_position_user_idx',
+    ).on(t.userId),
+  }),
+);
+
 export const bookRatings = sqliteTable(
   'book_ratings',
   {
@@ -502,6 +539,9 @@ export type InsertBookTag = InferInsertModel<typeof bookTags>;
 export type InsertBookIdentifier = InferInsertModel<typeof bookIdentifiers>;
 
 export type InsertUserBookStatus = InferInsertModel<typeof userBookStatus>;
+export type InsertUserBookReadingPosition = InferInsertModel<
+  typeof userBookReadingPosition
+>;
 export type InsertBookRating = InferInsertModel<typeof bookRatings>;
 export type InsertBookNote = InferInsertModel<typeof bookNotes>;
 
@@ -520,5 +560,8 @@ export type SelectBookTag = InferSelectModel<typeof bookTags>;
 export type SelectBookIdentifier = InferSelectModel<typeof bookIdentifiers>;
 
 export type SelectUserBookStatus = InferSelectModel<typeof userBookStatus>;
+export type SelectUserBookReadingPosition = InferSelectModel<
+  typeof userBookReadingPosition
+>;
 export type SelectBookRating = InferSelectModel<typeof bookRatings>;
 export type SelectBookNote = InferSelectModel<typeof bookNotes>;
