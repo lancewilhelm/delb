@@ -24,8 +24,53 @@ const readerContainer = ref<HTMLElement | null>(null);
 const loading = ref(true);
 const errorMessage = ref<string | null>(null);
 const bookTitle = ref<string>('Reader');
+const bookAuthors = ref<string[]>([]);
+const bookSeries = ref<string | null>(null);
+const bookSeriesIndex = ref<number | null>(null);
+const bookPublisher = ref<string | null>(null);
+const bookPublished = ref<string | null>(null);
+const bookLanguage = ref<string | null>(null);
+const bookPages = ref<number | null>(null);
 const currentProgress = ref<number | null>(null);
 const saveErrorMessage = ref<string | null>(null);
+
+const seriesLabel = computed(() => {
+  if (!bookSeries.value) return null;
+  if (bookSeriesIndex.value == null) return bookSeries.value;
+  return `${bookSeries.value} #${bookSeriesIndex.value}`;
+});
+
+const _readerMetadata = computed(() => ({
+  bookId: bookId.value || null,
+  title: bookTitle.value,
+  authors: bookAuthors.value,
+  series: bookSeries.value,
+  seriesIndex: bookSeriesIndex.value,
+  seriesLabel: seriesLabel.value,
+  publisher: bookPublisher.value,
+  published: bookPublished.value,
+  language: bookLanguage.value,
+  pages: bookPages.value,
+}));
+
+const readerMetadataList = computed(() => {
+  const authors = bookAuthors.value.length
+    ? bookAuthors.value.join(', ')
+    : null;
+
+  return [
+    { label: 'Authors', value: authors },
+    { label: 'Series', value: seriesLabel.value },
+    { label: 'Publisher', value: bookPublisher.value },
+    { label: 'Published', value: bookPublished.value },
+    { label: 'Language', value: bookLanguage.value },
+    {
+      label: 'Pages',
+      value: bookPages.value != null ? String(bookPages.value) : null,
+    },
+  ].filter((item) => Boolean(item.value));
+});
+
 const debugEnabled = true;
 
 function debugLog(message: string, details?: Record<string, unknown>) {
@@ -115,6 +160,26 @@ function applyReaderTheme() {
   if (sub) rendition.themes.override('--sub-color', sub);
 }
 
+function stripScriptedContent(doc?: Document | null) {
+  if (!doc) return { scripts: 0, handlers: 0 };
+
+  const scripts = doc.querySelectorAll('script');
+  let handlerCount = 0;
+
+  scripts.forEach((script) => script.remove());
+
+  doc.querySelectorAll('*').forEach((el) => {
+    for (const attr of Array.from(el.attributes)) {
+      if (attr.name.toLowerCase().startsWith('on')) {
+        el.removeAttribute(attr.name);
+        handlerCount += 1;
+      }
+    }
+  });
+
+  return { scripts: scripts.length, handlers: handlerCount };
+}
+
 async function loadReadingPosition() {
   if (!bookId.value) return null;
 
@@ -183,12 +248,35 @@ async function loadBookTitle() {
     if (!res.ok) return;
 
     const json = (await res.json().catch(() => null)) as {
-      data?: { book?: { title?: string } };
+      data?: {
+        book?: {
+          title?: string;
+          authors?: Array<{ name?: string }> | string[];
+          publisher?: { name?: string } | null;
+          series?: { name?: string; index?: number | null } | null;
+          published?: string | null;
+          language?: string | null;
+          pages?: number | null;
+        };
+      };
     } | null;
 
-    const title = json?.data?.book?.title?.trim();
+    const book = json?.data?.book;
+    const title = book?.title?.trim() ?? null;
+    const authors = (book?.authors ?? [])
+      .map((author) => (typeof author === 'string' ? author : author?.name))
+      .filter(Boolean) as string[];
+
+    bookTitle.value = title || bookTitle.value;
+    bookAuthors.value = authors;
+    bookPublisher.value = book?.publisher?.name ?? null;
+    bookSeries.value = book?.series?.name ?? null;
+    bookSeriesIndex.value = book?.series?.index ?? null;
+    bookPublished.value = book?.published ?? null;
+    bookLanguage.value = book?.language ?? null;
+    bookPages.value = book?.pages ?? null;
+
     if (title) {
-      bookTitle.value = title;
       useHead({ title: `Reading · ${title}` });
     }
   } catch {
@@ -245,29 +333,74 @@ async function loadEpub() {
       width: '100%',
       height: '100%',
       spread: 'none',
+      allowScriptedContent: false,
     });
-
-    applyReaderTheme();
-
-    try {
-      await bookInstance.locations.generate(1000);
-    } catch {
-      // Location generation is best-effort for progress percentages.
-    }
-
-    const saved = await loadReadingPosition();
-    const savedLocation = saved?.location ?? null;
     const rendition = renditionRef.value;
 
     if (!rendition) {
       throw new Error('Reader not initialized.');
     }
 
+    const hookApi = rendition as unknown as {
+      hooks?: {
+        content?: {
+          register?: (fn: (contents: { document: Document }) => void) => void;
+        };
+      };
+    };
+
+    hookApi?.hooks?.content?.register?.((contents) => {
+      const stripped = stripScriptedContent(contents.document);
+      if (stripped.scripts || stripped.handlers) {
+        debugLog('Stripped scripted content (rendition)', stripped);
+      }
+    });
+
+    const spineHookApi = bookInstance as unknown as {
+      spine?: {
+        hooks?: {
+          content?: {
+            register?: (fn: (contents: { document: Document }) => void) => void;
+          };
+        };
+      };
+    };
+
+    spineHookApi?.spine?.hooks?.content?.register?.((contents) => {
+      const stripped = stripScriptedContent(contents.document);
+      if (stripped.scripts || stripped.handlers) {
+        debugLog('Stripped scripted content (spine)', stripped);
+      }
+    });
+
+    applyReaderTheme();
+
+    const saved = await loadReadingPosition();
+    const savedLocation = saved?.location ?? null;
+    const shouldGenerateLocations = saved?.progress == null;
+
     if (savedLocation) {
       await rendition.display(savedLocation);
       currentProgress.value = saved?.progress ?? extractProgress(savedLocation);
     } else {
       await rendition.display();
+    }
+
+    if (shouldGenerateLocations) {
+      setTimeout(() => {
+        debugLog('Generating locations', { chars: 400 });
+        bookInstance?.locations
+          .generate(400)
+          .then(() => {
+            if (savedLocation && currentProgress.value == null) {
+              const progress = extractProgress(savedLocation);
+              if (progress != null) {
+                currentProgress.value = progress;
+              }
+            }
+          })
+          .catch(() => null);
+      }, 0);
     }
 
     rendition.on('relocated', (loc: { start?: { cfi?: string } }) => {
@@ -336,8 +469,10 @@ onBeforeUnmount(() => {
         </button>
 
         <div class="min-w-0">
-          <div class="text-sm opacity-70">Reading</div>
           <div class="text-lg font-semibold truncate">{{ bookTitle }}</div>
+          <div class="text-sm text-(--sub-color) truncate">
+            {{ bookAuthors.join(', ') }}
+          </div>
         </div>
       </div>
 
@@ -346,6 +481,22 @@ onBeforeUnmount(() => {
         <span class="font-medium">{{ formatProgress(currentProgress) }}</span>
         <span v-if="saveErrorMessage" class="text-(--error-color) text-xs">
           {{ saveErrorMessage }}
+        </span>
+      </div>
+    </div>
+
+    <div
+      v-if="readerMetadataList.length"
+      class="px-4 py-2 border-b border-(--sub-color) bg-(--bg-color)"
+    >
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+        <span
+          v-for="item in readerMetadataList"
+          :key="item.label"
+          class="inline-flex items-center gap-1 text-(--sub-color)"
+        >
+          <span class="opacity-70">{{ item.label }}:</span>
+          <span class="text-(--text-color)">{{ item.value }}</span>
         </span>
       </div>
     </div>

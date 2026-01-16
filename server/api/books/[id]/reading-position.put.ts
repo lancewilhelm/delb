@@ -41,9 +41,10 @@ export default defineEventHandler(async (event) => {
     return { success: false, message: 'Missing book id' };
   }
 
-  const body = (await readBody(event).catch(() => null)) as
-    | { location?: unknown; progress?: unknown }
-    | null;
+  const body = (await readBody(event).catch(() => null)) as {
+    location?: unknown;
+    progress?: unknown;
+  } | null;
 
   const rawLocation = body?.location;
   const rawProgress = body?.progress;
@@ -64,7 +65,7 @@ export default defineEventHandler(async (event) => {
   }
 
   let progress: number | null = null;
-  if (!wantsClear && rawProgress !== undefined) {
+  if (!wantsClear && rawProgress !== undefined && rawProgress !== null) {
     const parsed =
       typeof rawProgress === 'number'
         ? rawProgress
@@ -149,7 +150,7 @@ export default defineEventHandler(async (event) => {
     const rowsAffected =
       typeof updateRes === 'number'
         ? updateRes
-        : (updateRes as { rowsAffected?: number })?.rowsAffected ?? 0;
+        : ((updateRes as { rowsAffected?: number })?.rowsAffected ?? 0);
 
     if (!rowsAffected) {
       await cloudDb.insert(userBookReadingPosition).values({

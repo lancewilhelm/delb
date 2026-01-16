@@ -11,7 +11,10 @@ declare module 'epubjs' {
   };
 
   export type EpubThemes = {
-    register: (name: string, theme: Record<string, Record<string, string>>) => void;
+    register: (
+      name: string,
+      theme: Record<string, Record<string, string>>,
+    ) => void;
     select: (name: string) => void;
     override: (property: string, value: string) => void;
   };
@@ -33,6 +36,7 @@ declare module 'epubjs' {
         width?: string | number;
         height?: string | number;
         spread?: 'none' | 'auto' | 'always';
+        allowScriptedContent?: boolean;
       },
     ) => EpubRendition;
     locations: EpubLocations;
