@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import type Book from 'epubjs/types/book';
+import type Rendition from 'epubjs/types/rendition';
+
 definePageMeta({
   auth: {
     only: 'user',
@@ -24,77 +27,45 @@ const readerContainer = ref<HTMLElement | null>(null);
 const loading = ref(true);
 const errorMessage = ref<string | null>(null);
 const bookTitle = ref<string>('Reader');
-const bookAuthors = ref<string[]>([]);
-const bookSeries = ref<string | null>(null);
-const bookSeriesIndex = ref<number | null>(null);
-const bookPublisher = ref<string | null>(null);
-const bookPublished = ref<string | null>(null);
-const bookLanguage = ref<string | null>(null);
-const bookPages = ref<number | null>(null);
 const currentProgress = ref<number | null>(null);
 const saveErrorMessage = ref<string | null>(null);
 
-const seriesLabel = computed(() => {
-  if (!bookSeries.value) return null;
-  if (bookSeriesIndex.value == null) return bookSeries.value;
-  return `${bookSeries.value} #${bookSeriesIndex.value}`;
-});
-
-const _readerMetadata = computed(() => ({
-  bookId: bookId.value || null,
-  title: bookTitle.value,
-  authors: bookAuthors.value,
-  series: bookSeries.value,
-  seriesIndex: bookSeriesIndex.value,
-  seriesLabel: seriesLabel.value,
-  publisher: bookPublisher.value,
-  published: bookPublished.value,
-  language: bookLanguage.value,
-  pages: bookPages.value,
-}));
-
-const readerMetadataList = computed(() => {
-  const authors = bookAuthors.value.length
-    ? bookAuthors.value.join(', ')
-    : null;
-
-  return [
-    { label: 'Authors', value: authors },
-    { label: 'Series', value: seriesLabel.value },
-    { label: 'Publisher', value: bookPublisher.value },
-    { label: 'Published', value: bookPublished.value },
-    { label: 'Language', value: bookLanguage.value },
-    {
-      label: 'Pages',
-      value: bookPages.value != null ? String(bookPages.value) : null,
-    },
-  ].filter((item) => Boolean(item.value));
-});
-
-const debugEnabled = true;
-
-function debugLog(message: string, details?: Record<string, unknown>) {
-  if (!debugEnabled) return;
-  if (details) {
-    console.debug(`[Reader] ${message}`, details);
-  } else {
-    console.debug(`[Reader] ${message}`);
-  }
-}
-
-type EpubModule = typeof import('epubjs');
-type EpubFn = EpubModule['default'];
-type EpubBook = ReturnType<EpubFn>;
-type EpubRendition = ReturnType<EpubBook['renderTo']>;
-
-let bookInstance: EpubBook | null = null;
-const renditionRef = ref<EpubRendition | null>(null);
+let bookInstance: Book | null = null;
+const renditionRef = ref<Rendition | null>(null);
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 let lastSavedLocation: string | null = null;
 
-function backToDetails() {
-  if (!bookId.value) return;
-  navigateTo(`/books/${bookId.value}`);
+const userSettingsStore = useUserSettingsStore();
+const isSettingsOpen = ref(false);
+const settingsMenuRef = ref<HTMLElement | null>(null);
+const settingsButtonRef = ref<HTMLElement | null>(null);
+const readerFontSize = userSettingsStore.settingRef<number>('reader.fontSize');
+const readerLineHeight =
+  userSettingsStore.settingRef<number>('reader.lineHeight');
+const readerTheme = userSettingsStore.settingRef<'light' | 'dark' | 'app'>(
+  'reader.theme',
+);
+const readerDisplayMode = userSettingsStore.settingRef<'scroll' | 'pages'>(
+  'reader.displayMode',
+);
+const themesRegistered = ref(false);
+
+const router = useRouter();
+function backToBook() {
+  router.replace(`/books/${encodeURIComponent(bookId.value)}`);
+}
+
+function toggleSettings() {
+  isSettingsOpen.value = !isSettingsOpen.value;
+}
+
+function handleDocumentClick(event: MouseEvent) {
+  if (!isSettingsOpen.value) return;
+  const target = event.target as Node | null;
+  if (!target) return;
+  if (settingsMenuRef.value?.contains(target)) return;
+  if (settingsButtonRef.value?.contains(target)) return;
+  isSettingsOpen.value = false;
 }
 
 function formatProgress(pct: number | null) {
@@ -128,56 +99,73 @@ function goNext() {
   renditionRef.value?.next();
 }
 
-function applyReaderTheme() {
+function applyReaderSettings() {
   const rendition = renditionRef.value;
   if (!rendition || typeof window === 'undefined') return;
 
+  // Grab theme colors from the DOM
   const rootStyles = getComputedStyle(document.documentElement);
-  const bg = rootStyles.getPropertyValue('--bg-color').trim();
-  const text = rootStyles.getPropertyValue('--text-color').trim();
-  const main = rootStyles.getPropertyValue('--main-color').trim();
-  const sub = rootStyles.getPropertyValue('--sub-color').trim();
+  const delbBg = rootStyles.getPropertyValue('--bg-color').trim();
+  const delbText = rootStyles.getPropertyValue('--text-color').trim();
+  const delbMain = rootStyles.getPropertyValue('--main-color').trim();
 
-  rendition.themes.register('delb', {
-    html: {
-      background: 'var(--bg-color)',
-    },
-    body: {
-      background: 'var(--bg-color)',
-      color: 'var(--text-color)',
-      lineHeight: '1.6',
-    },
-    a: {
-      color: 'var(--main-color)',
-    },
-  });
+  // Register a base theme
+  if (!themesRegistered.value) {
+    rendition.themes.register('reader-base', {
+      body: {
+        background: 'var(--reader-bg)',
+        color: 'var(--reader-text)',
+        'line-height': 'var(--reader-line-height)',
+      },
+      a: {
+        color: 'var(--reader-link)',
+      },
+    });
 
-  rendition.themes.select('delb');
+    themesRegistered.value = true;
+  }
 
-  if (bg) rendition.themes.override('--bg-color', bg);
-  if (text) rendition.themes.override('--text-color', text);
-  if (main) rendition.themes.override('--main-color', main);
-  if (sub) rendition.themes.override('--sub-color', sub);
+  // Set the themes
+  const themeTokens =
+    readerTheme.value === 'light'
+      ? { bg: '#ffffff', text: '#111111', link: '#2563eb' }
+      : readerTheme.value === 'dark'
+        ? { bg: '#1b1b1b', text: '#dddddd', link: '#93c5fd' }
+        : { bg: delbBg, text: delbText, link: delbMain };
+
+  // Override the base theme with the theme tokens
+  rendition.themes.select('reader-base');
+  rendition.themes.override('--reader-bg', themeTokens.bg);
+  rendition.themes.override('--reader-text', themeTokens.text);
+  rendition.themes.override('--reader-link', themeTokens.link);
+
+  // Handle font size and line height
+  const fontSize = readerFontSize.value ?? 100;
+  const lineHeight = readerLineHeight.value ?? 120;
+  rendition.themes.fontSize(`${fontSize}%`);
+  rendition.themes.override('--reader-line-height', `${lineHeight}%`);
+
+  // Handle display mode
+  // if (readerDisplayMode.value === 'pages') {
+  //   renditionRef.value?.flow('paginated');
+  // } else if (readerDisplayMode.value === 'scroll') {
+  //   renditionRef.value?.requireManager('continuous');
+  //   renditionRef.value?.flow('scrolled');
+  // }
 }
 
-function stripScriptedContent(doc?: Document | null) {
-  if (!doc) return { scripts: 0, handlers: 0 };
-
-  const scripts = doc.querySelectorAll('script');
-  let handlerCount = 0;
-
-  scripts.forEach((script) => script.remove());
-
-  doc.querySelectorAll('*').forEach((el) => {
-    for (const attr of Array.from(el.attributes)) {
-      if (attr.name.toLowerCase().startsWith('on')) {
-        el.removeAttribute(attr.name);
-        handlerCount += 1;
-      }
-    }
-  });
-
-  return { scripts: scripts.length, handlers: handlerCount };
+function getThemeClass(hover?: boolean) {
+  const theme = readerTheme.value ?? 'app';
+  if (theme === 'app') {
+    const base = '';
+    return hover ? base + ' hover:bg-(--sub-color)/5' : base;
+  } else if (theme === 'dark') {
+    const base = 'bg-[#1b1b1b] text-[#ddd]';
+    return hover ? base + ' hover:bg-[#222]' : base;
+  } else if (theme === 'light') {
+    const base = 'bg-[#fff] text-[#111]';
+    return hover ? base + ' hover:bg-[#eee]' : base;
+  }
 }
 
 async function loadReadingPosition() {
@@ -263,19 +251,8 @@ async function loadBookTitle() {
 
     const book = json?.data?.book;
     const title = book?.title?.trim() ?? null;
-    const authors = (book?.authors ?? [])
-      .map((author) => (typeof author === 'string' ? author : author?.name))
-      .filter(Boolean) as string[];
 
     bookTitle.value = title || bookTitle.value;
-    bookAuthors.value = authors;
-    bookPublisher.value = book?.publisher?.name ?? null;
-    bookSeries.value = book?.series?.name ?? null;
-    bookSeriesIndex.value = book?.series?.index ?? null;
-    bookPublished.value = book?.published ?? null;
-    bookLanguage.value = book?.language ?? null;
-    bookPages.value = book?.pages ?? null;
-
     if (title) {
       useHead({ title: `Reading · ${title}` });
     }
@@ -314,17 +291,6 @@ async function loadEpub() {
     bookInstance = ePub(data);
     await bookInstance.ready;
 
-    debugLog('Container check before renderTo', {
-      hasContainer: Boolean(readerContainer.value),
-      containerTag: readerContainer.value?.tagName ?? null,
-      containerSize: readerContainer.value
-        ? {
-            width: readerContainer.value.clientWidth,
-            height: readerContainer.value.clientHeight,
-          }
-        : null,
-    });
-
     if (!readerContainer.value) {
       throw new Error('Reader container not ready.');
     }
@@ -332,8 +298,8 @@ async function loadEpub() {
     renditionRef.value = bookInstance.renderTo(readerContainer.value, {
       width: '100%',
       height: '100%',
-      spread: 'none',
-      allowScriptedContent: false,
+      minSpreadWidth: 900,
+      allowScriptedContent: true,
     });
     const rendition = renditionRef.value;
 
@@ -341,39 +307,7 @@ async function loadEpub() {
       throw new Error('Reader not initialized.');
     }
 
-    const hookApi = rendition as unknown as {
-      hooks?: {
-        content?: {
-          register?: (fn: (contents: { document: Document }) => void) => void;
-        };
-      };
-    };
-
-    hookApi?.hooks?.content?.register?.((contents) => {
-      const stripped = stripScriptedContent(contents.document);
-      if (stripped.scripts || stripped.handlers) {
-        debugLog('Stripped scripted content (rendition)', stripped);
-      }
-    });
-
-    const spineHookApi = bookInstance as unknown as {
-      spine?: {
-        hooks?: {
-          content?: {
-            register?: (fn: (contents: { document: Document }) => void) => void;
-          };
-        };
-      };
-    };
-
-    spineHookApi?.spine?.hooks?.content?.register?.((contents) => {
-      const stripped = stripScriptedContent(contents.document);
-      if (stripped.scripts || stripped.handlers) {
-        debugLog('Stripped scripted content (spine)', stripped);
-      }
-    });
-
-    applyReaderTheme();
+    applyReaderSettings();
 
     const saved = await loadReadingPosition();
     const savedLocation = saved?.location ?? null;
@@ -388,7 +322,6 @@ async function loadEpub() {
 
     if (shouldGenerateLocations) {
       setTimeout(() => {
-        debugLog('Generating locations', { chars: 400 });
         bookInstance?.locations
           .generate(400)
           .then(() => {
@@ -409,6 +342,9 @@ async function loadEpub() {
       currentProgress.value = progress;
       scheduleSave(cfi, progress);
     });
+
+    rendition.on('click', onRenditionClick);
+    showFullscreenTemporarily();
   } catch (err) {
     const e = err as FetchErrorLike;
     errorMessage.value =
@@ -427,57 +363,215 @@ function onKeydown(event: KeyboardEvent) {
   } else if (event.key === 'ArrowRight') {
     goNext();
   } else if (event.key === 'Escape') {
-    backToDetails();
+    backToBook();
   }
 }
 
 onMounted(async () => {
-  debugLog('Mounted', { bookId: bookId.value });
   await loadBookTitle();
   await nextTick();
-  debugLog('After nextTick', {
-    hasContainer: Boolean(readerContainer.value),
-    containerTag: readerContainer.value?.tagName ?? null,
-  });
   await loadEpub();
   window.addEventListener('keydown', onKeydown);
+  document.addEventListener('click', handleDocumentClick);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
+  document.removeEventListener('click', handleDocumentClick);
   if (saveTimeout) clearTimeout(saveTimeout);
+  if (fullscreenHideTimeout) clearTimeout(fullscreenHideTimeout);
+  (
+    renditionRef.value as { off?: (event: string, handler: () => void) => void }
+  )?.off?.('click', onRenditionClick);
   renditionRef.value?.destroy();
   bookInstance?.destroy();
 });
+
+const isMobileDevice = useIsMobileDevice();
+const isFullscreen = ref<boolean>(false);
+const fullscreenVisible = ref(false);
+let fullscreenHideTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function showFullscreenTemporarily() {
+  if (!isMobileDevice.value) return;
+  fullscreenVisible.value = true;
+
+  if (fullscreenHideTimeout) clearTimeout(fullscreenHideTimeout);
+  fullscreenHideTimeout = setTimeout(() => {
+    fullscreenVisible.value = false;
+  }, 2000);
+}
+
+function handleContentTap() {
+  showFullscreenTemporarily();
+}
+
+const onRenditionClick = () => {
+  showFullscreenTemporarily();
+};
+
+function toggleFullscreen() {
+  isFullscreen.value = !isFullscreen.value;
+  renditionRef.value?.start();
+}
+
+watch(
+  [readerFontSize, readerLineHeight, readerTheme, readerDisplayMode],
+  () => {
+    applyReaderSettings();
+  },
+);
 </script>
 
 <template>
-  <div
-    class="flex flex-col w-screen h-screen bg-(--bg-color) text-(--text-color)"
-  >
+  <div class="flex flex-col h-full w-full overflow-hidden">
+    <!-- Page header -->
     <div
-      class="flex items-center justify-between px-4 py-3 border-b border-(--sub-color) bg-(--bg-color)"
+      v-if="!isFullscreen"
+      class="relative z-30 flex items-center justify-between p-2 border-b border-t border-(--sub-color) bg-(--sub-alt-color)"
     >
       <div class="flex items-center gap-3 min-w-0">
-        <button
-          type="button"
-          class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm inline-flex items-center gap-2"
-          @click="backToDetails"
-        >
-          <Icon name="lucide:arrow-left" class="text-lg" />
-          Back
-        </button>
+        <!-- Back button -->
+        <icon
+          v-tooltip="'Back to book'"
+          name="lucide:arrow-left"
+          class="text-3xl opacity-80 hover:opacity-100 cursor-pointer"
+          @click="backToBook"
+        />
 
         <div class="min-w-0">
           <div class="text-lg font-semibold truncate">{{ bookTitle }}</div>
-          <div class="text-sm text-(--sub-color) truncate">
-            {{ bookAuthors.join(', ') }}
-          </div>
         </div>
       </div>
 
-      <div class="flex items-center gap-3 text-sm opacity-80">
-        <span>Progress</span>
+      <div class="flex items-center gap-3 text-sm">
+        <div class="relative">
+          <icon
+            ref="settingsButtonRef"
+            v-tooltip="'Reader settings'"
+            name="lucide:settings-2"
+            class="text-2xl opacity-80 hover:opacity-100 cursor-pointer"
+            @click.stop="toggleSettings"
+          />
+
+          <!-- Settings menu -->
+          <div
+            v-if="isSettingsOpen"
+            ref="settingsMenuRef"
+            class="absolute right-0 mt-2 w-72 rounded-md border border-(--sub-color) bg-(--bg-color) p-3 shadow-lg z-50"
+            @click.stop
+          >
+            <div class="space-y-3">
+              <div class="space-y-1">
+                <div class="text-sm">Font size</div>
+                <div class="flex items-center gap-2">
+                  <input
+                    v-model.number="readerFontSize"
+                    type="range"
+                    min="70"
+                    max="150"
+                    step="1"
+                    class="slider w-full!"
+                  />
+                  <span class="w-10 text-right">{{ readerFontSize }}%</span>
+                </div>
+              </div>
+
+              <div class="space-y-1">
+                <div class="text-sm">Line height</div>
+                <div class="flex items-center gap-2">
+                  <input
+                    v-model.number="readerLineHeight"
+                    type="range"
+                    min="100"
+                    max="200"
+                    step="1"
+                    class="slider w-full!"
+                  />
+                  <span class="w-10 text-right">{{ readerLineHeight }}%</span>
+                </div>
+              </div>
+
+              <div class="space-y-2">
+                <div class="text-sm">Theme</div>
+                <div class="grid grid-cols-3 gap-2">
+                  <label class="cursor-pointer">
+                    <input
+                      v-model="readerTheme"
+                      type="radio"
+                      value="light"
+                      class="sr-only peer"
+                    />
+                    <span
+                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-white text-[#111] peer-checked:bg-(--main-color) peer-checked:text-(--bg-color)"
+                    >
+                      Light
+                    </span>
+                  </label>
+                  <label class="cursor-pointer">
+                    <input
+                      v-model="readerTheme"
+                      type="radio"
+                      value="dark"
+                      class="sr-only peer"
+                    />
+                    <span
+                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-[#1b1b1b] text-[#ddd] peer-checked:bg-(--main-color) peer-checked:text-(--bg-color)"
+                    >
+                      Dark
+                    </span>
+                  </label>
+                  <label class="cursor-pointer">
+                    <input
+                      v-model="readerTheme"
+                      type="radio"
+                      value="app"
+                      class="sr-only peer"
+                    />
+                    <span
+                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-(--sub-alt-color) text-(--text-color) peer-checked:bg-(--main-color) peer-checked:text-(--bg-color)"
+                    >
+                      Delb
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="space-y-2">
+                <div class="text-sm">Display Mode</div>
+                <div class="grid grid-cols-2 gap-2">
+                  <label class="cursor-pointer">
+                    <input
+                      v-model="readerDisplayMode"
+                      type="radio"
+                      value="pages"
+                      class="sr-only peer"
+                    />
+                    <span
+                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-(--sub-alt-color) text-(--text-color) peer-checked:bg-(--main-color) peer-checked:text-(--bg-color)"
+                    >
+                      Pages
+                    </span>
+                  </label>
+                  <label class="cursor-pointer">
+                    <input
+                      v-model="readerDisplayMode"
+                      type="radio"
+                      value="scroll"
+                      class="sr-only peer"
+                    />
+                    <span
+                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-(--sub-alt-color) text-(--text-color) peer-checked:bg-(--main-color) peer-checked:text-(--bg-color)"
+                    >
+                      Scroll
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <span class="font-medium">{{ formatProgress(currentProgress) }}</span>
         <span v-if="saveErrorMessage" class="text-(--error-color) text-xs">
           {{ saveErrorMessage }}
@@ -485,57 +579,67 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
+    <!-- Page content -->
     <div
-      v-if="readerMetadataList.length"
-      class="px-4 py-2 border-b border-(--sub-color) bg-(--bg-color)"
+      class="relative flex h-full w-full overflow-hidden"
+      @click="handleContentTap"
     >
-      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-        <span
-          v-for="item in readerMetadataList"
-          :key="item.label"
-          class="inline-flex items-center gap-1 text-(--sub-color)"
+      <!-- Previous page button -->
+      <div
+        class="flex items-center p-2 cursor-pointer shrink-0"
+        :class="getThemeClass(true)"
+        @click.stop="goPrev"
+      >
+        <icon name="lucide:arrow-left" class="text-2xl opacity-80" />
+      </div>
+
+      <!-- Page content -->
+      <div class="h-full flex-1 min-w-0" :class="getThemeClass()">
+        <div ref="readerContainer" class="w-full h-full" />
+
+        <div
+          v-if="loading"
+          class="flex items-center justify-center w-full h-full"
         >
-          <span class="opacity-70">{{ item.label }}:</span>
-          <span class="text-(--text-color)">{{ item.value }}</span>
-        </span>
+          <div class="text-sm opacity-80">Loading reader…</div>
+        </div>
+
+        <div
+          v-else-if="errorMessage"
+          class="flex items-center justify-center w-full h-full"
+        >
+          <div class="text-sm text-(--error-color)">{{ errorMessage }}</div>
+        </div>
       </div>
-    </div>
 
-    <div class="relative flex-1">
-      <div ref="readerContainer" class="w-full h-full" />
-
+      <!-- Next page button -->
       <div
-        v-if="loading"
-        class="absolute inset-0 flex items-center justify-center"
+        class="flex items-center p-2 hover:bg-(--sub-color)/5 cursor-pointer shrink-0"
+        :class="getThemeClass(true)"
+        @click.stop="goNext"
       >
-        <div class="text-sm opacity-80">Loading reader…</div>
+        <icon name="lucide:arrow-right" class="text-2xl opacity-80" />
       </div>
 
-      <div
-        v-else-if="errorMessage"
-        class="absolute inset-0 flex items-center justify-center"
-      >
-        <div class="text-sm text-(--error-color)">{{ errorMessage }}</div>
+      <!-- Full screen toggle -->
+      <div class="absolute right-0 top-0 h-40 w-40 group">
+        <icon
+          :name="
+            isFullscreen
+              ? 'mingcute:fullscreen-exit-2-fill'
+              : 'mingcute:fullscreen-2-fill'
+          "
+          class="absolute right-4 top-4 text-3xl cursor-pointer transition-opacity"
+          :class="
+            isMobileDevice
+              ? fullscreenVisible
+                ? 'opacity-80 pointer-events-auto'
+                : 'opacity-0 pointer-events-none'
+              : 'opacity-0 pointer-events-none group-hover:opacity-80 group-hover:pointer-events-auto'
+          "
+          @click.stop="toggleFullscreen"
+        />
       </div>
-    </div>
-
-    <div
-      class="flex items-center justify-center gap-3 px-4 py-3 border-t border-(--sub-color) bg-(--bg-color)"
-    >
-      <button
-        type="button"
-        class="px-4 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
-        @click="goPrev"
-      >
-        Previous
-      </button>
-      <button
-        type="button"
-        class="px-4 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
-        @click="goNext"
-      >
-        Next
-      </button>
     </div>
   </div>
 </template>

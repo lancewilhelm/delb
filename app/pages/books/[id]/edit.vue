@@ -1461,14 +1461,12 @@ watch(
         class="flex items-center justify-between gap-2 mb-4 text-(--main-color)"
       >
         <!-- Back button -->
-        <div
+        <icon
           v-tooltip="'Back to book'"
-          type="button"
-          class="opacity-80 hover:opacity-100 cursor-pointer"
+          name="lucide:arrow-left"
+          class="text-3xl opacity-80 hover:opacity-100 cursor-pointer"
           @click="backToBook"
-        >
-          <icon name="lucide:arrow-left" class="text-3xl" />
-        </div>
+        />
 
         <!-- Metadata header -->
         <div v-if="book" class="flex items-center justify-between gap-4">

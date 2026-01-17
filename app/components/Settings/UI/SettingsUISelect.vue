@@ -62,7 +62,7 @@ function selectOption(option: string) {
 
     <!-- Custom Select Trigger -->
     <div
-      class="row-span-2 flex items-center gap-2 cursor-pointer bg-(--sub-alt-color) rounded-lg px-3 py-2 select-none min-w-[150px] settings-select-item-select"
+      class="row-span-2 flex items-center gap-2 cursor-pointer bg-(--sub-alt-color) rounded-lg px-3 py-2 select-none min-w-37.5 settings-select-item-select"
       tabindex="0"
       @mousedown.prevent.stop="popupVisible = !popupVisible"
       @keydown.enter.prevent.stop="popupVisible = !popupVisible"
@@ -82,7 +82,7 @@ function selectOption(option: string) {
     <div
       v-if="popupVisible"
       ref="popupRef"
-      class="absolute top-full mb-2 right-0 bg-(--bg-color) border border-(--main-color) rounded-lg shadow-lg max-h-100 min-w-[150px] z-10 overflow-y-auto settings-select-item-popup"
+      class="absolute top-full mb-2 right-0 bg-(--bg-color) border border-(--main-color) rounded-lg shadow-lg max-h-100 min-w-37.5 z-10 overflow-y-auto settings-select-item-popup"
     >
       <div
         v-for="option in options"

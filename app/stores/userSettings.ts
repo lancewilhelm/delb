@@ -70,10 +70,15 @@ export interface BaseUserSettings {
   };
 
   /**
-   * Mobile specific settings here, not to be confused with mobile
-   * (this will inevitably be confusing and need changing)
-   * TODO: Change this name to something not confusing
+   * Reader settings
    */
+  reader: {
+    fontSize: number;
+    lineHeight: number;
+    fontFamily: string;
+    displayMode: 'pages' | 'scroll';
+    theme: 'system' | 'light' | 'dark' | 'app';
+  };
 }
 
 export interface MobileSettingsConfig {
@@ -115,6 +120,13 @@ function getBaseDefaults(): BaseUserSettings {
     // Product decision: default to deleting everything from disk to avoid orphaned library folders.
     bookDelete: {
       defaultMode: 'everything',
+    },
+    reader: {
+      fontSize: 100,
+      lineHeight: 120,
+      fontFamily: 'Serif',
+      displayMode: 'pages',
+      theme: 'app',
     },
   };
 }
