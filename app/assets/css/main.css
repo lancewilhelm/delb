@@ -329,3 +329,16 @@ tr:last-child td {
     transition: none;
   }
 }
+
+/* Fix for epub.js container continuous scroll jumping */
+/* https://github.com/futurepress/epub.js/issues/1303 */
+.epub-container {
+  overflow-anchor: none !important;
+}
+
+.full-screen-toggle-btn {
+  box-shadow:
+    0 0 5px var(--sub-alt-color),
+    0 0 10px var(--sub-alt-color),
+    0 0 15px var(--sub-alt-color);
+}

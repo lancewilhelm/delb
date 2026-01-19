@@ -20,6 +20,9 @@ type FetchErrorLike = {
   message?: string;
 };
 
+type ReaderDisplayMode = 'scroll' | 'pages';
+type ReaderTheme = 'light' | 'dark' | 'app';
+
 const route = useRoute();
 const bookId = computed(() => String(route.params.id || ''));
 
@@ -32,25 +35,31 @@ const saveErrorMessage = ref<string | null>(null);
 
 let bookInstance: Book | null = null;
 const renditionRef = ref<Rendition | null>(null);
+
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 let lastSavedLocation: string | null = null;
 
 const userSettingsStore = useUserSettingsStore();
 const isSettingsOpen = ref(false);
 const settingsMenuRef = ref<HTMLElement | null>(null);
+// NOTE: the <icon> is a Vue component, so the template ref must be attached to a
+// real DOM element (wrapper) for reliable `.contains()` checks.
 const settingsButtonRef = ref<HTMLElement | null>(null);
+// Wrapper around the reader area (outside the epubjs iframe). We can listen here
+// because pointer/click events inside an iframe do not bubble to the parent doc.
+const readerAreaRef = ref<HTMLElement | null>(null);
+
 const readerFontSize = userSettingsStore.settingRef<number>('reader.fontSize');
 const readerLineHeight =
   userSettingsStore.settingRef<number>('reader.lineHeight');
-const readerTheme = userSettingsStore.settingRef<'light' | 'dark' | 'app'>(
-  'reader.theme',
-);
-const readerDisplayMode = userSettingsStore.settingRef<'scroll' | 'pages'>(
-  'reader.displayMode',
-);
+const readerTheme = userSettingsStore.settingRef<ReaderTheme>('reader.theme');
+const readerDisplayMode =
+  userSettingsStore.settingRef<ReaderDisplayMode>('reader.displayMode');
+
 const themesRegistered = ref(false);
 
 const router = useRouter();
+
 function backToBook() {
   router.replace(`/books/${encodeURIComponent(bookId.value)}`);
 }
@@ -59,14 +68,31 @@ function toggleSettings() {
   isSettingsOpen.value = !isSettingsOpen.value;
 }
 
-function handleDocumentClick(event: MouseEvent) {
-  if (!isSettingsOpen.value) return;
-  const target = event.target as Node | null;
-  if (!target) return;
-  if (settingsMenuRef.value?.contains(target)) return;
-  if (settingsButtonRef.value?.contains(target)) return;
+function closeSettings() {
   isSettingsOpen.value = false;
 }
+
+function handleDocumentClick(event: Event) {
+  if (!isSettingsOpen.value) return;
+
+  const target = event.target as Node | null;
+  if (!target) return;
+
+  // Click/tap within the menu or on the settings button should not close it.
+  if (settingsMenuRef.value?.contains(target)) return;
+  if (settingsButtonRef.value?.contains(target)) return;
+
+  closeSettings();
+}
+
+/**
+ * We enable swipe paging on mobile devices by configuring epubjs with `snap`.
+ * When swipe paging is enabled, we hide the prev/next arrow buttons.
+ *
+ * NOTE: `isMobileDevice` is declared later in this file, so we must not reference
+ * it here (before initialization). Swipe detection is derived directly from
+ * `useIsMobileDevice()` inside `getRenditionOptions` and the template condition.
+ */
 
 function formatProgress(pct: number | null) {
   if (pct == null) return '—';
@@ -99,73 +125,173 @@ function goNext() {
   renditionRef.value?.next();
 }
 
-function applyReaderSettings() {
-  const rendition = renditionRef.value;
-  if (!rendition || typeof window === 'undefined') return;
-
-  // Grab theme colors from the DOM
+function getThemeTokens() {
+  // Grab theme colors from the DOM (for "app" theme)
   const rootStyles = getComputedStyle(document.documentElement);
   const delbBg = rootStyles.getPropertyValue('--bg-color').trim();
   const delbText = rootStyles.getPropertyValue('--text-color').trim();
   const delbMain = rootStyles.getPropertyValue('--main-color').trim();
 
-  // Register a base theme
-  if (!themesRegistered.value) {
-    rendition.themes.register('reader-base', {
-      body: {
-        background: 'var(--reader-bg)',
-        color: 'var(--reader-text)',
-        'line-height': 'var(--reader-line-height)',
-      },
-      a: {
-        color: 'var(--reader-link)',
-      },
-    });
+  return readerTheme.value === 'light'
+    ? { bg: '#ffffff', text: '#111111', link: '#2563eb' }
+    : readerTheme.value === 'dark'
+      ? { bg: '#1b1b1b', text: '#dddddd', link: '#93c5fd' }
+      : { bg: delbBg, text: delbText, link: delbMain };
+}
 
-    themesRegistered.value = true;
-  }
+function ensureReaderThemeRegistered(rendition: {
+  themes: Rendition['themes'];
+}) {
+  if (themesRegistered.value) return;
 
-  // Set the themes
-  const themeTokens =
-    readerTheme.value === 'light'
-      ? { bg: '#ffffff', text: '#111111', link: '#2563eb' }
-      : readerTheme.value === 'dark'
-        ? { bg: '#1b1b1b', text: '#dddddd', link: '#93c5fd' }
-        : { bg: delbBg, text: delbText, link: delbMain };
+  rendition.themes.register('reader-base', {
+    body: {
+      background: 'var(--reader-bg)',
+      color: 'var(--reader-text)',
+      'line-height': 'var(--reader-line-height)',
+    },
+    a: {
+      color: 'var(--reader-link)',
+    },
+  });
 
-  // Override the base theme with the theme tokens
+  themesRegistered.value = true;
+}
+
+function applyReaderSettings() {
+  const rendition = renditionRef.value;
+  if (!rendition || typeof window === 'undefined') return;
+
+  ensureReaderThemeRegistered(rendition);
+
+  const themeTokens = getThemeTokens();
+
+  // Apply base theme + CSS vars
   rendition.themes.select('reader-base');
   rendition.themes.override('--reader-bg', themeTokens.bg);
   rendition.themes.override('--reader-text', themeTokens.text);
   rendition.themes.override('--reader-link', themeTokens.link);
 
-  // Handle font size and line height
+  // Force a theme refresh in case the rendition just recreated and the first
+  // section rendered before overrides were applied.
+  rendition.themes.select('reader-base');
+
+  // Apply font size + line height
   const fontSize = readerFontSize.value ?? 100;
   const lineHeight = readerLineHeight.value ?? 120;
   rendition.themes.fontSize(`${fontSize}%`);
   rendition.themes.override('--reader-line-height', `${lineHeight}%`);
+}
 
-  // Handle display mode
-  // if (readerDisplayMode.value === 'pages') {
-  //   renditionRef.value?.flow('paginated');
-  // } else if (readerDisplayMode.value === 'scroll') {
-  //   renditionRef.value?.requireManager('continuous');
-  //   renditionRef.value?.flow('scrolled');
-  // }
+function getRenditionOptions(mode: ReaderDisplayMode) {
+  // Determine swipe capability at call time (avoids referencing `isMobileDevice` before init).
+  const swipe = 'ontouchstart' in window || useIsMobileDevice().value;
+
+  if (mode === 'pages') {
+    return {
+      // On mobile, use continuous manager + snap for swipe paging.
+      manager: 'continuous',
+      flow: 'paginated',
+      snap: swipe ? {} : undefined,
+      spread: 'none',
+      width: '100%',
+      height: '100%',
+      minSpreadWidth: 900,
+      allowScriptedContent: true,
+    };
+  }
+
+  return {
+    manager: 'continuous',
+    flow: 'scrolled',
+    width: '100%',
+    height: '100%',
+    spread: 'none',
+    minSpreadWidth: 900,
+    allowScriptedContent: true,
+  };
+}
+
+function attachRenditionHandlers(
+  rendition: Pick<Rendition, 'on'> & Partial<Pick<Rendition, 'off'>>,
+) {
+  rendition.on('relocated', (loc: { start?: { cfi?: string } }) => {
+    const cfi = loc?.start?.cfi ?? null;
+    const progress = extractProgress(cfi);
+    currentProgress.value = progress;
+    scheduleSave(cfi, progress);
+  });
+
+  rendition.on('click', onRenditionClick);
+
+  // Re-apply theme after sections render (prevents "black text" after mode switch)
+  rendition.on('rendered', () => {
+    applyReaderSettings();
+  });
+}
+
+async function recreateRendition({
+  displayCfi,
+}: {
+  displayCfi?: string | null;
+} = {}) {
+  if (!bookInstance) {
+    throw new Error('Book instance not initialized.');
+  }
+
+  await bookInstance.ready;
+
+  if (!readerContainer.value) {
+    throw new Error('Reader container not ready.');
+  }
+
+  // Tear down any previous rendition (mode/size changes require fresh layout)
+  renditionRef.value?.destroy();
+  renditionRef.value = null;
+
+  // Themes are registered per-rendition in epubjs. Since we just destroyed the
+  // old rendition, we must reset our registration flag so the new rendition
+  // eagerly re-registers the base theme.
+  themesRegistered.value = false;
+
+  renditionRef.value = bookInstance.renderTo(
+    readerContainer.value,
+    getRenditionOptions(readerDisplayMode.value),
+  );
+
+  const rendition = renditionRef.value;
+  if (!rendition) {
+    throw new Error('Reader not initialized.');
+  }
+
+  attachRenditionHandlers(rendition);
+
+  // Apply theme/font settings to the new rendition (and register the base theme)
+  applyReaderSettings();
+
+  // Display the requested location (or default)
+  if (displayCfi) {
+    await rendition.display(displayCfi);
+  } else {
+    await rendition.display();
+  }
 }
 
 function getThemeClass(hover?: boolean) {
   const theme = readerTheme.value ?? 'app';
-  if (theme === 'app') {
-    const base = '';
-    return hover ? base + ' hover:bg-(--sub-color)/5' : base;
-  } else if (theme === 'dark') {
-    const base = 'bg-[#1b1b1b] text-[#ddd]';
-    return hover ? base + ' hover:bg-[#222]' : base;
-  } else if (theme === 'light') {
-    const base = 'bg-[#fff] text-[#111]';
-    return hover ? base + ' hover:bg-[#eee]' : base;
-  }
+
+  const base =
+    theme === 'dark'
+      ? 'bg-[#1b1b1b] text-[#ddd]'
+      : theme === 'light'
+        ? 'bg-[#fff] text-[#111]'
+        : '';
+
+  if (!hover) return base;
+
+  if (theme === 'dark') return base + ' hover:bg-[#222]';
+  if (theme === 'light') return base + ' hover:bg-[#eee]';
+  return base + ' hover:bg-(--sub-color)/5';
 }
 
 async function loadReadingPosition() {
@@ -261,63 +387,52 @@ async function loadBookTitle() {
   }
 }
 
-async function loadEpub() {
+async function fetchBook() {
   if (!bookId.value) {
     errorMessage.value = 'Missing book id';
     return;
   }
 
+  const res = await fetch(
+    `/api/books/${encodeURIComponent(bookId.value)}/download`,
+    { method: 'GET' },
+  );
+
+  if (!res.ok) {
+    throw new Error(`Failed to download book (${res.status})`);
+  }
+
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/epub+zip')) {
+    throw new Error('This book is not available as an EPUB.');
+  }
+
+  const data = await res.arrayBuffer();
+  const { default: ePub } = await import('epubjs');
+
+  bookInstance = ePub(data);
+}
+
+async function loadEpub() {
   loading.value = true;
   errorMessage.value = null;
 
   try {
-    const res = await fetch(
-      `/api/books/${encodeURIComponent(bookId.value)}/download`,
-      { method: 'GET' },
-    );
-
-    if (!res.ok) {
-      throw new Error(`Failed to download book (${res.status})`);
-    }
-
-    const contentType = res.headers.get('content-type') || '';
-    if (!contentType.includes('application/epub+zip')) {
-      throw new Error('This book is not available as an EPUB.');
-    }
-
-    const data = await res.arrayBuffer();
-    const { default: ePub } = await import('epubjs');
-
-    bookInstance = ePub(data);
-    await bookInstance.ready;
-
-    if (!readerContainer.value) {
-      throw new Error('Reader container not ready.');
-    }
-
-    renditionRef.value = bookInstance.renderTo(readerContainer.value, {
-      width: '100%',
-      height: '100%',
-      minSpreadWidth: 900,
-      allowScriptedContent: true,
-    });
-    const rendition = renditionRef.value;
-
-    if (!rendition) {
-      throw new Error('Reader not initialized.');
-    }
-
-    applyReaderSettings();
+    await fetchBook();
 
     const saved = await loadReadingPosition();
     const savedLocation = saved?.location ?? null;
     const shouldGenerateLocations = saved?.progress == null;
 
+    await recreateRendition({ displayCfi: savedLocation });
+
+    const rendition = renditionRef.value;
+    if (!rendition) {
+      throw new Error('Reader not initialized.');
+    }
+
     if (savedLocation) {
-      await rendition.display(savedLocation);
       currentProgress.value = saved?.progress ?? extractProgress(savedLocation);
-    } else {
-      await rendition.display();
     }
 
     if (shouldGenerateLocations) {
@@ -336,14 +451,6 @@ async function loadEpub() {
       }, 0);
     }
 
-    rendition.on('relocated', (loc: { start?: { cfi?: string } }) => {
-      const cfi = loc?.start?.cfi ?? null;
-      const progress = extractProgress(cfi);
-      currentProgress.value = progress;
-      scheduleSave(cfi, progress);
-    });
-
-    rendition.on('click', onRenditionClick);
     showFullscreenTemporarily();
   } catch (err) {
     const e = err as FetchErrorLike;
@@ -372,12 +479,16 @@ onMounted(async () => {
   await nextTick();
   await loadEpub();
   window.addEventListener('keydown', onKeydown);
-  document.addEventListener('click', handleDocumentClick);
+
+  // Use capture + pointerdown so we catch outside clicks even if something
+  // inside stops propagation. NOTE: clicks inside the epubjs iframe won't bubble
+  // to the document, so we also attach a listener to `readerAreaRef` in the template.
+  document.addEventListener('pointerdown', handleDocumentClick, true);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
-  document.removeEventListener('click', handleDocumentClick);
+  document.removeEventListener('pointerdown', handleDocumentClick, true);
   if (saveTimeout) clearTimeout(saveTimeout);
   if (fullscreenHideTimeout) clearTimeout(fullscreenHideTimeout);
   (
@@ -415,12 +526,18 @@ function toggleFullscreen() {
   renditionRef.value?.start();
 }
 
-watch(
-  [readerFontSize, readerLineHeight, readerTheme, readerDisplayMode],
-  () => {
-    applyReaderSettings();
-  },
-);
+watch([readerFontSize, readerLineHeight, readerTheme], () => {
+  applyReaderSettings();
+});
+
+watch(readerDisplayMode, async () => {
+  // Preserve current location while switching modes (the container width changes
+  // because the prev/next buttons hide/show, so we recreate the rendition to
+  // force a fresh layout pass).
+  const displayCfi = renditionRef.value?.location?.start?.cfi ?? null;
+  await nextTick();
+  await recreateRendition({ displayCfi });
+});
 </script>
 
 <template>
@@ -428,7 +545,7 @@ watch(
     <!-- Page header -->
     <div
       v-if="!isFullscreen"
-      class="relative z-30 flex items-center justify-between p-2 border-b border-t border-(--sub-color) bg-(--sub-alt-color)"
+      class="relative z-60 flex items-center justify-between p-2 border-b border-t border-(--sub-color) bg-(--sub-alt-color)"
     >
       <div class="flex items-center gap-3 min-w-0">
         <!-- Back button -->
@@ -446,19 +563,20 @@ watch(
 
       <div class="flex items-center gap-3 text-sm">
         <div class="relative">
-          <icon
-            ref="settingsButtonRef"
-            v-tooltip="'Reader settings'"
-            name="lucide:settings-2"
-            class="text-2xl opacity-80 hover:opacity-100 cursor-pointer"
-            @click.stop="toggleSettings"
-          />
+          <div ref="settingsButtonRef" class="flex">
+            <icon
+              v-tooltip="'Reader settings'"
+              name="lucide:settings-2"
+              class="text-2xl opacity-80 hover:opacity-100 cursor-pointer"
+              @click.stop="toggleSettings"
+            />
+          </div>
 
           <!-- Settings menu -->
           <div
             v-if="isSettingsOpen"
             ref="settingsMenuRef"
-            class="absolute right-0 mt-2 w-72 rounded-md border border-(--sub-color) bg-(--bg-color) p-3 shadow-lg z-50"
+            class="absolute right-0 mt-2 w-72 rounded-md border border-(--sub-color) bg-(--bg-color) p-3 shadow-lg"
             @click.stop
           >
             <div class="space-y-3">
@@ -503,7 +621,7 @@ watch(
                       class="sr-only peer"
                     />
                     <span
-                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-white text-[#111] peer-checked:bg-(--main-color) peer-checked:text-(--bg-color)"
+                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-white text-[#111] border-white peer-checked:border-(--main-color) border-2"
                     >
                       Light
                     </span>
@@ -516,7 +634,7 @@ watch(
                       class="sr-only peer"
                     />
                     <span
-                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-[#1b1b1b] text-[#ddd] peer-checked:bg-(--main-color) peer-checked:text-(--bg-color)"
+                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-[#1b1b1b] text-[#ddd] border-[#1b1b1b] peer-checked:border-(--main-color) border-2"
                     >
                       Dark
                     </span>
@@ -529,7 +647,7 @@ watch(
                       class="sr-only peer"
                     />
                     <span
-                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-(--sub-alt-color) text-(--text-color) peer-checked:bg-(--main-color) peer-checked:text-(--bg-color)"
+                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-(--sub-alt-color) text-(--text-color) border-(--sub-alt-color) peer-checked:border-(--main-color) border-2"
                     >
                       Delb
                     </span>
@@ -581,11 +699,22 @@ watch(
 
     <!-- Page content -->
     <div
+      ref="readerAreaRef"
       class="relative flex h-full w-full overflow-hidden"
+      :class="{ 'px-4': isMobileDevice && readerDisplayMode === 'pages' }"
       @click="handleContentTap"
     >
+      <!-- Overlay: when settings are open, capture any click/tap over the reader (including the epubjs iframe)
+           and close the settings menu. -->
+      <div
+        v-if="isSettingsOpen"
+        class="absolute inset-0 z-40"
+        @pointerdown="closeSettings"
+        @click="closeSettings"
+      />
       <!-- Previous page button -->
       <div
+        v-if="readerDisplayMode === 'pages' && !isMobileDevice"
         class="flex items-center p-2 cursor-pointer shrink-0"
         :class="getThemeClass(true)"
         @click.stop="goPrev"
@@ -614,6 +743,7 @@ watch(
 
       <!-- Next page button -->
       <div
+        v-if="readerDisplayMode === 'pages' && !isMobileDevice"
         class="flex items-center p-2 hover:bg-(--sub-color)/5 cursor-pointer shrink-0"
         :class="getThemeClass(true)"
         @click.stop="goNext"
@@ -623,22 +753,26 @@ watch(
 
       <!-- Full screen toggle -->
       <div class="absolute right-0 top-0 h-40 w-40 group">
-        <icon
-          :name="
-            isFullscreen
-              ? 'mingcute:fullscreen-exit-2-fill'
-              : 'mingcute:fullscreen-2-fill'
-          "
-          class="absolute right-4 top-4 text-3xl cursor-pointer transition-opacity"
+        <div
+          class="flex items-center justify-center absolute right-4 top-4 w-13 h-13 rounded-full bg-(--sub-alt-color) transition-opacity cursor-pointer full-screen-toggle-btn"
           :class="
             isMobileDevice
               ? fullscreenVisible
-                ? 'opacity-80 pointer-events-auto'
+                ? 'opacity-90 pointer-events-auto'
                 : 'opacity-0 pointer-events-none'
-              : 'opacity-0 pointer-events-none group-hover:opacity-80 group-hover:pointer-events-auto'
+              : 'opacity-0 pointer-events-none group-hover:opacity-90 group-hover:pointer-events-auto'
           "
           @click.stop="toggleFullscreen"
-        />
+        >
+          <icon
+            :name="
+              isFullscreen
+                ? 'mingcute:fullscreen-exit-2-fill'
+                : 'mingcute:fullscreen-2-fill'
+            "
+            class="text-3xl"
+          />
+        </div>
       </div>
     </div>
   </div>
