@@ -290,9 +290,9 @@ function getThemeClass(hover?: boolean) {
       ? 'bg-[#1b1b1b] text-[#ddd]'
       : theme === 'shadow'
         ? 'bg-black text-[#eee]'
-      : theme === 'light'
-        ? 'bg-[#fff] text-[#111]'
-        : '';
+        : theme === 'light'
+          ? 'bg-[#fff] text-[#111]'
+          : '';
 
   if (!hover) return base;
 
@@ -629,7 +629,7 @@ watch(readerDisplayMode, async () => {
                       class="sr-only peer"
                     />
                     <span
-                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-white text-[#111] border-white peer-checked:border-(--main-color) border-2"
+                      class="flex items-center justify-center rounded-md px-2 py-1 text-center text-xs font-medium bg-white text-[#111] border-white peer-checked:border-(--main-color) border-2"
                     >
                       Light
                     </span>
@@ -642,7 +642,7 @@ watch(readerDisplayMode, async () => {
                       class="sr-only peer"
                     />
                     <span
-                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-[#1b1b1b] text-[#ddd] border-[#1b1b1b] peer-checked:border-(--main-color) border-2"
+                      class="flex items-center justify-center rounded-md px-2 py-1 text-center text-xs font-medium bg-[#1b1b1b] text-[#ddd] border-[#1b1b1b] peer-checked:border-(--main-color) border-2"
                     >
                       Gray
                     </span>
@@ -655,7 +655,7 @@ watch(readerDisplayMode, async () => {
                       class="sr-only peer"
                     />
                     <span
-                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-black text-[#eee] border-black peer-checked:border-(--main-color) border-2"
+                      class="flex items-center justify-center rounded-md px-2 py-1 text-center text-xs font-medium bg-black text-[#eee] border-black peer-checked:border-(--main-color) border-2"
                     >
                       Shadow
                     </span>
@@ -668,7 +668,7 @@ watch(readerDisplayMode, async () => {
                       class="sr-only peer"
                     />
                     <span
-                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-(--bg-color) text-(--text-color) border-(--bg-color) peer-checked:border-(--main-color) border-2"
+                      class="flex items-center justify-center rounded-md px-2 py-1 text-center text-xs font-medium bg-(--bg-color) text-(--text-color) border-(--sub-color) peer-checked:border-(--main-color) border-2"
                     >
                       Delb
                     </span>
