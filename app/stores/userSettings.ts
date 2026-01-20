@@ -20,6 +20,8 @@ export type FontFamily = (typeof fontFamilyOptions)[number];
 export const funboxModes = ['confetti', 'snow'];
 export type FunboxMode = (typeof funboxModes)[number];
 
+export type ReaderTheme = 'system' | 'light' | 'gray' | 'shadow' | 'app';
+
 export interface BaseUserSettings {
   theme?: string;
   fontFamily: FontFamily;
@@ -77,7 +79,7 @@ export interface BaseUserSettings {
     lineHeight: number;
     fontFamily: string;
     displayMode: 'pages' | 'scroll';
-    theme: 'system' | 'light' | 'dark' | 'app';
+    theme: ReaderTheme;
   };
 }
 
@@ -200,6 +202,26 @@ function applyOverrides(
   ) as unknown as BaseUserSettings;
 }
 
+function normalizeReaderTheme(theme: unknown): ReaderTheme {
+  if (theme === 'dark') return 'gray';
+  if (theme === 'system') return 'system';
+  if (theme === 'light') return 'light';
+  if (theme === 'gray') return 'gray';
+  if (theme === 'shadow') return 'shadow';
+  if (theme === 'app') return 'app';
+  return 'app';
+}
+
+function normalizeReaderSettings(settings: BaseUserSettings): BaseUserSettings {
+  return {
+    ...settings,
+    reader: {
+      ...settings.reader,
+      theme: normalizeReaderTheme(settings.reader?.theme),
+    },
+  };
+}
+
 function normalizeSettings(remote: Partial<UserSettings>): UserSettings {
   const baseDefaults = getBaseDefaults();
   const defaults = getDefaultSettings();
@@ -213,6 +235,7 @@ function normalizeSettings(remote: Partial<UserSettings>): UserSettings {
     : defaults.mobile;
 
   const base = getBaseSettings(merged);
+  const normalizedBase = normalizeReaderSettings(base);
   const legacyOverrides = isPlainObject(
     (mobileBase as unknown as Record<string, unknown>).overrides,
   )
@@ -226,15 +249,16 @@ function normalizeSettings(remote: Partial<UserSettings>): UserSettings {
         mobileBase.settings as unknown as Record<string, unknown>,
       ) as unknown as BaseUserSettings)
     : legacyOverrides
-      ? applyOverrides(base, legacyOverrides)
+      ? applyOverrides(normalizedBase, legacyOverrides)
       : cloneValue(baseDefaults);
 
   return {
     ...merged,
+    ...normalizedBase,
     mobile: {
       enabled: !!mobileBase.enabled,
       searchButton: !!mobileBase.searchButton,
-      settings: mobileSettings,
+      settings: normalizeReaderSettings(mobileSettings),
     },
   };
 }
