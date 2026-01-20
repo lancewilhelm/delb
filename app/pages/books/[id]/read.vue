@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type Book from 'epubjs/types/book';
 import type Rendition from 'epubjs/types/rendition';
+import type { ReaderTheme } from '~/stores/userSettings';
 
 definePageMeta({
   auth: {
@@ -21,7 +22,6 @@ type FetchErrorLike = {
 };
 
 type ReaderDisplayMode = 'scroll' | 'pages';
-type ReaderTheme = 'light' | 'dark' | 'app';
 
 const route = useRoute();
 const bookId = computed(() => String(route.params.id || ''));
@@ -132,11 +132,16 @@ function getThemeTokens() {
   const delbText = rootStyles.getPropertyValue('--text-color').trim();
   const delbMain = rootStyles.getPropertyValue('--main-color').trim();
 
-  return readerTheme.value === 'light'
-    ? { bg: '#ffffff', text: '#111111', link: '#2563eb' }
-    : readerTheme.value === 'dark'
-      ? { bg: '#1b1b1b', text: '#dddddd', link: '#93c5fd' }
-      : { bg: delbBg, text: delbText, link: delbMain };
+  switch (readerTheme.value) {
+    case 'light':
+      return { bg: '#ffffff', text: '#111111', link: '#2563eb' };
+    case 'gray':
+      return { bg: '#1b1b1b', text: '#dddddd', link: '#93c5fd' };
+    case 'shadow':
+      return { bg: '#000000', text: '#eeeeee', link: '#eeeeee' };
+    default:
+      return { bg: delbBg, text: delbText, link: delbMain };
+  }
 }
 
 function ensureReaderThemeRegistered(rendition: {
@@ -281,15 +286,18 @@ function getThemeClass(hover?: boolean) {
   const theme = readerTheme.value ?? 'app';
 
   const base =
-    theme === 'dark'
+    theme === 'gray'
       ? 'bg-[#1b1b1b] text-[#ddd]'
-      : theme === 'light'
-        ? 'bg-[#fff] text-[#111]'
-        : '';
+      : theme === 'shadow'
+        ? 'bg-black text-[#eee]'
+        : theme === 'light'
+          ? 'bg-[#fff] text-[#111]'
+          : '';
 
   if (!hover) return base;
 
-  if (theme === 'dark') return base + ' hover:bg-[#222]';
+  if (theme === 'gray') return base + ' hover:bg-[#222]';
+  if (theme === 'shadow') return base + ' hover:bg-[#111]';
   if (theme === 'light') return base + ' hover:bg-[#eee]';
   return base + ' hover:bg-(--sub-color)/5';
 }
@@ -612,7 +620,7 @@ watch(readerDisplayMode, async () => {
 
               <div class="space-y-2">
                 <div class="text-sm">Theme</div>
-                <div class="grid grid-cols-3 gap-2">
+                <div class="grid grid-cols-4 gap-2">
                   <label class="cursor-pointer">
                     <input
                       v-model="readerTheme"
@@ -621,7 +629,7 @@ watch(readerDisplayMode, async () => {
                       class="sr-only peer"
                     />
                     <span
-                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-white text-[#111] border-white peer-checked:border-(--main-color) border-2"
+                      class="flex items-center justify-center rounded-md px-2 py-1 text-center text-xs font-medium bg-white text-[#111] border-white peer-checked:border-(--main-color) border-2"
                     >
                       Light
                     </span>
@@ -630,13 +638,26 @@ watch(readerDisplayMode, async () => {
                     <input
                       v-model="readerTheme"
                       type="radio"
-                      value="dark"
+                      value="gray"
                       class="sr-only peer"
                     />
                     <span
-                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-[#1b1b1b] text-[#ddd] border-[#1b1b1b] peer-checked:border-(--main-color) border-2"
+                      class="flex items-center justify-center rounded-md px-2 py-1 text-center text-xs font-medium bg-[#1b1b1b] text-[#ddd] border-[#1b1b1b] peer-checked:border-(--main-color) border-2"
                     >
-                      Dark
+                      Gray
+                    </span>
+                  </label>
+                  <label class="cursor-pointer">
+                    <input
+                      v-model="readerTheme"
+                      type="radio"
+                      value="shadow"
+                      class="sr-only peer"
+                    />
+                    <span
+                      class="flex items-center justify-center rounded-md px-2 py-1 text-center text-xs font-medium bg-black text-[#eee] border-black peer-checked:border-(--main-color) border-2"
+                    >
+                      Shadow
                     </span>
                   </label>
                   <label class="cursor-pointer">
@@ -647,7 +668,7 @@ watch(readerDisplayMode, async () => {
                       class="sr-only peer"
                     />
                     <span
-                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-(--sub-alt-color) text-(--text-color) border-(--sub-alt-color) peer-checked:border-(--main-color) border-2"
+                      class="flex items-center justify-center rounded-md px-2 py-1 text-center text-xs font-medium bg-(--bg-color) text-(--text-color) border-(--sub-color) peer-checked:border-(--main-color) border-2"
                     >
                       Delb
                     </span>
