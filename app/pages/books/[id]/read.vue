@@ -113,7 +113,7 @@ function scheduleSave(location: string | null, progress: number | null) {
 
   saveTimeout = setTimeout(async () => {
     if (lastSavedLocation === location) return;
-    await saveReadingPosition(location, progress);
+    await saveReadingPosition(location, progress ?? undefined);
   }, 1500);
 }
 
@@ -330,8 +330,16 @@ async function loadReadingPosition() {
   };
 }
 
-async function saveReadingPosition(location: string, progress: number | null) {
+async function saveReadingPosition(
+  location: string,
+  progress?: number | null,
+) {
   if (!bookId.value) return;
+
+  const body: { location: string; progress?: number } = { location };
+  if (progress != null) {
+    body.progress = progress;
+  }
 
   try {
     const res = await fetch(
@@ -339,7 +347,7 @@ async function saveReadingPosition(location: string, progress: number | null) {
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ location, progress }),
+        body: JSON.stringify(body),
       },
     );
 
@@ -448,10 +456,15 @@ async function loadEpub() {
         bookInstance?.locations
           .generate(400)
           .then(() => {
-            if (savedLocation && currentProgress.value == null) {
-              const progress = extractProgress(savedLocation);
+            if (currentProgress.value == null) {
+              const fallbackLocation =
+                savedLocation ?? renditionRef.value?.location?.start?.cfi ?? null;
+              const progress = extractProgress(fallbackLocation);
               if (progress != null) {
                 currentProgress.value = progress;
+                if (fallbackLocation) {
+                  void saveReadingPosition(fallbackLocation, progress);
+                }
               }
             }
           })
