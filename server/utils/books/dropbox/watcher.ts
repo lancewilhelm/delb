@@ -3,7 +3,7 @@ import { mkdir, readdir, rename, stat, writeFile } from 'node:fs/promises';
 
 import { logger } from '~/utils/logger';
 
-import { getDropboxIngestConfigFromSettings } from './config';
+import { getDropboxIngestConfigFromSettings, type DropboxIngestConfig } from './config';
 import { ingestDropboxFile } from './ingest';
 import { resolveDropboxTarget, type DropboxTarget } from './target';
 import { getGlobalSettingsRow } from './settings';
@@ -38,7 +38,7 @@ function timestampForFilename(d = new Date()): string {
   ].join('');
 }
 
-async function ensureDirs(cfg: ReturnType<typeof getDropboxIngestConfig>) {
+async function ensureDirs(cfg: DropboxIngestConfig) {
   await mkdir(cfg.dropboxDirAbs, { recursive: true });
   await mkdir(cfg.failedDirAbs, { recursive: true });
 }

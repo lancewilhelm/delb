@@ -51,7 +51,15 @@ async function resolveUserIdFromSettings(): Promise<string | null> {
     return rows[0]?.id ?? null;
   }
 
-  // Default to "first user" for single-user setups.
+  // Default to system owner (role = "owner") when not explicitly configured.
+  // If no owner exists (misconfigured DB), fall back to "first user".
+  const ownerRows = await cloudDb
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.role, 'owner'))
+    .limit(1);
+  if (ownerRows[0]?.id) return ownerRows[0].id;
+
   const first = await cloudDb.select({ id: users.id }).from(users).limit(1);
   return first[0]?.id ?? null;
 }
@@ -69,17 +77,16 @@ export async function resolveDropboxTarget(): Promise<DropboxTarget> {
   const dropbox = parseDropboxIngestSettings(row?.settings);
 
   const explicitCollectionId = (dropbox.targetCollectionId ?? '').toString().trim();
+  const addedByUserId = await resolveUserIdFromSettings();
 
   if (explicitCollectionId) {
-    const addedByUserId = (dropbox.targetUserId ?? '').toString().trim();
     return {
       collectionId: explicitCollectionId,
       addedByUserId: addedByUserId || null,
     };
   }
 
-  const userId = await resolveUserIdFromSettings();
-  if (!userId) {
+  if (!addedByUserId) {
     throw createError({
       statusCode: 400,
       statusMessage:
@@ -88,7 +95,7 @@ export async function resolveDropboxTarget(): Promise<DropboxTarget> {
   }
 
   return {
-    collectionId: await getPersonalCollectionIdForUser(userId),
-    addedByUserId: userId,
+    collectionId: await getPersonalCollectionIdForUser(addedByUserId),
+    addedByUserId,
   };
 }
