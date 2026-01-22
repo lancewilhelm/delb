@@ -25,6 +25,12 @@ const tabs: Record<string, Tab> = {
     icon: 'lucide:library',
     path: '/settings/admin/library',
   },
+  dropbox: {
+    name: 'dropbox',
+    component: resolveComponent('SettingsAdminDropbox'),
+    icon: 'lucide:inbox',
+    path: '/settings/admin/dropbox',
+  },
   metadata: {
     name: 'metadata',
     component: resolveComponent('SettingsAdminMetadata'),

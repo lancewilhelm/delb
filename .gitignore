@@ -31,5 +31,9 @@ data/
 library/
 !library/.gitkeep
 
+# dropbox ingestion (keep folder via placeholder file: dropbox/.gitkeep)
+dropbox/
+!dropbox/.gitkeep
+
 # Agents for llm coding
 AGENTS.md

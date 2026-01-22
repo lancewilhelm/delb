@@ -165,6 +165,19 @@ library/
 
 The database stores relative paths and metadata for each book.
 
+## Dropbox ingestion
+
+Delb can watch a local `dropbox/` directory and automatically ingest supported book files.
+
+- Drop a file into `dropbox/` (`.epub`, `.pdf`, `.mobi`, `.azw3` by default).
+- The server moves it into `library/...` and creates the DB rows.
+- Failed ingests are moved to `dropbox/failed/` with a `*.error.txt` sidecar.
+
+Admin settings:
+
+- Settings live under `Settings → Admin → Dropbox` and are stored in the global settings document.
+- Defaults match the list above; if you don’t configure anything, it works out of the box.
+
 ## License
 
 [Your License Here]

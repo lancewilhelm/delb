@@ -7,6 +7,24 @@ export interface GlobalSettings {
    * Preferred metadata provider (UI can use this to select a default source).
    */
   metadataProvider?: 'googleBooks' | 'hardcover';
+
+  /**
+   * Dropbox ingestion settings (server-side watcher).
+   *
+   * Stored in global settings so admins can tune behavior without env vars.
+   */
+  dropbox?: {
+    enabled?: boolean;
+    dir?: string;
+    extensions?: string[] | string;
+    pollIntervalMs?: number;
+    stablePassesRequired?: number;
+    stableMaxAgeMs?: number;
+
+    targetCollectionId?: string;
+    targetUserId?: string;
+    targetUserEmail?: string;
+  };
 }
 
 function getDefaultSettings(): GlobalSettings {
@@ -14,6 +32,18 @@ function getDefaultSettings(): GlobalSettings {
     allowRegistration: false,
 
     metadataProvider: 'googleBooks',
+
+    dropbox: {
+      enabled: true,
+      dir: 'dropbox',
+      extensions: ['.epub', '.pdf', '.mobi', '.azw3'],
+      pollIntervalMs: 2500,
+      stablePassesRequired: 2,
+      stableMaxAgeMs: 5 * 60 * 1000,
+      targetCollectionId: '',
+      targetUserId: '',
+      targetUserEmail: '',
+    },
   };
 }
 
