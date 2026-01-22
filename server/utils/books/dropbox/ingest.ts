@@ -227,7 +227,7 @@ export async function ingestDropboxFile(opts: {
         publishedAt,
         language: (meta.language || null) as string | null,
         coverImagePath,
-        createdByUserId: opts.target.addedByUserId,
+        createdByUserId: opts.target.ownerUserId,
         createdAt: now,
         updatedAt: now,
       });
@@ -247,12 +247,14 @@ export async function ingestDropboxFile(opts: {
         createdAt: now,
       });
 
-      await tx.insert(collectionBooks).values({
-        collectionId: opts.target.collectionId,
-        bookId,
-        addedByUserId: opts.target.addedByUserId,
-        addedAt: now,
-      });
+      for (const collectionId of opts.target.collectionIds) {
+        await tx.insert(collectionBooks).values({
+          collectionId,
+          bookId,
+          addedByUserId: opts.target.ownerUserId,
+          addedAt: now,
+        });
+      }
     });
   } catch (err) {
     // Try to clean up the moved file to avoid "orphaned on disk" entries.

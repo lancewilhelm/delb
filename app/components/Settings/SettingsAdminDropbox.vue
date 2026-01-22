@@ -135,10 +135,23 @@ const stableMaxAgeMs = computed({
   set: async (v: number) => updateDropbox({ stableMaxAgeMs: v }),
 });
 
-const targetCollectionId = computed({
-  get: () => (getDropboxSettings().targetCollectionId ?? '').toString(),
-  set: async (v: string) => updateDropbox({ targetCollectionId: v }),
-});
+const additionalCollectionIdsLocal = ref<string[]>([]);
+watch(
+  () => getDropboxSettings().additionalCollectionIds,
+  (v) => {
+    additionalCollectionIdsLocal.value = Array.isArray(v)
+      ? v.map((x) => (x ?? '').toString()).filter(Boolean)
+      : [];
+  },
+  { immediate: true },
+);
+
+async function saveAdditionalCollections() {
+  const ids = Array.from(new Set(additionalCollectionIdsLocal.value))
+    .map((s) => s.trim())
+    .filter(Boolean);
+  await updateDropbox({ additionalCollectionIds: ids });
+}
 
 const targetUserId = computed({
   get: () => (getDropboxSettings().targetUserId ?? '').toString(),
@@ -242,19 +255,54 @@ const targetUserId = computed({
       </div>
 
       <div class="space-y-2">
-        <div class="text-sm font-semibold">target collection (optional)</div>
-        <select
-          v-model="targetCollectionId"
-          class="w-full p-2 border border-(--sub-color) rounded-lg"
-          :disabled="!isAdmin || collectionsLoading"
+        <div class="text-sm font-semibold">also add to collections</div>
+        <div v-if="collectionsLoading" class="text-sm opacity-80">
+          Loading collections…
+        </div>
+        <div v-else-if="!collections.length" class="text-sm opacity-80">
+          No collections yet.
+        </div>
+        <div
+          v-else-if="collections.filter((x) => !x.isPersonal).length === 0"
+          class="text-sm opacity-80"
         >
-          <option value="">(default: personal collection)</option>
-          <option v-for="c in collections" :key="c.id" :value="c.id">
-            {{ c.name }}{{ c.isPersonal ? ' (Personal)' : '' }}
-          </option>
-        </select>
+          No shared collections available.
+        </div>
+        <div v-else class="space-y-1">
+          <label
+            v-for="c in collections.filter((x) => !x.isPersonal)"
+            :key="c.id"
+            class="flex items-center gap-2 text-sm"
+          >
+            <input
+              v-model="additionalCollectionIdsLocal"
+              type="checkbox"
+              :value="c.id"
+              :disabled="!isAdmin"
+              class="peer sr-only"
+            />
+            <span
+              class="h-5 w-5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
+              :class="!isAdmin ? 'peer-checked:bg-(--sub-color) cursor-default!' : ''"
+            ></span>
+            <span class="truncate">{{ c.name }}</span>
+          </label>
+
+          <div class="flex gap-2 mt-2">
+            <button
+              type="button"
+              class="px-3 py-2 rounded-lg bg-(--main-color) text-(--bg-color) disabled:opacity-50 disabled:cursor-not-allowed"
+              :disabled="!isAdmin"
+              @click="saveAdditionalCollections"
+            >
+              save
+            </button>
+          </div>
+        </div>
         <div class="text-xs opacity-70">
-          If unset, the server ingests into a Personal collection.
+          The book is always added to the selected owner’s Personal collection.
+          These are additional collections (non-Personal) to also link the book
+          into.
         </div>
       </div>
 

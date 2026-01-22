@@ -13,6 +13,10 @@ export type DropboxIngestSettings = {
    * If omitted, we default to a Personal collection.
    */
   targetCollectionId?: string;
+  /**
+   * Optional: add newly ingested books to these collections in addition to the owner's Personal collection.
+   */
+  additionalCollectionIds?: string[];
 
   /**
    * Optional: used only when `targetCollectionId` is not provided, to select

@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { collectionMembers, collections, users } from '~/utils/db/schema';
@@ -6,12 +6,16 @@ import { parseDropboxIngestSettings } from './config';
 import { getGlobalSettingsRow } from './settings';
 
 export type DropboxTarget = {
-  collectionId: string;
   /**
-   * For provenance. Nullable because dropbox ingestion is "server-side",
-   * and we may not have a user context.
+   * Owning user for the imported book.
    */
-  addedByUserId: string | null;
+  ownerUserId: string;
+
+  /**
+   * Collections the book will be added to.
+   * Must always include the owner's Personal collection (enforced here).
+   */
+  collectionIds: string[];
 };
 
 async function getPersonalCollectionIdForUser(userId: string): Promise<string> {
@@ -34,7 +38,7 @@ async function getPersonalCollectionIdForUser(userId: string): Promise<string> {
   return id;
 }
 
-async function resolveUserIdFromSettings(): Promise<string | null> {
+async function resolveOwnerUserIdFromSettings(): Promise<string | null> {
   const row = await getGlobalSettingsRow();
   const dropbox = parseDropboxIngestSettings(row?.settings);
 
@@ -64,38 +68,63 @@ async function resolveUserIdFromSettings(): Promise<string | null> {
   return first[0]?.id ?? null;
 }
 
+function uniqStrings(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const v of values) {
+    const s = (v ?? '').toString().trim();
+    if (!s) continue;
+    if (seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
 /**
  * Resolve which collection new dropbox-ingested books should land in.
  *
  * Precedence:
- * - Global setting `dropbox.targetCollectionId`
- * - personal collection of `dropbox.targetUserId` / `dropbox.targetUserEmail`
- * - personal collection of the "first user" in the DB (single-user default)
+ * - Owner user from settings (or system owner fallback)
+ * - Always add to owner's Personal collection
+ * - Optionally also add to `dropbox.additionalCollectionIds` (and legacy `dropbox.targetCollectionId`)
  */
 export async function resolveDropboxTarget(): Promise<DropboxTarget> {
   const row = await getGlobalSettingsRow();
   const dropbox = parseDropboxIngestSettings(row?.settings);
 
-  const explicitCollectionId = (dropbox.targetCollectionId ?? '').toString().trim();
-  const addedByUserId = await resolveUserIdFromSettings();
-
-  if (explicitCollectionId) {
-    return {
-      collectionId: explicitCollectionId,
-      addedByUserId: addedByUserId || null,
-    };
-  }
-
-  if (!addedByUserId) {
+  const ownerUserId = await resolveOwnerUserIdFromSettings();
+  if (!ownerUserId) {
     throw createError({
       statusCode: 400,
       statusMessage:
-        'No users exist to receive dropbox books; create a user or set dropbox.targetCollectionId',
+        'No users exist to receive dropbox books; create a user or set dropbox.targetUserId',
     });
   }
 
+  const personalCollectionId = await getPersonalCollectionIdForUser(ownerUserId);
+
+  // Additional collections (admin-configured). We intentionally exclude Personal;
+  // Personal is always included via `personalCollectionId`.
+  const legacySingle = (dropbox.targetCollectionId ?? '').toString().trim();
+  const additional = uniqStrings(dropbox.additionalCollectionIds);
+  const requested = Array.from(
+    new Set([legacySingle, ...additional].filter(Boolean)),
+  ).filter((id) => id !== personalCollectionId);
+
+  // Validate existence so a stale setting doesn't break ingestion.
+  const validAdditional = requested.length
+    ? await cloudDb
+        .select({ id: collections.id })
+        .from(collections)
+        .where(inArray(collections.id, requested))
+    : [];
+
+  const validAdditionalIds = validAdditional.map((r) => r.id).filter(Boolean);
+
   return {
-    collectionId: await getPersonalCollectionIdForUser(addedByUserId),
-    addedByUserId,
+    ownerUserId,
+    collectionIds: [personalCollectionId, ...validAdditionalIds],
   };
 }
