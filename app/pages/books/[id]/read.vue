@@ -33,6 +33,10 @@ const bookTitle = ref<string>('Reader');
 const currentProgress = ref<number | null>(null);
 const saveErrorMessage = ref<string | null>(null);
 
+// While EPUB.js locations are generating, progress derived from CFI can be wrong
+// (often 0.0%). We keep showing cached progress and display a pending indicator.
+const isAwaitingLocations = ref(false);
+
 let bookInstance: Book | null = null;
 const renditionRef = ref<Rendition | null>(null);
 
@@ -41,13 +45,6 @@ let lastSavedLocation: string | null = null;
 
 const userSettingsStore = useUserSettingsStore();
 const isSettingsOpen = ref(false);
-const settingsMenuRef = ref<HTMLElement | null>(null);
-// NOTE: the <icon> is a Vue component, so the template ref must be attached to a
-// real DOM element (wrapper) for reliable `.contains()` checks.
-const settingsButtonRef = ref<HTMLElement | null>(null);
-// Wrapper around the reader area (outside the epubjs iframe). We can listen here
-// because pointer/click events inside an iframe do not bubble to the parent doc.
-const readerAreaRef = ref<HTMLElement | null>(null);
 
 const readerFontSize = userSettingsStore.settingRef<number>('reader.fontSize');
 const readerLineHeight =
@@ -60,71 +57,99 @@ const themesRegistered = ref(false);
 
 const router = useRouter();
 
+/** Navigate back to the book page. */
 function backToBook() {
   router.replace(`/books/${encodeURIComponent(bookId.value)}`);
 }
 
+/** Toggle the settings menu. */
 function toggleSettings() {
   isSettingsOpen.value = !isSettingsOpen.value;
 }
 
+/** Close the settings menu. */
 function closeSettings() {
   isSettingsOpen.value = false;
 }
 
-function handleDocumentClick(event: Event) {
-  if (!isSettingsOpen.value) return;
-
-  const target = event.target as Node | null;
-  if (!target) return;
-
-  // Click/tap within the menu or on the settings button should not close it.
-  if (settingsMenuRef.value?.contains(target)) return;
-  if (settingsButtonRef.value?.contains(target)) return;
-
-  closeSettings();
-}
-
 /**
- * We enable swipe paging on mobile devices by configuring epubjs with `snap`.
- * When swipe paging is enabled, we hide the prev/next arrow buttons.
- *
- * NOTE: `isMobileDevice` is declared later in this file, so we must not reference
- * it here (before initialization). Swipe detection is derived directly from
- * `useIsMobileDevice()` inside `getRenditionOptions` and the template condition.
+ * Format the progress percentage.
+ * @param pct The progress percentage.
+ * @returns The formatted progress percentage string.
  */
-
 function formatProgress(pct: number | null) {
   if (pct == null) return '—';
   return `${pct.toFixed(1)}%`;
 }
 
+function isMeaningfullyNonZero(pct: number | null) {
+  return pct != null && Number.isFinite(pct) && pct >= 0.05;
+}
+
+/**
+ * Extracts the progress percentage from the given CFI.
+ * @param cfi The CFI string.
+ * @returns The progress percentage or null if extraction fails.
+ */
 function extractProgress(cfi: string | null) {
-  if (!bookInstance || !cfi || !bookInstance.locations?.length()) return null;
+  console.log(
+    `${Date.now()} extractProgress: Extracting progress with cfi ${cfi}...`,
+  );
+  // if (!bookInstance || !cfi || !bookInstance.locations?.length()) return null;
+  if (!bookInstance) {
+    console.log('extractProgress: bookInstance is null');
+    return null;
+  } else if (!cfi) {
+    console.log('extractProgress: cfi is null');
+    return null;
+  } else if (!bookInstance.locations?.length()) {
+    console.log('extractProgress: bookInstance.locations is null');
+    return null;
+  }
+
+  console.log(`${Date.now()} extractProgress: Running percentageFromCfi...`);
   const pct = bookInstance.locations.percentageFromCfi(cfi);
+  console.log(
+    `${Date.now()} extractProgress: percentageFromCfi complete: ${pct}`,
+  );
   if (!Number.isFinite(pct)) return null;
   return Math.max(0, Math.min(100, pct * 100));
 }
 
+/**
+ * Debounces saving the reading position.
+ * @param location The current location.
+ * @param progress The current progress percentage.
+ */
 function scheduleSave(location: string | null, progress: number | null) {
   if (!location) return;
+
+  // Never persist "unknown" progress. We'll keep showing cached progress
+  // until locations are generated and `percentageFromCfi` can produce a value.
+  if (progress == null) return;
 
   if (saveTimeout) clearTimeout(saveTimeout);
 
   saveTimeout = setTimeout(async () => {
     if (lastSavedLocation === location) return;
-    await saveReadingPosition(location, progress ?? undefined);
+    await saveReadingPosition(location, progress);
   }, 1500);
 }
 
+/** Navigate to the previous book page. */
 function goPrev() {
   renditionRef.value?.prev();
 }
 
+/** Navigate to the next book page. */
 function goNext() {
   renditionRef.value?.next();
 }
 
+/**
+ * Gets the current theme tokens.
+ * @returns The theme tokens object.
+ */
 function getThemeTokens() {
   // Grab theme colors from the DOM (for "app" theme)
   const rootStyles = getComputedStyle(document.documentElement);
@@ -144,9 +169,11 @@ function getThemeTokens() {
   }
 }
 
-function ensureReaderThemeRegistered(rendition: {
-  themes: Rendition['themes'];
-}) {
+/**
+ * Registers the base reader theme.
+ * @param rendition The rendition object.
+ */
+function registerBaseReaderTheme(rendition: { themes: Rendition['themes'] }) {
   if (themesRegistered.value) return;
 
   rendition.themes.register('reader-base', {
@@ -163,11 +190,12 @@ function ensureReaderThemeRegistered(rendition: {
   themesRegistered.value = true;
 }
 
+/** Applies reader settings to the rendition. */
 function applyReaderSettings() {
   const rendition = renditionRef.value;
   if (!rendition || typeof window === 'undefined') return;
 
-  ensureReaderThemeRegistered(rendition);
+  registerBaseReaderTheme(rendition);
 
   const themeTokens = getThemeTokens();
 
@@ -188,6 +216,10 @@ function applyReaderSettings() {
   rendition.themes.override('--reader-line-height', `${lineHeight}%`);
 }
 
+/**
+ * Gets the rendition options for the reader.
+ * @param mode The display mode.
+ */
 function getRenditionOptions(mode: ReaderDisplayMode) {
   // Determine swipe capability at call time (avoids referencing `isMobileDevice` before init).
   const swipe = 'ontouchstart' in window || useIsMobileDevice().value;
@@ -217,12 +249,41 @@ function getRenditionOptions(mode: ReaderDisplayMode) {
   };
 }
 
+/**
+ * Attaches event handlers to the rendition.
+ * @param rendition The rendition object.
+ */
 function attachRenditionHandlers(
   rendition: Pick<Rendition, 'on'> & Partial<Pick<Rendition, 'off'>>,
 ) {
   rendition.on('relocated', (loc: { start?: { cfi?: string } }) => {
     const cfi = loc?.start?.cfi ?? null;
+    console.log('Calling extractProgress from rendition relocation');
     const progress = extractProgress(cfi);
+
+    // While locations are missing (or still generating), `extractProgress` is null.
+    // Also, right after navigation it can transiently show ~0.0% even though the
+    // true progress (from percentageFromCfi) is not known yet.
+    //
+    // Behavior:
+    // - If progress is null: keep cached UI value, show pending indicator.
+    // - If progress is ~0 but we were previously showing a non-zero value: treat
+    //   as pending to avoid misleading 0.0% while awaiting locations.
+    // - Otherwise: accept and persist computed progress.
+    if (progress == null) {
+      isAwaitingLocations.value = true;
+      return;
+    }
+
+    if (
+      isAwaitingLocations.value &&
+      !isMeaningfullyNonZero(progress) &&
+      isMeaningfullyNonZero(currentProgress.value)
+    ) {
+      return;
+    }
+
+    isAwaitingLocations.value = false;
     currentProgress.value = progress;
     scheduleSave(cfi, progress);
   });
@@ -235,6 +296,10 @@ function attachRenditionHandlers(
   });
 }
 
+/**
+ * Creates new rendition and applies settings and themes
+ * @param displayCfi The display cfi.
+ */
 async function recreateRendition({
   displayCfi,
 }: {
@@ -250,13 +315,10 @@ async function recreateRendition({
     throw new Error('Reader container not ready.');
   }
 
-  // Tear down any previous rendition (mode/size changes require fresh layout)
   renditionRef.value?.destroy();
   renditionRef.value = null;
 
-  // Themes are registered per-rendition in epubjs. Since we just destroyed the
-  // old rendition, we must reset our registration flag so the new rendition
-  // eagerly re-registers the base theme.
+  // Needed to properly generate the new theme, if necessary
   themesRegistered.value = false;
 
   renditionRef.value = bookInstance.renderTo(
@@ -282,6 +344,11 @@ async function recreateRendition({
   }
 }
 
+/**
+ * Gets tailwind classes for object styling in the settings menu
+ * @param hover Whether the element is being hovered over
+ * @returns The tailwind classes for the element
+ */
 function getThemeClass(hover?: boolean) {
   const theme = readerTheme.value ?? 'app';
 
@@ -302,9 +369,14 @@ function getThemeClass(hover?: boolean) {
   return base + ' hover:bg-(--sub-color)/5';
 }
 
+/**
+ * Fetches the reading position from the backend db
+ * @returns The reading position data
+ */
 async function loadReadingPosition() {
   if (!bookId.value) return null;
 
+  console.log('loadReadingPosition: Loading reading position...');
   const res = await fetch(
     `/api/books/${encodeURIComponent(bookId.value)}/reading-position`,
     { method: 'GET' },
@@ -324,17 +396,23 @@ async function loadReadingPosition() {
     return { location: null, progress: null };
   }
 
+  console.log('loadReadingPosition: Reading position loaded:', json.data);
   return {
     location: json?.data?.location ?? null,
     progress: json?.data?.progress ?? null,
   };
 }
 
-async function saveReadingPosition(
-  location: string,
-  progress?: number | null,
-) {
+/**
+ * Saves the reading position to the backend db
+ * @param location The location to save
+ * @param progress The progress to save
+ */
+async function saveReadingPosition(location: string, progress?: number | null) {
   if (!bookId.value) return;
+  console.log(
+    `saveReadingPosition: Saving reading position, location=${location}, progress=${progress}`,
+  );
 
   const body: { location: string; progress?: number } = { location };
   if (progress != null) {
@@ -367,7 +445,10 @@ async function saveReadingPosition(
   }
 }
 
-async function loadBookTitle() {
+/**
+ * Fetch the book information and assigns it to applicaple refs
+ */
+async function loadBookMetadata() {
   if (!bookId.value) return;
 
   try {
@@ -403,6 +484,9 @@ async function loadBookTitle() {
   }
 }
 
+/**
+ * Fetches the book file
+ */
 async function fetchBook() {
   if (!bookId.value) {
     errorMessage.value = 'Missing book id';
@@ -429,6 +513,9 @@ async function fetchBook() {
   bookInstance = ePub(data);
 }
 
+/**
+ * Load the epub, fetches the book file and initializes the reader
+ */
 async function loadEpub() {
   loading.value = true;
   errorMessage.value = null;
@@ -438,7 +525,10 @@ async function loadEpub() {
 
     const saved = await loadReadingPosition();
     const savedLocation = saved?.location ?? null;
-    const shouldGenerateLocations = saved?.progress == null;
+
+    // Always kick off location generation in the background. It can be slow,
+    // but it should not block the initial render or cached progress display.
+    const shouldGenerateLocations = true;
 
     await recreateRendition({ displayCfi: savedLocation });
 
@@ -447,24 +537,38 @@ async function loadEpub() {
       throw new Error('Reader not initialized.');
     }
 
-    if (savedLocation) {
-      currentProgress.value = saved?.progress ?? extractProgress(savedLocation);
+    // Prefer cached progress immediately (fast) and only replace it once
+    // locations are generated and we can compute an authoritative value.
+    if (saved?.progress != null) {
+      currentProgress.value = saved.progress;
+      isAwaitingLocations.value = true;
     }
 
     if (shouldGenerateLocations) {
+      console.log(
+        `${Date.now()} starting generateLocation from inside loadEpub`,
+      );
+      isAwaitingLocations.value = true;
+
       setTimeout(() => {
         bookInstance?.locations
           .generate(400)
           .then(() => {
-            if (currentProgress.value == null) {
-              const fallbackLocation =
-                savedLocation ?? renditionRef.value?.location?.start?.cfi ?? null;
-              const progress = extractProgress(fallbackLocation);
-              if (progress != null) {
-                currentProgress.value = progress;
-                if (fallbackLocation) {
-                  void saveReadingPosition(fallbackLocation, progress);
-                }
+            const fallbackLocation =
+              savedLocation ?? renditionRef.value?.location?.start?.cfi ?? null;
+
+            console.log(
+              'Calling extractProgress from loadEpub and shouldGenerateLocations',
+            );
+            const progress = extractProgress(fallbackLocation);
+
+            // Only update UI and persist if we computed progress from
+            // `percentageFromCfi` (i.e., not null).
+            if (progress != null) {
+              isAwaitingLocations.value = false;
+              currentProgress.value = progress;
+              if (fallbackLocation) {
+                void saveReadingPosition(fallbackLocation, progress);
               }
             }
           })
@@ -496,20 +600,14 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 onMounted(async () => {
-  await loadBookTitle();
+  await loadBookMetadata();
   await nextTick();
   await loadEpub();
   window.addEventListener('keydown', onKeydown);
-
-  // Use capture + pointerdown so we catch outside clicks even if something
-  // inside stops propagation. NOTE: clicks inside the epubjs iframe won't bubble
-  // to the document, so we also attach a listener to `readerAreaRef` in the template.
-  document.addEventListener('pointerdown', handleDocumentClick, true);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
-  document.removeEventListener('pointerdown', handleDocumentClick, true);
   if (saveTimeout) clearTimeout(saveTimeout);
   if (fullscreenHideTimeout) clearTimeout(fullscreenHideTimeout);
   (
@@ -724,7 +822,15 @@ watch(readerDisplayMode, async () => {
           </div>
         </div>
 
-        <span class="font-medium">{{ formatProgress(currentProgress) }}</span>
+        <span class="font-medium">
+          {{ formatProgress(currentProgress)
+          }}<span
+            v-if="isAwaitingLocations"
+            class="align-top text-xs text-(--muted-color)"
+            title="Awaiting updated book locations"
+            >*</span
+          >
+        </span>
         <span v-if="saveErrorMessage" class="text-(--error-color) text-xs">
           {{ saveErrorMessage }}
         </span>

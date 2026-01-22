@@ -336,9 +336,9 @@ tr:last-child td {
   overflow-anchor: none !important;
 }
 
-.full-screen-toggle-btn {
+/*.full-screen-toggle-btn {
   box-shadow:
     0 0 5px var(--sub-alt-color),
     0 0 10px var(--sub-alt-color),
     0 0 15px var(--sub-alt-color);
-}
+}*/
