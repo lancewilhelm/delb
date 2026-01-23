@@ -44,12 +44,13 @@ const allowRegistration = computed({
 
 // Create user handlers
 const createUserModalVisible = ref(false);
+const newUserName = ref('');
 const newUserEmail = ref('');
 const newUserPassword = ref('');
 const newUserRole = ref<'admin' | 'user'>('user');
 const createUserEmailInput = ref<HTMLInputElement | null>(null);
 async function createUser() {
-  if (!newUserEmail.value || !newUserPassword.value) {
+  if (!newUserName.value.trim() || !newUserEmail.value || !newUserPassword.value) {
     alert('Please fill in all fields');
     return;
   }
@@ -59,7 +60,7 @@ async function createUser() {
     email: newUserEmail.value,
     password: newUserPassword.value,
     role: newUserRole.value,
-    name: '',
+    name: newUserName.value.trim(),
   });
 
   if (error) {
@@ -68,6 +69,7 @@ async function createUser() {
   }
 
   // Reset the form
+  newUserName.value = '';
   newUserEmail.value = '';
   newUserPassword.value = '';
   newUserRole.value = 'user';
@@ -162,6 +164,7 @@ function canEditUser(user: UserWithRole) {
           <thead class="bg-(--sub-color) text-(--main-color)">
             <tr>
               <th scope="col" class="px-6 py-1 text-left font-medium">email</th>
+              <th scope="col" class="px-6 py-1 text-left font-medium">name</th>
               <th scope="col" class="px-6 py-1 text-left font-medium">role</th>
               <th scope="col" class="px-6 py-1 text-left font-medium">
                 date created
@@ -176,6 +179,9 @@ function canEditUser(user: UserWithRole) {
               <tr v-for="u in sortedUsers" :key="u.id" class="h-[40px]">
                 <td class="px-6 py-1 whitespace-nowrap text-sm">
                   {{ u.email }}
+                </td>
+                <td class="px-6 py-1 whitespace-nowrap text-sm">
+                  {{ u.name }}
                 </td>
                 <td class="px-6 py-1 whitespace-nowrap text-sm">
                   {{ u.role }}
@@ -245,7 +251,7 @@ function canEditUser(user: UserWithRole) {
               </tr>
             </template>
             <tr v-else>
-              <td colspan="3" class="px-6 py-4 text-center text-sm">
+              <td colspan="5" class="px-6 py-4 text-center text-sm">
                 Loading users...
               </td>
             </tr>
@@ -286,6 +292,13 @@ function canEditUser(user: UserWithRole) {
           create new user
         </div>
         <div class="flex flex-col gap-2 w-[250px]">
+          <input
+            v-model="newUserName"
+            type="text"
+            placeholder="name"
+            class="w-full p-2 border border-(--sub-color) rounded-lg"
+            @keyup.enter="createUser"
+          />
           <input
             ref="createUserEmailInput"
             v-model="newUserEmail"
