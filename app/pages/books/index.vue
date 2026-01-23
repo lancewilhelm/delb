@@ -15,6 +15,7 @@ useHead({
 const uiStore = useUiStore();
 const collectionsStore = useCollectionsStore();
 const selectionStore = useBookSelectionStore();
+const route = useRoute();
 
 type FetchErrorLike = {
   data?: { message?: string };
@@ -579,6 +580,49 @@ function clearAddedDateFilter() {
   addedEnd.value = '';
 }
 
+// ------------------------------
+// Books filters (Status)
+// ------------------------------
+const STATUS_FILTER_OPTIONS = [
+  { value: 'to_be_read' as const, label: 'To be read' },
+  { value: 'reading' as const, label: 'Reading' },
+  { value: 'finished' as const, label: 'Finished' },
+  { value: 'dnf' as const, label: 'DNF' },
+] as const;
+
+const selectedStatuses = ref<UserBookStatus[]>([]);
+const includeNoStatus = ref(false);
+
+function isStatusSelected(status: UserBookStatus) {
+  return selectedStatuses.value.includes(status);
+}
+
+function toggleStatusSelected(status: UserBookStatus) {
+  const set = new Set(selectedStatuses.value);
+  if (set.has(status)) set.delete(status);
+  else set.add(status);
+  selectedStatuses.value = Array.from(set);
+}
+
+function toggleNoStatus() {
+  includeNoStatus.value = !includeNoStatus.value;
+}
+
+function clearFilters() {
+  clearAddedDateFilter();
+  selectedStatuses.value = [];
+  includeNoStatus.value = false;
+}
+
+const statusQuery = computed<Record<string, string>>(() => {
+  const q: Record<string, string> = {};
+  const tokens: string[] = [];
+  if (includeNoStatus.value) tokens.push('none');
+  for (const s of selectedStatuses.value) tokens.push(s);
+  if (tokens.length) q.status = tokens.join(',');
+  return q;
+});
+
 const addedDateQuery = computed<Record<string, string>>(() => {
   // Keep the endpoint stable: only include params when set
   const q: Record<string, string> = {};
@@ -588,7 +632,7 @@ const addedDateQuery = computed<Record<string, string>>(() => {
 });
 
 const booksEndpoint = computed(() => {
-  const q = addedDateQuery.value;
+  const q = { ...addedDateQuery.value, ...statusQuery.value };
   const pairs = Object.entries(q).filter(([, v]) => typeof v === 'string' && v);
   if (!pairs.length) return '/api/books';
 
@@ -598,6 +642,38 @@ const booksEndpoint = computed(() => {
 
   return `/api/books?${query}`;
 });
+
+// Allow deep-linking from dashboard via `?status=...`
+watch(
+  () => route.query.status,
+  (raw) => {
+    const v = Array.isArray(raw) ? raw[0] : raw;
+    if (typeof v !== 'string' || !v.trim()) return;
+
+    const tokens = v
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    includeNoStatus.value = tokens.includes('none');
+
+    const allowed = new Set<UserBookStatus>([
+      'to_be_read',
+      'reading',
+      'finished',
+      'dnf',
+    ]);
+
+    selectedStatuses.value = Array.from(
+      new Set(
+        tokens.filter((t): t is UserBookStatus =>
+          allowed.has(t as UserBookStatus),
+        ),
+      ),
+    );
+  },
+  { immediate: true },
+);
 
 function onFiltersDocumentPointerDown(e: MouseEvent) {
   if (!filtersOpen.value) return;
@@ -723,7 +799,7 @@ onMounted(async () => {
       <!-- Main content (fixed header + scrollable content area) -->
       <div class="flex-1 overflow-hidden flex flex-col min-h-0">
         <!-- Header (non-scrolling): view selector stays fixed -->
-        <div class="px-4 shrink-0 border-b border-(--sub-color)">
+        <div class="px-2 shrink-0 border-b border-(--sub-color)">
           <div class="flex items-center justify-between gap-4">
             <!-- View selector (mode) lives here (top-left) -->
             <ViewSelectorDropdown />
@@ -1061,7 +1137,7 @@ onMounted(async () => {
                     <button
                       class="text-xs opacity-70 hover:opacity-100"
                       type="button"
-                      @click="clearAddedDateFilter"
+                      @click="clearFilters"
                     >
                       Clear
                     </button>
@@ -1092,6 +1168,50 @@ onMounted(async () => {
 
                     <div class="text-xs opacity-70">
                       Shows books added within the selected date range.
+                    </div>
+
+                    <div class="pt-2 border-t border-(--sub-color)"></div>
+
+                    <div class="text-sm font-medium opacity-90">Status</div>
+
+                    <div class="space-y-2">
+                      <label
+                        class="flex items-center gap-2 cursor-pointer"
+                        @click.prevent="toggleNoStatus"
+                      >
+                        <input
+                          type="checkbox"
+                          class="peer sr-only"
+                          :checked="includeNoStatus"
+                          @change="toggleNoStatus"
+                        />
+                        <span
+                          class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                        ></span>
+                        <div class="min-w-0">
+                          <div class="text-sm">No status</div>
+                        </div>
+                      </label>
+
+                      <label
+                        v-for="opt in STATUS_FILTER_OPTIONS"
+                        :key="opt.value"
+                        class="flex items-center gap-2 cursor-pointer"
+                        @click.prevent="toggleStatusSelected(opt.value)"
+                      >
+                        <input
+                          type="checkbox"
+                          class="peer sr-only"
+                          :checked="isStatusSelected(opt.value)"
+                          @change="toggleStatusSelected(opt.value)"
+                        />
+                        <span
+                          class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                        ></span>
+                        <div class="min-w-0">
+                          <div class="text-sm">{{ opt.label }}</div>
+                        </div>
+                      </label>
                     </div>
                   </div>
                 </div>
@@ -1167,7 +1287,7 @@ onMounted(async () => {
             <!-- Only the books grid scrolls (BooksInfiniteGrid owns the scroller) -->
             <BooksInfiniteGrid
               :key="`${booksGridKey}-${booksSortKey}-${booksSortDir}-${JSON.stringify(
-                addedDateQuery,
+                { ...addedDateQuery, ...statusQuery },
               )}`"
               :collection-id="activeCollectionId"
               :sort="booksSortKey"

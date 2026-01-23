@@ -20,12 +20,16 @@ import {
   collectionMembers,
   publishers,
   series,
+  userBookStatus,
+  USER_BOOK_STATUSES,
 } from '~/utils/db/schema';
 import { logger } from '~/utils/logger';
 import { auth } from '~/utils/auth';
 
 type SortKey = 'dateAdded' | 'alphabetical' | 'publishedDate';
 type SortDir = 'asc' | 'desc';
+
+type UserBookStatusValue = (typeof USER_BOOK_STATUSES)[number];
 
 type Cursor = {
   /**
@@ -83,6 +87,44 @@ function decodeCursor(raw: unknown): Cursor | null {
   }
 }
 
+function normalizeStatusFilter(
+  raw: unknown,
+): { statuses: UserBookStatusValue[]; includeNone: boolean } {
+  const v = (raw ?? '').toString().trim();
+  if (!v) return { statuses: [], includeNone: false };
+
+  const parts = v
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  const uniq = Array.from(new Set(parts));
+
+  const statuses: UserBookStatusValue[] = [];
+  let includeNone = false;
+
+  for (const token of uniq) {
+    if (token === 'none') {
+      includeNone = true;
+      continue;
+    }
+
+    if ((USER_BOOK_STATUSES as readonly string[]).includes(token)) {
+      statuses.push(token as UserBookStatusValue);
+      continue;
+    }
+
+    throw createError({
+      statusCode: 400,
+      statusMessage: `Invalid status filter. Expected one of: ${USER_BOOK_STATUSES.join(
+        ', ',
+      )}, none`,
+    });
+  }
+
+  return { statuses, includeNone };
+}
+
 export default defineEventHandler(async (event) => {
   logger.debug('GET /api/books');
 
@@ -110,6 +152,7 @@ export default defineEventHandler(async (event) => {
   // - sortDir=<asc|desc> (default per sort; dateAdded desc)
   // - addedStart=<YYYY-MM-DD> optional (inclusive)
   // - addedEnd=<YYYY-MM-DD> optional (inclusive)
+  // - status=<csv> optional (e.g. "reading,to_be_read,none")
   const q = getQuery(event) as {
     collectionId?: string;
     limit?: string;
@@ -118,6 +161,7 @@ export default defineEventHandler(async (event) => {
     sortDir?: string;
     addedStart?: string;
     addedEnd?: string;
+    status?: string;
     debug?: string;
   };
 
@@ -129,6 +173,7 @@ export default defineEventHandler(async (event) => {
   const sortDir = normalizeSortDir(q.sortDir, sort);
 
   const cursor = decodeCursor(q.cursor);
+  const statusFilter = normalizeStatusFilter(q.status);
 
   // Added date range filter (books.createdAt)
   // Inputs are expected as YYYY-MM-DD from <input type="date">.
@@ -354,24 +399,50 @@ export default defineEventHandler(async (event) => {
 
     // Page query: fetch visible books via the collection link table.
     // Sort is selectable, with deterministic tie-break by id.
-    const pageRows = await cloudDb
+    let baseQuery = cloudDb
       .select({ book: books })
       .from(books)
-      .innerJoin(collectionBooks, eq(collectionBooks.bookId, books.id))
-      .where(
+      .innerJoin(collectionBooks, eq(collectionBooks.bookId, books.id));
+
+    const commonWhere = and(
+      inArray(collectionBooks.collectionId, targetCollectionIds),
+      cursorWhere,
+      // Inclusive range (numeric compare against unix-second bounds)
+      // We coerce createdAt to INTEGER to handle cases where it may be stored as TEXT.
+      addedStartSec !== null
+        ? sql`CAST(${books.createdAt} AS INTEGER) >= ${addedStartSec}`
+        : undefined,
+      addedEndSec !== null
+        ? sql`CAST(${books.createdAt} AS INTEGER) <= ${addedEndSec}`
+        : undefined,
+    );
+
+    const hasStatusFilter =
+      statusFilter.includeNone || statusFilter.statuses.length > 0;
+
+    const statusWhere = hasStatusFilter
+      ? statusFilter.includeNone && statusFilter.statuses.length
+        ? or(
+            inArray(userBookStatus.status, statusFilter.statuses),
+            sql`${userBookStatus.status} IS NULL`,
+          )
+        : statusFilter.includeNone
+          ? sql`${userBookStatus.status} IS NULL`
+          : inArray(userBookStatus.status, statusFilter.statuses)
+      : undefined;
+
+    if (hasStatusFilter) {
+      baseQuery = baseQuery.leftJoin(
+        userBookStatus,
         and(
-          inArray(collectionBooks.collectionId, targetCollectionIds),
-          cursorWhere,
-          // Inclusive range (numeric compare against unix-second bounds)
-          // We coerce createdAt to INTEGER to handle cases where it may be stored as TEXT.
-          addedStartSec !== null
-            ? sql`CAST(${books.createdAt} AS INTEGER) >= ${addedStartSec}`
-            : undefined,
-          addedEndSec !== null
-            ? sql`CAST(${books.createdAt} AS INTEGER) <= ${addedEndSec}`
-            : undefined,
+          eq(userBookStatus.bookId, books.id),
+          eq(userBookStatus.userId, userId),
         ),
-      )
+      );
+    }
+
+    const pageRows = await baseQuery
+      .where(and(commonWhere, statusWhere))
       // Avoid duplicates if a book is in multiple target collections.
       // Group by book id provides a deterministic unique set in SQLite.
       .groupBy(books.id)

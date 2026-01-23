@@ -9,6 +9,12 @@ type NavItem = {
 };
 
 const items: NavItem[] = [
+  {
+    id: 'dashboard',
+    label: 'Dashboard',
+    to: '/',
+    icon: 'lucide:layout-dashboard',
+  },
   { id: 'books', label: 'Books', to: '/books', icon: 'lucide:book' },
   { id: 'authors', label: 'Authors', to: '/authors', icon: 'lucide:user' },
   { id: 'series', label: 'Series', to: '/series', icon: 'lucide:layers' },
@@ -80,7 +86,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex items-center">
-    <!-- Mobile (default): dropdown -->
+    <!-- Mobile: dropdown -->
     <div class="relative md:hidden">
       <button
         ref="anchorRef"
@@ -144,8 +150,8 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- Desktop (sm+): inline nav -->
-    <nav aria-label="Library views" class="hidden md:flex items-center gap-0!">
+    <!-- Desktop: inline nav -->
+    <nav aria-label="Views" class="hidden md:flex items-center gap-0!">
       <NuxtLink
         v-for="item in items"
         :key="item.id"

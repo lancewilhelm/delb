@@ -30,10 +30,23 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
         class="text-(--main-color) cursor-pointer header-icon font-bold text-2xl logo"
         @click="
           () => {
+            console.log(route.path);
             if (route.path === '/') {
+              return;
+            } else if (
+              route.path === '/books' ||
+              route.path === '/authors' ||
+              route.path === '/series' ||
+              route.path === '/publishers' ||
+              route.path === '/tags'
+            ) {
               uiStore.setLibraryView('books');
+              navigateTo('/');
+            } else {
+              navigateTo(`/${uiStore.libraryView}`);
             }
-            navigateTo('/');
+            {
+            }
           }
         "
       >
