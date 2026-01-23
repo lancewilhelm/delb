@@ -124,7 +124,7 @@ const showAnyMetadata = computed(
 </script>
 
 <template>
-  <div :class="['w-full', props.class]">
+  <div :class="['w-full max-w-80', props.class]">
     <div class="flex flex-col gap-1">
       <div class="relative">
         <BookCover
@@ -167,7 +167,9 @@ const showAnyMetadata = computed(
 
       <div v-if="showAnyMetadata" class="flex flex-col">
         <!-- Title -->
-        <HoverScrollText v-if="userSettingsStore.activeSettings.bookGrid.showTitle">
+        <HoverScrollText
+          v-if="userSettingsStore.activeSettings.bookGrid.showTitle"
+        >
           <span class="cursor-pointer hover:underline" @click="onOpenBook">
             {{ props.book.title }}
           </span>
@@ -175,7 +177,9 @@ const showAnyMetadata = computed(
 
         <!-- Authors -->
         <HoverScrollText
-          v-if="userSettingsStore.activeSettings.bookGrid.showAuthors && authorLabel"
+          v-if="
+            userSettingsStore.activeSettings.bookGrid.showAuthors && authorLabel
+          "
           class="opacity-70 cursor-pointer"
         >
           <span v-if="props.selectable" @click="onOpenBook">
@@ -200,7 +204,8 @@ const showAnyMetadata = computed(
         <!-- Series -->
         <HoverScrollText
           v-if="
-            userSettingsStore.activeSettings.bookGrid.showSeries && props.book.series
+            userSettingsStore.activeSettings.bookGrid.showSeries &&
+            props.book.series
           "
           class="italic opacity-70 text-sm cursor-pointer"
         >
