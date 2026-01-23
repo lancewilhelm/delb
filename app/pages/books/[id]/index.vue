@@ -843,6 +843,8 @@ watch(
     loadBook();
   },
 );
+
+const isMobileDevice = useIsMobileDevice();
 </script>
 
 <template>
@@ -1231,19 +1233,20 @@ watch(
         </div>
 
         <!-- Actions & Collections -->
-        <div class="flex flex-col items-center sm:row-start-2 sm:col-start-1">
+        <div class="flex flex-col items-center row-start-2 col-start-1">
           <!-- Actions -->
           <div class="flex flex-wrap gap-1 pt-2 items-center justify-center">
             <NuxtLink
+              v-tooltip="'Read book'"
               v-if="hasEpub"
               class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
               :to="`/books/${book.id}/read`"
             >
-              <icon name="lucide:book-open" class="text-lg" />
-              Read
+              <icon name="lucide:book-open" class="text-xl" />
             </NuxtLink>
 
             <button
+              v-tooltip="'Download book'"
               v-if="book.files && book.files.length > 0"
               class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
               type="button"
@@ -1254,29 +1257,29 @@ watch(
                 :name="
                   downloading ? 'lucide:loader-circle' : 'lucide:book-down'
                 "
-                :class="[downloading ? 'animate-spin' : '', 'scale-135']"
+                class="text-xl"
+                :class="[downloading ? 'animate-spin' : '']"
               />
-              {{ downloading ? 'Downloading...' : 'Download' }}
             </button>
 
             <NuxtLink
+              v-tooltip="'Edit book details'"
               v-if="isAdmin"
               class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
               :to="`/books/${book.id}/edit`"
             >
-              <icon name="lucide:pencil" class="text-lg" />
-              Edit
+              <icon name="lucide:pencil" class="text-xl" />
             </NuxtLink>
 
             <button
+              v-tooltip="'Delete book'"
               v-if="isAdmin"
               class="px-3 py-2 rounded-md border border-(--error-color) text-(--error-color) hover:bg-(--error-color)/90! text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
               type="button"
               :disabled="deleting"
               @click="showDeleteConfirm = true"
             >
-              <icon name="lucide:trash-2" class="text-lg" />
-              Delete
+              <icon name="lucide:trash-2" class="text-xl" />
             </button>
           </div>
 

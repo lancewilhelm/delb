@@ -889,7 +889,10 @@ onMounted(async () => {
                 </button>
               </div>
 
-              <p v-if="collectionsSaveError" class="text-sm text-red-600">
+              <p
+                v-if="collectionsSaveError"
+                class="text-sm text-(--warning-color)"
+              >
                 {{ collectionsSaveError }}
               </p>
 
@@ -1074,7 +1077,10 @@ onMounted(async () => {
                       </label>
                     </div>
 
-                    <p v-if="statusError" class="text-sm text-red-600">
+                    <p
+                      v-if="statusError"
+                      class="text-sm text-(--warning-color)"
+                    >
                       {{ statusError }}
                     </p>
                   </div>
