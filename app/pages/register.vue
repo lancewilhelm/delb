@@ -10,10 +10,15 @@ useHead({
 });
 
 const email = ref("");
+const name = ref("");
 const password = ref("");
 const verifyPassword = ref("");
 
 async function handleSubmit() {
+    if (!name.value.trim()) {
+        alert("Please enter your name");
+        return;
+    }
     if (password.value !== verifyPassword.value) {
         alert("Passwords do not match");
         return;
@@ -23,9 +28,7 @@ async function handleSubmit() {
     const { error } = await signUp.email({
         email: email.value,
         password: password.value,
-        // Better Auth validates `name` as a non-empty string (>= 1 char) by default.
-        // Use the email as a safe default until you add a dedicated "name" field to the form.
-        name: email.value,
+        name: name.value.trim(),
     });
 
     if (error) {
@@ -54,6 +57,13 @@ async function handleSubmit() {
             class="flex flex-col gap-2 items-center register-form"
             @submit.prevent="handleSubmit"
         >
+            <input
+                v-model="name"
+                type="text"
+                autocomplete="name"
+                placeholder="name"
+                class="border border-(--sub-color) px-2 py-1 rounded text-[12pt] w-[250px]"
+            />
             <input
                 v-model="email"
                 type="email"

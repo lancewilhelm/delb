@@ -4,7 +4,7 @@ const changePasswordSuccess = ref(false);
 const currentPassword = ref('');
 const newPassword = ref('');
 const confirmPassword = ref('');
-const { changePassword } = useAuth();
+const { changePassword, changeEmail, fetchSession, user, client } = useAuth();
 async function handleUpdatePassword() {
   if (newPassword.value !== confirmPassword.value) {
     alert('New password and confirmation do not match');
@@ -35,6 +35,79 @@ async function handleUpdatePassword() {
 }
 
 const config = useRuntimeConfig();
+
+const profileName = ref('');
+const profileEmail = ref('');
+const profileUpdateSuccess = ref(false);
+const profileUpdating = ref(false);
+
+watch(
+  () => user.value,
+  (currentUser) => {
+    profileName.value = currentUser?.name ?? '';
+    profileEmail.value = currentUser?.email ?? '';
+  },
+  { immediate: true },
+);
+
+const profileDirty = computed(() => {
+  const currentName = user.value?.name ?? '';
+  const currentEmail = user.value?.email ?? '';
+  return (
+    profileName.value.trim() !== currentName ||
+    profileEmail.value.trim() !== currentEmail
+  );
+});
+
+async function handleUpdateProfile() {
+  if (!user.value || profileUpdating.value) return;
+
+  const trimmedName = profileName.value.trim();
+  const trimmedEmail = profileEmail.value.trim();
+
+  if (!trimmedName) {
+    alert('Please enter your name');
+    return;
+  }
+
+  if (!trimmedEmail) {
+    alert('Please enter your email');
+    return;
+  }
+
+  profileUpdating.value = true;
+
+  try {
+    if (trimmedName !== (user.value.name ?? '')) {
+      const { error } = await client.updateUser({ name: trimmedName });
+      if (error) {
+        throw error;
+      }
+    }
+
+    if (trimmedEmail !== (user.value.email ?? '')) {
+      const { error } = await changeEmail({ newEmail: trimmedEmail });
+      if (error) {
+        throw error;
+      }
+    }
+
+    await fetchSession();
+    profileUpdateSuccess.value = true;
+    setTimeout(() => {
+      profileUpdateSuccess.value = false;
+    }, 3000);
+  } catch (error: unknown) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String((error as { message?: unknown }).message ?? 'Unknown error')
+        : 'Unknown error';
+    alert('Error updating profile: ' + message);
+    console.error('Error updating profile:', error);
+  } finally {
+    profileUpdating.value = false;
+  }
+}
 </script>
 <template>
   <div class="w-full">
@@ -52,6 +125,43 @@ const config = useRuntimeConfig();
         >
           <Icon name="lucide:check" class="w-4 h-4 text-(--main-color)" />
           password updated
+        </div>
+      </div>
+    </SettingsUIGroup>
+    <SettingsUIGroup title="profile" icon="lucide:user" class="flex flex-col">
+      <div class="flex flex-col gap-2 max-w-[320px]">
+        <input
+          v-model="profileName"
+          type="text"
+          autocomplete="name"
+          placeholder="name"
+          class="w-full p-2 border border-(--sub-color) rounded-lg"
+        />
+        <input
+          v-model="profileEmail"
+          type="email"
+          autocomplete="email"
+          placeholder="email"
+          class="w-full p-2 border border-(--sub-color) rounded-lg"
+        />
+        <div class="flex items-center gap-2">
+          <button
+            class="flex items-center gap-2 bg-(--main-color) text-(--bg-color) p-2 rounded-lg px-4 cursor-pointer"
+            :class="[
+              profileDirty ? 'opacity-100' : 'opacity-60 cursor-not-allowed',
+            ]"
+            :disabled="!profileDirty || profileUpdating"
+            @click="handleUpdateProfile"
+          >
+            save changes
+          </button>
+          <div
+            v-if="profileUpdateSuccess"
+            class="flex items-center gap-2 italic text-(--main-color)"
+          >
+            <Icon name="lucide:check" class="w-4 h-4 text-(--main-color)" />
+            profile updated
+          </div>
         </div>
       </div>
     </SettingsUIGroup>
