@@ -129,6 +129,7 @@ delb/
 - [Tooltip Guide](docs/tooltip.md) - Component documentation
 - [Calibre Import](docs/calibre-import.md) - Import-in-place process + caveats
 - [Calibre Database Schema](docs/calibre-database-schema.md) - Reference schema
+- [Health Checks](docs/health-checks.md) - Planned library/database integrity checks
 
 ## Development
 
@@ -164,6 +165,8 @@ library/
 ```
 
 The database stores relative paths and metadata for each book.
+
+Delb also supports **reference-only books** (no associated file in `library/`). This allows using Delb as a “physical library” catalog in addition to a file-backed ebook library.
 
 ## Dropbox ingestion
 

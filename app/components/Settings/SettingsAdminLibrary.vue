@@ -11,6 +11,27 @@ defineOptions({ name: 'SettingsAdminLibrary' });
 
 type ImportAction = 'import' | 'rescan';
 
+type HealthMode = 'quick' | 'deep';
+type HealthStatus = 'ok' | 'warn' | 'error';
+
+type HealthCheckResult = {
+  id: string;
+  name: string;
+  status: HealthStatus;
+  message: string;
+  howToFix?: string;
+  meta?: Record<string, unknown>;
+  sample?: Array<Record<string, unknown>>;
+};
+
+type HealthReport = {
+  mode: HealthMode;
+  startedAt: string;
+  finishedAt: string;
+  overall: HealthStatus;
+  results: HealthCheckResult[];
+};
+
 type ImportSummary = {
   action: ImportAction;
   dryRun: boolean;
@@ -85,6 +106,14 @@ const rescanImportNew = ref(false);
 const rescanDryRun = ref(false);
 const rescanAttachToCollections = ref(false);
 
+type HealthApiResponse =
+  | { success: true; data: HealthReport }
+  | { success: false; message?: string };
+
+const healthBusy = ref(false);
+const healthReport = ref<HealthReport | null>(null);
+const healthErrorMessage = ref<string | null>(null);
+
 async function fetchCollections() {
   collectionsLoading.value = true;
   try {
@@ -134,6 +163,48 @@ function formatNumber(n: unknown): string {
 
 function isValidSelectionForImport(): boolean {
   return selectedCollectionIds.value.length > 0;
+}
+
+function statusClass(status: HealthStatus): string {
+  return status === 'error'
+    ? 'text-(--error-color)'
+    : status === 'warn'
+      ? 'text-yellow-600 dark:text-yellow-400'
+      : 'text-green-600 dark:text-green-400';
+}
+
+async function runHealthChecks(mode: HealthMode) {
+  if (healthBusy.value) return;
+
+  healthBusy.value = true;
+  healthErrorMessage.value = null;
+
+  try {
+    const res = await $fetch<HealthApiResponse>('/api/settings/admin/health', {
+      method: 'POST',
+      body: { mode },
+    });
+
+    if (!res || (res as { success?: boolean }).success !== true) {
+      const msg =
+        (res as { message?: string } | undefined)?.message ||
+        'Failed to run health checks';
+      healthErrorMessage.value = msg;
+      return;
+    }
+
+    healthReport.value = (res as { success: true; data: HealthReport }).data;
+  } catch (err) {
+    const e = err as {
+      data?: { message?: string };
+      statusMessage?: string;
+      message?: string;
+    };
+    healthErrorMessage.value =
+      e?.data?.message || e?.statusMessage || e?.message || 'Unexpected error';
+  } finally {
+    healthBusy.value = false;
+  }
 }
 
 async function runCalibreAction(
@@ -376,6 +447,87 @@ async function runCalibreAction(
           class="text-xs text-(--error-color)"
         >
           Select at least one collection (or disable “add to collections”).
+        </div>
+      </div>
+    </SettingsUIGroup>
+
+    <SettingsUIGroup
+      title="health checks"
+      icon="lucide:heart-pulse"
+      description="find common library/database issues that affect the user experience"
+    >
+      <div class="mt-4 space-y-3">
+        <div class="flex flex-wrap gap-2">
+          <button
+            class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
+            :disabled="healthBusy"
+            @click="runHealthChecks('quick')"
+          >
+            {{ healthBusy ? 'Running...' : 'Run quick checks' }}
+          </button>
+
+          <button
+            class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
+            :disabled="healthBusy"
+            @click="runHealthChecks('deep')"
+          >
+            {{ healthBusy ? 'Running...' : 'Run deep checks' }}
+          </button>
+        </div>
+
+        <div v-if="healthErrorMessage" class="text-sm text-(--error-color)">
+          {{ healthErrorMessage }}
+        </div>
+
+        <div v-if="healthReport" class="space-y-3">
+          <div class="flex flex-wrap items-center gap-2 text-sm">
+            <span class="font-semibold">overall:</span>
+            <span class="font-mono" :class="statusClass(healthReport.overall)">{{
+              healthReport.overall
+            }}</span>
+            <span class="opacity-70">
+              ({{ healthReport.mode }}, {{ healthReport.startedAt }} →
+              {{ healthReport.finishedAt }})
+            </span>
+          </div>
+
+          <div class="space-y-2">
+            <div
+              v-for="r in healthReport.results"
+              :key="r.id"
+              class="p-3 rounded border border-(--sub-color)/30"
+            >
+              <div class="flex items-center justify-between gap-3">
+                <div class="font-semibold text-sm">{{ r.name }}</div>
+                <div class="font-mono text-sm" :class="statusClass(r.status)">
+                  {{ r.status }}
+                </div>
+              </div>
+              <div class="text-sm opacity-90 mt-1">{{ r.message }}</div>
+              <div v-if="r.howToFix" class="text-xs opacity-70 mt-2">
+                {{ r.howToFix }}
+              </div>
+
+              <details
+                v-if="(r.sample && r.sample.length) || r.meta"
+                class="mt-2 text-xs opacity-80"
+              >
+                <summary class="cursor-pointer select-none">
+                  details
+                </summary>
+                <div v-if="r.meta" class="mt-2">
+                  <pre class="whitespace-pre-wrap">{{
+                    JSON.stringify(r.meta, null, 2)
+                  }}</pre>
+                </div>
+                <div v-if="r.sample && r.sample.length" class="mt-2">
+                  <pre class="whitespace-pre-wrap">{{
+                    JSON.stringify(r.sample, null, 2)
+                  }}</pre>
+                </div>
+              </details>
+            </div>
+          </div>
         </div>
       </div>
     </SettingsUIGroup>
