@@ -1,12 +1,14 @@
 import path from 'node:path';
 import { stat } from 'node:fs/promises';
 
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { auth } from '~/utils/auth';
 import { logger } from '~/utils/logger';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
+  authors,
+  bookAuthors,
   bookFiles,
   bookIdentifiers,
   books,
@@ -15,6 +17,12 @@ import {
   users,
 } from '~/utils/db/schema';
 import { BOOK_STORAGE_DEFAULTS } from '~~/server/utils/books/storage/paths';
+import {
+  FUZZY_DUPLICATE_THRESHOLD,
+  fuzzySeedToken,
+  fuzzyTitleAuthorScoreFromTokens,
+  fuzzyTokens,
+} from '~~/server/utils/books/duplicates';
 
 type HealthMode = 'quick' | 'deep';
 type HealthStatus = 'ok' | 'warn' | 'error';
@@ -34,6 +42,8 @@ type Body = {
   sampleLimit?: unknown;
   maxFilesToStat?: unknown;
   maxDirsToStat?: unknown;
+  maxBooksForFuzzy?: unknown;
+  maxFuzzyComparisons?: unknown;
 };
 
 function normalizeInt(
@@ -151,6 +161,14 @@ export default defineEventHandler(async (event) => {
   const maxDirsToStat = normalizeInt(body?.maxDirsToStat, 5000, {
     min: 0,
     max: 50_000,
+  });
+  const maxBooksForFuzzy = normalizeInt(body?.maxBooksForFuzzy, 3000, {
+    min: 0,
+    max: 20_000,
+  });
+  const maxFuzzyComparisons = normalizeInt(body?.maxFuzzyComparisons, 150_000, {
+    min: 0,
+    max: 2_000_000,
   });
 
   const startedAt = new Date().toISOString();
@@ -315,6 +333,266 @@ export default defineEventHandler(async (event) => {
   }
 
   if (mode === 'deep') {
+    // 4.5) Possible duplicates (same fuzzy check as ingest)
+    {
+      type BookRow = {
+        id: string;
+        title: string;
+        coverImagePath: string | null;
+        createdAt: unknown;
+        createdByUserId: string | null;
+      };
+
+      const bookRows: BookRow[] =
+        maxBooksForFuzzy > 0
+          ? await cloudDb
+              .select({
+                id: books.id,
+                title: books.title,
+                coverImagePath: books.coverImagePath,
+                createdAt: books.createdAt,
+                createdByUserId: books.createdByUserId,
+              })
+              .from(books)
+              .limit(maxBooksForFuzzy)
+          : [];
+
+      const bookIds = bookRows.map((b) => b.id).filter(Boolean);
+
+      const authorLinks =
+        bookIds.length > 0
+          ? await cloudDb
+              .select({
+                bookId: bookAuthors.bookId,
+                name: authors.name,
+                position: bookAuthors.position,
+              })
+              .from(bookAuthors)
+              .innerJoin(authors, eq(authors.id, bookAuthors.authorId))
+              .where(inArray(bookAuthors.bookId, bookIds))
+              .orderBy(
+                sql`COALESCE(${bookAuthors.position}, 999) ASC`,
+                authors.name,
+              )
+          : [];
+
+      const authorNamesByBookId = new Map<string, string[]>();
+      for (const row of authorLinks) {
+        const list = authorNamesByBookId.get(row.bookId) ?? [];
+        list.push(row.name);
+        authorNamesByBookId.set(row.bookId, list);
+      }
+
+      type Sig = {
+        id: string;
+        title: string;
+        coverImagePath: string | null;
+        createdAt: unknown;
+        createdByUserId: string | null;
+        authorNames: string[];
+        titleTokens: string[];
+        authorTokens: string[];
+        seed: string | null;
+      };
+
+      const sigs: Sig[] = bookRows.map((b) => {
+        const authorNames = authorNamesByBookId.get(b.id) ?? [];
+        const titleTokens = fuzzyTokens(b.title);
+        const authorTokens = fuzzyTokens(authorNames.join(' '));
+        const seed = fuzzySeedToken(titleTokens);
+        return {
+          id: b.id,
+          title: b.title,
+          coverImagePath: b.coverImagePath ?? null,
+          createdAt: b.createdAt,
+          createdByUserId: b.createdByUserId ?? null,
+          authorNames,
+          titleTokens,
+          authorTokens,
+          seed,
+        };
+      });
+
+      const bySeed = new Map<string, Sig[]>();
+      for (const s of sigs) {
+        if (!s.seed) continue;
+        const list = bySeed.get(s.seed) ?? [];
+        list.push(s);
+        bySeed.set(s.seed, list);
+      }
+
+      let comparisons = 0;
+      let foundPairs = 0;
+      const samplePairs: Array<Record<string, unknown>> = [];
+
+      const seenPairKey = new Set<string>();
+
+      for (const [, bucket] of bySeed) {
+        if (comparisons >= maxFuzzyComparisons) break;
+        if (bucket.length < 2) continue;
+
+        for (let i = 0; i < bucket.length; i++) {
+          if (comparisons >= maxFuzzyComparisons) break;
+          const a = bucket[i]!;
+          for (let j = i + 1; j < bucket.length; j++) {
+            if (comparisons >= maxFuzzyComparisons) break;
+            const b = bucket[j]!;
+
+            comparisons++;
+
+            const score = fuzzyTitleAuthorScoreFromTokens({
+              titleTokensA: a.titleTokens,
+              authorTokensA: a.authorTokens,
+              titleTokensB: b.titleTokens,
+              authorTokensB: b.authorTokens,
+            });
+
+            if (score < FUZZY_DUPLICATE_THRESHOLD) continue;
+
+            const first = a.id < b.id ? a : b;
+            const second = a.id < b.id ? b : a;
+
+            const aId = first.id;
+            const bId = second.id;
+            const key = `${aId}|${bId}`;
+            if (seenPairKey.has(key)) continue;
+            seenPairKey.add(key);
+
+            foundPairs++;
+
+            if (samplePairs.length < sampleLimit) {
+              samplePairs.push({
+                score,
+                a: {
+                  id: first.id,
+                  title: first.title,
+                  authorNames: first.authorNames,
+                  coverImagePath: first.coverImagePath,
+                  createdAt: first.createdAt,
+                  ownerUserId: first.createdByUserId,
+                },
+                b: {
+                  id: second.id,
+                  title: second.title,
+                  authorNames: second.authorNames,
+                  coverImagePath: second.coverImagePath,
+                  createdAt: second.createdAt,
+                  ownerUserId: second.createdByUserId,
+                },
+              });
+            }
+          }
+        }
+      }
+
+      // Enrich sample pairs with owner + collections info (bounded by sampleLimit).
+      try {
+        const ids = Array.from(
+          new Set(
+            samplePairs
+              .flatMap((p) => [
+                (p as { a?: { id?: unknown } }).a?.id,
+                (p as { b?: { id?: unknown } }).b?.id,
+              ])
+              .map((x) => (x ?? '').toString())
+              .filter(Boolean),
+          ),
+        );
+
+        if (ids.length) {
+          const ownerRows = await cloudDb
+            .select({
+              bookId: books.id,
+              ownerUserId: books.createdByUserId,
+              ownerName: users.name,
+              ownerEmail: users.email,
+            })
+            .from(books)
+            .leftJoin(users, eq(users.id, books.createdByUserId))
+            .where(inArray(books.id, ids));
+
+          const ownerByBookId = new Map(
+            ownerRows.map((r) => [
+              r.bookId,
+              {
+                userId: r.ownerUserId ?? null,
+                name: r.ownerName ?? null,
+                email: r.ownerEmail ?? null,
+              },
+            ]),
+          );
+
+          const collectionRows = await cloudDb
+            .select({
+              bookId: collectionBooks.bookId,
+              id: collections.id,
+              name: collections.name,
+              isPersonal: collections.isPersonal,
+            })
+            .from(collectionBooks)
+            .innerJoin(collections, eq(collections.id, collectionBooks.collectionId))
+            .where(inArray(collectionBooks.bookId, ids));
+
+          const collectionsByBookId = new Map<
+            string,
+            Array<{ id: string; name: string; isPersonal: boolean }>
+          >();
+
+          for (const row of collectionRows) {
+            const list = collectionsByBookId.get(row.bookId) ?? [];
+            list.push({
+              id: row.id,
+              name: row.name,
+              isPersonal: Boolean(row.isPersonal),
+            });
+            collectionsByBookId.set(row.bookId, list);
+          }
+
+          for (const p of samplePairs) {
+            const pair = p as {
+              a?: { id?: string; owner?: unknown; collections?: unknown };
+              b?: { id?: string; owner?: unknown; collections?: unknown };
+            };
+            const aId = pair.a?.id;
+            const bId = pair.b?.id;
+
+            if (pair.a && aId) {
+              pair.a.owner = ownerByBookId.get(aId) ?? null;
+              pair.a.collections = collectionsByBookId.get(aId) ?? [];
+            }
+            if (pair.b && bId) {
+              pair.b.owner = ownerByBookId.get(bId) ?? null;
+              pair.b.collections = collectionsByBookId.get(bId) ?? [];
+            }
+          }
+        }
+      } catch {
+        // If enrichment fails, still return the core pair list.
+      }
+
+      results.push({
+        id: 'duplicates.fuzzy-title-author',
+        name: 'Possible duplicates (fuzzy title/author)',
+        status: foundPairs > 0 ? 'warn' : 'ok',
+        message:
+          foundPairs > 0
+            ? `${foundPairs} possible duplicate pair(s) found by fuzzy match`
+            : 'No fuzzy title/author duplicates found',
+        howToFix:
+          foundPairs > 0
+            ? 'Review each pair and decide whether to keep both or de-duplicate (merge tooling is planned).'
+            : undefined,
+        meta: {
+          scannedBooks: bookRows.length,
+          comparisons,
+          threshold: FUZZY_DUPLICATE_THRESHOLD,
+          maxBooksForFuzzy,
+          maxFuzzyComparisons,
+        },
+        sample: samplePairs,
+      });
+    }
+
     // 5) Book file pointers exist on disk
     {
       const rows = await cloudDb

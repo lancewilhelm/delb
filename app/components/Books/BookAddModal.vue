@@ -229,28 +229,368 @@ async function uploadBooks() {
   successMessage.value = null;
 
   try {
-    const form = new FormData();
-    for (const f of files.value) {
-      form.append('file', f);
-    }
-    for (const id of collectionIds) {
-      form.append('collectionId', id);
-    }
+    // Upload sequentially so duplicate prompts can be handled one-at-a-time.
+    // This avoids the confusing "some uploaded, then a duplicate modal" state.
+    while (files.value.length) {
+      const file = files.value[0];
+      if (!file) break;
 
-    await $fetch('/api/books/upload', {
-      method: 'POST',
-      body: form,
-    });
+      const form = new FormData();
+      form.append('file', file);
+      for (const id of collectionIds) form.append('collectionId', id);
+
+      const res = await $fetch<{
+        success: boolean;
+        data?: {
+          results?: Array<{
+            success: boolean;
+            filename?: string;
+            error?: string;
+            code?: string;
+            details?: unknown;
+          }>;
+        };
+      }>('/api/books/upload', { method: 'POST', body: form });
+
+      const r = (res?.data?.results ?? [])[0];
+
+      if (r && !r.success && r.code === 'possible_duplicate') {
+        duplicateReview.value = {
+          kind: 'upload',
+          file,
+          filename: file.name,
+          details: r.details,
+        };
+        selectedDuplicateBookId.value = defaultSelectedDuplicate(r.details);
+        duplicateReviewOpen.value = true;
+        errorMessage.value = 'Possible duplicate detected. Review required.';
+        return;
+      }
+
+      if (r && !r.success) {
+        errorMessage.value = r.error || 'Upload failed';
+        return;
+      }
+
+      files.value = files.value.filter((f) => f !== file);
+      emit('added');
+      emit('book-uploaded');
+    }
 
     close();
-    emit('added');
-    emit('book-uploaded');
   } catch (err) {
     const e = err as FetchErrorLike;
     errorMessage.value =
       e?.data?.message || e?.statusMessage || e?.message || 'Upload failed';
   } finally {
     uploading.value = false;
+  }
+}
+
+type DuplicateCandidate = {
+  matchType: 'identifier' | 'fuzzy';
+  score: number;
+  book: {
+    id: string;
+    title: string;
+    coverImagePath: string | null;
+    authorNames: string[];
+    identifiers: Array<{ type: string; value: string }>;
+  };
+};
+
+type DuplicateReview = {
+  kind: 'upload' | 'metadata';
+  file: File | undefined;
+  filename: string;
+  details: unknown;
+};
+
+const duplicateReviewOpen = ref(false);
+const duplicateReview = ref<DuplicateReview | null>(null);
+
+const selectedDuplicateBookId = ref<string>('');
+
+function defaultSelectedDuplicate(details: unknown): string {
+  const candidates = parseDuplicateCandidates(details);
+  return candidates[0]?.book?.id ?? '';
+}
+
+function coverThumbUrl(coverImagePath: string | null | undefined): string {
+  const p = (coverImagePath ?? '').toString().trim();
+  if (!p) return '';
+  return `/api/media/covers/${p.replace(/^library\//, '')}`;
+}
+
+function parseDuplicateCandidates(details: unknown): DuplicateCandidate[] {
+  if (!details || typeof details !== 'object') return [];
+  if (!('candidates' in details)) return [];
+  const raw = (details as { candidates?: unknown }).candidates;
+  return Array.isArray(raw) ? (raw as DuplicateCandidate[]) : [];
+}
+
+function parseIncoming(details: unknown): { title: string; author: string } {
+  if (!details || typeof details !== 'object') return { title: '', author: '' };
+  const incoming = (details as { incoming?: unknown }).incoming;
+  if (!incoming || typeof incoming !== 'object')
+    return { title: '', author: '' };
+  return {
+    title: (incoming as { title?: unknown }).title
+      ? String((incoming as { title?: unknown }).title)
+      : '',
+    author: (incoming as { author?: unknown }).author
+      ? String((incoming as { author?: unknown }).author)
+      : '',
+  };
+}
+
+async function uploadAnyway() {
+  const review = duplicateReview.value;
+  if (!review || review.kind !== 'upload') return;
+  const file = review?.file;
+  if (!review || !file || uploading.value) return;
+
+  const collectionIds = selectedCollectionIds.value.filter(Boolean);
+  if (!collectionIds.length) {
+    errorMessage.value = 'Select at least one collection.';
+    return;
+  }
+
+  uploading.value = true;
+  errorMessage.value = null;
+  let continueQueue = false;
+
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    for (const id of collectionIds) form.append('collectionId', id);
+    form.append('allowDuplicate', '1');
+
+    const res = await $fetch<{
+      success: boolean;
+      data?: {
+        results?: Array<{ success: boolean; error?: string; code?: string }>;
+      };
+    }>('/api/books/upload', { method: 'POST', body: form });
+
+    const failed = (res?.data?.results ?? []).find((r) => !r.success);
+    if (failed) {
+      errorMessage.value = failed.error || 'Upload failed';
+      return;
+    }
+
+    files.value = files.value.filter((f) => f !== file);
+
+    duplicateReviewOpen.value = false;
+    duplicateReview.value = null;
+    selectedDuplicateBookId.value = '';
+
+    emit('added');
+    emit('book-uploaded');
+
+    continueQueue = files.value.length > 0;
+
+    if (!continueQueue) {
+      close();
+    }
+  } catch (err) {
+    const e = err as FetchErrorLike;
+    errorMessage.value =
+      e?.data?.message || e?.statusMessage || e?.message || 'Upload failed';
+  } finally {
+    uploading.value = false;
+  }
+
+  if (continueQueue) {
+    await uploadBooks();
+  }
+}
+
+function cancelDuplicate() {
+  const review = duplicateReview.value;
+  if (!review) return;
+
+  if (review.kind === 'upload') {
+    // "Skip upload": drop this file and continue with remaining queue.
+    const file = review.file;
+    if (file) files.value = files.value.filter((f) => f !== file);
+  }
+
+  duplicateReviewOpen.value = false;
+  duplicateReview.value = null;
+  selectedDuplicateBookId.value = '';
+
+  if (review.kind === 'upload') {
+    // Keep the modal's errors scoped; allow the next upload to proceed.
+    errorMessage.value = null;
+    successMessage.value = null;
+
+    if (!files.value.length) {
+      close();
+    } else {
+      void uploadBooks();
+    }
+  }
+}
+
+async function replaceSelected() {
+  const review = duplicateReview.value;
+  if (!review || review.kind !== 'upload') return;
+
+  const file = review.file;
+  const replaceBookId = selectedDuplicateBookId.value.trim();
+  if (!file || !replaceBookId || uploading.value) return;
+
+  const collectionIds = selectedCollectionIds.value.filter(Boolean);
+  if (!collectionIds.length) {
+    errorMessage.value = 'Select at least one collection.';
+    return;
+  }
+
+  uploading.value = true;
+  errorMessage.value = null;
+  let continueQueue = false;
+
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    for (const id of collectionIds) form.append('collectionId', id);
+    form.append('allowDuplicate', '1');
+    form.append('replaceBookId', replaceBookId);
+
+    const res = await $fetch<{
+      success: boolean;
+      data?: {
+        results?: Array<{ success: boolean; error?: string; code?: string }>;
+      };
+    }>('/api/books/upload', { method: 'POST', body: form });
+
+    const failed = (res?.data?.results ?? []).find((r) => !r.success);
+    if (failed) {
+      errorMessage.value = failed.error || 'Upload failed';
+      return;
+    }
+
+    files.value = files.value.filter((f) => f !== file);
+
+    duplicateReviewOpen.value = false;
+    duplicateReview.value = null;
+    selectedDuplicateBookId.value = '';
+
+    emit('added');
+    emit('book-uploaded');
+
+    continueQueue = files.value.length > 0;
+
+    if (!continueQueue) {
+      close();
+    }
+  } catch (err) {
+    const e = err as FetchErrorLike;
+    errorMessage.value =
+      e?.data?.message || e?.statusMessage || e?.message || 'Upload failed';
+  } finally {
+    uploading.value = false;
+  }
+
+  if (continueQueue) {
+    await uploadBooks();
+  }
+}
+
+async function addFromMetadataAnyway() {
+  if (creating.value) return;
+
+  const q = query.value.trim();
+  if (!q) {
+    errorMessage.value = 'Please enter a search query.';
+    successMessage.value = null;
+    focusMetadataInputSoon();
+    return;
+  }
+
+  const collectionIds = selectedCollectionIds.value.filter(Boolean);
+  if (!collectionIds.length) {
+    errorMessage.value = 'Select at least one collection.';
+    successMessage.value = null;
+    return;
+  }
+
+  creating.value = true;
+  errorMessage.value = null;
+  successMessage.value = null;
+
+  try {
+    const res = await $fetch<{
+      success: boolean;
+      data?: { book?: { id: string; title: string } };
+      message?: string;
+    }>('/api/books/metadata-import/create', {
+      method: 'POST',
+      body: {
+        query: q,
+        collectionIds,
+        allowDuplicate: true,
+      },
+    });
+
+    const bookId = res?.data?.book?.id ?? '';
+    const title = res?.data?.book?.title ?? '';
+
+    if (!bookId) {
+      throw new Error(res?.message || 'Failed to create book from metadata.');
+    }
+
+    successMessage.value = title
+      ? `Added “${title}”.`
+      : 'Book added successfully.';
+
+    duplicateReviewOpen.value = false;
+    duplicateReview.value = null;
+
+    emit('added');
+    emit('book-uploaded');
+
+    if (keepOpen.value) {
+      query.value = '';
+      focusMetadataInputSoon();
+    } else {
+      close();
+    }
+  } catch (err) {
+    const e = err as FetchErrorLike & { data?: { code?: string } };
+    if (e?.data?.code === 'possible_duplicate') {
+      duplicateReview.value = {
+        kind: 'metadata',
+        file: undefined,
+        filename: 'metadata',
+        details: e.data,
+      };
+      selectedDuplicateBookId.value = defaultSelectedDuplicate(e.data);
+      duplicateReviewOpen.value = true;
+      errorMessage.value = 'Possible duplicate detected. Review required.';
+      successMessage.value = null;
+      return;
+    }
+    errorMessage.value =
+      e?.data?.message ||
+      e?.statusMessage ||
+      e?.message ||
+      'Failed to add book from metadata.';
+    successMessage.value = null;
+    focusMetadataInputSoon();
+  } finally {
+    creating.value = false;
+  }
+}
+
+async function proceedWithDuplicate() {
+  const review = duplicateReview.value;
+  if (!review) return;
+  if (review.kind === 'upload') {
+    await uploadAnyway();
+  } else {
+    await addFromMetadataAnyway();
   }
 }
 
@@ -469,6 +809,143 @@ const subtitleText = computed(() =>
         </div>
       </div>
 
+      <ModalWindow
+        :open="duplicateReviewOpen"
+        :width-full="true"
+        @close="cancelDuplicate"
+      >
+        <div class="flex flex-col gap-3 w-full max-w-200">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <div class="text-lg font-semibold">Possible duplicate</div>
+              <div class="text-sm opacity-80">
+                Review the existing match(es) and decide what to do.
+              </div>
+            </div>
+
+            <Icon
+              name="lucide-x"
+              class="shrink-0 text-xl cursor-pointer opacity-80 hover:opacity-100"
+              @click.stop="cancelDuplicate"
+            />
+          </div>
+
+          <div
+            v-if="duplicateReview"
+            class="p-3 rounded border border-(--sub-color)/30"
+          >
+            <div class="text-sm font-semibold">Incoming</div>
+            <div class="text-sm opacity-90 mt-1">
+              <span class="font-mono">{{ duplicateReview.filename }}</span>
+            </div>
+            <div class="text-sm opacity-90 mt-1">
+              <span class="font-semibold">title:</span>
+              {{ parseIncoming(duplicateReview.details).title || '—' }}
+            </div>
+            <div class="text-sm opacity-90">
+              <span class="font-semibold">author:</span>
+              {{ parseIncoming(duplicateReview.details).author || '—' }}
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <div class="text-sm font-semibold">Existing candidates</div>
+
+            <div
+              v-for="c in parseDuplicateCandidates(duplicateReview?.details)"
+              :key="c.book.id"
+              class="flex gap-3 p-3 rounded border border-(--sub-color)/30"
+            >
+              <input
+                v-model="selectedDuplicateBookId"
+                type="radio"
+                :value="c.book.id"
+                class="mt-1"
+                :disabled="busy"
+              />
+              <div class="shrink-0">
+                <img
+                  v-if="c.book.coverImagePath"
+                  :src="coverThumbUrl(c.book.coverImagePath)"
+                  class="w-16 h-24 object-cover rounded border border-(--sub-color)/30"
+                  alt=""
+                />
+                <div
+                  v-else
+                  class="w-16 h-24 rounded border border-(--sub-color)/30 flex items-center justify-center text-xs opacity-60"
+                >
+                  no cover
+                </div>
+              </div>
+
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="font-semibold truncate">{{ c.book.title }}</div>
+                  <div class="text-xs opacity-70 font-mono">
+                    {{ c.matchType }} {{ Math.round(c.score * 100) }}%
+                  </div>
+                </div>
+                <div class="text-sm opacity-80 truncate">
+                  {{
+                    (c.book.authorNames || []).join(', ') || 'Unknown Author'
+                  }}
+                </div>
+                <div class="flex flex-wrap gap-2 mt-2">
+                  <button
+                    type="button"
+                    class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
+                    :disabled="busy"
+                    @click="navigateTo(`/books/${c.book.id}`)"
+                  >
+                    View book
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div
+              v-if="
+                duplicateReview &&
+                !parseDuplicateCandidates(duplicateReview.details).length
+              "
+              class="text-sm opacity-70"
+            >
+              No candidates returned.
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-2 justify-end">
+            <button
+              type="button"
+              class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
+              :disabled="busy"
+              @click="cancelDuplicate"
+            >
+              {{ duplicateReview?.kind === 'upload' ? 'Skip upload' : 'Cancel' }}
+            </button>
+
+            <button
+              type="button"
+              class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
+              :disabled="busy"
+              @click="proceedWithDuplicate"
+            >
+              {{ duplicateReview?.kind === 'metadata' ? 'Add anyway' : 'Upload anyway' }}
+            </button>
+
+            <button
+              v-if="duplicateReview?.kind === 'upload'"
+              type="button"
+              class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
+              :disabled="busy || !selectedDuplicateBookId"
+              @click="replaceSelected"
+            >
+              Replace selected
+            </button>
+          </div>
+        </div>
+      </ModalWindow>
+
       <!-- Upload mode -->
       <div v-if="mode === 'upload'" class="space-y-3">
         <div
@@ -522,6 +999,15 @@ const subtitleText = computed(() =>
 
           <div class="flex gap-2 w-full justify-center">
             <button
+              v-tooltip="'Remove all pending uploads'"
+              class="px-3 py-2 w-full disabled:opacity-50 hover:bg-(--error-color)! bg-(--sub-color)/15"
+              :disabled="uploading"
+              @click="clearFiles"
+            >
+              Clear
+            </button>
+
+            <button
               v-tooltip="
                 !selectedCollectionIds.length
                   ? 'Select at least one collection'
@@ -532,15 +1018,6 @@ const subtitleText = computed(() =>
               @click="uploadBooks"
             >
               {{ uploading ? 'Uploading...' : 'Upload' }}
-            </button>
-
-            <button
-              v-tooltip="'Remove all pending uploads'"
-              class="px-3 py-2 w-full disabled:opacity-50 hover:bg-(--error-color)! bg-(--sub-color)/15"
-              :disabled="uploading"
-              @click="clearFiles"
-            >
-              Clear
             </button>
           </div>
         </div>
@@ -598,7 +1075,7 @@ const subtitleText = computed(() =>
         </div>
       </div>
 
-      <div v-if="errorMessage" class="text-sm text-red-400">
+      <div v-if="errorMessage" class="text-sm text-(--error-color)">
         {{ errorMessage }}
       </div>
       <div v-else-if="successMessage" class="text-sm text-green-400">

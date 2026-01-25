@@ -572,7 +572,7 @@ onBeforeUnmount(() => {
   <!-- This component owns the scroll container so the view selector (outside) does not scroll. -->
   <div ref="scrollContainerRef" class="flex-1 overflow-auto" @scroll="onScroll">
     <div class="px-4 py-4">
-      <div v-if="errorMessage" class="text-sm text-(--warning-color) mb-3">
+      <div v-if="errorMessage" class="text-sm text-(--error-color) mb-3">
         {{ errorMessage }}
       </div>
 

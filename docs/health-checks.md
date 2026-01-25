@@ -77,6 +77,16 @@ having book_count > 1;
 
 **How to fix:** Decide whether the records are duplicates; keep both if intentional, otherwise merge/delete one and fix the identifiers.
 
+### 3b) Possible duplicates (fuzzy title/author) (deep)
+
+**Why it matters:** Users can accidentally add the same book twice; this check surfaces likely duplicates even when identifiers are missing.
+
+**Definition:** A “possible duplicate pair” is two books whose title+author similarity meets the same threshold used by ingest-time duplicate detection.
+
+**Severity:** `warn`
+
+**How to fix:** Review each pair and decide whether to keep both, or de-duplicate (merge tooling is planned).
+
 ### 4) Book file pointers that don’t exist on disk (deep)
 
 **Why it matters:** A user clicking “download/read” will fail if a `book_files.relative_path` is missing.

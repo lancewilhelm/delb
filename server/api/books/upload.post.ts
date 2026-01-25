@@ -8,6 +8,7 @@ import {
   authors,
   bookAuthors,
   bookFiles,
+  bookIdentifiers,
   books,
   collectionMembers,
   collectionBooks,
@@ -22,6 +23,8 @@ import { resolveDataPath, toSafePathSegment } from '~~/server/utils/books/fs';
 import { makeAuthorSortKey, makeTitleSortKey } from '~~/server/utils/sort/keys';
 import { buildBookStorageRelativePath } from '~~/server/utils/books/storage/paths';
 import { normalizePublishedAt } from '~~/server/utils/books/published';
+import { findPossibleDuplicates } from '~~/server/utils/books/duplicates';
+import { deleteBook } from '~~/server/utils/books/delete-book';
 
 type SupportedBookFormat = 'epub' | 'pdf' | 'mobi' | 'azw3';
 const SUPPORTED_BOOK_FORMATS: ReadonlyArray<SupportedBookFormat> = [
@@ -61,6 +64,7 @@ type ParsedBookMetadata = {
   title: string;
   /** Display author (v1: single author string) */
   author: string;
+  identifiers?: Array<{ type: string; value: string }>;
   description?: string;
   language?: string;
   published?: string;
@@ -115,6 +119,13 @@ async function parseBookMetadataFromBuffer(opts: {
     return {
       title: meta.title || fallbackTitle || 'Untitled',
       author: meta.author || 'Unknown Author',
+      identifiers: [
+        meta.ISBN ? { type: 'isbn', value: meta.ISBN } : null,
+        meta.UUID ? { type: 'uuid', value: meta.UUID } : null,
+      ].filter(
+        (x): x is { type: string; value: string } =>
+          Boolean(x && x.type && x.value),
+      ),
       description: meta.description,
       language: meta.language,
       published: meta.published,
@@ -201,7 +212,13 @@ async function findOrCreateAuthorByName(name: string) {
  */
 async function processOneBookUpload(
   filePart: MultipartFilePart,
-  input: { userId: string; collectionIds: string[] },
+  input: {
+    userId: string;
+    userRole: string;
+    collectionIds: string[];
+    allowDuplicate?: boolean;
+    replaceBookId?: string | null;
+  },
 ) {
   if (!filePart.filename || !filePart.data) {
     throw createError({ statusCode: 400, statusMessage: 'Missing book file' });
@@ -218,6 +235,45 @@ async function processOneBookUpload(
 
   const authorName = meta.author || 'Unknown Author';
   const title = meta.title || 'Untitled';
+
+  if (input.replaceBookId) {
+    if (!input.allowDuplicate) {
+      throw createError({ statusCode: 400, statusMessage: 'Missing allowDuplicate for replace' });
+    }
+
+    await deleteBook({
+      bookId: input.replaceBookId,
+      mode: 'everything',
+      actor: { id: input.userId, role: input.userRole },
+      logCtx: 'POST /api/books/upload: replace',
+    });
+  }
+
+  if (!input.allowDuplicate) {
+    const candidates = await findPossibleDuplicates({
+      title,
+      author: authorName,
+      identifiers: meta.identifiers ?? [],
+      maxCandidates: 8,
+    });
+
+    if (candidates.length) {
+      throw createError({
+        statusCode: 409,
+        statusMessage: 'Possible duplicate',
+        data: {
+          code: 'possible_duplicate',
+          incoming: {
+            title,
+            author: authorName,
+            identifiers: meta.identifiers ?? [],
+            filename: filePart.filename,
+          },
+          candidates,
+        },
+      });
+    }
+  }
 
   const safeTitle = toSafePathSegment(title, 'Untitled');
 
@@ -321,6 +377,20 @@ async function processOneBookUpload(
     createdAt: now,
   });
 
+  if (meta.identifiers?.length) {
+    for (const ident of meta.identifiers) {
+      const type = (ident.type ?? '').toString().trim().toLowerCase();
+      const value = (ident.value ?? '').toString().trim();
+      if (!type || !value) continue;
+
+      await cloudDb.insert(bookIdentifiers).values({
+        bookId: id,
+        type,
+        value,
+      });
+    }
+  }
+
   // Add to collections
   for (const collectionId of input.collectionIds) {
     await cloudDb.insert(collectionBooks).values({
@@ -416,16 +486,52 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  const allowDuplicate = form
+    .filter((p) => p.name === 'allowDuplicate')
+    .map((p) => (typeof p.data === 'string' ? p.data : p.data?.toString()))
+    .some((v) => {
+      const s = (v ?? '').toString().trim().toLowerCase();
+      return s === '1' || s === 'true' || s === 'yes' || s === 'on';
+    });
+
+  const replaceBookId = form
+    .filter((p) => p.name === 'replaceBookId')
+    .map((p) => (typeof p.data === 'string' ? p.data : p.data?.toString()))
+    .map((s) => (s ?? '').toString().trim())
+    .find((s) => s.length > 0) ?? null;
+
+  if (replaceBookId && !allowDuplicate) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'replaceBookId requires allowDuplicate=1',
+    });
+  }
+
+  if (replaceBookId && fileParts.length !== 1) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'replaceBookId is only supported for single-file uploads',
+    });
+  }
+
   const results: Array<{
     success: boolean;
     book?: unknown;
     filename?: string;
     error?: string;
+    code?: string;
+    details?: unknown;
   }> = [];
 
   for (const part of fileParts) {
     try {
-      const book = await processOneBookUpload(part, { userId, collectionIds });
+      const book = await processOneBookUpload(part, {
+        userId,
+        userRole: session.user.role,
+        collectionIds,
+        allowDuplicate,
+        replaceBookId,
+      });
       results.push({ success: true, book, filename: part.filename });
     } catch (err: unknown) {
       logger.error(err, 'POST /api/books/upload: Failed to process one upload');
@@ -444,6 +550,16 @@ export default defineEventHandler(async (event) => {
           e?.statusMessage ||
           e?.message ||
           'Failed to upload file',
+        code:
+          e && typeof e === 'object' && 'data' in e
+            ? ((e as { data?: { code?: unknown } })?.data?.code as
+                | string
+                | undefined)
+            : undefined,
+        details:
+          e && typeof e === 'object' && 'data' in e
+            ? (e as { data?: unknown }).data
+            : undefined,
       });
     }
   }

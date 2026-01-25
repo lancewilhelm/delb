@@ -26,6 +26,7 @@ import { ensureCoverOutputsFromBytes } from '~~/server/utils/books/covers';
 import { makeAuthorSortKey, makeTitleSortKey } from '~~/server/utils/sort/keys';
 import { normalizePublishedAt } from '~~/server/utils/books/published';
 import { fetchTopMetadataItemByDefaultProvider } from '~~/server/utils/books/metadata/top-result';
+import { findPossibleDuplicates } from '~~/server/utils/books/duplicates';
 
 type Body = {
   /**
@@ -37,6 +38,11 @@ type Body = {
    * One or more target collection IDs. If empty/missing, defaults to the user's Personal collection.
    */
   collectionIds?: string[];
+
+  /**
+   * If true, skip "possible duplicate" blocking and proceed with creation.
+   */
+  allowDuplicate?: boolean;
 };
 
 function makeAbsoluteUrl(
@@ -374,6 +380,32 @@ export default defineEventHandler(async (event) => {
 
   const now = new Date();
   const bookId = crypto.randomUUID();
+
+  if (!body.allowDuplicate) {
+    const candidates = await findPossibleDuplicates({
+      title,
+      author: authorsToAttach.join(', '),
+      identifiers: industryIdentifiers,
+      maxCandidates: 8,
+    });
+
+    if (candidates.length) {
+      throw createError({
+        statusCode: 409,
+        statusMessage: 'Possible duplicate',
+        data: {
+          code: 'possible_duplicate',
+          incoming: {
+            title,
+            author: authorsToAttach.join(', '),
+            identifiers: industryIdentifiers,
+            query,
+          },
+          candidates,
+        },
+      });
+    }
+  }
 
   // Create book
   // NOTE: This assumes your `books` table has optional columns:

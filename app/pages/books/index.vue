@@ -891,7 +891,7 @@ onMounted(async () => {
 
               <p
                 v-if="collectionsSaveError"
-                class="text-sm text-(--warning-color)"
+                class="text-sm text-(--error-color)"
               >
                 {{ collectionsSaveError }}
               </p>
@@ -1079,7 +1079,7 @@ onMounted(async () => {
 
                     <p
                       v-if="statusError"
-                      class="text-sm text-(--warning-color)"
+                      class="text-sm text-(--error-color)"
                     >
                       {{ statusError }}
                     </p>
