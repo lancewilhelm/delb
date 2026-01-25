@@ -13,7 +13,6 @@ export default defineNuxtConfig({
     '@nuxt/icon',
     '@vueuse/nuxt',
     '@pinia/nuxt',
-    '@nuxtjs/mdc',
     'pinia-plugin-persistedstate/nuxt',
   ],
   app: {

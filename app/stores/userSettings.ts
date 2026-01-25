@@ -1,6 +1,3 @@
-import { defineStore } from 'pinia';
-import { useDebounceFn } from '@vueuse/core';
-
 export type MetadataProviderKey = 'googleBooks' | 'hardcover';
 
 export type BookDeleteMode = 'db_only' | 'everything';
