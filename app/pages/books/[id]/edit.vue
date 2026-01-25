@@ -1555,7 +1555,7 @@ watch(
             </button>
 
             <button
-              v-tooltip="'Trash current cover'"
+              v-tooltip="'Clear current cover'"
               class="px-3 py-2 rounded-md border border-(--error-color) text-(--error-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed!"
               type="button"
               :disabled="
@@ -1563,7 +1563,7 @@ watch(
               "
               @click="resetSavedCover"
             >
-              <icon name="lucide:trash-2" class="scale-135" />
+              <icon name="lucide:x" class="scale-135" />
               Clear
             </button>
           </div>

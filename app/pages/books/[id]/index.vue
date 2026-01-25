@@ -715,6 +715,8 @@ const deleteMode = ref<DeleteBookMode>(
 // “Remember my choice” toggle for this modal
 const rememberDeleteChoice = ref(false);
 
+const router = useRouter();
+
 async function deleteBook() {
   if (!bookId.value || deleting.value) return;
 
@@ -751,7 +753,8 @@ async function deleteBook() {
     }
 
     showDeleteConfirm.value = false;
-    await navigateTo('/');
+    // await navigateTo('/');
+    router.back();
   } catch (err) {
     const e = err as FetchErrorLike;
     errorMessage.value =
