@@ -77,6 +77,7 @@ export interface BaseUserSettings {
     fontFamily: string;
     displayMode: 'pages' | 'scroll';
     theme: ReaderTheme;
+    minSpreadWidth: number;
   };
 }
 
@@ -126,6 +127,7 @@ function getBaseDefaults(): BaseUserSettings {
       fontFamily: 'Serif',
       displayMode: 'pages',
       theme: 'app',
+      minSpreadWidth: 1100,
     },
   };
 }

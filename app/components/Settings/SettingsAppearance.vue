@@ -62,6 +62,13 @@ const gridCoverShowSeries = userSettingsStore.settingRef<boolean>(
 );
 
 // ------------------------------
+// Reader settings
+// ------------------------------
+const readerMinSpreadWidth = userSettingsStore.settingRef<number>(
+  'reader.minSpreadWidth',
+);
+
+// ------------------------------
 // Theme items
 // ------------------------------
 
@@ -235,14 +242,30 @@ function handleSortChange(target: string) {
     </SettingsUIGroup>
 
     <SettingsUIGroup
-      title="mobile specific settings"
+      title="mobile"
       icon="lucide:smartphone"
-      description="Settings for mobile devices"
+      description="mobile device specific settings"
     >
       <SettingsUIToggle
         v-model="mobileSearchButton"
         title="Mobile search button"
         description="On mobile devices, show a search button in the bottom right instead of in the header"
+      />
+    </SettingsUIGroup>
+
+    <SettingsUIGroup
+      title="reader"
+      icon="lucide:book-open"
+      description="reader settings"
+    >
+      <SettingsUISlider
+        v-model="readerMinSpreadWidth"
+        title="Reader min spread width"
+        description="Min width where the reader displays as two columns (default: 1100px)"
+        :min="400"
+        :max="5000"
+        :value-input="true"
+        :suffix="'px'"
       />
     </SettingsUIGroup>
 

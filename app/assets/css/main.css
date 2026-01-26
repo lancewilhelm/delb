@@ -100,7 +100,7 @@ input {
   --slider-track-height: 6px;
   --slider-thumb-size: 16px;
 
-  --slider-track-bg: color-mix(in srgb, var(--sub-alt-color) 85%, black);
+  --slider-track-bg: var(--sub-alt-color);
   --slider-fill-bg: var(--main-color);
   --slider-thumb-bg: var(--text-color);
   --slider-thumb-ring: color-mix(in srgb, var(--main-color) 65%, transparent);

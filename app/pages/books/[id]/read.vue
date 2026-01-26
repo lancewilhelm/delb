@@ -230,10 +230,9 @@ function getRenditionOptions(mode: ReaderDisplayMode) {
       manager: 'continuous',
       flow: 'paginated',
       snap: swipe ? {} : undefined,
-      spread: 'none',
       width: '100%',
       height: '100%',
-      minSpreadWidth: 900,
+      minSpreadWidth: 1100,
       allowScriptedContent: true,
     };
   }
