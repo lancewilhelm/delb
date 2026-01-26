@@ -209,7 +209,7 @@ function browseUpload() {
 }
 
 useDropZone(dropZoneRef, {
-  onDrop(dropped) {
+  onDrop(dropped: File[] | null) {
     if (!dropped) return;
     addFiles(toAllowedUploadFiles(dropped));
   },
@@ -966,7 +966,7 @@ const subtitleText = computed(() =>
             multiple
             accept=".epub,.pdf,.mobi,.azw3,application/epub+zip,application/pdf"
             @change="
-              (e) => {
+              (e: Event) => {
                 const picked =
                   (e.target as HTMLInputElement).files ?? undefined;
                 if (picked) addFiles(toAllowedUploadFiles(picked));

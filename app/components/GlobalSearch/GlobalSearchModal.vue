@@ -400,7 +400,7 @@ onBeforeUnmount(() => {
                 v-for="item in group.items"
                 :key="`${item.kind}:${item.id}`"
                 :ref="
-                  (el) =>
+                  (el: Element | null) =>
                     setRowRef(
                       el as HTMLElement,
                       flatResults.findIndex(

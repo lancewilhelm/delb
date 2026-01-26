@@ -4,23 +4,18 @@ set -e
 
 # Paths
 DB_PATH=/app/data/delb.db
-KEY_FILE=/app/data/auth_secret.key
 
-# Generate BETTER_AUTH_SECRET if not provided
+# Require BETTER_AUTH_SECRET (handled via env in production deployments)
 if [ -z "$BETTER_AUTH_SECRET" ]; then
-  if [ ! -f "$KEY_FILE" ]; then
-    echo "BETTER_AUTH_SECRET not provided — generating one..."
-    head -c 32 /dev/urandom | base64 >"$KEY_FILE"
-  fi
-  echo "Loading BETTER_AUTH_SECRET from $KEY_FILE..."
-  export BETTER_AUTH_SECRET=$(cat "$KEY_FILE")
+  echo "ERROR: BETTER_AUTH_SECRET must be set (refusing to auto-generate in production)." >&2
+  exit 1
 fi
 
 # Set DATABASE_URL for Drizzle
-export DATABASE_URL="file:$DB_PATH"
+export DATABASE_URL="${DATABASE_URL:-file:$DB_PATH}"
 
-echo "Pushing database schema..."
-NODE_ENV=production npx --yes drizzle-kit push --config=drizzle.config.ts
+echo "Running database migrations..."
+NODE_ENV=production node ./.drizzle/migrate.mjs
 
 echo "Starting Nuxt app..."
 exec "$@"

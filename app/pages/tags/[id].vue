@@ -145,7 +145,7 @@ onMounted(async () => {
         :collection-id="activeCollectionId"
         class="flex-1 min-h-0"
         @error="handleGridError"
-        @update:count="(n) => (bookCount = n)"
+        @update:count="(n: number) => (bookCount = n)"
       />
     </div>
   </div>

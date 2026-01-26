@@ -164,7 +164,7 @@ watch(
           <div
             v-for="(option, i) in filteredOptions"
             :key="i"
-            :ref="(el) => setOptionRef(el as HTMLElement, i)"
+            :ref="(el: Element | null) => setOptionRef(el as HTMLElement, i)"
             class="h-9 cursor-pointer px-3 py-1 hover:bg-(--sub-alt-color) flex items-center justify-between command-palette-option"
             :class="[
               highlightedIndex === i

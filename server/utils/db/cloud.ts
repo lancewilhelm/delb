@@ -1,3 +1,7 @@
-import { drizzle } from "drizzle-orm/libsql";
+import { createClient } from '@libsql/client';
+import { drizzle } from 'drizzle-orm/libsql';
 
-export const cloudDb = drizzle("file:./data/delb.db");
+const databaseUrl = process.env.DATABASE_URL || 'file:./data/delb.db';
+const client = createClient({ url: databaseUrl });
+
+export const cloudDb = drizzle(client);

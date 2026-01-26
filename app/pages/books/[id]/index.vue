@@ -846,8 +846,6 @@ watch(
     loadBook();
   },
 );
-
-const isMobileDevice = useIsMobileDevice();
 </script>
 
 <template>
@@ -1082,8 +1080,8 @@ const isMobileDevice = useIsMobileDevice();
                     class="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 translate-y-0.5"
                     :disabled="ratingSaving"
                     :aria-label="`${starIndex} star`"
-                    @mousemove="(e) => onRatingMouseMove(e, starIndex)"
-                    @click="(e) => onRatingClick(e, starIndex)"
+                    @mousemove="(e: MouseEvent) => onRatingMouseMove(e, starIndex)"
+                    @click="(e: MouseEvent) => onRatingClick(e, starIndex)"
                   >
                     <Icon
                       :name="iconForStarIndex(starIndex, effectiveRatingValue)"

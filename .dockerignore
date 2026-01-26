@@ -1,0 +1,20 @@
+.git
+.github
+.DS_Store
+
+# Local build artifacts
+.nuxt
+.output
+
+# Local dependencies
+node_modules
+.pnpm-store
+
+# Local runtime data / mounts
+data
+library
+dropbox
+
+# Logs
+*.log
+
