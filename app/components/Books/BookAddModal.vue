@@ -1,7 +1,4 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { useDropZone } from '@vueuse/core';
-
 defineOptions({ name: 'BookAddModal' });
 
 const uiStore = useUiStore();
@@ -809,12 +806,13 @@ const subtitleText = computed(() =>
         </div>
       </div>
 
+      <!-- Duplicate review modal -->
       <ModalWindow
         :open="duplicateReviewOpen"
         :width-full="true"
         @close="cancelDuplicate"
       >
-        <div class="flex flex-col gap-3 w-full max-w-200">
+        <div class="flex flex-col gap-3 w-full">
           <div class="flex items-start justify-between gap-4">
             <div>
               <div class="text-lg font-semibold">Possible duplicate</div>
@@ -921,7 +919,9 @@ const subtitleText = computed(() =>
               :disabled="busy"
               @click="cancelDuplicate"
             >
-              {{ duplicateReview?.kind === 'upload' ? 'Skip upload' : 'Cancel' }}
+              {{
+                duplicateReview?.kind === 'upload' ? 'Skip upload' : 'Cancel'
+              }}
             </button>
 
             <button
@@ -930,7 +930,11 @@ const subtitleText = computed(() =>
               :disabled="busy"
               @click="proceedWithDuplicate"
             >
-              {{ duplicateReview?.kind === 'metadata' ? 'Add anyway' : 'Upload anyway' }}
+              {{
+                duplicateReview?.kind === 'metadata'
+                  ? 'Add anyway'
+                  : 'Upload anyway'
+              }}
             </button>
 
             <button
