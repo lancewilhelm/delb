@@ -17,6 +17,8 @@ const newCollectionName = ref('');
 const editModalOpen = ref(false);
 const editingCollectionId = ref<string | null>(null);
 
+const newCollectionNameInput = ref<HTMLInputElement | null>(null);
+
 type FetchErrorLike = {
   data?: { message?: string };
   statusMessage?: string;
@@ -46,6 +48,12 @@ function openCreateModal() {
   createError.value = null;
   newCollectionName.value = '';
   createModalOpen.value = true;
+
+  // Focus the input ref
+  requestAnimationFrame(() => {
+    newCollectionNameInput.value?.focus();
+    newCollectionNameInput.value?.select?.();
+  });
 }
 
 function closeCreateModal() {
@@ -278,7 +286,7 @@ onBeforeUnmount(() => {
 
         <p
           v-if="collectionsStore.errorMessage"
-          class="px-3 py-2 text-sm text-red-600"
+          class="px-3 py-2 text-sm text-(-error-color)"
         >
           {{ collectionsStore.errorMessage }}
         </p>
@@ -323,6 +331,7 @@ onBeforeUnmount(() => {
 
         <div class="space-y-2">
           <input
+            ref="newCollectionNameInput"
             v-model="newCollectionName"
             type="text"
             placeholder="e.g. Personal, Family, Favorites…"
@@ -331,7 +340,7 @@ onBeforeUnmount(() => {
             @keyup.enter="createCollection"
           />
 
-          <p v-if="createError" class="text-sm text-red-600">
+          <p v-if="createError" class="text-sm text-(--error-color)">
             {{ createError }}
           </p>
         </div>

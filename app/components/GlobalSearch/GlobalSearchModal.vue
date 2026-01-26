@@ -6,6 +6,7 @@ type GlobalSearchResultItem = {
   id: string;
   title: string;
   subtitle?: string | null;
+  identifiers?: Array<{ type: string; value: string }>;
   icon?: string;
   coverImagePath?: string | null;
 };
@@ -33,6 +34,7 @@ type SearchApiResponse = {
         id: string;
         title: string;
         subtitle?: string | null;
+        identifiers?: Array<{ type: string; value: string }>;
         published?: string | null;
         coverImagePath?: string | null;
       }>;
@@ -167,6 +169,12 @@ function coverThumbUrl(coverImagePath: string) {
   return `/api/media/covers/${coverImagePath.replace(/^library\//, '')}`;
 }
 
+function formatIsbnIdentifier(ident: { type: string; value: string }): string {
+  const t = (ident.type ?? '').toLowerCase();
+  const label = t.includes('13') ? 'ISBN-13' : t.includes('10') ? 'ISBN-10' : 'ISBN';
+  return `${label} ${ident.value}`;
+}
+
 async function runSearch(q: string) {
   const trimmed = q.trim();
   errorMessage.value = null;
@@ -195,10 +203,23 @@ async function runSearch(q: string) {
 
     const bookItems: GlobalSearchResultItem[] =
       buckets?.books?.map((b) => ({
+        identifiers: b.identifiers ?? [],
         kind: 'book',
         id: String(b.id),
         title: String(b.title ?? ''),
-        subtitle: b.subtitle ?? null,
+        subtitle: (() => {
+          const parts: string[] = [];
+          const authorLine = (b.subtitle ?? '').toString().trim();
+          if (authorLine) parts.push(authorLine);
+
+          const isbns = (b.identifiers ?? [])
+            .slice(0, 2)
+            .map(formatIsbnIdentifier)
+            .filter(Boolean);
+          if (isbns.length) parts.push(isbns.join(', '));
+
+          return parts.length ? parts.join(' • ') : null;
+        })(),
         coverImagePath: b.coverImagePath ?? null,
         icon: 'lucide:book',
       })) ?? [];
@@ -361,7 +382,7 @@ onBeforeUnmount(() => {
           ref="inputRef"
           v-model="query"
           type="text"
-          placeholder="search library"
+          placeholder="search library (title, author, ISBN)"
           class="w-full bg-transparent! px-2! rounded-t-lg! rounded-b-none! focus:outline-none"
         />
       </div>

@@ -92,26 +92,16 @@ function isMeaningfullyNonZero(pct: number | null) {
  * @returns The progress percentage or null if extraction fails.
  */
 function extractProgress(cfi: string | null) {
-  console.log(
-    `${Date.now()} extractProgress: Extracting progress with cfi ${cfi}...`,
-  );
   // if (!bookInstance || !cfi || !bookInstance.locations?.length()) return null;
   if (!bookInstance) {
-    console.log('extractProgress: bookInstance is null');
     return null;
   } else if (!cfi) {
-    console.log('extractProgress: cfi is null');
     return null;
   } else if (!bookInstance.locations?.length()) {
-    console.log('extractProgress: bookInstance.locations is null');
     return null;
   }
 
-  console.log(`${Date.now()} extractProgress: Running percentageFromCfi...`);
   const pct = bookInstance.locations.percentageFromCfi(cfi);
-  console.log(
-    `${Date.now()} extractProgress: percentageFromCfi complete: ${pct}`,
-  );
   if (!Number.isFinite(pct)) return null;
   return Math.max(0, Math.min(100, pct * 100));
 }
@@ -257,7 +247,6 @@ function attachRenditionHandlers(
 ) {
   rendition.on('relocated', (loc: { start?: { cfi?: string } }) => {
     const cfi = loc?.start?.cfi ?? null;
-    console.log('Calling extractProgress from rendition relocation');
     const progress = extractProgress(cfi);
 
     // While locations are missing (or still generating), `extractProgress` is null.
@@ -375,7 +364,6 @@ function getThemeClass(hover?: boolean) {
 async function loadReadingPosition() {
   if (!bookId.value) return null;
 
-  console.log('loadReadingPosition: Loading reading position...');
   const res = await fetch(
     `/api/books/${encodeURIComponent(bookId.value)}/reading-position`,
     { method: 'GET' },
@@ -395,7 +383,6 @@ async function loadReadingPosition() {
     return { location: null, progress: null };
   }
 
-  console.log('loadReadingPosition: Reading position loaded:', json.data);
   return {
     location: json?.data?.location ?? null,
     progress: json?.data?.progress ?? null,
@@ -409,9 +396,6 @@ async function loadReadingPosition() {
  */
 async function saveReadingPosition(location: string, progress?: number | null) {
   if (!bookId.value) return;
-  console.log(
-    `saveReadingPosition: Saving reading position, location=${location}, progress=${progress}`,
-  );
 
   const body: { location: string; progress?: number } = { location };
   if (progress != null) {
@@ -544,9 +528,6 @@ async function loadEpub() {
     }
 
     if (shouldGenerateLocations) {
-      console.log(
-        `${Date.now()} starting generateLocation from inside loadEpub`,
-      );
       isAwaitingLocations.value = true;
 
       setTimeout(() => {
@@ -556,9 +537,6 @@ async function loadEpub() {
             const fallbackLocation =
               savedLocation ?? renditionRef.value?.location?.start?.cfi ?? null;
 
-            console.log(
-              'Calling extractProgress from loadEpub and shouldGenerateLocations',
-            );
             const progress = extractProgress(fallbackLocation);
 
             // Only update UI and persist if we computed progress from

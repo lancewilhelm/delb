@@ -1,4 +1,8 @@
+import { logger } from '~/utils/logger';
+
 export default defineEventHandler(async (event) => {
+  logger.debug('GET /api/books/metadata/search');
+
   const query = getQuery(event);
   const searchQuery = query.q as string;
 
@@ -18,7 +22,7 @@ export default defineEventHandler(async (event) => {
           q: searchQuery,
           maxResults: 20,
         },
-      }
+      },
     );
 
     return response;

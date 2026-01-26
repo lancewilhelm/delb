@@ -1,9 +1,10 @@
-import { and, eq, inArray, like } from 'drizzle-orm';
+import { and, eq, inArray, like, sql } from 'drizzle-orm';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
   authors,
   bookAuthors,
   books,
+  bookIdentifiers,
   collectionBooks,
   collectionMembers,
   publishers,
@@ -76,6 +77,23 @@ export default defineEventHandler(async (event) => {
   const contains = `%${needle}%`;
   const lowerNeedle = raw.toLowerCase();
 
+  function normalizeIdentifierCandidate(input: string): string {
+    const stripped = input
+      // common barcode/scanner formats
+      .replace(/^\s*isbn(?:-?1[03])?\s*[:#]?\s*/i, '')
+      .trim();
+
+    // remove whitespace/hyphens/punctuation while keeping alphanumerics (ISBN10 may end with X)
+    return stripped.replace(/[^0-9A-Za-z]+/g, '').toUpperCase();
+  }
+
+  const normalizedIdentNeedle = normalizeIdentifierCandidate(raw);
+  const isProbablyIdentifierQuery =
+    /^\s*isbn/i.test(raw) ||
+    /^[0-9Xx-\s]{10,}$/.test(raw) ||
+    /^[0-9]{13}$/.test(normalizedIdentNeedle) ||
+    /^[0-9X]{10}$/.test(normalizedIdentNeedle);
+
   function scoreName(name: string) {
     const lower = (name ?? '').toLowerCase();
     const starts = lower.startsWith(lowerNeedle);
@@ -126,8 +144,21 @@ export default defineEventHandler(async (event) => {
     const booksPromise = (async () => {
       if (allowedCollectionIds.length === 0) return [];
 
+      type RawBookRow = {
+        id: string;
+        title: string | null;
+        published: string | null;
+        createdAt: unknown;
+        coverImagePath: string | null;
+      };
+
+      type BookRowWithMatch = RawBookRow & {
+        match: { kind: 'titlePrefix' | 'titleContains' | 'author' | 'identifier' };
+        matchedIdentifierValue?: string | null;
+      };
+
       // Books that match by title directly (scoped by membership)
-      const titlePrefixRows = await cloudDb
+      const titlePrefixRows: RawBookRow[] = await cloudDb
         .select({
           id: books.id,
           title: books.title,
@@ -146,7 +177,7 @@ export default defineEventHandler(async (event) => {
         // Intentionally pull more for ranking/de-duping (books can appear in many collections)
         .limit(Math.max(perBucketLimit * 8, 80));
 
-      const titleContainsRows = await cloudDb
+      const titleContainsRows: RawBookRow[] = await cloudDb
         .select({
           id: books.id,
           title: books.title,
@@ -165,7 +196,7 @@ export default defineEventHandler(async (event) => {
         .limit(Math.max(perBucketLimit * 12, 120));
 
       // Books that match by author name (scoped by membership)
-      const authorMatchRows = await cloudDb
+      const authorMatchRows: RawBookRow[] = await cloudDb
         .select({
           id: books.id,
           title: books.title,
@@ -185,30 +216,98 @@ export default defineEventHandler(async (event) => {
         )
         .limit(Math.max(perBucketLimit * 12, 120));
 
-      // Merge + de-dup by book.id
-      const merged = [
-        ...titlePrefixRows,
-        ...titleContainsRows,
-        ...authorMatchRows,
+      // Books that match by identifier value (e.g. ISBN) (scoped by membership)
+      const identifierMatchRows: Array<RawBookRow & { matchedIdentifierValue: string | null }> =
+        isProbablyIdentifierQuery && normalizedIdentNeedle.length >= 4
+          ? await cloudDb
+              .select({
+                id: books.id,
+                title: books.title,
+                published: books.published,
+                createdAt: books.createdAt,
+                coverImagePath: books.coverImagePath,
+                matchedIdentifierValue: bookIdentifiers.value,
+              })
+              .from(books)
+              .innerJoin(collectionBooks, eq(collectionBooks.bookId, books.id))
+              .innerJoin(bookIdentifiers, eq(bookIdentifiers.bookId, books.id))
+              .where(
+                and(
+                  inArray(collectionBooks.collectionId, allowedCollectionIds),
+                  like(
+                    sql`UPPER(${bookIdentifiers.value})`,
+                    `%${escapeLike(normalizedIdentNeedle)}%`,
+                  ),
+                ),
+              )
+              // Pull more: multiple identifiers per book can yield duplicates
+              .limit(Math.max(perBucketLimit * 20, 200))
+          : [];
+
+      function matchPriority(row: BookRowWithMatch): number {
+        if (row.match.kind === 'identifier') {
+          const ident = normalizeIdentifierCandidate(
+            String(row.matchedIdentifierValue ?? ''),
+          );
+          if (ident && ident === normalizedIdentNeedle) return 0; // exact
+          if (ident && normalizedIdentNeedle && ident.startsWith(normalizedIdentNeedle))
+            return 1; // prefix
+          return 2; // contains / other
+        }
+
+        if (row.match.kind === 'titlePrefix') return 10;
+        if (row.match.kind === 'titleContains') return 20;
+        if (row.match.kind === 'author') return 30;
+        return 50;
+      }
+
+      // Merge + de-dup by book.id, keeping the best (lowest) matchPriority per book
+      const merged: BookRowWithMatch[] = [
+        ...titlePrefixRows.map((r) => ({
+          ...r,
+          match: { kind: 'titlePrefix' as const },
+        })),
+        ...titleContainsRows.map((r) => ({
+          ...r,
+          match: { kind: 'titleContains' as const },
+        })),
+        ...authorMatchRows.map((r) => ({
+          ...r,
+          match: { kind: 'author' as const },
+        })),
+        ...identifierMatchRows.map((r) => ({
+          ...r,
+          match: { kind: 'identifier' as const },
+        })),
       ];
-      const seen = new Set<string>();
-      const unique = merged.filter((r) => {
-        if (seen.has(r.id)) return false;
-        seen.add(r.id);
-        return true;
-      });
+
+      const bestById = new Map<string, BookRowWithMatch>();
+      for (const row of merged) {
+        const existing = bestById.get(row.id);
+        if (!existing) {
+          bestById.set(row.id, row);
+          continue;
+        }
+
+        const currPri = matchPriority(row);
+        const prevPri = matchPriority(existing);
+        if (currPri < prevPri) bestById.set(row.id, row);
+      }
+
+      const unique = Array.from(bestById.values());
 
       // Rank by title match first, then recency as a tie-breaker.
       const scored = unique
         .map((r) => {
           const title = r.title ?? '';
           const titleScore = scoreName(title);
+          const pri = matchPriority(r);
           // Newer first as a mild tie-breaker
           const recency =
             r.createdAt instanceof Date
               ? r.createdAt.getTime()
               : Number(r.createdAt ?? 0);
-          return { ...r, _score: titleScore, _recency: recency };
+          return { ...r, _score: pri * 1000 + titleScore, _recency: recency };
         })
         .sort((a, b) => {
           if (a._score !== b._score) return a._score - b._score;
@@ -241,6 +340,26 @@ export default defineEventHandler(async (event) => {
         byBook.set(row.bookId, list);
       }
 
+      const identifierLinks = await cloudDb
+        .select({
+          bookId: bookIdentifiers.bookId,
+          type: bookIdentifiers.type,
+          value: bookIdentifiers.value,
+        })
+        .from(bookIdentifiers)
+        .where(inArray(bookIdentifiers.bookId, bookIds));
+
+      const identifiersByBook = new Map<
+        string,
+        Array<{ type: string; value: string }>
+      >();
+
+      for (const row of identifierLinks) {
+        const list = identifiersByBook.get(row.bookId) ?? [];
+        list.push({ type: row.type, value: row.value });
+        identifiersByBook.set(row.bookId, list);
+      }
+
       return scored.map((b) => {
         const list = (byBook.get(b.id) ?? []).slice().sort((a, bb) => {
           // position can be null; keep nulls last, alphabetical within same pos
@@ -251,10 +370,22 @@ export default defineEventHandler(async (event) => {
         });
 
         const authorNames = list.map((x) => x.name).filter(Boolean);
+        const identifiers = (identifiersByBook.get(b.id) ?? [])
+          .filter((x) => (x.type ?? '').toLowerCase().includes('isbn'))
+          .slice()
+          .sort((a, bb) => {
+            const at = a.type.toLowerCase();
+            const bt = bb.type.toLowerCase();
+            if (at !== bt) return at.localeCompare(bt);
+            return a.value.localeCompare(bb.value);
+          })
+          .slice(0, 4);
+
         return {
           id: b.id,
           title: b.title,
           subtitle: authorNames.length ? authorNames.join(', ') : null,
+          identifiers,
           published: b.published ?? null,
           coverImagePath: b.coverImagePath ?? null,
         };
