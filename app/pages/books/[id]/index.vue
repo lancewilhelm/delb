@@ -852,6 +852,10 @@ watch(
   <div class="flex flex-col w-full h-full overflow-hidden">
     <AppHeader class="w-full" />
 
+    <div class="px-2 shrink-0 border-b border-(--sub-color)">
+      <ViewSelectorDropdown />
+    </div>
+
     <div class="flex flex-col w-full h-full p-4 pt-2 sm:pt-4 overflow-auto">
       <div class="flex items-center gap-2 mb-4 text-(--main-color)">
         <icon
@@ -1080,7 +1084,9 @@ watch(
                     class="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 translate-y-0.5"
                     :disabled="ratingSaving"
                     :aria-label="`${starIndex} star`"
-                    @mousemove="(e: MouseEvent) => onRatingMouseMove(e, starIndex)"
+                    @mousemove="
+                      (e: MouseEvent) => onRatingMouseMove(e, starIndex)
+                    "
                     @click="(e: MouseEvent) => onRatingClick(e, starIndex)"
                   >
                     <Icon
@@ -1238,8 +1244,8 @@ watch(
           <!-- Actions -->
           <div class="flex flex-wrap gap-1 pt-2 items-center justify-center">
             <NuxtLink
-              v-tooltip="'Read book'"
               v-if="hasEpub"
+              v-tooltip="'Read book'"
               class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
               :to="`/books/${book.id}/read`"
             >
@@ -1247,8 +1253,8 @@ watch(
             </NuxtLink>
 
             <button
-              v-tooltip="'Download book'"
               v-if="book.files && book.files.length > 0"
+              v-tooltip="'Download book'"
               class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
               type="button"
               :disabled="downloading"
@@ -1264,8 +1270,8 @@ watch(
             </button>
 
             <NuxtLink
-              v-tooltip="'Edit book details'"
               v-if="isAdmin"
+              v-tooltip="'Edit book details'"
               class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
               :to="`/books/${book.id}/edit`"
             >
@@ -1273,8 +1279,8 @@ watch(
             </NuxtLink>
 
             <button
-              v-tooltip="'Delete book'"
               v-if="isAdmin"
+              v-tooltip="'Delete book'"
               class="px-3 py-2 rounded-md border border-(--error-color) text-(--error-color) hover:bg-(--error-color)/90! text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
               type="button"
               :disabled="deleting"

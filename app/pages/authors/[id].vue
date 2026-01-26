@@ -113,6 +113,10 @@ onMounted(async () => {
   <div class="flex flex-col w-full h-full overflow-hidden">
     <AppHeader class="w-full" />
 
+    <div class="px-2 shrink-0 border-b border-(--sub-color)">
+      <ViewSelectorDropdown />
+    </div>
+
     <div class="flex-1 overflow-hidden flex flex-col min-h-0">
       <!-- Header (non-scrolling) -->
       <div class="p-4 shrink-0">

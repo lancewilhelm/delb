@@ -121,6 +121,9 @@ onMounted(async () => {
 <template>
   <div class="flex flex-col w-full h-full overflow-hidden">
     <AppHeader class="w-full" />
+    <div class="px-2 shrink-0 border-b border-(--sub-color)">
+      <ViewSelectorDropdown />
+    </div>
 
     <!-- Fixed header + scrollable books grid -->
     <div class="w-full h-full overflow-hidden flex flex-col min-h-0">

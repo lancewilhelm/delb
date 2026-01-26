@@ -254,6 +254,10 @@ watch(
   <div class="flex flex-col w-full h-full overflow-hidden">
     <AppHeader class="w-full" />
 
+    <div class="px-2 shrink-0 border-b border-(--sub-color)">
+      <ViewSelectorDropdown />
+    </div>
+
     <div class="w-full h-full p-4 overflow-auto">
       <div class="flex items-center gap-2 mb-4 text-(--main-color)">
         <Icon
