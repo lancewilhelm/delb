@@ -124,7 +124,7 @@ const showAnyMetadata = computed(
 </script>
 
 <template>
-  <div :class="['w-full max-w-80', props.class]">
+  <div :class="['w-full', props.class]">
     <div class="flex flex-col gap-1">
       <div class="relative">
         <BookCover

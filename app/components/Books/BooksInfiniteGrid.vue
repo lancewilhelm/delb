@@ -141,7 +141,7 @@ const bookCardHeightPx = computed<number>(() => {
 const gridStyle = computed<Record<string, string>>(() => {
   const w = gridCoverWidthPresetPx.value;
   const cols = userSettingsStore.activeSettings.bookGrid?.dynamicCoverSizing
-    ? `repeat(auto-fit, minmax(${w}px, 1fr))`
+    ? `repeat(auto-fill, minmax(${w}px, 1fr))`
     : `repeat(auto-fill, ${w}px)`;
 
   return {
