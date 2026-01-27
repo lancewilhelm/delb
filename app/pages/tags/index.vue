@@ -213,7 +213,7 @@ onMounted(async () => {
                     :src="b.coverThumbnailUrl"
                     :alt="`Cover for ${b.title}`"
                     :title="b.title"
-                    class="h-full relative"
+                    class="h-full w-auto! aspect-2/3! shrink-0 relative"
                     :class="i === 0 ? '' : '-ml-13'"
                     :style="{ zIndex: 100 - i }"
                   />
