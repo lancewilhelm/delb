@@ -151,7 +151,7 @@ const router = useRouter();
         <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
           <div class="flex-1 min-h-0 overflow-auto p-4 space-y-6">
             <!-- Filter input -->
-            <div class="flex items-center justify-between gap-3z-200">
+            <div class="flex items-center justify-between gap-3">
               <input
                 v-model="seriesQuery"
                 class="px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm w-56"

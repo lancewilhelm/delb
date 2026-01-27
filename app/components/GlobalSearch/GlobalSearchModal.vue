@@ -171,7 +171,11 @@ function coverThumbUrl(coverImagePath: string) {
 
 function formatIsbnIdentifier(ident: { type: string; value: string }): string {
   const t = (ident.type ?? '').toLowerCase();
-  const label = t.includes('13') ? 'ISBN-13' : t.includes('10') ? 'ISBN-10' : 'ISBN';
+  const label = t.includes('13')
+    ? 'ISBN-13'
+    : t.includes('10')
+      ? 'ISBN-10'
+      : 'ISBN';
   return `${label} ${ident.value}`;
 }
 
@@ -367,11 +371,11 @@ onBeforeUnmount(() => {
 <template>
   <div
     v-if="uiStore.globalSearchVisible"
-    class="fixed top-0 left-0 w-full h-full flex items-center justify-center z-50 bg-black/20"
+    class="fixed top-0 left-0 w-full h-full flex items-center justify-center z-5000 bg-black/20"
     @click="closeModal"
   >
     <div
-      class="flex flex-col backdrop-blur-lg bg-(--bg-color)/80 w-[720px] h-[600px] m-4 md:max-w-[80%] lg:max-w-[60%] rounded-lg shadow-lg border border-(--sub-color) overflow-hidden"
+      class="flex flex-col backdrop-blur-lg bg-(--bg-color)/80 w-180 h-150 m-4 md:max-w-[80%] lg:max-w-[60%] rounded-lg shadow-lg border border-(--sub-color) overflow-hidden"
       @click.stop
     >
       <div
