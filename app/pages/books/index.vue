@@ -704,6 +704,17 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', onFiltersDocumentKeyDown);
 });
 
+const isFiltersApplied = computed(() => {
+  if (
+    addedStart.value ||
+    addedEnd.value ||
+    selectedStatuses.value.length ||
+    includeNoStatus.value
+  )
+    return true;
+  return false;
+});
+
 // Direction toggles by re-selecting the active sort option in the dropdown.
 
 const activeBooksSortLabel = computed(() => {
@@ -1077,10 +1088,7 @@ onMounted(async () => {
                       </label>
                     </div>
 
-                    <p
-                      v-if="statusError"
-                      class="text-sm text-(--error-color)"
-                    >
+                    <p v-if="statusError" class="text-sm text-(--error-color)">
                       {{ statusError }}
                     </p>
                   </div>
@@ -1112,6 +1120,11 @@ onMounted(async () => {
                 <button
                   ref="filterAnchorRef"
                   class="p-1 flex items-center gap-2 h-full!"
+                  :class="
+                    isFiltersApplied
+                      ? 'bg-(--main-color) hover:bg-(--main-color)/70!'
+                      : ''
+                  "
                   :aria-expanded="filtersOpen"
                   aria-haspopup="menu"
                   @click="toggleFiltersDropdown"
@@ -1119,8 +1132,11 @@ onMounted(async () => {
                   <Icon
                     name="lucide:funnel"
                     class="text-(--main-color) opacity-80 shrink-0 text-xl sm:text-lg"
+                    :class="isFiltersApplied ? 'text-(--bg-color)!' : ''"
                   />
-                  <span class="hidden lg:block text-sm opacity-80"
+                  <span
+                    class="hidden lg:block text-sm opacity-80"
+                    :class="isFiltersApplied ? 'text-(--bg-color)' : ''"
                     >Filters</span
                   >
                   <!-- <Icon
