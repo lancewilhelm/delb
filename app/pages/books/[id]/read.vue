@@ -818,7 +818,7 @@ watch(readerDisplayMode, async () => {
     <div
       ref="readerAreaRef"
       class="relative flex h-full w-full overflow-hidden"
-      :class="{ 'px-4': isMobileDevice && readerDisplayMode === 'pages' }"
+      :class="{ '': isMobileDevice && readerDisplayMode === 'pages' }"
       @click="handleContentTap"
     >
       <!-- Overlay: when settings are open, capture any click/tap over the reader (including the epubjs iframe)
