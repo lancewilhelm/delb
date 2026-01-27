@@ -212,7 +212,7 @@ function handleSortChange(target: string) {
       />
       <SettingsUIInput
         v-model="authorsMaxCovers"
-        title="Series Max Cover Count"
+        title="Authors Max Cover Count"
         description="Maximum number of covers to display on author cards. (-1 for no limit)"
       />
       <SettingsUIInput
