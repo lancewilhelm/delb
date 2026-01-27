@@ -13,6 +13,7 @@ useHead({
 
 // Scope (collection) lives in the header collection switcher dropdown.
 const collectionsStore = useCollectionsStore();
+const router = useRouter();
 
 type FetchErrorLike = {
   data?: { message?: string };
@@ -26,6 +27,11 @@ type AuthorsListResponse = {
       id: string;
       name: string;
       bookCount: number;
+      books?: Array<{
+        id: string;
+        title: string;
+        coverThumbnailUrl: string | null;
+      }>;
     }>;
   };
 };
@@ -39,6 +45,11 @@ type AuthorRow = {
   id: string;
   name: string;
   bookCount: number;
+  books?: Array<{
+    id: string;
+    title: string;
+    coverThumbnailUrl: string | null;
+  }>;
 };
 
 const authors = ref<AuthorRow[]>([]);
@@ -88,6 +99,11 @@ async function refreshAuthors() {
   }
 }
 
+const userSettingsStore = useUserSettingsStore();
+const maxAuthorsCovers = userSettingsStore.settingRef<number>(
+  'coverStyle.authorsMaxCovers',
+);
+
 // ------------------------------
 // UI helpers
 // ------------------------------
@@ -107,8 +123,6 @@ async function refreshActiveView() {
     await collectionsStore.fetchCollections();
   }
 
-  // Books view now uses BooksInfiniteGrid (it owns its own paging/observer).
-  console.log('refreshing authors');
   await refreshAuthors();
 }
 
@@ -151,7 +165,7 @@ onMounted(async () => {
               Loading...
             </div>
 
-            <div v-else-if="errorMessage" class="text-sm text-red-600">
+            <div v-else-if="errorMessage" class="text-sm text-(--error-color)">
               {{ errorMessage }}
             </div>
 
@@ -162,22 +176,53 @@ onMounted(async () => {
               No authors found in the selected collection.
             </div>
 
-            <div v-else class="mt-3 space-y-2">
+            <div v-else class="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
               <div
                 v-for="a in filteredAuthors"
                 :key="a.id"
-                class="flex items-center justify-between border border-(--sub-color) rounded-md px-3 py-2 overflow-hidden"
+                class="flex items-center justify-between gap-3 border border-(--sub-color) hover:border-(--main-color) hover:bg-(--sub-color)/10 rounded-md px-3 py-2 overflow-hidden h-32 cursor-pointer shadow-sm hover:shadow-md"
+                @click="router.push(`/authors/${a.id}`)"
               >
-                <div class="min-w-0">
-                  <NuxtLink
-                    :to="`/authors/${a.id}`"
-                    class="truncate hover:underline"
-                  >
+                <div class="min-w-0 z-101">
+                  <div class="text-wrap">
                     {{ a.name }}
-                  </NuxtLink>
+                  </div>
                   <div class="text-xs opacity-70">
                     {{ a.bookCount }} book{{ a.bookCount === 1 ? '' : 's' }}
                   </div>
+                </div>
+
+                <div
+                  v-if="
+                    (a.books ?? []).some(
+                      (b) =>
+                        typeof b.coverThumbnailUrl === 'string' &&
+                        b.coverThumbnailUrl,
+                    )
+                  "
+                  class="shrink-0 flex items-center h-full"
+                >
+                  <BookCover
+                    v-for="(b, i) in (a.books ?? [])
+                      .filter(
+                        (x) =>
+                          typeof x.coverThumbnailUrl === 'string' &&
+                          x.coverThumbnailUrl,
+                      )
+                      .slice(
+                        0,
+                        maxAuthorsCovers === -1
+                          ? a.books?.length
+                          : maxAuthorsCovers,
+                      )"
+                    :key="b.id"
+                    :src="b.coverThumbnailUrl"
+                    :alt="`Cover for ${b.title}`"
+                    :title="b.title"
+                    class="h-full relative"
+                    :class="i === 0 ? '' : '-ml-13'"
+                    :style="{ zIndex: 100 - i }"
+                  />
                 </div>
               </div>
             </div>

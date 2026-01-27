@@ -37,6 +37,22 @@ const coverStyleGrayscale = userSettingsStore.settingRef<boolean>(
   'coverStyle.grayscale',
 );
 
+const authorsMaxCovers = userSettingsStore.settingRef<number>(
+  'coverStyle.authorsMaxCovers',
+);
+
+const seriesMaxCovers = userSettingsStore.settingRef<number>(
+  'coverStyle.seriesMaxCovers',
+);
+
+const publishersMaxCovers = userSettingsStore.settingRef<number>(
+  'coverStyle.publishersMaxCovers',
+);
+
+const tagsMaxCovers = userSettingsStore.settingRef<number>(
+  'coverStyle.tagsMaxCovers',
+);
+
 // ------------------------------
 // Book grid appearance controls
 // ------------------------------
@@ -158,7 +174,7 @@ function handleSortChange(target: string) {
 <template>
   <div class="w-full">
     <SettingsUIGroup
-      title="device settings"
+      title="Device Settings"
       icon="lucide:smartphone"
       description="choose whether mobile devices can override your default settings"
     >
@@ -175,7 +191,7 @@ function handleSortChange(target: string) {
       </div>
     </SettingsUIGroup>
     <SettingsUIGroup
-      title="cover style"
+      title="Cover Style"
       icon="lucide:book-image"
       description="customize the cover style"
     >
@@ -194,16 +210,36 @@ function handleSortChange(target: string) {
         title="Grayscale"
         description="Applies a grayscale filter to the cover"
       />
+      <SettingsUIInput
+        v-model="authorsMaxCovers"
+        title="Series Max Cover Count"
+        description="Maximum number of covers to display on author cards. (-1 for no limit)"
+      />
+      <SettingsUIInput
+        v-model="seriesMaxCovers"
+        title="Series Max Cover Count"
+        description="Maximum number of covers to display on series cards. (-1 for no limit)"
+      />
+      <SettingsUIInput
+        v-model="publishersMaxCovers"
+        title="Publisher Max Cover Count"
+        description="Maximum number of covers to display on publisher cards. (-1 for no limit)"
+      />
+      <SettingsUIInput
+        v-model="tagsMaxCovers"
+        title="Publisher Max Cover Count"
+        description="Maximum number of covers to display on tag cards. (-1 for no limit)"
+      />
     </SettingsUIGroup>
 
     <SettingsUIGroup
-      title="book grid"
+      title="Book Grid"
       icon="lucide:layout-grid"
       description="customize grid cover sizing"
     >
       <SettingsUIToggle
         v-model="gridCoverDynamicSizing"
-        title="Dynamic cover sizing"
+        title="Dynamic Cover Sizing"
         description="When enabled, covers grow/shrink together to fill the row. When disabled, covers keep a fixed width."
       />
       <SettingsUISlider
@@ -242,9 +278,9 @@ function handleSortChange(target: string) {
     </SettingsUIGroup>
 
     <SettingsUIGroup
-      title="mobile"
+      title="Mobile"
       icon="lucide:smartphone"
-      description="mobile device specific settings"
+      description="Mobile device specific settings"
     >
       <SettingsUIToggle
         v-model="mobileSearchButton"
@@ -254,13 +290,13 @@ function handleSortChange(target: string) {
     </SettingsUIGroup>
 
     <SettingsUIGroup
-      title="reader"
+      title="Reader"
       icon="lucide:book-open"
-      description="reader settings"
+      description="Reader settings"
     >
       <SettingsUISlider
         v-model="readerMinSpreadWidth"
-        title="Reader min spread width"
+        title="Reader Min Spread Width"
         description="Min width where the reader displays as two columns (default: 1100px)"
         :min="400"
         :max="5000"
@@ -270,7 +306,7 @@ function handleSortChange(target: string) {
     </SettingsUIGroup>
 
     <SettingsUIGroup
-      title="font"
+      title="Font"
       icon="ri:font-family"
       description="customize the font style"
     >

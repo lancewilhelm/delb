@@ -43,7 +43,7 @@ const hasSrc = computed(() => !!props.src);
 
 <template>
   <div
-    class="cover w-full h-full rounded-sm overflow-hidden background-transparent"
+    class="cover w-full h-full rounded-sm overflow-hidden background-transparent shadow-md"
     :class="[
       props.class,
       userSettingsStore.activeSettings.coverStyle.glossySpine ? 'gloss' : '',
@@ -71,17 +71,6 @@ const hasSrc = computed(() => !!props.src);
 </template>
 
 <style scoped>
-/* Reusable "3D-ish" cover styling (moved from global CSS) */
-.cover {
-  position: relative;
-  box-shadow:
-    rgba(0, 0, 0, 0.15) 0px 1.1px 1.5px,
-    rgba(0, 0, 0, 0.1) 0px 2.8px 3.9px,
-    rgba(0, 0, 0, 0.08) 0px 5.8px 7.9px,
-    rgba(0, 0, 0, 0.06) 0px 12.0455px 16.4px,
-    rgba(0, 0, 0, 0.04) 0px 33px 45px;
-}
-
 /* Book Cover Effect */
 .gloss::before {
   content: '';

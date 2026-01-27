@@ -111,7 +111,7 @@ onBeforeUnmount(() => {
       <div
         v-if="open"
         ref="panelRef"
-        class="absolute left-0 mt-1 w-44 bg-(--bg-color) border border-(--sub-color) rounded-md shadow-lg z-50 overflow-hidden"
+        class="absolute left-0 mt-1 w-44 bg-(--bg-color) border border-(--sub-color) rounded-md shadow-lg z-150 overflow-hidden"
         role="menu"
       >
         <div class="px-3 py-2 border-(--sub-color)">

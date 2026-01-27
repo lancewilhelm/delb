@@ -32,6 +32,10 @@ export interface BaseUserSettings {
     glossySpine: boolean;
     roundedRight: boolean;
     grayscale: boolean;
+    authorsMaxCovers: number;
+    seriesMaxCovers: number;
+    publishersMaxCovers: number;
+    tagsMaxCovers: number;
   };
 
   /**
@@ -104,6 +108,10 @@ function getBaseDefaults(): BaseUserSettings {
       glossySpine: true,
       roundedRight: false,
       grayscale: false,
+      authorsMaxCovers: -1,
+      seriesMaxCovers: -1,
+      publishersMaxCovers: 8,
+      tagsMaxCovers: 8,
     },
     bookGrid: {
       dynamicCoverSizing: true,

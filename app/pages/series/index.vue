@@ -100,6 +100,11 @@ async function refreshSeries() {
   }
 }
 
+const userSettingsStore = useUserSettingsStore();
+const maxSeriesCovers = userSettingsStore.settingRef<number>(
+  'coverStyle.seriesMaxCovers',
+);
+
 // ------------------------------
 // UI helpers
 // ------------------------------
@@ -172,14 +177,15 @@ const router = useRouter();
 
             <!-- Series content -->
             <div v-else class="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+              <!-- Series Cards -->
               <div
                 v-for="s in filteredSeries"
                 :key="s.id"
-                class="flex items-center justify-between gap-3 border border-(--sub-color) hover:border-(--main-color) hover:bg-(--sub-color)/10 rounded-md px-3 py-2 overflow-hidden h-32 cursor-pointer"
+                class="flex items-center justify-between gap-3 border border-(--sub-color) hover:border-(--main-color) hover:bg-(--sub-color)/10 rounded-md px-3 py-2 overflow-hidden h-32 cursor-pointer shadow-sm hover:shadow-md"
                 @click="router.push(`/series/${s.id}`)"
               >
                 <!-- Series info -->
-                <div class="min-w-0 z-200">
+                <div class="min-w-0 z-101">
                   <div class="text-wrap">
                     {{ s.name }}
                   </div>
@@ -206,7 +212,12 @@ const router = useRouter();
                           typeof x.coverThumbnailUrl === 'string' &&
                           x.coverThumbnailUrl,
                       )
-                      .slice(0, s.books?.length)"
+                      .slice(
+                        0,
+                        maxSeriesCovers === -1
+                          ? s.books?.length
+                          : maxSeriesCovers,
+                      )"
                     :key="b.id"
                     :src="b.coverThumbnailUrl"
                     :alt="`Cover for ${b.title}`"

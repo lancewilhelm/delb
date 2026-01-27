@@ -55,7 +55,7 @@ watch(
 <template>
   <div
     v-if="uiStore.commandPaletteVisible"
-    class="fixed top-0 left-0 w-full h-full flex items-center justify-center z-50 bg-black/20"
+    class="fixed top-0 left-0 w-full h-full flex items-center justify-center z-5000 bg-black/20"
     @click="closePalette"
     @mouseover="
       selectedOption?.label === 'theme' ||

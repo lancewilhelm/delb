@@ -1,4 +1,4 @@
-import { and, asc, countDistinct, eq } from 'drizzle-orm';
+import { and, asc, countDistinct, eq, inArray } from 'drizzle-orm';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
   bookTags,
@@ -61,6 +61,10 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  function coverThumbUrl(coverImagePath: string) {
+    return `/api/media/covers/${coverImagePath.replace(/^library\//, '')}`;
+  }
+
   try {
     /**
      * We want:
@@ -98,11 +102,74 @@ export default defineEventHandler(async (event) => {
       .groupBy(tags.id, tags.name)
       .orderBy(asc(tags.name));
 
-    const out = rows.map((r) => ({
+    const outBase = rows.map((r) => ({
       id: r.id,
       name: r.name,
       // SQLite returns integers for COUNT; coerce defensively
       bookCount: typeof r.bookCount === 'number' ? r.bookCount : Number(r.bookCount),
+    }));
+
+    const tagIds = outBase.map((t) => t.id).filter(Boolean);
+
+    const bookRows =
+      tagIds.length > 0
+        ? await cloudDb
+            .select({
+              tagId: bookTags.tagId,
+              bookId: books.id,
+              title: books.title,
+              coverImagePath: books.coverImagePath,
+            })
+            .from(bookTags)
+            .innerJoin(books, eq(books.id, bookTags.bookId))
+            .innerJoin(collectionBooks, eq(collectionBooks.bookId, books.id))
+            .innerJoin(
+              collectionMembers,
+              eq(collectionMembers.collectionId, collectionBooks.collectionId),
+            )
+            .where(
+              and(
+                inArray(bookTags.tagId, tagIds),
+                eq(collectionMembers.userId, session.user.id),
+                collectionId ? eq(collectionBooks.collectionId, collectionId) : undefined,
+              ),
+            )
+            .groupBy(bookTags.tagId, books.id, books.title, books.coverImagePath)
+            .orderBy(asc(bookTags.tagId), asc(books.title), asc(books.id))
+        : [];
+
+    const booksByTagId = new Map<
+      string,
+      Array<{
+        id: string;
+        title: string;
+        coverImagePath: string | null;
+        coverThumbnailUrl: string | null;
+      }>
+    >();
+
+    for (const row of bookRows) {
+      const tid = (row.tagId ?? '').toString();
+      const bid = (row.bookId ?? '').toString();
+      const title = (row.title ?? '').toString();
+      const coverImagePathRaw = (row.coverImagePath ?? '').toString().trim();
+      const coverImagePath = coverImagePathRaw ? coverImagePathRaw : null;
+
+      if (!tid || !bid) continue;
+
+      const list = booksByTagId.get(tid) ?? [];
+      list.push({
+        id: bid,
+        title,
+        coverImagePath,
+        coverThumbnailUrl: coverImagePath ? coverThumbUrl(coverImagePath) : null,
+      });
+      booksByTagId.set(tid, list);
+    }
+
+    const out = outBase.map((t) => ({
+      ...t,
+      books: booksByTagId.get(t.id) ?? [],
     }));
 
     return {
