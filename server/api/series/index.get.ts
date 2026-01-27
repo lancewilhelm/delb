@@ -1,13 +1,13 @@
-import { and, asc, countDistinct, eq } from "drizzle-orm";
-import { cloudDb } from "~~/server/utils/db/cloud";
+import { and, asc, countDistinct, eq, inArray, sql } from 'drizzle-orm';
+import { cloudDb } from '~~/server/utils/db/cloud';
 import {
   books,
   collectionBooks,
   collectionMembers,
   series as seriesTable,
-} from "~/utils/db/schema";
-import { logger } from "~/utils/logger";
-import { auth } from "~/utils/auth";
+} from '~/utils/db/schema';
+import { logger } from '~/utils/logger';
+import { auth } from '~/utils/auth';
 
 /**
  * GET /api/series?collectionId=<optional>
@@ -28,7 +28,7 @@ import { auth } from "~/utils/auth";
  * }
  */
 export default defineEventHandler(async (event) => {
-  logger.debug("GET /api/series");
+  logger.debug('GET /api/series');
 
   const session = await auth.api.getSession({
     headers: event.headers,
@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
 
   if (!session) {
     setResponseStatus(event, 401);
-    return { success: false, message: "Unauthorized" };
+    return { success: false, message: 'Unauthorized' };
   }
 
   const { collectionId } = getQuery(event) as { collectionId?: string };
@@ -56,8 +56,12 @@ export default defineEventHandler(async (event) => {
 
     if (!membership[0]) {
       setResponseStatus(event, 403);
-      return { success: false, message: "Forbidden" };
+      return { success: false, message: 'Forbidden' };
     }
+  }
+
+  function coverThumbUrl(coverImagePath: string) {
+    return `/api/media/covers/${coverImagePath.replace(/^library\//, '')}`;
   }
 
   try {
@@ -99,11 +103,89 @@ export default defineEventHandler(async (event) => {
       .groupBy(seriesTable.id, seriesTable.name)
       .orderBy(asc(seriesTable.name));
 
-    const out = rows.map((r) => ({
+    const outBase = rows.map((r) => ({
       id: r.id,
       name: r.name,
       bookCount:
-        typeof r.bookCount === "number" ? r.bookCount : Number(r.bookCount),
+        typeof r.bookCount === 'number' ? r.bookCount : Number(r.bookCount),
+    }));
+
+    const seriesIds = outBase.map((s) => s.id).filter(Boolean);
+
+    const coverRows =
+      seriesIds.length > 0
+        ? await cloudDb
+            .select({
+              seriesId: books.seriesId,
+              bookId: books.id,
+              title: books.title,
+              coverImagePath: books.coverImagePath,
+              seriesIndex: books.seriesIndex,
+            })
+            .from(books)
+            .innerJoin(collectionBooks, eq(collectionBooks.bookId, books.id))
+            .innerJoin(
+              collectionMembers,
+              eq(collectionMembers.collectionId, collectionBooks.collectionId),
+            )
+            .where(
+              and(
+                inArray(books.seriesId, seriesIds),
+                eq(collectionMembers.userId, session.user.id),
+                collectionId
+                  ? eq(collectionBooks.collectionId, collectionId)
+                  : undefined,
+              ),
+            )
+            // Avoid duplicates when the same book is in multiple collections within scope.
+            .groupBy(books.id)
+            // Order thumbnails by series_index (nulls last), then title for stability.
+            .orderBy(
+              asc(sql`COALESCE(${books.seriesIndex}, 999999)`),
+              asc(books.title),
+              asc(books.id),
+            )
+        : [];
+
+    const booksBySeriesId = new Map<
+      string,
+      Array<{
+        id: string;
+        title: string;
+        seriesIndex: number | null;
+        coverImagePath: string | null;
+        coverThumbnailUrl: string | null;
+      }>
+    >();
+
+    for (const row of coverRows) {
+      const sid = (row.seriesId ?? '').toString();
+      const bid = (row.bookId ?? '').toString();
+      const title = (row.title ?? '').toString();
+      const coverImagePathRaw = (row.coverImagePath ?? '').toString().trim();
+      const coverImagePath = coverImagePathRaw ? coverImagePathRaw : null;
+      const seriesIndex =
+        typeof row.seriesIndex === 'number'
+          ? row.seriesIndex
+          : row.seriesIndex ?? null;
+
+      if (!sid || !bid) continue;
+
+      const list = booksBySeriesId.get(sid) ?? [];
+      list.push({
+        id: bid,
+        title,
+        seriesIndex,
+        coverImagePath,
+        coverThumbnailUrl: coverImagePath ? coverThumbUrl(coverImagePath) : null,
+      });
+
+      booksBySeriesId.set(sid, list);
+    }
+
+    const out = outBase.map((s) => ({
+      ...s,
+      books: booksBySeriesId.get(s.id) ?? [],
     }));
 
     return {
@@ -113,10 +195,10 @@ export default defineEventHandler(async (event) => {
       },
     };
   } catch (error: unknown) {
-    logger.error(error, "GET /api/series: failed");
+    logger.error(error, 'GET /api/series: failed');
     throw createError({
       statusCode: 500,
-      statusMessage: "Failed to load series",
+      statusMessage: 'Failed to load series',
     });
   }
 });

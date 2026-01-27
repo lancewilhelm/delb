@@ -26,6 +26,12 @@ type SeriesListResponse = {
       id: string;
       name: string;
       bookCount: number;
+      books?: Array<{
+        id: string;
+        title: string;
+        seriesIndex: number | null;
+        coverThumbnailUrl: string | null;
+      }>;
     }>;
   };
 };
@@ -39,6 +45,12 @@ type SeriesRow = {
   id: string;
   name: string;
   bookCount: number;
+  books?: Array<{
+    id: string;
+    title: string;
+    seriesIndex: number | null;
+    coverThumbnailUrl: string | null;
+  }>;
 };
 
 const seriesRows = ref<SeriesRow[]>([]);
@@ -111,6 +123,8 @@ async function refreshActiveView() {
 onMounted(async () => {
   await refreshActiveView();
 });
+
+const router = useRouter();
 </script>
 
 <template>
@@ -131,8 +145,8 @@ onMounted(async () => {
         <!-- Body -->
         <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
           <div class="flex-1 min-h-0 overflow-auto p-4 space-y-6">
-            <!-- Series -->
-            <div class="flex items-center justify-between gap-3">
+            <!-- Filter input -->
+            <div class="flex items-center justify-between gap-3z-200">
               <input
                 v-model="seriesQuery"
                 class="px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm w-56"
@@ -145,7 +159,7 @@ onMounted(async () => {
               Loading...
             </div>
 
-            <div v-else-if="errorMessage" class="text-sm text-red-600">
+            <div v-else-if="errorMessage" class="text-sm text-(--error-color)">
               {{ errorMessage }}
             </div>
 
@@ -156,22 +170,51 @@ onMounted(async () => {
               No series found in the selected collection.
             </div>
 
-            <div v-else class="mt-3 space-y-2">
+            <!-- Series content -->
+            <div v-else class="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
               <div
                 v-for="s in filteredSeries"
                 :key="s.id"
-                class="flex items-center justify-between border border-(--sub-color) rounded-md px-3 py-2 overflow-hidden"
+                class="flex items-center justify-between gap-3 border border-(--sub-color) hover:border-(--main-color) hover:bg-(--sub-color)/10 rounded-md px-3 py-2 overflow-hidden h-32 cursor-pointer"
+                @click="router.push(`/series/${s.id}`)"
               >
-                <div class="min-w-0">
-                  <NuxtLink
-                    :to="`/series/${s.id}`"
-                    class="truncate hover:underline"
-                  >
+                <!-- Series info -->
+                <div class="min-w-0 z-200">
+                  <div class="text-wrap">
                     {{ s.name }}
-                  </NuxtLink>
+                  </div>
                   <div class="text-xs opacity-70">
                     {{ s.bookCount }} book{{ s.bookCount === 1 ? '' : 's' }}
                   </div>
+                </div>
+
+                <!-- Book covers -->
+                <div
+                  v-if="
+                    (s.books ?? []).some(
+                      (b) =>
+                        typeof b.coverThumbnailUrl === 'string' &&
+                        b.coverThumbnailUrl,
+                    )
+                  "
+                  class="shrink-0 flex items-center h-full"
+                >
+                  <BookCover
+                    v-for="(b, i) in (s.books ?? [])
+                      .filter(
+                        (x) =>
+                          typeof x.coverThumbnailUrl === 'string' &&
+                          x.coverThumbnailUrl,
+                      )
+                      .slice(0, s.books?.length)"
+                    :key="b.id"
+                    :src="b.coverThumbnailUrl"
+                    :alt="`Cover for ${b.title}`"
+                    :title="b.title"
+                    class="h-full relative"
+                    :class="i === 0 ? '' : '-ml-13'"
+                    :style="{ zIndex: 100 - i }"
+                  />
                 </div>
               </div>
             </div>
