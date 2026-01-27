@@ -212,6 +212,10 @@ const router = useRouter();
                           typeof x.coverThumbnailUrl === 'string' &&
                           x.coverThumbnailUrl,
                       )
+                      .sort(
+                        (a, b) =>
+                          (a.seriesIndex ?? 999) - (b.seriesIndex ?? 999),
+                      )
                       .slice(
                         0,
                         maxSeriesCovers === -1
