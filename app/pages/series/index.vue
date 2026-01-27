@@ -134,7 +134,7 @@ const router = useRouter();
 
 <template>
   <div class="flex flex-col w-full h-full overflow-hidden">
-    <AppHeader class="w-full" @book-uploaded="console.log('book uploaded')" />
+    <AppHeader class="w-full" />
 
     <div class="flex w-full h-full overflow-hidden">
       <!-- Main content (fixed header + scrollable content area) -->

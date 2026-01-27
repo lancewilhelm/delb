@@ -50,7 +50,11 @@ const newUserPassword = ref('');
 const newUserRole = ref<'admin' | 'user'>('user');
 const createUserEmailInput = ref<HTMLInputElement | null>(null);
 async function createUser() {
-  if (!newUserName.value.trim() || !newUserEmail.value || !newUserPassword.value) {
+  if (
+    !newUserName.value.trim() ||
+    !newUserEmail.value ||
+    !newUserPassword.value
+  ) {
     alert('Please fill in all fields');
     return;
   }
