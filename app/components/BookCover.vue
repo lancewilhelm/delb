@@ -43,7 +43,7 @@ const hasSrc = computed(() => !!props.src);
 
 <template>
   <div
-    class="cover w-full h-full rounded-sm overflow-hidden background-transparent shadow-md"
+    class="relative w-full h-full rounded-sm overflow-hidden background-transparent shadow-md cover"
     :class="[
       props.class,
       userSettingsStore.activeSettings.coverStyle.glossySpine ? 'gloss' : '',
