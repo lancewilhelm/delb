@@ -90,7 +90,7 @@ onBeforeUnmount(() => {
     <div class="relative md:hidden">
       <button
         ref="anchorRef"
-        class="py-0 px-0.5 gap-2 hover:bg-transparent! rounded-none! active:bg-transparent! focus:bg-transparent!"
+        class="p-1 gap-2 hover:bg-transparent! rounded-none! active:bg-transparent! focus:bg-transparent!"
         :aria-expanded="open"
         aria-haspopup="menu"
         @click="toggleDropdown"
@@ -99,12 +99,13 @@ onBeforeUnmount(() => {
           :name="activeItem.icon"
           class="text-(--main-color) opacity-90 shrink-0 text-2xl"
         />
-        <span class="text-2xl text-(--main-color)">
+        <span class="text-xl text-(--main-color)">
           {{ activeItem.label }}
         </span>
         <Icon
           name="lucide:chevron-down"
-          class="text-(--main-color) opacity-70 shrink-0"
+          class="text-(--main-color) opacity-70 shrink-0 transition"
+          :class="open ? 'rotate-180' : ''"
         />
       </button>
 

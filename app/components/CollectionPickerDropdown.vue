@@ -187,7 +187,8 @@ onBeforeUnmount(() => {
       }}</span>
       <Icon
         name="lucide:chevron-down"
-        class="text-(--main-color) opacity-80 shrink-0"
+        class="text-(--main-color) opacity-80 shrink-0 transition"
+        :class="open ? 'rotate-180' : ''"
       />
     </button>
 
