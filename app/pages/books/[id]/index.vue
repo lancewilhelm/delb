@@ -643,10 +643,92 @@ const hasEpub = computed(() => {
 
 const downloading = ref(false);
 
-function guessDownloadFilename(b: Book) {
+const downloadDropdownOpen = ref(false);
+const downloadAnchorRef = ref<HTMLElement | null>(null);
+const downloadPanelRef = ref<HTMLElement | null>(null);
+
+function closeDownloadDropdown() {
+  downloadDropdownOpen.value = false;
+}
+
+function toggleDownloadDropdown() {
+  downloadDropdownOpen.value = !downloadDropdownOpen.value;
+}
+
+function onDocumentPointerDown(e: MouseEvent) {
+  if (!downloadDropdownOpen.value) return;
+  const target = e.target as Node | null;
+
+  if (
+    (downloadPanelRef.value && target && downloadPanelRef.value.contains(target)) ||
+    (downloadAnchorRef.value &&
+      target &&
+      downloadAnchorRef.value.contains(target))
+  ) {
+    return;
+  }
+
+  closeDownloadDropdown();
+}
+
+function onDocumentKeyDown(e: KeyboardEvent) {
+  if (!downloadDropdownOpen.value) return;
+  if (e.key === 'Escape') closeDownloadDropdown();
+}
+
+onMounted(() => {
+  document.addEventListener('mousedown', onDocumentPointerDown);
+  document.addEventListener('keydown', onDocumentKeyDown);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onDocumentPointerDown);
+  document.removeEventListener('keydown', onDocumentKeyDown);
+});
+
+type BookFile = NonNullable<Book['files']>[number];
+
+function getFileFormatLabel(file: BookFile) {
+  const fmt = (file.format || '').trim().toLowerCase();
+  if (fmt) return fmt.toUpperCase();
+
+  // Fallback to extension from path when format is missing.
+  const fromPath = (file.relativePath || '')
+    .split('.')
+    .pop()
+    ?.trim()
+    .toLowerCase();
+  return (fromPath || 'FILE').toUpperCase();
+}
+
+const downloadChoices = computed(() => {
+  const files = (book.value?.files ?? []) as BookFile[];
+  if (!files.length) return [];
+
+  const totals = new Map<string, number>();
+  for (const f of files) {
+    const key = getFileFormatLabel(f);
+    totals.set(key, (totals.get(key) ?? 0) + 1);
+  }
+
+  const seen = new Map<string, number>();
+  return files.map((file) => {
+    const label = getFileFormatLabel(file);
+    const next = (seen.get(label) ?? 0) + 1;
+    seen.set(label, next);
+
+    const total = totals.get(label) ?? 1;
+    const displayLabel = total > 1 ? `${label} (${next})` : label;
+
+    return { file, label: displayLabel };
+  });
+});
+
+function guessDownloadFilename(b: Book, file?: BookFile | null) {
   const title = (b.title || 'book').trim();
 
   const preferred =
+    file ??
     b.files?.find((f) => (f.format || '').toLowerCase() === 'epub') ??
     b.files?.[0];
 
@@ -654,13 +736,19 @@ function guessDownloadFilename(b: Book) {
   return `${title}.${ext}`;
 }
 
-async function downloadBook() {
+async function downloadBookFile(file?: BookFile | null) {
   if (!book.value || !downloadUrl.value || downloading.value) return;
 
   downloading.value = true;
+  closeDownloadDropdown();
 
   try {
-    const res = await fetch(downloadUrl.value, { method: 'GET' });
+    const url = new URL(downloadUrl.value, window.location.origin);
+    if (file?.id) {
+      url.searchParams.set('fileId', file.id);
+    }
+
+    const res = await fetch(url.toString(), { method: 'GET' });
     if (!res.ok) {
       throw new Error(`Download failed (${res.status})`);
     }
@@ -676,19 +764,19 @@ async function downloadBook() {
     const fromHeader = match?.[1] || match?.[2] || match?.[3];
     const filename =
       (fromHeader ? decodeURIComponent(fromHeader.trim()) : null) ||
-      guessDownloadFilename(book.value);
+      guessDownloadFilename(book.value, file ?? null);
 
-    const url = URL.createObjectURL(blob);
+    const blobUrl = URL.createObjectURL(blob);
     try {
       const a = document.createElement('a');
-      a.href = url;
+      a.href = blobUrl;
       a.download = filename;
       a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
       a.remove();
     } finally {
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(blobUrl);
     }
   } catch (err) {
     const e = err as FetchErrorLike;
@@ -700,6 +788,18 @@ async function downloadBook() {
   } finally {
     downloading.value = false;
   }
+}
+
+function onDownloadClick() {
+  const files = (book.value?.files ?? []) as BookFile[];
+  if (!files.length || downloading.value) return;
+
+  if (files.length === 1) {
+    void downloadBookFile(files[0] ?? null);
+    return;
+  }
+
+  toggleDownloadDropdown();
 }
 
 type DeleteBookMode = 'db_only' | 'everything';
@@ -846,6 +946,9 @@ watch(
     loadBook();
   },
 );
+
+// Copy composable for the file paths
+const { copy } = useClipboard();
 </script>
 
 <template>
@@ -1030,17 +1133,22 @@ watch(
             class="grid grid-cols-[110px_1fr] gap-2 text-sm"
           >
             <div class="opacity-70">Files</div>
-            <div class="min-w-0 break-all">
-              {{
-                book.files
-                  .map((f) => {
-                    const fmt = (f.format || '').toUpperCase();
-                    const p = f.relativePath || '';
-                    return fmt ? `${fmt}: ${p}` : p;
-                  })
-                  .filter(Boolean)
-                  .join(' • ')
-              }}
+            <div class="min-w-0 break-all flex flex-col gap-1">
+              <div
+                v-for="f in book.files"
+                :key="f.id"
+                v-tooltip="'Click to copy path'"
+                class="flex gap-1 cursor-pointer"
+                @click="copy(f.relativePath)"
+              >
+                <span v-if="f.format" class="shrink-0 flex items-center"
+                  ><span
+                    class="border border-(--sub-color) rounded px-1 no-wrap"
+                    >{{ f.format.toUpperCase() }}</span
+                  ></span
+                >
+                <HoverScrollText>{{ f.relativePath }}</HoverScrollText>
+              </div>
             </div>
           </div>
 
@@ -1252,22 +1360,57 @@ watch(
               <icon name="lucide:book-open" class="text-xl" />
             </NuxtLink>
 
-            <button
-              v-if="book.files && book.files.length > 0"
-              v-tooltip="'Download book'"
-              class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
-              type="button"
-              :disabled="downloading"
-              @click="downloadBook"
-            >
-              <icon
-                :name="
-                  downloading ? 'lucide:loader-circle' : 'lucide:book-down'
-                "
-                class="text-xl"
-                :class="[downloading ? 'animate-spin' : '']"
-              />
-            </button>
+            <div v-if="book.files && book.files.length > 0" class="relative">
+              <button
+                ref="downloadAnchorRef"
+                v-tooltip="'Download book'"
+                class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center"
+                type="button"
+                :disabled="downloading"
+                :aria-expanded="downloadDropdownOpen"
+                aria-haspopup="menu"
+                @click="onDownloadClick"
+              >
+                <icon
+                  :name="
+                    downloading ? 'lucide:loader-circle' : 'lucide:book-down'
+                  "
+                  class="text-xl"
+                  :class="[downloading ? 'animate-spin' : '']"
+                />
+                <icon
+                  v-if="book.files.length > 1"
+                  name="lucide:chevron-down"
+                  class="text-base opacity-70"
+                  :class="downloadDropdownOpen ? 'rotate-180' : ''"
+                />
+              </button>
+
+              <div
+                v-if="downloadDropdownOpen && downloadChoices.length > 1"
+                ref="downloadPanelRef"
+                class="absolute right-0 mt-1 w-44 bg-(--bg-color) border border-(--sub-color) rounded-md shadow-lg z-150 overflow-hidden"
+                role="menu"
+              >
+                <div class="px-3 py-2 border-b border-(--sub-color)">
+                  <div class="text-xs opacity-70">Download as</div>
+                </div>
+
+                <div>
+                  <button
+                    v-for="opt in downloadChoices"
+                    :key="opt.file.id"
+                    class="w-full px-3 py-2 text-left justify-start! gap-3 transition rounded-none! flex items-center hover:bg-(--sub-color)/15 text-(--main-color) opacity-80 hover:opacity-100"
+                    role="menuitem"
+                    type="button"
+                    :disabled="downloading"
+                    @click="downloadBookFile(opt.file)"
+                  >
+                    <span class="truncate text-sm">{{ opt.label }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
 
             <NuxtLink
               v-if="isAdmin"

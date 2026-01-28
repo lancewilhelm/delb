@@ -44,6 +44,16 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing book id" });
   }
 
+  const query = getQuery(event);
+  const requestedFileId =
+    typeof query.fileId === "string" && query.fileId.trim()
+      ? query.fileId.trim()
+      : null;
+  const requestedFormat =
+    typeof query.format === "string" && query.format.trim()
+      ? query.format.trim().toLowerCase()
+      : null;
+
   // Enforce visibility: user must be a member of at least one collection
   // that contains the requested book.
   const memberships = await cloudDb
@@ -101,10 +111,29 @@ export default defineEventHandler(async (event) => {
     }))
     .filter((f) => supportedFormats.includes(f.format as never));
 
+  const fileFromId = requestedFileId
+    ? normalized.find((f) => f.id === requestedFileId)
+    : null;
+
+  if (requestedFileId && !fileFromId) {
+    throw createError({ statusCode: 404, statusMessage: "Book file not found" });
+  }
+
+  const fileFromFormat = requestedFormat
+    ? normalized.find((f) => f.format === requestedFormat)
+    : null;
+
+  if (requestedFormat && !fileFromFormat) {
+    throw createError({ statusCode: 404, statusMessage: "Book file not found" });
+  }
+
   const file =
+    fileFromId ??
+    fileFromFormat ??
     preferredOrder
       .map((fmt) => normalized.find((f) => f.format === fmt))
-      .find(Boolean) ?? normalized[0];
+      .find(Boolean) ??
+    normalized[0];
 
   if (!file?.relativePath) {
     throw createError({

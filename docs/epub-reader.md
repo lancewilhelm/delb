@@ -20,7 +20,7 @@ The reader lives at:
 - `app/pages/books/[id]/read.vue`
 
 This page:
-- Loads the EPUB from the existing download endpoint
+- Loads the EPUB from the download endpoint using `format=epub` (and `fileId` when available)
 - Restores the last saved reading position (if any)
 - Saves position automatically when the reader relocates
 
@@ -49,6 +49,14 @@ Notes:
 - `progress` is a percentage (0..100) when available
 
 ## API Endpoints
+
+### Download book file (used by reader)
+
+`GET /api/books/:id/download`
+
+Query params:
+- `format`: when set to `epub`, forces an EPUB response (reader requirement)
+- `fileId`: optionally downloads a specific stored file for the book (used to disambiguate when multiple files exist)
 
 ### Get reading position
 

@@ -32,6 +32,7 @@ const errorMessage = ref<string | null>(null);
 const bookTitle = ref<string>('Reader');
 const currentProgress = ref<number | null>(null);
 const saveErrorMessage = ref<string | null>(null);
+const epubFileId = ref<string | null>(null);
 
 // While EPUB.js locations are generating, progress derived from CFI can be wrong
 // (often 0.0%). We keep showing cached progress and display a pending indicator.
@@ -451,7 +452,17 @@ async function loadBookMetadata() {
           published?: string | null;
           language?: string | null;
           pages?: number | null;
+          files?: Array<{
+            id?: string;
+            format?: string | null;
+            relativePath?: string;
+          }>;
         };
+        files?: Array<{
+          id?: string;
+          format?: string | null;
+          relativePath?: string;
+        }>;
       };
     } | null;
 
@@ -462,6 +473,14 @@ async function loadBookMetadata() {
     if (title) {
       useHead({ title: `Reading · ${title}` });
     }
+
+    const files = (json?.data?.files ?? book?.files ?? []) as Array<{
+      id?: string;
+      format?: string | null;
+    }>;
+
+    const epub = files.find((f) => (f.format || '').toLowerCase() === 'epub');
+    epubFileId.value = epub?.id ? String(epub.id) : null;
   } catch {
     // Title is best-effort; ignore failures.
   }
@@ -476,12 +495,23 @@ async function fetchBook() {
     return;
   }
 
-  const res = await fetch(
+  const url = new URL(
     `/api/books/${encodeURIComponent(bookId.value)}/download`,
-    { method: 'GET' },
+    window.location.origin,
   );
 
+  // Reader only supports EPUB for now. Force an EPUB response.
+  url.searchParams.set('format', 'epub');
+  if (epubFileId.value) {
+    url.searchParams.set('fileId', epubFileId.value);
+  }
+
+  const res = await fetch(url.toString(), { method: 'GET' });
+
   if (!res.ok) {
+    if (res.status === 404) {
+      throw new Error('This book is not available as an EPUB.');
+    }
     throw new Error(`Failed to download book (${res.status})`);
   }
 
