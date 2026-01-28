@@ -268,7 +268,7 @@ const book = ref<Book | null>(null);
 
 const coverResetPending = ref(false);
 
-const coverUrl = computed(() => {
+const coverThumbUrl = computed(() => {
   // If the user has requested a reset, reflect that immediately in the edit UI,
   // but do not persist until Save is pressed.
   if (coverResetPending.value) return null;
@@ -276,9 +276,18 @@ const coverUrl = computed(() => {
   const b = book.value;
   if (!b?.coverImagePath) return null;
 
-  // Stored as: library/<author>/<title>/cover.webp
+  // Stored as: library/<author>/<title>/thumb.webp (default)
   // API expects: /api/media/covers/<path under library>
   return `/api/media/covers/${b.coverImagePath.replace(/^library\//, '')}`;
+});
+
+const coverSourceUrl = computed(() => {
+  const thumb = coverThumbUrl.value;
+  if (!thumb) return null;
+
+  // `coverImagePath` points at `thumb.webp` by default. Asking for `kind=source`
+  // resolves to `cover.<ext>` if present.
+  return `${thumb}${thumb.includes('?') ? '&' : '?'}kind=source`;
 });
 
 // Cover upload UI
@@ -1455,6 +1464,11 @@ watch(
     <!-- Header -->
     <AppHeader class="w-full" />
 
+    <!-- View selector -->
+    <div class="px-2 shrink-0 border-b border-(--sub-color)">
+      <ViewSelectorDropdown />
+    </div>
+
     <!-- Content -->
     <div class="w-full h-full p-4 overflow-auto">
       <div
@@ -1464,7 +1478,7 @@ watch(
         <icon
           v-tooltip="'Back to book'"
           name="lucide:arrow-left"
-          class="text-3xl opacity-80 hover:opacity-100 cursor-pointer"
+          class="text-3xl opacity-80 hover:opacity-100 cursor-pointer self-start"
           @click="backToBook"
         />
 
@@ -1516,7 +1530,9 @@ watch(
           class="flex flex-col justify-center items-center w-full sm:w-80 shrink-0 self-center md:self-start"
         >
           <BookCover
-            :src="coverPreviewUrl ?? coverUrl"
+            :src="coverPreviewUrl ?? coverSourceUrl"
+            :fallback-src="coverPreviewUrl ? null : coverThumbUrl"
+            :show-resolution="true"
             :alt="`Cover for ${book.title}`"
             :title="book.title"
             class="w-50! sm:w-full!"
@@ -1559,7 +1575,7 @@ watch(
               class="px-3 py-2 rounded-md border border-(--error-color) text-(--error-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed!"
               type="button"
               :disabled="
-                saving || coverUploading || coverUrlLoading || !coverUrl
+                saving || coverUploading || coverUrlLoading || !coverThumbUrl
               "
               @click="resetSavedCover"
             >

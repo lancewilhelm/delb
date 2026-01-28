@@ -173,14 +173,14 @@ function canEditUser(user: UserWithRole) {
               <th scope="col" class="px-6 py-1 text-left font-medium">
                 date created
               </th>
-              <th scope="col" class="px-6 py-1 text-left font-medium w-[150px]">
+              <th scope="col" class="px-6 py-1 text-left font-medium w-37.5">
                 actions
               </th>
             </tr>
           </thead>
           <tbody class="divide-y divide-(--sub-color) text-(--text-color)">
             <template v-if="sortedUsers.length > 0">
-              <tr v-for="u in sortedUsers" :key="u.id" class="h-[40px]">
+              <tr v-for="u in sortedUsers" :key="u.id" class="h-10">
                 <td class="px-6 py-1 whitespace-nowrap text-sm">
                   {{ u.email }}
                 </td>
@@ -295,7 +295,7 @@ function canEditUser(user: UserWithRole) {
         <div class="text-(--main-color) text-lg self-start">
           create new user
         </div>
-        <div class="flex flex-col gap-2 w-[250px]">
+        <div class="flex flex-col gap-2 w-62.5">
           <input
             v-model="newUserName"
             type="text"

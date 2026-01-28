@@ -692,14 +692,15 @@ function getThumbnail(item: GoogleBookItem): string {
             <div class="flex gap-3">
               <!-- Thumbnail with Cover Checkbox -->
               <div class="shrink-0 flex flex-col gap-2 items-center">
-                <div
-                  class="w-40 bg-(--sub-color)/20 rounded flex items-center justify-center overflow-hidden"
-                >
-                  <BookCover
-                    :src="result.imageUrl || ''"
-                    :title="result.title"
-                  />
-                </div>
+	                <div
+	                  class="w-40 bg-(--sub-color)/20 rounded flex items-center justify-center overflow-hidden"
+	                >
+	                  <BookCover
+	                    :src="result.imageUrl || null"
+	                    :show-resolution="true"
+	                    :title="result.title"
+	                  />
+	                </div>
 
                 <!-- Cover Checkbox -->
                 <label

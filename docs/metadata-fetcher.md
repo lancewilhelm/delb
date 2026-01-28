@@ -10,6 +10,8 @@ Currently supported sources:
 
 When editing a book, administrators can search for and import metadata from external sources. The interface allows selective import of individual fields (title, authors, description, publisher, published date, language, tags/categories, and cover image) via checkboxes, giving users full control over what metadata to update.
 
+Cover images shown in the metadata search results display a small resolution badge (e.g. `1200×1800`) so you can quickly gauge cover quality before importing.
+
 ## Provider Selection
 
 ### Multi-provider search (modal toggles)
@@ -32,6 +34,8 @@ Hardcover is only selectable when the server has a configured Hardcover token. I
 6. Browse the results - each result shows available metadata fields
 7. Check the boxes next to the fields you want to import
 8. Click "Import Selected Fields" to apply the changes
+
+Tip: The cover preview on the edit page uses the full-resolution stored cover when available, and shows its resolution in the corner.
 
 ## Current Implementation Status
 
