@@ -78,6 +78,175 @@ const coverSrc = computed(() => {
   return `/api/media/covers/${base}`;
 });
 
+type BookFile = {
+  id: string;
+  format: string;
+  relativePath: string;
+};
+
+type BookFilesResponse = {
+  success: true;
+  data: { files: BookFile[] };
+};
+
+type CoverMenuItemBase = {
+  key: string;
+  label?: string;
+  disabled?: boolean;
+};
+
+type CoverMenuItem =
+  | (CoverMenuItemBase & { to: string; onSelect?: never; children?: never })
+  | (CoverMenuItemBase & {
+      onSelect: () => void | Promise<void>;
+      to?: never;
+      children?: never;
+    })
+  | (CoverMenuItemBase & {
+      label: string;
+      children: CoverMenuItem[];
+      to?: never;
+      onSelect?: never;
+    });
+
+function getFileFormatLabel(file: BookFile) {
+  const fmt = (file.format || '').trim().toLowerCase();
+  if (fmt) return fmt.toUpperCase();
+
+  const fromPath = (file.relativePath || '')
+    .split('.')
+    .pop()
+    ?.trim()
+    .toLowerCase();
+  return (fromPath || 'FILE').toUpperCase();
+}
+
+function guessDownloadFilename(title: string, file?: BookFile | null) {
+  const safeTitle = (title || 'book')
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, '_')
+    .replace(/\s+/g, ' ');
+
+  const ext = (file?.format || 'epub').trim().toLowerCase() || 'epub';
+  return `${safeTitle}.${ext}`;
+}
+
+async function downloadBookFile(file?: BookFile | null) {
+  const bookId = props.book.id;
+  if (!bookId) return;
+
+  const url = new URL(
+    `/api/books/${encodeURIComponent(bookId)}/download`,
+    window.location.origin,
+  );
+  if (file?.id) {
+    url.searchParams.set('fileId', file.id);
+  }
+
+  const res = await fetch(url.toString(), { method: 'GET' });
+  if (!res.ok) throw new Error(`Download failed (${res.status})`);
+
+  const blob = await res.blob();
+
+  const contentDisposition = res.headers.get('content-disposition') || '';
+  const match =
+    /filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;]+)/i.exec(
+      contentDisposition,
+    );
+  const fromHeader = match?.[1] || match?.[2] || match?.[3];
+  const filename =
+    (fromHeader ? decodeURIComponent(fromHeader.trim()) : null) ||
+    guessDownloadFilename(props.book.title, file ?? null);
+
+  const blobUrl = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    URL.revokeObjectURL(blobUrl);
+  }
+}
+
+const fileCache = ref<BookFile[] | null>(null);
+const fileCacheLoaded = ref(false);
+
+async function getContextMenuItems(): Promise<CoverMenuItem[]> {
+  const items: CoverMenuItem[] = [
+    { key: 'view', label: 'View', to: `/books/${props.book.id}` },
+  ];
+
+  try {
+    if (!fileCacheLoaded.value) {
+      const res = await $fetch<BookFilesResponse>(
+        `/api/books/${encodeURIComponent(props.book.id)}/files`,
+      );
+      fileCache.value = res?.data?.files ?? [];
+      fileCacheLoaded.value = true;
+    }
+
+    const files = fileCache.value ?? [];
+    if (!files.length) return items;
+
+    if (files.length === 1) {
+      items.push({
+        key: 'download',
+        label: 'Download',
+        onSelect: async () => {
+          try {
+            await downloadBookFile(files[0] ?? null);
+          } catch (e) {
+            console.error(e);
+          }
+        },
+      });
+      return items;
+    }
+
+    const totals = new Map<string, number>();
+    for (const f of files) {
+      const key = getFileFormatLabel(f);
+      totals.set(key, (totals.get(key) ?? 0) + 1);
+    }
+
+    const seen = new Map<string, number>();
+    const choices = files.map((file) => {
+      const label = getFileFormatLabel(file);
+      const next = (seen.get(label) ?? 0) + 1;
+      seen.set(label, next);
+
+      const total = totals.get(label) ?? 1;
+      const displayLabel = total > 1 ? `${label} (${next})` : label;
+
+      return { file, label: displayLabel };
+    });
+
+    items.push({
+      key: 'download',
+      label: 'Download',
+      children: choices.map((opt) => ({
+        key: `download:${opt.file.id}`,
+        label: opt.label,
+        onSelect: async () => {
+          try {
+            await downloadBookFile(opt.file);
+          } catch (e) {
+            console.error(e);
+          }
+        },
+      })),
+    });
+  } catch {
+    // Hide download option on failure (or unauthorized), keep View.
+  }
+
+  return items;
+}
+
 const authorLabel = computed(() => {
   const b = props.book;
 
@@ -133,6 +302,7 @@ const showAnyMetadata = computed(
           :title="props.book.title"
           class="cursor-pointer"
           :class="lockAspectRatio ? 'aspect-2/3' : ''"
+          :context-menu-items="props.selectable ? [] : getContextMenuItems"
           @click="onOpenBook"
         />
 

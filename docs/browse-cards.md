@@ -15,3 +15,10 @@ Implementation details:
   - `app/pages/publishers/index.vue`
   - `app/pages/tags/index.vue`
 
+Interaction details:
+
+- Covers support a right-click context menu via `app/components/BookCover.vue` (`contextMenuItems` prop).
+- Book thumbnails wire the menu to:
+  - `View` → `/books/:id`
+  - `Download` (only shown when the book has files; multiple files show per-format choices)
+- The context menu lazily queries `GET /api/books/:id/files` (`server/api/books/[id]/files.get.ts`).
