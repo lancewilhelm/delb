@@ -110,3 +110,8 @@ January 2025 (when the root cause was identified)
 ## Future Issues
 
 Additional known issues will be documented here as they are discovered.
+# Hydration warnings for persisted UI state (SSR)
+
+If you see hydration mismatch warnings involving the header collection switcher (e.g. server renders `All` but the client expects `Personal`), it’s because persisted Pinia state is restored from `localStorage` on the client, but SSR renders with the store’s default state.
+
+Implementation detail: components that depend on persisted `localStorage` state should be wrapped in `ClientOnly` (example: `app/components/AppHeader.vue`).

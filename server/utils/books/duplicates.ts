@@ -33,7 +33,13 @@ function normalizeIdentifierValue(type: string, value: string): string {
   const v = (value ?? '').toString().trim();
   if (!v) return '';
 
-  if (t === 'isbn') {
+  if (
+    t === 'isbn' ||
+    t === 'isbn10' ||
+    t === 'isbn13' ||
+    t === 'isbn_10' ||
+    t === 'isbn_13'
+  ) {
     // Accept common ISBN formatting variants.
     return v.replace(/[^0-9xX]/g, '').toUpperCase();
   }

@@ -2,6 +2,7 @@
 defineOptions({ name: 'BookAddModal' });
 
 const uiStore = useUiStore();
+const { isAdmin } = useAuth();
 
 const emit = defineEmits<{
   /**
@@ -20,7 +21,7 @@ type CollectionOption = {
 };
 
 type FetchErrorLike = {
-  data?: { message?: string };
+  data?: unknown;
   statusMessage?: string;
   message?: string;
 };
@@ -105,6 +106,55 @@ const metadataInputRef = ref<HTMLInputElement | null>(null);
 const query = ref('');
 const keepOpen = ref(false);
 const creating = ref(false);
+const metadataSearchOpen = ref(false);
+
+type MetadataProviderKey = 'googleBooks' | 'hardcover';
+type PendingMetadataImport = {
+  provider: MetadataProviderKey;
+  item: unknown;
+  query: string;
+};
+const pendingMetadataImport = ref<PendingMetadataImport | null>(null);
+
+type PossibleDuplicatePayload = {
+  code: 'possible_duplicate';
+  message?: string;
+  metadata?: { provider?: MetadataProviderKey; item?: unknown };
+};
+
+function extractFetchErrorMessage(err: FetchErrorLike): string | null {
+  const msg = (err.data as { message?: unknown } | null)?.message;
+  if (typeof msg === 'string' && msg.trim()) return msg;
+  return null;
+}
+
+function extractPossibleDuplicatePayload(err: unknown): PossibleDuplicatePayload | null {
+  const data = (err as { data?: unknown } | null)?.data;
+  if (!data) return null;
+
+  // Common shape: error.data is the payload set in `createError({ data: ... })`
+  if (
+    typeof data === 'object' &&
+    data !== null &&
+    'code' in data &&
+    (data as { code?: unknown }).code === 'possible_duplicate'
+  ) {
+    return data as PossibleDuplicatePayload;
+  }
+
+  // Alternate shape: error.data is an envelope with `.data` containing our payload.
+  if (
+    typeof data === 'object' &&
+    data !== null &&
+    'data' in data &&
+    typeof (data as { data?: unknown }).data === 'object' &&
+    (data as { data: { code?: unknown } }).data.code === 'possible_duplicate'
+  ) {
+    return (data as { data: PossibleDuplicatePayload }).data;
+  }
+
+  return null;
+}
 
 function focusMetadataInputSoon() {
   requestAnimationFrame(() => {
@@ -128,12 +178,19 @@ function resetPerOpen() {
   creating.value = false;
   query.value = '';
   keepOpen.value = false;
+  metadataSearchOpen.value = false;
+  pendingMetadataImport.value = null;
 }
 
 function close() {
   uiStore.setAddBookModalVisible(false);
   // Clear the selected collections
   selectedCollectionIds.value = [];
+  metadataSearchOpen.value = false;
+  pendingMetadataImport.value = null;
+  duplicateReviewOpen.value = false;
+  duplicateReview.value = null;
+  selectedDuplicateBookId.value = '';
 }
 
 const isOpen = computed(() => uiStore.addBookModalVisible);
@@ -278,7 +335,7 @@ async function uploadBooks() {
   } catch (err) {
     const e = err as FetchErrorLike;
     errorMessage.value =
-      e?.data?.message || e?.statusMessage || e?.message || 'Upload failed';
+      extractFetchErrorMessage(e) || e?.statusMessage || e?.message || 'Upload failed';
   } finally {
     uploading.value = false;
   }
@@ -317,6 +374,66 @@ function coverThumbUrl(coverImagePath: string | null | undefined): string {
   const p = (coverImagePath ?? '').toString().trim();
   if (!p) return '';
   return `/api/media/covers/${p.replace(/^library\//, '')}`;
+}
+
+function isGoogleLikeMetadataItem(
+  input: unknown,
+): input is {
+  id: string;
+  volumeInfo: {
+    title?: string;
+    authors?: string[];
+    industryIdentifiers?: Array<{ type: string; identifier: string }>;
+    imageLinks?: { thumbnail?: string; smallThumbnail?: string };
+  };
+} {
+  if (!input || typeof input !== 'object') return false;
+  if (!('id' in input) || !('volumeInfo' in input)) return false;
+  const id = (input as { id?: unknown }).id;
+  const vi = (input as { volumeInfo?: unknown }).volumeInfo;
+  return typeof id === 'string' && !!id.trim() && !!vi && typeof vi === 'object';
+}
+
+function incomingCoverUrl(): string | null {
+  const pending = pendingMetadataImport.value;
+  if (!pending) return null;
+  if (!isGoogleLikeMetadataItem(pending.item)) return null;
+
+  const vi = pending.item.volumeInfo ?? {};
+  const thumb = vi.imageLinks?.thumbnail || vi.imageLinks?.smallThumbnail || '';
+  const url = thumb.replace('&edge=curl', '').trim();
+  return url ? url : null;
+}
+
+function incomingIdentifiers(): string[] {
+  const pending = pendingMetadataImport.value;
+  if (pending && isGoogleLikeMetadataItem(pending.item)) {
+    const ids = pending.item.volumeInfo.industryIdentifiers ?? [];
+    return ids
+      .map((x) => `${x.type}:${x.identifier}`.trim())
+      .filter(Boolean)
+      .slice(0, 6);
+  }
+
+  const details = duplicateReview.value?.details;
+  if (!details || typeof details !== 'object') return [];
+  if (!('incoming' in details)) return [];
+  const incoming = (details as { incoming?: unknown }).incoming;
+  if (!incoming || typeof incoming !== 'object') return [];
+  const raw = (incoming as { identifiers?: unknown }).identifiers;
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .map((x) => {
+      if (!x || typeof x !== 'object') return '';
+      const t = 'type' in x ? String((x as { type?: unknown }).type ?? '') : '';
+      const v =
+        'value' in x ? String((x as { value?: unknown }).value ?? '') : '';
+      const out = `${t}:${v}`.trim();
+      return out === ':' ? '' : out;
+    })
+    .filter(Boolean)
+    .slice(0, 6);
 }
 
 function parseDuplicateCandidates(details: unknown): DuplicateCandidate[] {
@@ -393,7 +510,7 @@ async function uploadAnyway() {
   } catch (err) {
     const e = err as FetchErrorLike;
     errorMessage.value =
-      e?.data?.message || e?.statusMessage || e?.message || 'Upload failed';
+      extractFetchErrorMessage(e) || e?.statusMessage || e?.message || 'Upload failed';
   } finally {
     uploading.value = false;
   }
@@ -416,6 +533,9 @@ function cancelDuplicate() {
   duplicateReviewOpen.value = false;
   duplicateReview.value = null;
   selectedDuplicateBookId.value = '';
+  if (review.kind === 'metadata') {
+    pendingMetadataImport.value = null;
+  }
 
   if (review.kind === 'upload') {
     // Keep the modal's errors scoped; allow the next upload to proceed.
@@ -485,7 +605,7 @@ async function replaceSelected() {
   } catch (err) {
     const e = err as FetchErrorLike;
     errorMessage.value =
-      e?.data?.message || e?.statusMessage || e?.message || 'Upload failed';
+      extractFetchErrorMessage(e) || e?.statusMessage || e?.message || 'Upload failed';
   } finally {
     uploading.value = false;
   }
@@ -495,16 +615,105 @@ async function replaceSelected() {
   }
 }
 
-async function addFromMetadataAnyway() {
+async function proceedWithDuplicate() {
+  const review = duplicateReview.value;
+  if (!review) return;
+  if (review.kind === 'upload') {
+    await uploadAnyway();
+  }
+}
+
+// -------------------- Metadata flow --------------------
+async function resolveMetadataDuplicate(
+  action: 'add_new' | 'use_existing' | 'replace_existing',
+) {
   if (creating.value) return;
 
-  const q = query.value.trim();
-  if (!q) {
-    errorMessage.value = 'Please enter a search query.';
+  const pending = pendingMetadataImport.value;
+  if (!pending) return;
+
+  const collectionIds = selectedCollectionIds.value.filter(Boolean);
+  if (!collectionIds.length) {
+    errorMessage.value = 'Select at least one collection.';
     successMessage.value = null;
-    focusMetadataInputSoon();
     return;
   }
+
+  creating.value = true;
+  errorMessage.value = null;
+  successMessage.value = null;
+
+  try {
+    const res = await $fetch<{
+      success: boolean;
+      data?: {
+        book?: { id: string; title: string };
+        addedCollectionIds?: string[];
+      };
+      message?: string;
+    }>('/api/books/metadata-import/create', {
+      method: 'POST',
+      body: {
+        provider: pending.provider,
+        item: pending.item,
+        collectionIds,
+        duplicateAction: action,
+        existingBookId: selectedDuplicateBookId.value || undefined,
+      },
+    });
+
+    const bookId = res?.data?.book?.id ?? '';
+    const title = res?.data?.book?.title ?? '';
+    if (!bookId) {
+      throw new Error(res?.message || 'Failed to resolve duplicate.');
+    }
+
+    if (action === 'use_existing') {
+      const n = (res?.data?.addedCollectionIds ?? []).length;
+      successMessage.value = title
+        ? `Added existing “${title}” to ${n || 'selected'} collection(s).`
+        : 'Added existing book to collections.';
+    } else if (action === 'replace_existing') {
+      successMessage.value = title
+        ? `Replaced existing entry with “${title}”.`
+        : 'Replaced existing book entry.';
+    } else {
+      successMessage.value = title ? `Added “${title}”.` : 'Book added.';
+    }
+
+    duplicateReviewOpen.value = false;
+    duplicateReview.value = null;
+    pendingMetadataImport.value = null;
+    selectedDuplicateBookId.value = '';
+
+    emit('added');
+    emit('book-uploaded');
+
+    if (keepOpen.value) {
+      query.value = '';
+      focusMetadataInputSoon();
+    } else {
+      close();
+    }
+  } catch (err) {
+    const e = err as FetchErrorLike;
+    errorMessage.value =
+      extractFetchErrorMessage(e) ||
+      e?.statusMessage ||
+      e?.message ||
+      'Failed to resolve duplicate.';
+    successMessage.value = null;
+  } finally {
+    creating.value = false;
+  }
+}
+
+async function createFromMetadataItem(opts: {
+  provider: MetadataProviderKey;
+  item: unknown;
+  sourceLabel: string;
+}) {
+  if (creating.value) return;
 
   const collectionIds = selectedCollectionIds.value.filter(Boolean);
   if (!collectionIds.length) {
@@ -525,25 +734,21 @@ async function addFromMetadataAnyway() {
     }>('/api/books/metadata-import/create', {
       method: 'POST',
       body: {
-        query: q,
+        provider: opts.provider,
+        item: opts.item,
         collectionIds,
-        allowDuplicate: true,
       },
     });
 
     const bookId = res?.data?.book?.id ?? '';
     const title = res?.data?.book?.title ?? '';
-
     if (!bookId) {
-      throw new Error(res?.message || 'Failed to create book from metadata.');
+      throw new Error(res?.message || 'Failed to add book from metadata.');
     }
 
     successMessage.value = title
       ? `Added “${title}”.`
-      : 'Book added successfully.';
-
-    duplicateReviewOpen.value = false;
-    duplicateReview.value = null;
+      : `Added book from ${opts.sourceLabel}.`;
 
     emit('added');
     emit('book-uploaded');
@@ -555,43 +760,39 @@ async function addFromMetadataAnyway() {
       close();
     }
   } catch (err) {
-    const e = err as FetchErrorLike & { data?: { code?: string } };
-    if (e?.data?.code === 'possible_duplicate') {
+    const dup = extractPossibleDuplicatePayload(err);
+    if (dup) {
+      const provider = dup.metadata?.provider ?? opts.provider;
+      const item = dup.metadata?.item ?? opts.item;
+      pendingMetadataImport.value = {
+        provider,
+        item,
+        query: query.value.trim(),
+      };
       duplicateReview.value = {
         kind: 'metadata',
         file: undefined,
-        filename: 'metadata',
-        details: e.data,
+        filename: opts.sourceLabel,
+        details: dup,
       };
-      selectedDuplicateBookId.value = defaultSelectedDuplicate(e.data);
+      selectedDuplicateBookId.value = defaultSelectedDuplicate(dup);
       duplicateReviewOpen.value = true;
       errorMessage.value = 'Possible duplicate detected. Review required.';
       successMessage.value = null;
       return;
     }
+
+    const e = err as FetchErrorLike;
     errorMessage.value =
-      e?.data?.message ||
+      extractFetchErrorMessage(e) ||
       e?.statusMessage ||
       e?.message ||
       'Failed to add book from metadata.';
     successMessage.value = null;
-    focusMetadataInputSoon();
   } finally {
     creating.value = false;
   }
 }
-
-async function proceedWithDuplicate() {
-  const review = duplicateReview.value;
-  if (!review) return;
-  if (review.kind === 'upload') {
-    await uploadAnyway();
-  } else {
-    await addFromMetadataAnyway();
-  }
-}
-
-// -------------------- Metadata flow --------------------
 async function createFromMetadata() {
   if (creating.value) return;
 
@@ -648,9 +849,36 @@ async function createFromMetadata() {
       close();
     }
   } catch (err) {
-    const e = err as FetchErrorLike;
+    const e = err as FetchErrorLike & {
+      data?: unknown;
+    };
+
+    const dup = extractPossibleDuplicatePayload(err);
+    if (dup) {
+      const provider = dup.metadata?.provider ?? 'googleBooks';
+      const item = dup.metadata?.item;
+
+      if (item) {
+        pendingMetadataImport.value = { provider, item, query: q };
+      } else {
+        pendingMetadataImport.value = null;
+      }
+
+      duplicateReview.value = {
+        kind: 'metadata',
+        file: undefined,
+        filename: q,
+        details: dup,
+      };
+      selectedDuplicateBookId.value = defaultSelectedDuplicate(dup);
+      duplicateReviewOpen.value = true;
+      errorMessage.value = 'Possible duplicate detected. Review required.';
+      successMessage.value = null;
+      return;
+    }
+
     errorMessage.value =
-      e?.data?.message ||
+      extractFetchErrorMessage(e) ||
       e?.statusMessage ||
       e?.message ||
       'Failed to add book from metadata.';
@@ -700,6 +928,18 @@ const subtitleText = computed(() =>
     ? 'Drop ebook files here or browse (EPUB, PDF, MOBI, AZW3). Metadata will be extracted from the file.'
     : 'Search using the default metadata provider and add the top result. No file will be downloaded.',
 );
+
+function handleMetadataSearchSelect(selection: {
+  source: MetadataProviderKey;
+  item: unknown;
+}) {
+  metadataSearchOpen.value = false;
+  createFromMetadataItem({
+    provider: selection.source,
+    item: selection.item,
+    sourceLabel: selection.source === 'hardcover' ? 'Hardcover' : 'Google',
+  });
+}
 </script>
 
 <template>
@@ -828,39 +1068,87 @@ const subtitleText = computed(() =>
             />
           </div>
 
-          <div
-            v-if="duplicateReview"
-            class="p-3 rounded border border-(--sub-color)/30"
-          >
+          <div v-if="duplicateReview" class="space-y-2">
             <div class="text-sm font-semibold">Incoming</div>
-            <div class="text-sm opacity-90 mt-1">
-              <span class="font-mono">{{ duplicateReview.filename }}</span>
-            </div>
-            <div class="text-sm opacity-90 mt-1">
-              <span class="font-semibold">title:</span>
-              {{ parseIncoming(duplicateReview.details).title || '—' }}
-            </div>
-            <div class="text-sm opacity-90">
-              <span class="font-semibold">author:</span>
-              {{ parseIncoming(duplicateReview.details).author || '—' }}
+
+            <div class="flex gap-3 p-3 rounded border border-(--sub-color)/30">
+              <div class="shrink-0">
+                <img
+                  v-if="incomingCoverUrl()"
+                  :src="incomingCoverUrl() || ''"
+                  class="w-16 h-24 object-cover rounded border border-(--sub-color)/30"
+                  alt=""
+                />
+                <div
+                  v-else
+                  class="w-16 h-24 rounded border border-(--sub-color)/30 flex items-center justify-center text-xs opacity-60"
+                >
+                  no cover
+                </div>
+              </div>
+
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="font-semibold truncate">
+                    {{ parseIncoming(duplicateReview.details).title || 'Untitled' }}
+                  </div>
+                  <div class="text-xs opacity-70 font-mono">
+                    <span v-if="duplicateReview.kind === 'metadata'">
+                      {{ pendingMetadataImport?.provider || 'metadata' }}
+                    </span>
+                    <span v-else>{{ duplicateReview.filename }}</span>
+                  </div>
+                </div>
+
+                <div class="text-sm opacity-80 truncate">
+                  {{ parseIncoming(duplicateReview.details).author || 'Unknown Author' }}
+                </div>
+
+                <div
+                  v-if="incomingIdentifiers().length"
+                  class="text-xs opacity-70 mt-2 font-mono break-words"
+                >
+                  {{ incomingIdentifiers().join(', ') }}
+                </div>
+              </div>
             </div>
           </div>
 
           <div class="space-y-2">
             <div class="text-sm font-semibold">Existing candidates</div>
 
-            <div
+            <label
               v-for="c in parseDuplicateCandidates(duplicateReview?.details)"
               :key="c.book.id"
-              class="flex gap-3 p-3 rounded border border-(--sub-color)/30"
+              class="flex gap-3 p-3 rounded border cursor-pointer transition"
+              :class="
+                selectedDuplicateBookId === c.book.id
+                  ? 'border-(--main-color)/60 bg-(--main-color)/5'
+                  : 'border-(--sub-color)/30 hover:bg-(--sub-color)/10'
+              "
             >
               <input
                 v-model="selectedDuplicateBookId"
                 type="radio"
                 :value="c.book.id"
-                class="mt-1"
+                class="peer sr-only"
                 :disabled="busy"
               />
+              <span
+                class="mt-1 h-5 w-5 shrink-0 rounded-full border border-(--sub-color) relative transition"
+                :class="busy ? 'opacity-60 cursor-not-allowed' : ''"
+                :aria-hidden="true"
+              >
+                <span
+                  class="absolute inset-1.5 rounded-full transition"
+                  :class="
+                    selectedDuplicateBookId === c.book.id
+                      ? 'bg-(--main-color)'
+                      : 'bg-transparent'
+                  "
+                ></span>
+              </span>
+
               <div class="shrink-0">
                 <img
                   v-if="c.book.coverImagePath"
@@ -899,7 +1187,7 @@ const subtitleText = computed(() =>
                   </button>
                 </div>
               </div>
-            </div>
+            </label>
 
             <div
               v-if="
@@ -925,16 +1213,43 @@ const subtitleText = computed(() =>
             </button>
 
             <button
+              v-if="duplicateReview?.kind === 'metadata'"
+              type="button"
+              class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
+              :disabled="busy || !pendingMetadataImport"
+              @click="resolveMetadataDuplicate('use_existing')"
+            >
+              Add existing to collections
+            </button>
+
+            <button
+              v-if="duplicateReview?.kind === 'metadata'"
+              type="button"
+              class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
+              :disabled="busy || !pendingMetadataImport || !isAdmin"
+              @click="resolveMetadataDuplicate('replace_existing')"
+            >
+              Replace selected
+            </button>
+
+            <button
+              v-if="duplicateReview?.kind === 'metadata'"
+              type="button"
+              class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
+              :disabled="busy || !pendingMetadataImport"
+              @click="resolveMetadataDuplicate('add_new')"
+            >
+              Add new entry
+            </button>
+
+            <button
+              v-else
               type="button"
               class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
               :disabled="busy"
               @click="proceedWithDuplicate"
             >
-              {{
-                duplicateReview?.kind === 'metadata'
-                  ? 'Add anyway'
-                  : 'Upload anyway'
-              }}
+              Upload anyway
             </button>
 
             <button
@@ -1076,6 +1391,15 @@ const subtitleText = computed(() =>
             <span v-if="creating">Adding…</span>
             <span v-else>Add top result</span>
           </button>
+
+          <button
+            type="button"
+            class="flex-1 border border-(--sub-color) p-2 rounded-md bg-(--sub-color)/15 hover:bg-(--sub-color)/25 transition"
+            :disabled="busy || !selectedCollectionIds.length"
+            @click="metadataSearchOpen = true"
+          >
+            Search results
+          </button>
         </div>
       </div>
 
@@ -1087,4 +1411,12 @@ const subtitleText = computed(() =>
       </div>
     </div>
   </ModalWindow>
+
+  <BookMetadataSearchModal
+    :open="metadataSearchOpen"
+    :initial-query="query.trim()"
+    mode="full"
+    @close="metadataSearchOpen = false"
+    @select="handleMetadataSearchSelect"
+  />
 </template>

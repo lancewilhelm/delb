@@ -217,6 +217,7 @@ interface ImportFields {
 }
 
 interface ImportSelection {
+  source: SearchResultSource;
   item: GoogleBookItem;
   fields: ImportFields;
 }
@@ -224,12 +225,15 @@ interface ImportSelection {
 const props = defineProps<{
   open: boolean;
   initialQuery?: string;
+  mode?: 'fields' | 'full';
 }>();
 
 const emit = defineEmits<{
   close: [];
   select: [selection: ImportSelection];
 }>();
+
+const fullMode = computed(() => props.mode === 'full');
 
 const userSettingsStore = useUserSettingsStore();
 const globalSettingsStore = useGlobalSettingsStore();
@@ -520,8 +524,24 @@ function importMetadata(result: SearchResult) {
   }
 
   const item = result.googleItem;
-  const fields = getFields(resultKey(result));
+  const fields: ImportFields = fullMode.value
+    ? {
+        title: true,
+        authors: true,
+        description: true,
+        publisher: true,
+        published: true,
+        language: true,
+        tags: true,
+        cover: true,
+        identifiers: true,
+        series: true,
+        seriesIndex: true,
+        pages: true,
+      }
+    : getFields(resultKey(result));
   const selectedData: ImportSelection = {
+    source: result.source,
     item,
     fields,
   };
@@ -689,6 +709,106 @@ function getThumbnail(item: GoogleBookItem): string {
             :key="resultKey(result)"
             class="border border-(--sub-color) rounded-lg p-3"
           >
+            <template v-if="props.mode === 'full'">
+              <div class="flex gap-3">
+                <div class="shrink-0 flex flex-col gap-2 items-center">
+                  <div
+                    class="w-40 bg-(--sub-color)/20 rounded flex items-center justify-center overflow-hidden"
+                  >
+                    <BookCover
+                      :src="result.imageUrl || null"
+                      :show-resolution="true"
+                      :title="result.title"
+                    />
+                  </div>
+
+                  <div class="text-[10px] opacity-60">
+                    Source: {{ result.source }}
+                  </div>
+                </div>
+
+                <div class="flex-1 min-w-0 space-y-2">
+                  <div class="text-lg font-semibold truncate">
+                    {{
+                      result.googleItem?.volumeInfo.title ||
+                      result.title ||
+                      'Untitled'
+                    }}
+                  </div>
+
+                  <div class="text-sm opacity-80 truncate">
+                    {{
+                      (result.googleItem?.volumeInfo.authors || result.authors || [])
+                        .join(', ') || 'Unknown Author'
+                    }}
+                  </div>
+
+                  <div
+                    v-if="
+                      result.googleItem?.volumeInfo.publisher || result.publisher
+                    "
+                    class="text-xs opacity-70 truncate"
+                  >
+                    <span class="opacity-60">Publisher:</span>
+                    {{
+                      result.googleItem?.volumeInfo.publisher ||
+                      result.publisher ||
+                      '—'
+                    }}
+                  </div>
+
+                  <div
+                    v-if="
+                      result.googleItem?.volumeInfo.publishedDate ||
+                      result.publishedDate
+                    "
+                    class="text-xs opacity-70 truncate"
+                  >
+                    <span class="opacity-60">Published:</span>
+                    {{
+                      result.googleItem?.volumeInfo.publishedDate ||
+                      result.publishedDate ||
+                      '—'
+                    }}
+                  </div>
+
+                  <div
+                    v-if="result.googleItem?.volumeInfo.industryIdentifiers?.length"
+                    class="text-xs opacity-70"
+                  >
+                    <span class="opacity-60">Identifiers:</span>
+                    <span class="font-mono">
+                      {{
+                        result.googleItem.volumeInfo.industryIdentifiers
+                          .map((x) => `${x.type}:${x.identifier}`)
+                          .join(', ')
+                      }}
+                    </span>
+                  </div>
+
+                  <div class="pt-1">
+                    <button
+                      v-if="result.googleItem"
+                      type="button"
+                      class="px-4 py-2 rounded-md bg-(--main-color) text-(--bg-color) hover:opacity-90 text-sm disabled:opacity-40 disabled:cursor-not-allowed transition"
+                      @click="importMetadata(result)"
+                    >
+                      Import book
+                    </button>
+                    <button
+                      v-else
+                      type="button"
+                      class="px-4 py-2 rounded-md border border-(--sub-color) text-sm opacity-60 cursor-not-allowed"
+                      disabled
+                    >
+                      Import not available
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <template v-else>
             <div class="flex gap-3">
               <!-- Thumbnail with Cover Checkbox -->
               <div class="shrink-0 flex flex-col gap-2 items-center">
@@ -1041,6 +1161,7 @@ function getThumbnail(item: GoogleBookItem): string {
                 </div>
               </div>
             </div>
+            </template>
           </div>
         </div>
       </div>

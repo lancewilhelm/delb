@@ -12,6 +12,8 @@ When editing a book, administrators can search for and import metadata from exte
 
 Cover images shown in the metadata search results display a small resolution badge (e.g. `1200×1800`) so you can quickly gauge cover quality before importing.
 
+In addition, the **Add book** modal supports importing a *full* book record from metadata (no per-field selection). This is designed for fast entry workflows like barcode/ISBN scanning.
+
 ## Provider Selection
 
 ### Multi-provider search (modal toggles)
@@ -36,6 +38,20 @@ Hardcover is only selectable when the server has a configured Hardcover token. I
 8. Click "Import Selected Fields" to apply the changes
 
 Tip: The cover preview on the edit page uses the full-resolution stored cover when available, and shows its resolution in the corner.
+
+## Add Book Modal (Full Import)
+
+From the Add Book modal ("By metadata" tab), you can either:
+- **Add top result** (single step): intended for barcode/ISBN scanning where you want the top match immediately.
+- **Search results** (choose from a list): browse a list of matches and import the entire selected book.
+
+### Possible duplicates (Add Book modal)
+
+When a possible duplicate is detected while importing a book from metadata, the UI offers:
+- **Cancel** (do nothing)
+- **Add existing to collections** (adds the existing candidate book to any selected collections it isn’t already in)
+- **Replace selected** (admin-only; overwrites the selected existing book’s canonical metadata with the incoming metadata, then adds it to missing selected collections)
+- **Add new entry** (creates a new book entry without affecting the existing one)
 
 ## Current Implementation Status
 
@@ -186,6 +202,8 @@ If the endpoint returns an error indicating the token is not configured, confirm
 - `/app/components/BookMetadataSearchModal.vue` - Search modal component
 - `/server/api/books/metadata/search.get.ts` - API endpoint for Google Books search
 - `/server/api/books/metadata/hardcover/search.get.ts` - API endpoint for Hardcover search (GraphQL proxy)
+- `/app/components/Books/BookAddModal.vue` - Add Book modal (full metadata import + duplicate resolution)
+- `/server/api/books/metadata-import/create.post.ts` - Creates a book from metadata (top result or selected result) + duplicate resolution
 - `/server/api/settings/admin/hardcover-token.put.ts` - Admin-only endpoint to set/clear Hardcover token (server-side)
 - `/app/components/Settings/SettingsAdminMetadata.vue` - Admin UI for metadata provider settings + Hardcover token (server-side)
 - `/app/components/BookMetadataSearchModal.vue` - Multi-provider search toggles (remembered per-user)

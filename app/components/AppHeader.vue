@@ -51,7 +51,29 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
       >
         Delb
       </div>
-      <CollectionPickerDropdown />
+      <ClientOnly>
+        <CollectionPickerDropdown />
+        <template #fallback>
+          <button
+            class="sm:pl-1 flex items-center gap-2 px-1 opacity-70 cursor-wait"
+            type="button"
+            disabled
+            aria-label="Loading collections"
+          >
+            <Icon
+              name="lucide:folder"
+              class="text-(--main-color) opacity-80 shrink-0"
+            />
+            <span class="max-w-48 truncate text-sm opacity-80">
+              Collection
+            </span>
+            <Icon
+              name="lucide:chevron-down"
+              class="text-(--main-color) opacity-80 shrink-0"
+            />
+          </button>
+        </template>
+      </ClientOnly>
       <Icon
         v-tooltip="'Add book'"
         name="lucide:book-plus"

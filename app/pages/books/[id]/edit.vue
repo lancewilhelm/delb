@@ -78,6 +78,7 @@ interface MetadataImportSelection {
    * - filters non-author contributions (e.g. cover artists)
    * - provides tags/genres, identifiers, series, seriesIndex, publishedDate when available
    */
+  source?: 'googleBooks' | 'hardcover';
   item: GoogleBookItem;
   fields: ImportFields;
 }
