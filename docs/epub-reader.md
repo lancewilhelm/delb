@@ -11,6 +11,7 @@ Key features:
 - Previous/Next navigation
 - Keyboard navigation (Left/Right arrows)
 - Escape key to return to book details
+- Table of contents sidebar (EPUB navigation)
 - Reading position stored per user in the database
 
 ## Reader Route
@@ -87,6 +88,5 @@ Behavior:
 
 Potential upgrades:
 - Persisting position on `beforeunload`
-- TOC navigation
 - Font size / theme controls
 - Highlights, notes, and bookmarks

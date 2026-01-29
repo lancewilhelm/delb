@@ -23,9 +23,22 @@ type FetchErrorLike = {
 
 type ReaderDisplayMode = 'scroll' | 'pages';
 
+type TocItem = {
+  label: string;
+  href: string;
+  subitems?: TocItem[];
+};
+
+type FlatTocItem = {
+  label: string;
+  href: string;
+  depth: number;
+};
+
 const route = useRoute();
 const bookId = computed(() => String(route.params.id || ''));
 
+const readerAreaRef = ref<HTMLElement | null>(null);
 const readerContainer = ref<HTMLElement | null>(null);
 const loading = ref(true);
 const errorMessage = ref<string | null>(null);
@@ -46,6 +59,11 @@ let lastSavedLocation: string | null = null;
 
 const userSettingsStore = useUserSettingsStore();
 const isSettingsOpen = ref(false);
+const isTocOpen = ref(false);
+const tocLoading = ref(false);
+const tocErrorMessage = ref<string | null>(null);
+const tocItems = ref<TocItem[]>([]);
+const currentSectionHref = ref<string | null>(null);
 
 const readerFontSize = userSettingsStore.settingRef<number>('reader.fontSize');
 const readerLineHeight =
@@ -65,12 +83,26 @@ function backToBook() {
 
 /** Toggle the settings menu. */
 function toggleSettings() {
+  if (!isSettingsOpen.value) {
+    isTocOpen.value = false;
+  }
   isSettingsOpen.value = !isSettingsOpen.value;
 }
 
 /** Close the settings menu. */
 function closeSettings() {
   isSettingsOpen.value = false;
+}
+
+function toggleToc() {
+  if (!isTocOpen.value) {
+    isSettingsOpen.value = false;
+  }
+  isTocOpen.value = !isTocOpen.value;
+}
+
+function closeToc() {
+  isTocOpen.value = false;
 }
 
 /**
@@ -239,6 +271,117 @@ function getRenditionOptions(mode: ReaderDisplayMode) {
   };
 }
 
+function flattenToc(items: TocItem[], depth = 0): FlatTocItem[] {
+  const out: FlatTocItem[] = [];
+  for (const item of items) {
+    out.push({ label: item.label, href: item.href, depth });
+    if (item.subitems?.length) {
+      out.push(...flattenToc(item.subitems, depth + 1));
+    }
+  }
+  return out;
+}
+
+const flatToc = computed(() => flattenToc(tocItems.value));
+
+function normalizeHref(href: string) {
+  return href.split('#')[0] || href;
+}
+
+function isActiveTocHref(href: string) {
+  const current = currentSectionHref.value;
+  if (!current) return false;
+  return normalizeHref(current) === normalizeHref(href);
+}
+
+function normalizeToc(raw: unknown): TocItem[] {
+  if (!Array.isArray(raw)) return [];
+
+  const normalizeItem = (v: unknown): TocItem | null => {
+    if (!v || typeof v !== 'object') return null;
+    const obj = v as Record<string, unknown>;
+
+    const labelRaw = obj.label;
+    const hrefRaw = obj.href;
+
+    const label =
+      typeof labelRaw === 'string'
+        ? labelRaw.trim()
+        : typeof labelRaw === 'number'
+          ? String(labelRaw)
+          : '';
+    const href = typeof hrefRaw === 'string' ? hrefRaw.trim() : '';
+
+    if (!href) return null;
+
+    const subitems = normalizeToc(obj.subitems);
+
+    return {
+      label: label || href,
+      href,
+      subitems: subitems.length ? subitems : undefined,
+    };
+  };
+
+  return raw.map(normalizeItem).filter((v): v is TocItem => Boolean(v));
+}
+
+async function loadToc() {
+  if (!bookInstance) return;
+
+  tocLoading.value = true;
+  tocErrorMessage.value = null;
+
+  try {
+    const loaded = (bookInstance as unknown as { loaded?: unknown })?.loaded as
+      | { navigation?: Promise<unknown> }
+      | undefined;
+
+    const rawNav = await loaded?.navigation;
+
+    // epubjs examples resolve navigation directly to a toc array; some builds
+    // expose an object with a `toc` property.
+    const rawToc =
+      Array.isArray(rawNav) && rawNav.length
+        ? rawNav
+        : (rawNav as { toc?: unknown } | null)?.toc;
+
+    tocItems.value = normalizeToc(rawToc);
+  } catch {
+    tocItems.value = [];
+    tocErrorMessage.value = 'Could not load table of contents';
+  } finally {
+    tocLoading.value = false;
+  }
+}
+
+async function goToTocHref(href: string) {
+  if (!href) return;
+
+  try {
+    await renditionRef.value?.display(href);
+  } finally {
+    if (isMobileDevice.value) {
+      closeToc();
+    }
+  }
+}
+
+async function refreshRenditionLayout() {
+  const rendition = renditionRef.value;
+  const container = readerContainer.value ?? readerAreaRef.value;
+  if (!rendition || !container) return;
+
+  await nextTick();
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+  const rect = container.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+
+  rendition.resize(Math.floor(rect.width), Math.floor(rect.height));
+  void rendition.reportLocation();
+}
+
 /**
  * Attaches event handlers to the rendition.
  * @param rendition The rendition object.
@@ -246,36 +389,40 @@ function getRenditionOptions(mode: ReaderDisplayMode) {
 function attachRenditionHandlers(
   rendition: Pick<Rendition, 'on'> & Partial<Pick<Rendition, 'off'>>,
 ) {
-  rendition.on('relocated', (loc: { start?: { cfi?: string } }) => {
-    const cfi = loc?.start?.cfi ?? null;
-    const progress = extractProgress(cfi);
+  rendition.on(
+    'relocated',
+    (loc: { start?: { cfi?: string; href?: string } }) => {
+      const cfi = loc?.start?.cfi ?? null;
+      currentSectionHref.value = loc?.start?.href ?? null;
+      const progress = extractProgress(cfi);
 
-    // While locations are missing (or still generating), `extractProgress` is null.
-    // Also, right after navigation it can transiently show ~0.0% even though the
-    // true progress (from percentageFromCfi) is not known yet.
-    //
-    // Behavior:
-    // - If progress is null: keep cached UI value, show pending indicator.
-    // - If progress is ~0 but we were previously showing a non-zero value: treat
-    //   as pending to avoid misleading 0.0% while awaiting locations.
-    // - Otherwise: accept and persist computed progress.
-    if (progress == null) {
-      isAwaitingLocations.value = true;
-      return;
-    }
+      // While locations are missing (or still generating), `extractProgress` is null.
+      // Also, right after navigation it can transiently show ~0.0% even though the
+      // true progress (from percentageFromCfi) is not known yet.
+      //
+      // Behavior:
+      // - If progress is null: keep cached UI value, show pending indicator.
+      // - If progress is ~0 but we were previously showing a non-zero value: treat
+      //   as pending to avoid misleading 0.0% while awaiting locations.
+      // - Otherwise: accept and persist computed progress.
+      if (progress == null) {
+        isAwaitingLocations.value = true;
+        return;
+      }
 
-    if (
-      isAwaitingLocations.value &&
-      !isMeaningfullyNonZero(progress) &&
-      isMeaningfullyNonZero(currentProgress.value)
-    ) {
-      return;
-    }
+      if (
+        isAwaitingLocations.value &&
+        !isMeaningfullyNonZero(progress) &&
+        isMeaningfullyNonZero(currentProgress.value)
+      ) {
+        return;
+      }
 
-    isAwaitingLocations.value = false;
-    currentProgress.value = progress;
-    scheduleSave(cfi, progress);
-  });
+      isAwaitingLocations.value = false;
+      currentProgress.value = progress;
+      scheduleSave(cfi, progress);
+    },
+  );
 
   rendition.on('click', onRenditionClick);
 
@@ -544,6 +691,7 @@ async function loadEpub() {
     const shouldGenerateLocations = true;
 
     await recreateRendition({ displayCfi: savedLocation });
+    void loadToc();
 
     const rendition = renditionRef.value;
     if (!rendition) {
@@ -602,7 +750,13 @@ function onKeydown(event: KeyboardEvent) {
   } else if (event.key === 'ArrowRight') {
     goNext();
   } else if (event.key === 'Escape') {
-    backToBook();
+    if (isSettingsOpen.value) {
+      closeSettings();
+    } else if (isTocOpen.value) {
+      closeToc();
+    } else {
+      backToBook();
+    }
   }
 }
 
@@ -648,6 +802,8 @@ const onRenditionClick = () => {
 };
 
 function toggleFullscreen() {
+  isSettingsOpen.value = false;
+  isTocOpen.value = false;
   isFullscreen.value = !isFullscreen.value;
   renditionRef.value?.start();
 }
@@ -664,6 +820,14 @@ watch(readerDisplayMode, async () => {
   await nextTick();
   await recreateRendition({ displayCfi });
 });
+
+watch(
+  isTocOpen,
+  () => {
+    void refreshRenditionLayout();
+  },
+  { flush: 'post' },
+);
 </script>
 
 <template>
@@ -688,6 +852,13 @@ watch(readerDisplayMode, async () => {
       </div>
 
       <div class="flex items-center gap-3 text-sm">
+        <icon
+          v-tooltip="'Table of contents'"
+          name="lucide:list"
+          class="text-2xl opacity-80 hover:opacity-100 cursor-pointer"
+          :class="{ 'text-(--main-color) opacity-100': isTocOpen }"
+          @click.stop="toggleToc"
+        />
         <div class="relative">
           <div ref="settingsButtonRef" class="flex">
             <icon
@@ -851,6 +1022,60 @@ watch(readerDisplayMode, async () => {
       :class="{ '': isMobileDevice && readerDisplayMode === 'pages' }"
       @click="handleContentTap"
     >
+      <!-- Table of contents -->
+      <div
+        v-if="isTocOpen"
+        class="absolute inset-0 z-50 flex md:static md:inset-auto md:z-auto md:shrink-0 md:w-80"
+        @click.stop
+      >
+        <div
+          class="flex h-full w-full flex-col border-r border-(--sub-color) bg-(--bg-color)"
+        >
+          <div
+            class="flex items-center justify-between px-3 py-1 border-b border-(--sub-color)"
+          >
+            <div class="text-sm font-semibold">Contents</div>
+            <icon
+              v-tooltip="'Close'"
+              name="lucide:x"
+              class="text-2xl opacity-80 hover:opacity-100 cursor-pointer md:hidden"
+              @click="closeToc"
+            />
+          </div>
+
+          <div class="min-h-0 flex-1 overflow-y-auto p-2">
+            <div v-if="tocLoading" class="text-sm opacity-80 p-2">
+              Loading table of contents…
+            </div>
+            <div
+              v-else-if="tocErrorMessage"
+              class="text-sm text-(--error-color) p-2"
+            >
+              {{ tocErrorMessage }}
+            </div>
+            <div v-else-if="!flatToc.length" class="text-sm opacity-80 p-2">
+              No table of contents found.
+            </div>
+
+            <button
+              v-for="item in flatToc"
+              :key="item.href"
+              type="button"
+              class="w-full rounded-md px-2 py-1.5 text-left text-sm hover:bg-(--sub-color)/10"
+              :class="{
+                'bg-(--sub-color)/10 text-(--main-color)': isActiveTocHref(
+                  item.href,
+                ),
+              }"
+              :style="{ paddingLeft: `${8 + item.depth * 14}px` }"
+              @click="goToTocHref(item.href)"
+            >
+              {{ item.label }}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Overlay: when settings are open, capture any click/tap over the reader (including the epubjs iframe)
            and close the settings menu. -->
       <div
