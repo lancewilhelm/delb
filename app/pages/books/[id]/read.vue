@@ -842,7 +842,7 @@ watch(
         <icon
           v-tooltip="'Back to book'"
           name="lucide:arrow-left"
-          class="text-3xl opacity-80 hover:opacity-100 cursor-pointer"
+          class="text-3xl opacity-80 hover:opacity-100 cursor-pointer shrink-0"
           @click="backToBook"
         />
 
