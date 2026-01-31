@@ -1,9 +1,6 @@
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineNuxtConfig({
-  future: {
-    compatibilityVersion: 4,
-  },
   ssr: true,
   compatibilityDate: '2025-04-12',
   devtools: { enabled: false },
@@ -30,16 +27,7 @@ export default defineNuxtConfig({
       ],
     },
   },
-  css: ['~/assets/css/main.css', '~/assets/css/hljs.css'],
-  runtimeConfig: {
-    openaiApiKey: process.env.OPENAI_API_KEY || '',
-    geminiApiKey: process.env.GEMINI_API_KEY || '',
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
-    public: {
-      debug: false,
-      appVersion: '',
-    },
-  },
+  css: ['~/assets/css/main.css'],
   imports: {
     dirs: ['utils'],
   },
