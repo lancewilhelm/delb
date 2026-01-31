@@ -362,7 +362,11 @@ async function deleteSeriesIfUnreferenced(seriesId: string) {
 /**
  * PUT /api/books/:id
  *
- * Admin-only endpoint that updates a book's canonical metadata.
+ * Updates a book's canonical metadata.
+ *
+ * Authorization:
+ * - system admin/owner can edit any book
+ * - the book creator (books.createdByUserId) can edit their own book
  *
  * Lean v1 behavior:
  * - Only updates fields present in the request body.
@@ -376,11 +380,12 @@ export default defineEventHandler(async (event) => {
     headers: event.headers,
   });
 
-  if (!session || !isAdminRole(session.user.role)) {
+  if (!session) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
   }
 
   const userId = session.user.id;
+  const canEditAny = isAdminRole(session.user.role);
 
   const id = getRouterParam(event, 'id');
   if (!id) {
@@ -423,6 +428,13 @@ export default defineEventHandler(async (event) => {
   const existingBook = visible[0]?.books;
   if (!existingBook) {
     throw createError({ statusCode: 404, statusMessage: 'Book not found' });
+  }
+
+  const canEditOwn = Boolean(
+    existingBook.createdByUserId && existingBook.createdByUserId === userId,
+  );
+  if (!canEditAny && !canEditOwn) {
+    throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
   }
 
   // Capture previous references for orphan cleanup after mutations.

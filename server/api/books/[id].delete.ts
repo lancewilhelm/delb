@@ -11,7 +11,13 @@ function normalizeDeleteMode(raw: string | null | undefined): DeleteMode {
 /**
  * DELETE /api/books/:id
  *
- * Admin-only endpoint that deletes the book. Supports only 2 modes:
+ * Deletes a book.
+ *
+ * Authorization:
+ * - system admin/owner can delete any book
+ * - the book creator (books.createdByUserId) can delete their own book
+ *
+ * Supports only 2 modes:
  *
  * Query params:
  * - mode=
@@ -26,10 +32,7 @@ export default defineEventHandler(async (event) => {
     headers: event.headers,
   });
 
-  if (
-    !session ||
-    (session.user.role !== 'admin' && session.user.role !== 'owner')
-  ) {
+  if (!session) {
     setResponseStatus(event, 401);
     return { success: false, message: 'Unauthorized' };
   }

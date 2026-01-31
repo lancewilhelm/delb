@@ -90,7 +90,7 @@ Notes:
 
 Future direction:
 
-- Only the uploader/owner of a book should be able to permanently delete it.
+- Book deletion should be restricted to the uploader/owner (with admin override).
 
 ---
 

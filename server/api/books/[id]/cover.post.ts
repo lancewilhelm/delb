@@ -17,7 +17,7 @@ import { auth } from '~/utils/auth';
 /**
  * POST /api/books/:id/cover
  *
- * Admin-only endpoint that accepts an uploaded image and stores:
+ * Endpoint that accepts an uploaded image and stores:
  * - Original bytes as: `library/<author(s)>/<title (id8)>/cover.<ext>` (true original)
  * - Thumbnail as:     `library/<author(s)>/<title (id8)>/thumb.webp` (320px wide)
  *
@@ -30,7 +30,8 @@ import { auth } from '~/utils/auth';
  * Request: multipart/form-data with a single file field named `file`.
  *
  * Security:
- * - Requires authenticated admin/owner.
+ * - Requires authenticated session.
+ * - Only system admin/owner or the book creator (books.createdByUserId) may update the cover.
  * - Ensures the requesting user can "see" the book via collection membership
  *   (same visibility model as GET /api/books/:id).
  * - Resolves and writes the cover next to the stored book file inside `library/`.
@@ -50,14 +51,12 @@ export default defineEventHandler(async (event) => {
     headers: event.headers,
   });
 
-  if (
-    !session ||
-    (session.user.role !== 'admin' && session.user.role !== 'owner')
-  ) {
+  if (!session) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
   }
 
   const userId = session.user.id;
+  const canEditAny = session.user.role === 'admin' || session.user.role === 'owner';
 
   const id = getRouterParam(event, 'id');
   if (!id) {
@@ -112,6 +111,11 @@ export default defineEventHandler(async (event) => {
     const book = visible[0]?.books;
     if (!book) {
       throw createError({ statusCode: 404, statusMessage: 'Book not found' });
+    }
+
+    const canEditOwn = Boolean(book.createdByUserId && book.createdByUserId === userId);
+    if (!canEditAny && !canEditOwn) {
+      throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
     }
 
     // Find a canonical file path for this book to determine its directory.

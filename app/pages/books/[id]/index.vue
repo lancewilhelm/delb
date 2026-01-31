@@ -17,6 +17,7 @@ type Book = {
   id: string;
   title: string;
   coverImagePath?: string | null;
+  createdByUserId?: string | null;
 
   /**
    * Per-user rating for this book.
@@ -187,7 +188,14 @@ async function saveStatus(next: UserBookStatus | null) {
   }
 }
 
-const { isAdmin } = useAuth();
+const { isAdmin, user } = useAuth();
+
+const canEditBook = computed(() => {
+  if (isAdmin.value) return true;
+  const bookOwnerId = book.value?.createdByUserId ?? null;
+  const currentUserId = user.value?.id ?? null;
+  return Boolean(bookOwnerId && currentUserId && bookOwnerId === currentUserId);
+});
 
 const showDeleteConfirm = ref(false);
 const deleting = ref(false);
@@ -1415,7 +1423,7 @@ const { copy } = useClipboard();
             </div>
 
             <NuxtLink
-              v-if="isAdmin"
+              v-if="canEditBook"
               v-tooltip="'Edit book details'"
               class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
               :to="`/books/${book.id}/edit`"
@@ -1424,7 +1432,7 @@ const { copy } = useClipboard();
             </NuxtLink>
 
             <button
-              v-if="isAdmin"
+              v-if="canEditBook"
               v-tooltip="'Delete book'"
               class="px-3 py-2 rounded-md border border-(--error-color) text-(--error-color) hover:bg-(--error-color)/90! text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
               type="button"

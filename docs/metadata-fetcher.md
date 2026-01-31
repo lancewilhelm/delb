@@ -1,6 +1,6 @@
 # Metadata Fetcher
 
-The metadata fetcher feature allows administrators to search for and import book metadata from external sources.
+The metadata fetcher feature allows book owners and administrators to search for and import book metadata from external sources.
 
 Currently supported sources:
 
@@ -9,7 +9,7 @@ Currently supported sources:
 
 ## Overview
 
-When editing a book, administrators can search for and import metadata from external sources. The interface allows selective import of individual fields (title, authors, description, publisher, published date, language, tags/categories, and cover image) via checkboxes, giving users full control over what metadata to update.
+When editing a book, book owners and administrators can search for and import metadata from external sources. The interface allows selective import of individual fields (title, authors, description, publisher, published date, language, tags/categories, and cover image) via checkboxes, giving users full control over what metadata to update.
 
 Cover images shown in the metadata search results display a small resolution badge (e.g. `1200×1800`) so you can quickly gauge cover quality before importing.
 

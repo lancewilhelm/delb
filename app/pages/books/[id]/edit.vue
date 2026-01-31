@@ -14,7 +14,25 @@ definePageMeta({
       const auth = useAuth();
       // Ensure we have a session/user loaded (global auth middleware doesn't enforce roles)
       await auth.fetchSession();
-      if (!auth.isAdmin.value) {
+      if (auth.isAdmin.value) return;
+
+      const route = useRoute();
+      const bookId = String(route.params.id || '');
+      if (!bookId) return navigateTo('/', { replace: true });
+
+      try {
+        const res = await $fetch<{
+          success?: boolean;
+          data?: { book?: { createdByUserId?: string | null } };
+        }>(`/api/books/${encodeURIComponent(bookId)}`, { method: 'GET' });
+
+        const createdByUserId = res?.data?.book?.createdByUserId ?? null;
+        const currentUserId = auth.user.value?.id ?? null;
+
+        if (!createdByUserId || !currentUserId || createdByUserId !== currentUserId) {
+          return navigateTo('/', { replace: true });
+        }
+      } catch {
         return navigateTo('/', { replace: true });
       }
     },
