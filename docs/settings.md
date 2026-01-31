@@ -75,8 +75,12 @@ This ensures that the theme is already in place **before HTML is delivered**.
 
 ## Client Sync
 
-- `app/plugins/sync.client.ts` pulls settings once when the app loads (if logged in).
-- This keeps local cache in sync with server changes.
+- `app/plugins/sync.client.ts` pulls settings:
+  - once when the app has a session (initial load), and
+  - again on the transition to logged-in (e.g. after `/login` or `/register`).
+- This ensures settings (including theme) apply without requiring a full reload.
+
+Additionally, the `/login` and `/register` flows explicitly pull settings after `fetchSession()` to avoid showing the default theme during the post-login navigation.
 
 ---
 

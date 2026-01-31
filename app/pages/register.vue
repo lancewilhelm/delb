@@ -81,6 +81,18 @@ async function handleSubmit() {
     // Fetch the session
     await fetchSession();
 
+    // Pull settings immediately after register/login so theme + prefs apply without a reload.
+    const userSettingsStore = useUserSettingsStore();
+    const globalSettingsStore = useGlobalSettingsStore();
+    await Promise.all([
+      userSettingsStore.pull(),
+      globalSettingsStore.pullLatest(),
+    ]);
+
+    if (userSettingsStore.activeSettings.theme) {
+      await loadTheme(userSettingsStore.activeSettings.theme);
+    }
+
     return navigateTo('/');
   } catch (error) {
     logger.error({ error }, 'Error signing up');

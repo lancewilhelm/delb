@@ -223,7 +223,10 @@ export function useCommandPalette() {
     {
       label: 'log out',
       icon: 'lucide:log-out',
-      action: () => useAuth().signOut(),
+      action: () => {
+        closePalette();
+        return useAuth().signOut();
+      },
     },
   ]);
 

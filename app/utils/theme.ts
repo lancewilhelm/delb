@@ -12,6 +12,14 @@ export function loadTheme(themeName?: string): Promise<void> {
       resolve();
     });
   }
+
+  const existingTheme = document.querySelector<HTMLLinkElement>('#currentTheme');
+  const requestedHref = `/css/themes/${themeName}.css`;
+  const existingHref = existingTheme?.getAttribute('href') || existingTheme?.href;
+  if (existingHref && existingHref.endsWith(requestedHref)) {
+    return Promise.resolve();
+  }
+
   return new Promise((resolve, reject) => {
     document.body.classList.add('theme-transitioning');
     const existing = document.querySelector<HTMLLinkElement>('#currentTheme');

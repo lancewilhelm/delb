@@ -64,10 +64,17 @@ async function handleSubmit() {
     // - pulled once on app load when logged in
     // - pushed on change from the settings stores
 
-    // Load the theme
     const userSettingsStore = useUserSettingsStore();
+    const globalSettingsStore = useGlobalSettingsStore();
+    await Promise.all([
+      userSettingsStore.pull(),
+      globalSettingsStore.pullLatest(),
+    ]);
+
+    // Load the theme immediately after pulling settings so there's no "default theme"
+    // flash between login and the app.
     if (userSettingsStore.activeSettings.theme) {
-      loadTheme(userSettingsStore.activeSettings.theme);
+      await loadTheme(userSettingsStore.activeSettings.theme);
     }
 
     // Navigate to the home page

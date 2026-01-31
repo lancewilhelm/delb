@@ -1,35 +1,55 @@
-export default defineNuxtPlugin(async (nuxtApp) => {
+export default defineNuxtPlugin((nuxtApp) => {
   if (import.meta.server) return;
 
   /**
    * Settings sync is intentionally lightweight:
-   * - Pull once on app load (when logged in)
+   * - Pull once when the app has a session (initial load OR just after login)
    * - Push only when settings change (inside the settings stores)
    */
+  const { loggedIn } = useAuth();
+  const userSettingsStore = useUserSettingsStore();
+  const globalSettingsStore = useGlobalSettingsStore();
+
+  let pullInFlight: Promise<void> | null = null;
   async function pullSettingsOnce() {
-    const { session } = useAuth();
-    if (!session.value) return;
+    if (!loggedIn.value) return;
+    if (pullInFlight) return pullInFlight;
 
-    const userSettingsStore = useUserSettingsStore();
-    const globalSettingsStore = useGlobalSettingsStore();
-
-    await Promise.all([
+    pullInFlight = Promise.all([
       userSettingsStore.pull(),
       globalSettingsStore.pullLatest(),
-    ]);
+    ])
+      .then(() => undefined)
+      .finally(() => {
+        pullInFlight = null;
+      });
+
+    return pullInFlight;
   }
 
-  // Try immediately; if session isn't ready yet, try again after mount.
-  try {
-    await pullSettingsOnce();
-  } catch (err) {
-    console.error('Failed to pull settings on app load:', err);
-    nuxtApp.hook('app:mounted', async () => {
+  watch(
+    loggedIn,
+    async (isLoggedIn, wasLoggedIn) => {
+      if (!isLoggedIn) return;
+
+      // Only pull on the transition to "logged in" (plus one immediate run).
+      if (wasLoggedIn) return;
+
       try {
         await pullSettingsOnce();
-      } catch (e) {
-        console.error('Failed to pull settings after mount:', e);
+      } catch (err) {
+        console.error('Failed to pull settings after login:', err);
       }
-    });
-  }
+    },
+    { immediate: true },
+  );
+
+  nuxtApp.hook('app:mounted', async () => {
+    // Safety net: in case session hydration happens after plugin init.
+    try {
+      await pullSettingsOnce();
+    } catch (err) {
+      console.error('Failed to pull settings after mount:', err);
+    }
+  });
 });

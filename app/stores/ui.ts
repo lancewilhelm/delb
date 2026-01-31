@@ -104,6 +104,7 @@ export const useUiStore = defineStore(
 
     function $reset() {
       // Insert reset logic here if needed
+      commandPaletteVisible.value = false;
       libraryView.value = 'books';
       booksSortKey.value = 'dateAdded';
       booksSortDirection.value = 'desc';

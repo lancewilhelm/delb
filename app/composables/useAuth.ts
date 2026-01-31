@@ -53,6 +53,39 @@ export function useAuth() {
     });
     session.value = data?.session || null;
     user.value = data?.user || null;
+
+    if (import.meta.client) {
+      const nextUserId = (data?.user as { id?: string } | undefined)?.id;
+      if (nextUserId) {
+        const key = 'delb.authUserId';
+        const prevUserId = localStorage.getItem(key);
+        if (prevUserId && prevUserId !== nextUserId) {
+          // User switched accounts in the same browser. Clear persisted state so we don't
+          // leak preferences/UI state between accounts.
+          const userSettingsStore = useUserSettingsStore();
+          const globalSettingsStore = useGlobalSettingsStore();
+          const uiStore = useUiStore();
+          const collectionsStore = useCollectionsStore();
+
+          userSettingsStore.$reset();
+          globalSettingsStore.$reset();
+          uiStore.$reset();
+          collectionsStore.$reset();
+
+          const storesToClear = [
+            'delb.userSettings',
+            'delb.globalSettings',
+            'delb.ui',
+            'delb.collections',
+          ];
+          for (const store of storesToClear) {
+            localStorage.removeItem(store);
+          }
+        }
+        localStorage.setItem(key, nextUserId);
+      }
+    }
+
     sessionFetching.value = false;
     return data;
   };
@@ -65,6 +98,11 @@ export function useAuth() {
   }
 
   async function signOut() {
+    // Close any global UI before navigation.
+    const uiStore = useUiStore();
+    uiStore.setCommandPaletteVisible(false);
+    uiStore.setGlobalSearchVisible(false);
+
     const res = await client.signOut();
     session.value = null;
     user.value = null;
@@ -73,21 +111,24 @@ export function useAuth() {
     // Reset all stores
     const userSettingsStore = useUserSettingsStore();
     const globalSettingsStore = useGlobalSettingsStore();
-    const uiStore = useUiStore();
+    const collectionsStore = useCollectionsStore();
     userSettingsStore.$reset();
     globalSettingsStore.$reset();
     uiStore.$reset();
+    collectionsStore.$reset();
 
     // Clear persisted local storage
     const storesToClear = [
       'delb.userSettings',
       'delb.globalSettings',
       'delb.ui',
+      'delb.collections',
     ];
     if (import.meta.client) {
       for (const store of storesToClear) {
         localStorage.removeItem(store);
       }
+      localStorage.removeItem('delb.authUserId');
     }
 
     await navigateTo('/login', { replace: true });
