@@ -660,7 +660,9 @@ function onDocumentPointerDown(e: MouseEvent) {
   const target = e.target as Node | null;
 
   if (
-    (downloadPanelRef.value && target && downloadPanelRef.value.contains(target)) ||
+    (downloadPanelRef.value &&
+      target &&
+      downloadPanelRef.value.contains(target)) ||
     (downloadAnchorRef.value &&
       target &&
       downloadAnchorRef.value.contains(target))

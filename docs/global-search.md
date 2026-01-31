@@ -17,4 +17,3 @@ Implementation details:
 - API: `server/api/search/index.get.ts`
 - Identifiers storage: `app/utils/db/schema.ts` (`book_identifiers` table)
 - UI: `app/components/GlobalSearch/GlobalSearchModal.vue`
-

@@ -71,11 +71,13 @@ You’ll see controls for:
 ### Import vs Re-scan
 
 #### Import (`action: "import"`)
+
 - One-time import of Calibre metadata and file pointers
 - Requires selecting at least one target collection
 - Adds imported books to the selected collection(s)
 
 #### Re-scan (`action: "rescan"`)
+
 - Refreshes Delb data from the current state of Calibre’s `metadata.db`
 - Optionally can “import new books discovered during rescan”
 
@@ -192,12 +194,14 @@ Delb enforces uniqueness so that a single Calibre book maps to a single Delb boo
 ## Caveats / Risks / “Can I go back to Calibre?”
 
 ### Safe scenario (recommended): Delb does not modify Calibre files
+
 If you run import-in-place and then edit metadata in Delb, and Delb is only updating `data/delb.db`:
 
 - Calibre’s `library/metadata.db` and file layout remain unchanged
 - You can stop using Delb and open the same library in Calibre without surprises
 
 ### Risky scenario: moving/renaming files under `library/`
+
 If Delb (or a user action) moves/renames Calibre’s book directories or files inside `library/` without also updating Calibre’s DB:
 
 - Calibre may show missing books/formats/covers
@@ -206,6 +210,7 @@ If Delb (or a user action) moves/renames Calibre’s book directories or files i
 **Practical guidance:** treat `library/` as Calibre-owned when using import-in-place.
 
 ### Backup guidance
+
 Even with import-in-place, it’s wise to keep backups of:
 
 - `library/` (Calibre library folder, including `metadata.db`)
@@ -218,6 +223,7 @@ If you plan to experiment with file moves/renames under `library/`, you should d
 ## Troubleshooting
 
 ### Import fails due to schema differences
+
 Calibre schema varies significantly by version. If an import fails with a SQLite error referencing a missing table/column, it usually means:
 
 - your `metadata.db` uses a different column name than expected
@@ -226,6 +232,7 @@ Calibre schema varies significantly by version. If an import fails with a SQLite
 Delb’s importer is designed to skip optional features when possible, but some schema mismatches may require additional detection logic.
 
 ### Import completes but missing files appear in Delb
+
 Common causes:
 
 - Calibre’s `metadata.db` references paths that do not exist on disk
@@ -233,6 +240,7 @@ Common causes:
 - Files are present but not discoverable due to an uncommon Calibre layout
 
 Try:
+
 - Re-scan in Delb
 - Verify the file exists under `library/` on disk
 - Confirm the file extension is supported

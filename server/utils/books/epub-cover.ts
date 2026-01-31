@@ -1,8 +1,8 @@
-import path from "node:path";
-import { mkdir, writeFile } from "node:fs/promises";
+import path from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
 
-import { EPub } from "epub2";
-import sharp from "sharp";
+import { EPub } from 'epub2';
+import sharp from 'sharp';
 
 /**
  * Best-effort extracted cover information.
@@ -107,12 +107,12 @@ export async function extractAndStoreEpubCover(opts: {
       const onEndListener = onEnd as unknown as (...args: unknown[]) => void;
 
       const cleanup = () => {
-        epub.removeListener("error", onErrorListener);
-        epub.removeListener("end", onEndListener);
+        epub.removeListener('error', onErrorListener);
+        epub.removeListener('end', onEndListener);
       };
 
-      epub.on("error", onErrorListener);
-      epub.on("end", onEndListener);
+      epub.on('error', onErrorListener);
+      epub.on('end', onEndListener);
       epub.parse();
     });
 
@@ -144,18 +144,18 @@ export async function extractAndStoreEpubCover(opts: {
 
   const manifest: EpubManifestItem[] | undefined =
     anyEpub?.manifest &&
-    typeof anyEpub.manifest === "object" &&
+    typeof anyEpub.manifest === 'object' &&
     !Array.isArray(anyEpub.manifest)
       ? (Object.values(anyEpub.manifest as Record<string, EpubManifestItem>) ??
         undefined)
       : undefined;
 
   const isImageMime = (mt?: string) =>
-    typeof mt === "string" && mt.toLowerCase().startsWith("image/");
+    typeof mt === 'string' && mt.toLowerCase().startsWith('image/');
 
   const pickCoverCandidate = (): EpubManifestItem | null => {
     // 1) Try an explicit cover reference if it looks like an id/href
-    if (typeof coverRef === "string" && coverRef.trim()) {
+    if (typeof coverRef === 'string' && coverRef.trim()) {
       // Might be an id in the manifest or an href.
       const byId =
         manifest?.find((m) => m?.id === coverRef) ??
@@ -166,7 +166,7 @@ export async function extractAndStoreEpubCover(opts: {
       }
 
       // Fallback: treat as href if it looks like a path
-      if (coverRef.includes("/") || coverRef.includes(".")) {
+      if (coverRef.includes('/') || coverRef.includes('.')) {
         return { href: coverRef, mediaType: undefined };
       }
     }
@@ -192,24 +192,24 @@ export async function extractAndStoreEpubCover(opts: {
   };
 
   const scoreCoverCandidate = (m: EpubManifestItem): number => {
-    const id = (m?.id ?? "").toString().toLowerCase();
-    const href = (m?.href ?? "").toString().toLowerCase();
-    const mt = (m?.mediaType ?? "").toString().toLowerCase();
+    const id = (m?.id ?? '').toString().toLowerCase();
+    const href = (m?.href ?? '').toString().toLowerCase();
+    const mt = (m?.mediaType ?? '').toString().toLowerCase();
 
     let score = 0;
 
-    if (id.includes("cover")) score += 5;
-    if (href.includes("cover")) score += 5;
+    if (id.includes('cover')) score += 5;
+    if (href.includes('cover')) score += 5;
 
     // Common filename hints
-    if (href.includes("front")) score += 2;
-    if (href.includes("thumbnail")) score -= 2;
+    if (href.includes('front')) score += 2;
+    if (href.includes('thumbnail')) score -= 2;
 
     // Prefer jpeg/png over svg/gif for covers
-    if (mt.includes("jpeg") || mt.includes("jpg")) score += 2;
-    if (mt.includes("png")) score += 1;
-    if (mt.includes("svg")) score -= 3;
-    if (mt.includes("gif")) score -= 2;
+    if (mt.includes('jpeg') || mt.includes('jpg')) score += 2;
+    if (mt.includes('png')) score += 1;
+    if (mt.includes('svg')) score -= 3;
+    if (mt.includes('gif')) score -= 2;
 
     return score;
   };
@@ -256,16 +256,16 @@ export async function extractAndStoreEpubCover(opts: {
       });
 
     // Try cover by id first (more reliable than href in `epub2`)
-    if (candidate.id && typeof getImage === "function") {
+    if (candidate.id && typeof getImage === 'function') {
       try {
         const [data, mime] = await wrapCb(getImage, candidate.id);
         if (Buffer.isBuffer(data)) {
           return {
             bytes: data,
             mimeType: (
-              (typeof mime === "string" ? mime : undefined) ||
+              (typeof mime === 'string' ? mime : undefined) ||
               candidate.mediaType ||
-              "application/octet-stream"
+              'application/octet-stream'
             ).toString(),
           };
         }
@@ -275,16 +275,16 @@ export async function extractAndStoreEpubCover(opts: {
     }
 
     // Try getFile by id
-    if (candidate.id && typeof getFile === "function") {
+    if (candidate.id && typeof getFile === 'function') {
       try {
         const [data, mime] = await wrapCb(getFile, candidate.id);
         if (Buffer.isBuffer(data)) {
           return {
             bytes: data,
             mimeType: (
-              (typeof mime === "string" ? mime : undefined) ||
+              (typeof mime === 'string' ? mime : undefined) ||
               candidate.mediaType ||
-              "application/octet-stream"
+              'application/octet-stream'
             ).toString(),
           };
         }
@@ -294,16 +294,16 @@ export async function extractAndStoreEpubCover(opts: {
     }
 
     // Try getFile by href
-    if (candidate.href && typeof getFile === "function") {
+    if (candidate.href && typeof getFile === 'function') {
       try {
         const [data, mime] = await wrapCb(getFile, candidate.href);
         if (Buffer.isBuffer(data)) {
           return {
             bytes: data,
             mimeType: (
-              (typeof mime === "string" ? mime : undefined) ||
+              (typeof mime === 'string' ? mime : undefined) ||
               candidate.mediaType ||
-              "application/octet-stream"
+              'application/octet-stream'
             ).toString(),
           };
         }
@@ -327,14 +327,14 @@ export async function extractAndStoreEpubCover(opts: {
 
   // 1) Persist original/source bytes as-is, but normalize the filename to: cover.<ext>
   const sourceBytes = cover.bytes;
-  const sourceMimeType = cover.mimeType || "application/octet-stream";
+  const sourceMimeType = cover.mimeType || 'application/octet-stream';
 
   // Best-effort source extension inference based on mime type
-  let sourceExtension = "bin";
-  if (sourceMimeType.includes("webp")) sourceExtension = "webp";
-  else if (sourceMimeType.includes("png")) sourceExtension = "png";
-  else if (sourceMimeType.includes("jpeg") || sourceMimeType.includes("jpg"))
-    sourceExtension = "jpg";
+  let sourceExtension = 'bin';
+  if (sourceMimeType.includes('webp')) sourceExtension = 'webp';
+  else if (sourceMimeType.includes('png')) sourceExtension = 'png';
+  else if (sourceMimeType.includes('jpeg') || sourceMimeType.includes('jpg'))
+    sourceExtension = 'jpg';
 
   const outputSourceDirPosix = path.posix.dirname(
     opts.outputSourceRelativePathPosix,

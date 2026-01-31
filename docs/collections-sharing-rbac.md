@@ -22,13 +22,16 @@ However, the UI/UX goal is also:
 This introduces an RBAC/UX edge case that is **not fully specified yet**:
 
 ### Edge case: access revoked from the original shared collection
+
 Scenario:
+
 1. User **A** shares collection **C_shared** with user **B** (B can view or edit it).
 2. Book **X** is in **C_shared**, so **B** can see book **X**.
 3. While B still has access, B adds book **X** to another collection they can edit (e.g. **C_b_personal** or another shared collection **C_other**).
 4. Later, A removes B from **C_shared**.
 
 Question:
+
 - Should B still be able to access book **X** via **C_b_personal** / **C_other**?
 
 There are two defensible policies:
@@ -40,10 +43,12 @@ If B successfully adds X to a collection B can edit at the time of the action, t
 Visibility is strictly bounded to the original sharing boundary; if access to the collection that “introduced” the book is revoked, any derived links should be removed or become invalid.
 
 v1 stance:
+
 - Delb currently leans toward a “visibility via any accessible collection” rule, which implies **Policy 1**.
 - If/when this becomes a problem, we may need to introduce provenance tracking (e.g. “book access grants” or “link source collection”) to support Policy 2, or introduce explicit ownership constraints.
 
 Until this is formalized, treat this as a known RBAC edge case to revisit when:
+
 - you add stricter ownership semantics,
 - you add book-level sharing permissions,
 - or you introduce “unlink from source” / “revoke derived access” features.
@@ -52,7 +57,7 @@ Until this is formalized, treat this as a known RBAC edge case to revisit when:
 
 ## Quick mental model
 
-- A **collection** is a *sharing boundary* and a *visibility boundary*.
+- A **collection** is a _sharing boundary_ and a _visibility boundary_.
 - Sharing grants access to the **collection**, not ownership of the underlying books.
 - A user’s **Personal** collection is special:
   - always exists per user
@@ -71,6 +76,7 @@ Collections support exactly these roles:
 - `viewer`
 
 ### Single-owner invariant (important)
+
 Collections are intended to have **exactly one `owner`**.
 
 When ownership is transferred, the recipient becomes the **sole** owner and the previous owner becomes an `editor`.
@@ -81,18 +87,19 @@ When ownership is transferred, the recipient becomes the **sole** owner and the 
 
 ## Permissions (v1)
 
-| Capability | owner | editor | viewer |
-|---|---:|---:|---:|
-| View collection | ✅ | ✅ | ✅ |
-| Rename collection | ✅ | ✅ | ❌ |
-| List members | ✅ | ✅ | ❌ |
-| Add members (by email) | ✅ | ✅ | ❌ |
-| Remove members | ✅ | ✅ | ❌ |
-| Delete collection | ✅ | ❌ | ❌ |
-| Transfer ownership | ✅ | ❌ | ❌ |
-| Leave collection (remove self) | ❌ | ✅ | ✅ |
+| Capability                     | owner | editor | viewer |
+| ------------------------------ | ----: | -----: | -----: |
+| View collection                |    ✅ |     ✅ |     ✅ |
+| Rename collection              |    ✅ |     ✅ |     ❌ |
+| List members                   |    ✅ |     ✅ |     ❌ |
+| Add members (by email)         |    ✅ |     ✅ |     ❌ |
+| Remove members                 |    ✅ |     ✅ |     ❌ |
+| Delete collection              |    ✅ |     ❌ |     ❌ |
+| Transfer ownership             |    ✅ |     ❌ |     ❌ |
+| Leave collection (remove self) |    ❌ |     ✅ |     ✅ |
 
 ### Notes
+
 - Only the **owner** can delete a collection.
 - **Owners cannot leave** a collection. They must either delete it or transfer ownership.
 - Member management and deletion are performed from the **Edit Collection** modal.
@@ -102,9 +109,11 @@ When ownership is transferred, the recipient becomes the **sole** owner and the 
 ## Member management
 
 ### Add / update member (by email)
+
 Members are added using their **email address**. If the user already belongs to the collection, the role is updated.
 
 High-level rules:
+
 - Personal collections cannot be shared.
 - Only `owner` and `editor` can add/update members.
 - You cannot change your own role through the “add/update member” action.
@@ -127,6 +136,7 @@ Because leaving is effectively irreversible from the member’s perspective (the
 Ownership transfer is **owner-only** and is designed to enforce “one owner per collection”.
 
 ### Behavior
+
 - Ownership is transferred by providing the **new owner’s email**.
 - The new owner becomes the **sole** `owner`.
 - The previous owner becomes an `editor`.
@@ -175,27 +185,33 @@ These endpoints exist to support the v1 model:
   Apply bulk add/remove operations to books within the context of a **specific collection**.
 
 #### Key guardrails and RBAC
+
 - Caller must be an `owner` or `editor` of the **scope collection** (`:id`) to perform any bulk operation.
 - For `addToCollectionIds` / `removeFromCollectionIds`, the caller must also be an `owner` or `editor` of each **target collection** being mutated.
 - **Personal collections** are **non-removable** in bulk operations (attempts are ignored and reported as such).
 - This endpoint is intentionally **collection-scoped**. There is no “bulk across All view” server semantic.
 
 #### Request shape
+
 The endpoint supports two selection models:
 
-1) Explicit IDs (client enumerates selected books):
+1. Explicit IDs (client enumerates selected books):
+
 - `allInCollection: false`
 - `bookIds: string[]`
 
-2) Scope-wide selection (do not enumerate IDs):
+2. Scope-wide selection (do not enumerate IDs):
+
 - `allInCollection: true`
 - `excludedBookIds: string[]` (optional)
 
 Along with one or both operations:
+
 - `addToCollectionIds: string[]` (optional)
 - `removeFromCollectionIds: string[]` (optional)
 
 #### Response shape (high level)
+
 - `booksResolved`: how many book ids the server applied the operation to (after exclusions / scope resolution)
 - `added`: list of `{ collectionId, bookId }` pairs that were added
 - `removed`: list of `{ collectionId, bookId }` pairs that were removed

@@ -35,9 +35,7 @@ export type ParsedPublishedDate = {
  *
  * Returns null if it cannot confidently parse.
  */
-export function parsePublishedDate(
-  input: unknown,
-): ParsedPublishedDate | null {
+export function parsePublishedDate(input: unknown): ParsedPublishedDate | null {
   if (input == null) return null;
 
   if (input instanceof Date) {
@@ -218,8 +216,7 @@ function tryParseISO(raw: string): ParsedPublishedDate | null {
   // Basic ISO instant check: contains a 'T' and some timezone or Z, or milliseconds.
   // We don't over-validate here; Date.parse for ISO is consistent.
   const looksIsoInstant =
-    /\d{4}-\d{2}-\d{2}T/.test(raw) &&
-    /(Z|[+-]\d{2}:\d{2})/.test(raw);
+    /\d{4}-\d{2}-\d{2}T/.test(raw) && /(Z|[+-]\d{2}:\d{2})/.test(raw);
 
   if (!looksIsoInstant) return null;
 
@@ -232,7 +229,12 @@ function tryParseISO(raw: string): ParsedPublishedDate | null {
 function looksDateLike(raw: string): boolean {
   // Very lightweight guard: must contain at least one digit and a separator typical for dates.
   if (!/\d/.test(raw)) return false;
-  if (raw.includes('-') || raw.includes('/') || raw.includes('.') || raw.includes('T'))
+  if (
+    raw.includes('-') ||
+    raw.includes('/') ||
+    raw.includes('.') ||
+    raw.includes('T')
+  )
     return true;
   return false;
 }

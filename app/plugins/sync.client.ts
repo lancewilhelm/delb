@@ -23,12 +23,12 @@ export default defineNuxtPlugin(async (nuxtApp) => {
   try {
     await pullSettingsOnce();
   } catch (err) {
-    console.error("Failed to pull settings on app load:", err);
-    nuxtApp.hook("app:mounted", async () => {
+    console.error('Failed to pull settings on app load:', err);
+    nuxtApp.hook('app:mounted', async () => {
       try {
         await pullSettingsOnce();
       } catch (e) {
-        console.error("Failed to pull settings after mount:", e);
+        console.error('Failed to pull settings after mount:', e);
       }
     });
   }

@@ -1,7 +1,7 @@
-import { EPub } from "epub2";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
+import { EPub } from 'epub2';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 export type EpubMetadata = {
   title: string;
@@ -18,7 +18,7 @@ export type EpubMetadata = {
 
 function firstNonEmpty(...values: Array<unknown>): string | undefined {
   for (const v of values) {
-    if (typeof v === "string") {
+    if (typeof v === 'string') {
       const s = v.trim();
       if (s) return s;
     }
@@ -41,10 +41,10 @@ export async function parseEpubMetadataFromBuffer(
   buffer: Buffer,
   opts?: { fallbackTitle?: string },
 ): Promise<EpubMetadata> {
-  const fallbackTitle = opts?.fallbackTitle?.trim() || "Untitled";
+  const fallbackTitle = opts?.fallbackTitle?.trim() || 'Untitled';
 
-  const tmpDir = await mkdtemp(path.join(os.tmpdir(), "delb-epub-"));
-  const tmpFilePath = path.join(tmpDir, "upload.epub");
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'delb-epub-'));
+  const tmpFilePath = path.join(tmpDir, 'upload.epub');
   await writeFile(tmpFilePath, buffer);
 
   const epub = new EPub(tmpFilePath);
@@ -63,11 +63,11 @@ export async function parseEpubMetadataFromBuffer(
           ).metadata;
 
           const m =
-            metadataUnknown && typeof metadataUnknown === "object"
+            metadataUnknown && typeof metadataUnknown === 'object'
               ? (metadataUnknown as Record<string, unknown>)
               : {};
 
-          const title = firstNonEmpty(m.title, m["dc:title"]) ?? fallbackTitle;
+          const title = firstNonEmpty(m.title, m['dc:title']) ?? fallbackTitle;
 
           // `epub2` often provides `creator` or `creatorFileAs`.
           // Sometimes it's `author`. We normalize to a single string.
@@ -76,17 +76,17 @@ export async function parseEpubMetadataFromBuffer(
               m.creator,
               m.creatorFileAs,
               m.author,
-              m["dc:creator"],
-            ) ?? "Unknown Author";
+              m['dc:creator'],
+            ) ?? 'Unknown Author';
 
-          const description = firstNonEmpty(m.description, m["dc:description"]);
-          const language = firstNonEmpty(m.language, m["dc:language"]);
-          const identifier = firstNonEmpty(m.identifier, m["dc:identifier"]);
-          const publisher = firstNonEmpty(m.publisher, m["dc:publisher"]);
-          const subject = firstNonEmpty(m.subject, m["dc:subject"]);
-          const published = firstNonEmpty(m.date, m["dc:date"]);
-          const ISBN = firstNonEmpty(m.ISBN, m["dc:ISBN"]);
-          const UUID = firstNonEmpty(m.UUID, m["dc:UUID"]);
+          const description = firstNonEmpty(m.description, m['dc:description']);
+          const language = firstNonEmpty(m.language, m['dc:language']);
+          const identifier = firstNonEmpty(m.identifier, m['dc:identifier']);
+          const publisher = firstNonEmpty(m.publisher, m['dc:publisher']);
+          const subject = firstNonEmpty(m.subject, m['dc:subject']);
+          const published = firstNonEmpty(m.date, m['dc:date']);
+          const ISBN = firstNonEmpty(m.ISBN, m['dc:ISBN']);
+          const UUID = firstNonEmpty(m.UUID, m['dc:UUID']);
 
           cleanup();
           resolve({
@@ -109,17 +109,17 @@ export async function parseEpubMetadataFromBuffer(
 
       const cleanup = () => {
         epub.removeListener(
-          "error",
+          'error',
           onError as unknown as (...args: unknown[]) => void,
         );
         epub.removeListener(
-          "end",
+          'end',
           onEnd as unknown as (...args: unknown[]) => void,
         );
       };
 
-      epub.on("error", onError as unknown as (...args: unknown[]) => void);
-      epub.on("end", onEnd as unknown as (...args: unknown[]) => void);
+      epub.on('error', onError as unknown as (...args: unknown[]) => void);
+      epub.on('end', onEnd as unknown as (...args: unknown[]) => void);
 
       // Triggers parsing
       epub.parse();

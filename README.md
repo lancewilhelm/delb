@@ -48,6 +48,7 @@ Delb can **import an existing Calibre library in place**.
 - **Recommendation:** If you plan to keep using Calibre alongside Delb, keep a backup of your Calibre library before running any tools that might reorganize files.
 
 See:
+
 - `docs/calibre-import.md` for the import process + caveats
 - `docs/calibre-database-schema.md` for Calibre schema reference
 
@@ -73,7 +74,7 @@ See:
 
 ### Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 - pnpm (recommended package manager)
 
 ### Installation
@@ -156,6 +157,7 @@ pnpm run db:studio
 ## Storage
 
 Books are stored in the `library/` directory at the project root with the structure:
+
 ```
 library/
 └── {author}/

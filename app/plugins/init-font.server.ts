@@ -1,14 +1,14 @@
 export default defineNuxtPlugin(() => {
   if (import.meta.client) return; // SSR only
   const route = useRoute();
-  const isLoggedIn = route.path !== "/login" && route.path !== "/register";
+  const isLoggedIn = route.path !== '/login' && route.path !== '/register';
   const userSettings = useUserSettingsStore(); // SSR-compatible
 
   // Use user's setting or fallback
   const fontFamily =
     userSettings.activeSettings.fontFamily && isLoggedIn
       ? userSettings.activeSettings.fontFamily
-      : "Geist, sans-serif";
+      : 'Geist, sans-serif';
 
   useHead({
     style: [
@@ -18,7 +18,7 @@ export default defineNuxtPlugin(() => {
           font-family: ${fontFamily} !important;
         }
       `,
-        id: "currentFontFamilyStyle",
+        id: 'currentFontFamilyStyle',
       },
     ],
   });

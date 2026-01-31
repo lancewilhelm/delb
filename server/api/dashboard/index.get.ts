@@ -96,7 +96,10 @@ export default defineEventHandler(async (event) => {
     .innerJoin(collectionBooks, eq(collectionBooks.bookId, books.id))
     .leftJoin(
       userBookStatus,
-      and(eq(userBookStatus.bookId, books.id), eq(userBookStatus.userId, userId)),
+      and(
+        eq(userBookStatus.bookId, books.id),
+        eq(userBookStatus.userId, userId),
+      ),
     )
     .where(inArray(collectionBooks.collectionId, targetCollectionIds));
 
@@ -136,7 +139,10 @@ export default defineEventHandler(async (event) => {
     )
     .where(inArray(collectionBooks.collectionId, targetCollectionIds))
     .groupBy(books.id)
-    .orderBy(desc(userBookReadingPosition.updatedAt), desc(userBookStatus.updatedAt))
+    .orderBy(
+      desc(userBookReadingPosition.updatedAt),
+      desc(userBookStatus.updatedAt),
+    )
     .limit(12);
 
   const readingBooks: FetchBook[] = readingRows.map((r) => ({
@@ -154,4 +160,3 @@ export default defineEventHandler(async (event) => {
     },
   };
 });
-

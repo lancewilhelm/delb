@@ -152,7 +152,9 @@ export default defineEventHandler(async (event) => {
     );
 
     if (personalSet.size) {
-      ignoredPersonalRemovals.push(...eligibleRemove.filter((id) => personalSet.has(id)));
+      ignoredPersonalRemovals.push(
+        ...eligibleRemove.filter((id) => personalSet.has(id)),
+      );
       finalRemoveIds = eligibleRemove.filter((id) => !personalSet.has(id));
     }
   }

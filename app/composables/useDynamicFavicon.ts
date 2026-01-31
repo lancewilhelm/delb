@@ -1,5 +1,5 @@
-import themeList from "@/assets/json/themes.json";
-import { useUserSettingsStore } from "@/stores/userSettings";
+import themeList from '@/assets/json/themes.json';
+import { useUserSettingsStore } from '@/stores/userSettings';
 
 export function useDynamicFavicon() {
   const userSettings = useUserSettingsStore();
@@ -8,14 +8,14 @@ export function useDynamicFavicon() {
   return computed(() => {
     const themeName =
       userSettings.activeSettings.theme &&
-      route.path !== "/login" &&
-      route.path !== "/register"
+      route.path !== '/login' &&
+      route.path !== '/register'
         ? userSettings.activeSettings.theme
-        : "guage";
+        : 'guage';
 
     const theme = themeList.find((t) => t.name === themeName);
-    const mainColor = theme?.mainColor || "#dddddd";
-    const bgColor = theme?.bgColor || "#1b1b1b";
+    const mainColor = theme?.mainColor || '#dddddd';
+    const bgColor = theme?.bgColor || '#1b1b1b';
 
     const svg = `
       <svg width="100%" height="100%" viewBox="0 0 250 250" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">

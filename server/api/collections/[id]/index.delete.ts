@@ -1,9 +1,9 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq } from 'drizzle-orm';
 
-import { cloudDb } from "~~/server/utils/db/cloud";
-import { auth } from "~/utils/auth";
-import { logger } from "~/utils/logger";
-import { collectionMembers, collections } from "~/utils/db/schema";
+import { cloudDb } from '~~/server/utils/db/cloud';
+import { auth } from '~/utils/auth';
+import { logger } from '~/utils/logger';
+import { collectionMembers, collections } from '~/utils/db/schema';
 
 /**
  * DELETE /api/collections/:id
@@ -21,7 +21,9 @@ import { collectionMembers, collections } from "~/utils/db/schema";
  */
 export default defineEventHandler(async (event) => {
   const id =
-    typeof event.context?.params?.id === "string" ? event.context.params.id : "";
+    typeof event.context?.params?.id === 'string'
+      ? event.context.params.id
+      : '';
   logger.debug(`DELETE /api/collections/${id}`);
 
   const session = await auth.api.getSession({
@@ -29,13 +31,13 @@ export default defineEventHandler(async (event) => {
   });
 
   if (!session) {
-    throw createError({ statusCode: 401, statusMessage: "Unauthorized" });
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
   }
 
   if (!id) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Collection id is required",
+      statusMessage: 'Collection id is required',
     });
   }
 
@@ -55,13 +57,16 @@ export default defineEventHandler(async (event) => {
 
   const collection = c[0];
   if (!collection?.id) {
-    throw createError({ statusCode: 404, statusMessage: "Collection not found" });
+    throw createError({
+      statusCode: 404,
+      statusMessage: 'Collection not found',
+    });
   }
 
   if (collection.isPersonal) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Personal collections cannot be deleted",
+      statusMessage: 'Personal collections cannot be deleted',
     });
   }
 
@@ -70,13 +75,16 @@ export default defineEventHandler(async (event) => {
     .select({ role: collectionMembers.role })
     .from(collectionMembers)
     .where(
-      and(eq(collectionMembers.collectionId, id), eq(collectionMembers.userId, userId)),
+      and(
+        eq(collectionMembers.collectionId, id),
+        eq(collectionMembers.userId, userId),
+      ),
     )
     .limit(1);
 
   const role = membership[0]?.role;
-  if (role !== "owner") {
-    throw createError({ statusCode: 403, statusMessage: "Forbidden" });
+  if (role !== 'owner') {
+    throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
   }
 
   // Delete collection row. Dependent rows should cascade via schema.

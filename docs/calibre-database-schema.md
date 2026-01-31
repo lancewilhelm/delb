@@ -3,6 +3,7 @@
 This document captures a **reference** view of the SQLite schemas Calibre uses, primarily to inform Delb’s future import/migration planning.
 
 Sources:
+
 - The schema listing in this doc is based on an extracted summary (provided in the project discussion) from Calibre’s repository code and SQL resources.
 - Calibre upstream code search: https://github.com/kovidgoyal/calibre/search?q=CREATE+TABLE&type=code
 
@@ -25,7 +26,7 @@ The import is driven from the admin settings page (Library Management):
   - linked book files (formats) and their paths
   - cover paths
   - metadata (title, description, identifiers, tags, series, publisher, language)
-  Optionally, the rescan can also import books that were added to Calibre after the first import.
+    Optionally, the rescan can also import books that were added to Calibre after the first import.
 
 ### Idempotency and linking to Calibre book ids
 
@@ -33,7 +34,7 @@ To support rescan and prevent duplicate imports, Delb stores the Calibre `books.
 
 - Delb `books.calibre_book_id` ⇄ Calibre `books.id`
 
-Delb does **not** preserve Calibre’s *library UUID*; it only uses the Calibre book id to make the import/rescan idempotent.
+Delb does **not** preserve Calibre’s _library UUID_; it only uses the Calibre book id to make the import/rescan idempotent.
 
 ### Files and formats
 
@@ -74,40 +75,46 @@ This is the main library database in a Calibre library folder. It stores books, 
 ### Core entity tables
 
 #### `books`
+
 - `id` INTEGER PRIMARY KEY AUTOINCREMENT
 - `title` TEXT NOT NULL DEFAULT 'Unknown' COLLATE NOCASE
 - `sort` TEXT COLLATE NOCASE
 - `timestamp` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 - `uri` TEXT
 - `series_index` INTEGER NOT NULL DEFAULT 1
-- `author_sort` TEXT COLLATE NOCASE *(added later via upgrades)*
-- `isbn` TEXT DEFAULT "" COLLATE NOCASE *(added later via upgrades)*
+- `author_sort` TEXT COLLATE NOCASE _(added later via upgrades)_
+- `isbn` TEXT DEFAULT "" COLLATE NOCASE _(added later via upgrades)_
 - Other columns may be added by later upgrades (example: `last_modified`) depending on Calibre version.
 
 #### `authors`
+
 - `id` INTEGER PRIMARY KEY
 - `name` TEXT NOT NULL COLLATE NOCASE
 - `sort` TEXT COLLATE NOCASE
 - UNIQUE(`name`)
 
 #### `publishers`
+
 - `id` INTEGER PRIMARY KEY
 - `name` TEXT NOT NULL COLLATE NOCASE
 - `sort` TEXT COLLATE NOCASE
 - UNIQUE(`name`)
 
 #### `tags`
+
 - `id` INTEGER PRIMARY KEY
 - `name` TEXT NOT NULL COLLATE NOCASE
 - UNIQUE(`name`)
 
 #### `series`
+
 - `id` INTEGER PRIMARY KEY
 - `name` TEXT NOT NULL COLLATE NOCASE
 - `sort` TEXT COLLATE NOCASE
 - UNIQUE(`name`)
 
 #### `ratings`
+
 - `id` INTEGER PRIMARY KEY
 - `rating` INTEGER CHECK(`rating` > -1 AND `rating` < 11)
 - UNIQUE(`rating`)
@@ -118,6 +125,7 @@ This is the main library database in a Calibre library folder. It stores books, 
 ### Link tables (many-to-many and one-to-many modeling)
 
 #### `books_authors_link`
+
 - `id` INTEGER PRIMARY KEY
 - `book` INTEGER NOT NULL
 - `author` INTEGER NOT NULL
@@ -125,6 +133,7 @@ This is the main library database in a Calibre library folder. It stores books, 
 - Indexes typically exist on `book` and `author`.
 
 #### `books_publishers_link`
+
 - `id` INTEGER PRIMARY KEY
 - `book` INTEGER NOT NULL
 - `publisher` INTEGER NOT NULL
@@ -133,6 +142,7 @@ This is the main library database in a Calibre library folder. It stores books, 
 - Indexes typically exist on `book` and `publisher`.
 
 #### `books_tags_link`
+
 - `id` INTEGER PRIMARY KEY
 - `book` INTEGER NOT NULL
 - `tag` INTEGER NOT NULL
@@ -140,6 +150,7 @@ This is the main library database in a Calibre library folder. It stores books, 
 - Indexes typically exist on `book` and `tag`.
 
 #### `books_series_link`
+
 - `id` INTEGER PRIMARY KEY
 - `book` INTEGER NOT NULL
 - `series` INTEGER NOT NULL
@@ -147,6 +158,7 @@ This is the main library database in a Calibre library folder. It stores books, 
 - Indexes typically exist on `book` and `series`.
 
 #### `books_ratings_link`
+
 - `id` INTEGER PRIMARY KEY
 - `book` INTEGER NOT NULL
 - `rating` INTEGER NOT NULL
@@ -158,6 +170,7 @@ This is the main library database in a Calibre library folder. It stores books, 
 ### Content storage / per-book resources
 
 #### `data` (per-book formats)
+
 Stores the actual format payloads (depending on how Calibre is configured/used).
 
 - `id` INTEGER PRIMARY KEY
@@ -169,6 +182,7 @@ Stores the actual format payloads (depending on how Calibre is configured/used).
 - Index typically exists on `book`.
 
 #### `covers`
+
 - `id` INTEGER PRIMARY KEY
 - `book` INTEGER NOT NULL
 - `uncompressed_size` INTEGER NOT NULL
@@ -177,6 +191,7 @@ Stores the actual format payloads (depending on how Calibre is configured/used).
 - Index typically exists on `book`.
 
 #### `comments`
+
 - `id` INTEGER PRIMARY KEY
 - `book` INTEGER NOT NULL
 - `text` TEXT NOT NULL COLLATE NOCASE
@@ -184,6 +199,7 @@ Stores the actual format payloads (depending on how Calibre is configured/used).
 - Index typically exists on `book`.
 
 #### `conversion_options`
+
 - `id` INTEGER PRIMARY KEY
 - `format` TEXT NOT NULL COLLATE NOCASE
 - `book` INTEGER
@@ -192,6 +208,7 @@ Stores the actual format payloads (depending on how Calibre is configured/used).
 - Indexes typically exist on `format` and `book`.
 
 #### `feeds`
+
 - `id` INTEGER PRIMARY KEY
 - `title` TEXT NOT NULL
 - `script` TEXT NOT NULL
@@ -204,6 +221,7 @@ Stores the actual format payloads (depending on how Calibre is configured/used).
 Calibre’s “custom columns” can be created by users at runtime. The schema is **not fixed**.
 
 A common normalized pattern (conceptual) for a custom column is:
+
 - A master values table:
   - `id`, `value` (and optional extra columns for series-like data)
   - UNIQUE(`value`)
@@ -214,13 +232,14 @@ A common normalized pattern (conceptual) for a custom column is:
 - Plus indexes and triggers.
 - Denormalized patterns also exist depending on custom column type/config.
 
-For import planning in Delb: expect that a Calibre `metadata.db` may contain *many extra tables* related to custom columns.
+For import planning in Delb: expect that a Calibre `metadata.db` may contain _many extra tables_ related to custom columns.
 
 ---
 
 ### Support / plugin tables (examples)
 
 #### `books_plugin_data`
+
 - `id` INTEGER PRIMARY KEY
 - `book` INTEGER NOT NULL
 - `name` TEXT NOT NULL
@@ -228,6 +247,7 @@ For import planning in Delb: expect that a Calibre `metadata.db` may contain *ma
 - UNIQUE(`book`, `name`)
 
 #### `metadata_dirtied`
+
 - `id` INTEGER PRIMARY KEY
 - `book` INTEGER NOT NULL
 - UNIQUE(`book`)
@@ -237,11 +257,13 @@ For import planning in Delb: expect that a Calibre `metadata.db` may contain *ma
 ### Schema-upgrade-added tables (examples)
 
 #### `library_id`
+
 - `id` INTEGER PRIMARY KEY
 - `uuid` TEXT NOT NULL
 - UNIQUE(`uuid`)
 
 #### `identifiers`
+
 - `id` INTEGER PRIMARY KEY
 - `book` INTEGER NOT NULL
 - `type` TEXT NOT NULL DEFAULT "isbn" COLLATE NOCASE
@@ -249,11 +271,13 @@ For import planning in Delb: expect that a Calibre `metadata.db` may contain *ma
 - UNIQUE(`book`, `type`)
 
 #### `languages`
+
 - `id` INTEGER PRIMARY KEY
 - `lang_code` TEXT NOT NULL COLLATE NOCASE
 - UNIQUE(`lang_code`)
 
 #### `books_languages_link`
+
 - `id` INTEGER PRIMARY KEY
 - `book` INTEGER NOT NULL
 - `language` INTEGER NOT NULL
@@ -264,6 +288,7 @@ For import planning in Delb: expect that a Calibre `metadata.db` may contain *ma
 ### Views
 
 #### `meta` (view)
+
 Calibre commonly provides a `meta` view that aggregates `books` plus related data (authors, tags, series, formats, comments, rating, publisher, isbn, etc.). The exact columns can vary across versions, but commonly include:
 
 - `id`, `title`, `authors`, `publisher`, `rating`, `timestamp`, `size`, `tags`,
@@ -278,6 +303,7 @@ Calibre maintains a separate database for full-text search indexing of book text
 ### Tables
 
 #### `fts_db.dirtied_formats`
+
 - `id` INTEGER PRIMARY KEY
 - `book` INTEGER NOT NULL
 - `format` TEXT NOT NULL COLLATE NOCASE
@@ -285,6 +311,7 @@ Calibre maintains a separate database for full-text search indexing of book text
 - UNIQUE(`book`, `format`)
 
 #### `fts_db.books_text`
+
 - `id` INTEGER PRIMARY KEY
 - `book` INTEGER NOT NULL
 - `timestamp` REAL NOT NULL
@@ -317,6 +344,7 @@ Calibre uses a separate notes database with optional full-text search.
 ### Tables
 
 #### `notes_db.notes`
+
 - `id` INTEGER PRIMARY KEY AUTOINCREMENT
 - `item` INTEGER NOT NULL
 - `colname` TEXT NOT NULL COLLATE NOCASE
@@ -327,11 +355,13 @@ Calibre uses a separate notes database with optional full-text search.
 - UNIQUE(`item`, `colname`)
 
 #### `notes_db.resources`
+
 - `hash` TEXT NOT NULL PRIMARY KEY ON CONFLICT FAIL
 - `name` TEXT NOT NULL UNIQUE ON CONFLICT FAIL
 - Declared `WITHOUT ROWID`
 
 #### `notes_db.notes_resources_link`
+
 - `id` INTEGER PRIMARY KEY
 - `note` INTEGER NOT NULL
 - `resource` TEXT NOT NULL
@@ -355,6 +385,7 @@ These databases support Calibre’s server features, caches, and state tracking.
 ### `server-users.sqlite` (Calibre server user DB)
 
 #### `users`
+
 - `id` INTEGER PRIMARY KEY
 - `name` TEXT NOT NULL
 - `pw` TEXT NOT NULL
@@ -369,6 +400,7 @@ These databases support Calibre’s server features, caches, and state tracking.
 ### `srv-last-read.sqlite` (last read positions)
 
 #### `last_read_positions`
+
 - `id` INTEGER PRIMARY KEY AUTOINCREMENT
 - `library_id` TEXT NOT NULL
 - `book` INTEGER NOT NULL
@@ -384,6 +416,7 @@ These databases support Calibre’s server features, caches, and state tracking.
 ### `live.sqlite` (live modules cache)
 
 #### `modules`
+
 - `id` INTEGER PRIMARY KEY AUTOINCREMENT
 - `date` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 - `atime` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -404,11 +437,13 @@ Calibre can read device-specific SQLite databases (e.g. Kobo). These are created
 ## 6) SQLite extensions and behavior that affect schema semantics
 
 Some Calibre database behavior depends on SQLite extensions:
+
 - Custom aggregates/functions (e.g. concatenation helpers) via a native module (C).
 - A custom FTS5 tokenizer used by the FTS databases.
 - Extension module registration and build metadata are defined in Calibre upstream.
 
 For Delb import planning, this matters because:
+
 - Import may need to replicate **derived fields** (e.g. `sortconcat`-like behavior) in application logic rather than relying on SQLite extensions.
 - Full-text search ingestion may require re-indexing rather than attempting to import FTS tables directly.
 
@@ -417,6 +452,7 @@ For Delb import planning, this matters because:
 ## Suggested next steps for Delb (import-oriented)
 
 When you’re ready to implement import:
+
 1. Decide whether Delb will import:
    - only `metadata.db` core tables, or
    - also notes and last-read positions, or

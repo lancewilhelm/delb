@@ -1,9 +1,9 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq } from 'drizzle-orm';
 
-import { cloudDb } from "~~/server/utils/db/cloud";
-import { auth } from "~/utils/auth";
-import { logger } from "~/utils/logger";
-import { collectionMembers, collections, users } from "~/utils/db/schema";
+import { cloudDb } from '~~/server/utils/db/cloud';
+import { auth } from '~/utils/auth';
+import { logger } from '~/utils/logger';
+import { collectionMembers, collections, users } from '~/utils/db/schema';
 
 /**
  * POST /api/collections/:id/transfer-ownership
@@ -28,9 +28,9 @@ import { collectionMembers, collections, users } from "~/utils/db/schema";
  */
 export default defineEventHandler(async (event) => {
   const id =
-    typeof event.context?.params?.id === "string"
+    typeof event.context?.params?.id === 'string'
       ? event.context.params.id
-      : "";
+      : '';
   logger.debug(`POST /api/collections/${id}/transfer-ownership`);
 
   const session = await auth.api.getSession({
@@ -38,27 +38,27 @@ export default defineEventHandler(async (event) => {
   });
 
   if (!session) {
-    throw createError({ statusCode: 401, statusMessage: "Unauthorized" });
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
   }
 
   if (!id) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Collection id is required",
+      statusMessage: 'Collection id is required',
     });
   }
 
-  const body = (await readBody(event).catch(() => null)) as
-    | { email?: unknown }
-    | null;
+  const body = (await readBody(event).catch(() => null)) as {
+    email?: unknown;
+  } | null;
 
-  const emailRaw = typeof body?.email === "string" ? body.email : "";
+  const emailRaw = typeof body?.email === 'string' ? body.email : '';
   const email = emailRaw.trim().toLowerCase();
 
   if (!email) {
     throw createError({
       statusCode: 400,
-      statusMessage: "email is required",
+      statusMessage: 'email is required',
     });
   }
 
@@ -74,13 +74,16 @@ export default defineEventHandler(async (event) => {
 
   const c = cRows[0];
   if (!c?.id) {
-    throw createError({ statusCode: 404, statusMessage: "Collection not found" });
+    throw createError({
+      statusCode: 404,
+      statusMessage: 'Collection not found',
+    });
   }
 
   if (c.isPersonal) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Personal collections cannot transfer ownership",
+      statusMessage: 'Personal collections cannot transfer ownership',
     });
   }
 
@@ -99,8 +102,8 @@ export default defineEventHandler(async (event) => {
     .limit(1);
 
   const actingRole = actingMembershipRows[0]?.role;
-  if (actingRole !== "owner") {
-    throw createError({ statusCode: 403, statusMessage: "Forbidden" });
+  if (actingRole !== 'owner') {
+    throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
   }
 
   // Resolve email -> userId
@@ -110,15 +113,15 @@ export default defineEventHandler(async (event) => {
     .where(eq(users.email, email))
     .limit(1);
 
-  const targetUserId = userRows[0]?.id ?? "";
+  const targetUserId = userRows[0]?.id ?? '';
   if (!targetUserId) {
-    throw createError({ statusCode: 404, statusMessage: "User not found" });
+    throw createError({ statusCode: 404, statusMessage: 'User not found' });
   }
 
   if (targetUserId === actingUserId) {
     throw createError({
       statusCode: 400,
-      statusMessage: "You cannot transfer ownership to yourself",
+      statusMessage: 'You cannot transfer ownership to yourself',
     });
   }
 
@@ -140,7 +143,7 @@ export default defineEventHandler(async (event) => {
     await cloudDb.insert(collectionMembers).values({
       collectionId: id,
       userId: targetUserId,
-      role: "viewer", // temporary until we promote to owner below
+      role: 'viewer', // temporary until we promote to owner below
       createdAt: now,
     });
   }
@@ -152,17 +155,17 @@ export default defineEventHandler(async (event) => {
   // This keeps the result deterministic even if legacy data somehow has >1 owner.
   await cloudDb
     .update(collectionMembers)
-    .set({ role: "editor" })
+    .set({ role: 'editor' })
     .where(
       and(
         eq(collectionMembers.collectionId, id),
-        eq(collectionMembers.role, "owner"),
+        eq(collectionMembers.role, 'owner'),
       ),
     );
 
   await cloudDb
     .update(collectionMembers)
-    .set({ role: "owner" })
+    .set({ role: 'owner' })
     .where(
       and(
         eq(collectionMembers.collectionId, id),

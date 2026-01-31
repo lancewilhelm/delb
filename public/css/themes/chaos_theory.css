@@ -12,14 +12,14 @@
   --colorful-error-extra-color: #b03c47;
 }
 
-#logo{
+#logo {
   -webkit-transform: rotateY(180deg);
   unicode-bidi: bidi-override;
   transition: 0.5s;
 }
 
 header #logo .top {
-  font-family: "Comic Sans MS", "Comic Sans", cursive;
+  font-family: 'Comic Sans MS', 'Comic Sans', cursive;
 }
 
 header #logo .icon {
@@ -94,7 +94,7 @@ nav {
   gap: 0.5rem;
 }
 
-nav  {
+nav {
   border-radius: 10rem i !important;
   color: var(--bg-color);
   transition: 0.5s;
@@ -133,43 +133,59 @@ nav .nav-button:nth-child(8) {
 }
 
 body.crtmode nav .nav-button:nth-child(1) {
-  box-shadow: 3px 0 1px color-mix(in srgb, #ab92e1 20%, transparent),
-    -3px 0 color-mix(in srgb, #ab92e1 30%, transparent), 0 0 3px;
+  box-shadow:
+    3px 0 1px color-mix(in srgb, #ab92e1 20%, transparent),
+    -3px 0 color-mix(in srgb, #ab92e1 30%, transparent),
+    0 0 3px;
 }
 
 body.crtmode nav .nav-button:nth-child(2) {
-  box-shadow: 3px 0 1px color-mix(in srgb, #f3ea5d 20%, transparent),
-    -3px 0 color-mix(in srgb, #f3ea5d 30%, transparent), 0 0 3px;
+  box-shadow:
+    3px 0 1px color-mix(in srgb, #f3ea5d 20%, transparent),
+    -3px 0 color-mix(in srgb, #f3ea5d 30%, transparent),
+    0 0 3px;
 }
 
 body.crtmode nav .nav-button:nth-child(3) {
-  box-shadow: 3px 0 1px color-mix(in srgb, #7ae1bf 20%, transparent),
-    -3px 0 color-mix(in srgb, #7ae1bf 30%, transparent), 0 0 3px;
+  box-shadow:
+    3px 0 1px color-mix(in srgb, #7ae1bf 20%, transparent),
+    -3px 0 color-mix(in srgb, #7ae1bf 30%, transparent),
+    0 0 3px;
 }
 
 body.crtmode nav .nav-button:nth-child(4) {
-  box-shadow: 3px 0 1px color-mix(in srgb, #ff5869 20%, transparent),
-    -3px 0 color-mix(in srgb, #ff5869 30%, transparent), 0 0 3px;
+  box-shadow:
+    3px 0 1px color-mix(in srgb, #ff5869 20%, transparent),
+    -3px 0 color-mix(in srgb, #ff5869 30%, transparent),
+    0 0 3px;
 }
 
 body.crtmode nav .nav-button:nth-child(5) {
-  box-shadow: 3px 0 1px color-mix(in srgb, #fc76d9 20%, transparent),
-    -3px 0 color-mix(in srgb, #fc76d9 30%, transparent), 0 0 3px;
+  box-shadow:
+    3px 0 1px color-mix(in srgb, #fc76d9 20%, transparent),
+    -3px 0 color-mix(in srgb, #fc76d9 30%, transparent),
+    0 0 3px;
 }
 
 body.crtmode nav .nav-button:nth-child(6) {
-  box-shadow: 3px 0 1px color-mix(in srgb, #fc76d9 20%, transparent),
-    -3px 0 color-mix(in srgb, #fc76d9 30%, transparent), 0 0 3px;
+  box-shadow:
+    3px 0 1px color-mix(in srgb, #fc76d9 20%, transparent),
+    -3px 0 color-mix(in srgb, #fc76d9 30%, transparent),
+    0 0 3px;
 }
 
 body.crtmode nav .nav-button:nth-child(7) {
-  box-shadow: 3px 0 1px color-mix(in srgb, #ab92e1 20%, transparent),
-    -3px 0 color-mix(in srgb, #ab92e1 30%, transparent), 0 0 3px;
+  box-shadow:
+    3px 0 1px color-mix(in srgb, #ab92e1 20%, transparent),
+    -3px 0 color-mix(in srgb, #ab92e1 30%, transparent),
+    0 0 3px;
 }
 
 body.crtmode nav .nav-button:nth-child(8) {
-  box-shadow: 3px 0 1px color-mix(in srgb, #f3ea5d 20%, transparent),
-    -3px 0 color-mix(in srgb, #f3ea5d 30%, transparent), 0 0 3px;
+  box-shadow:
+    3px 0 1px color-mix(in srgb, #f3ea5d 20%, transparent),
+    -3px 0 color-mix(in srgb, #f3ea5d 30%, transparent),
+    0 0 3px;
 }
 
 body.crtmode #caret {
@@ -179,6 +195,7 @@ body.crtmode #caret {
 }
 
 body.crtmode header.focus nav .nav-button {
-  box-shadow: 3px 0 1px var(--crt-sub-color-glow),
+  box-shadow:
+    3px 0 1px var(--crt-sub-color-glow),
     -3px 0 var(--crt-sub-color-glow);
 }

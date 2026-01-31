@@ -1,15 +1,15 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from 'drizzle-orm';
 
-import { cloudDb } from "~~/server/utils/db/cloud";
+import { cloudDb } from '~~/server/utils/db/cloud';
 import {
   books,
   collectionBooks,
   collectionMembers,
   userBookStatus,
   USER_BOOK_STATUSES,
-} from "~/utils/db/schema";
-import { logger } from "~/utils/logger";
-import { auth } from "~/utils/auth";
+} from '~/utils/db/schema';
+import { logger } from '~/utils/logger';
+import { auth } from '~/utils/auth';
 
 /**
  * POST /api/books/:id/status
@@ -33,50 +33,50 @@ import { auth } from "~/utils/auth";
  * - { success: true, data: { status: string | null } }
  */
 export default defineEventHandler(async (event) => {
-  logger.debug("POST /api/books/:id/status");
+  logger.debug('POST /api/books/:id/status');
 
   const session = await auth.api.getSession({ headers: event.headers });
   if (!session) {
     setResponseStatus(event, 401);
-    return { success: false, message: "Unauthorized" };
+    return { success: false, message: 'Unauthorized' };
   }
 
   const userId = session.user.id;
 
-  const bookId = getRouterParam(event, "id");
+  const bookId = getRouterParam(event, 'id');
   if (!bookId) {
     setResponseStatus(event, 400);
-    return { success: false, message: "Missing book id" };
+    return { success: false, message: 'Missing book id' };
   }
 
-  const body = (await readBody(event).catch(() => null)) as
-    | { status?: unknown }
-    | null;
+  const body = (await readBody(event).catch(() => null)) as {
+    status?: unknown;
+  } | null;
 
   const raw = body?.status;
 
   // Clear if null/undefined/empty string
-  const wantsClear = raw === null || raw === undefined || raw === "";
+  const wantsClear = raw === null || raw === undefined || raw === '';
 
   // Validate status if not clearing.
   let status: (typeof USER_BOOK_STATUSES)[number] | null = null;
 
   if (!wantsClear) {
-    if (typeof raw !== "string") {
+    if (typeof raw !== 'string') {
       setResponseStatus(event, 400);
       return {
         success: false,
-        message: "Invalid status (must be a string or null to clear).",
+        message: 'Invalid status (must be a string or null to clear).',
       };
     }
 
     // Keep it strict for now: only built-in statuses.
-    if (!((USER_BOOK_STATUSES as readonly string[]).includes(raw))) {
+    if (!(USER_BOOK_STATUSES as readonly string[]).includes(raw)) {
       setResponseStatus(event, 400);
       return {
         success: false,
         message: `Invalid status. Expected one of: ${USER_BOOK_STATUSES.join(
-          ", ",
+          ', ',
         )}`,
       };
     }
@@ -98,7 +98,7 @@ export default defineEventHandler(async (event) => {
 
     if (!memberCollectionIds.length) {
       setResponseStatus(event, 404);
-      return { success: false, message: "Book not found" };
+      return { success: false, message: 'Book not found' };
     }
 
     const visible = await cloudDb
@@ -113,7 +113,7 @@ export default defineEventHandler(async (event) => {
 
     if (!visible[0]) {
       setResponseStatus(event, 404);
-      return { success: false, message: "Book not found" };
+      return { success: false, message: 'Book not found' };
     }
 
     if (status === null) {
@@ -143,9 +143,9 @@ export default defineEventHandler(async (event) => {
       );
 
     const rowsAffected =
-      typeof updateRes === "number"
+      typeof updateRes === 'number'
         ? updateRes
-        : (updateRes as { rowsAffected?: number })?.rowsAffected ?? 0;
+        : ((updateRes as { rowsAffected?: number })?.rowsAffected ?? 0);
 
     if (!rowsAffected) {
       await cloudDb.insert(userBookStatus).values({
@@ -160,11 +160,11 @@ export default defineEventHandler(async (event) => {
   } catch (error: unknown) {
     // If the unique constraint triggers due to a race, fall back to update.
     const message =
-      typeof error === "object" && error !== null && "message" in error
-        ? String((error as { message?: unknown }).message ?? "")
-        : "";
+      typeof error === 'object' && error !== null && 'message' in error
+        ? String((error as { message?: unknown }).message ?? '')
+        : '';
 
-    if (message.toLowerCase().includes("unique")) {
+    if (message.toLowerCase().includes('unique')) {
       try {
         if (status === null) {
           await cloudDb
@@ -191,12 +191,12 @@ export default defineEventHandler(async (event) => {
 
         return { success: true, data: { status } };
       } catch (e) {
-        logger.error(e, "POST /api/books/:id/status: Error after unique retry");
+        logger.error(e, 'POST /api/books/:id/status: Error after unique retry');
       }
     }
 
-    logger.error(error, "POST /api/books/:id/status: Error setting status");
+    logger.error(error, 'POST /api/books/:id/status: Error setting status');
     setResponseStatus(event, 500);
-    return { success: false, message: "Failed to set status" };
+    return { success: false, message: 'Failed to set status' };
   }
 });

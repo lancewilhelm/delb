@@ -9,6 +9,7 @@ Delb’s Docker image runs the Nuxt server and maintains a persistent SQLite DB.
 ## Run
 
 This expects:
+
 - a persistent volume mounted to `/app/data` for `data/delb.db`
 - (optional) a Calibre library mounted to `/app/library`
 - `BETTER_AUTH_SECRET` provided via env

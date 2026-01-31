@@ -167,7 +167,7 @@ export default defineEventHandler(async (event) => {
       const seriesIndex =
         typeof row.seriesIndex === 'number'
           ? row.seriesIndex
-          : row.seriesIndex ?? null;
+          : (row.seriesIndex ?? null);
 
       if (!sid || !bid) continue;
 
@@ -177,7 +177,9 @@ export default defineEventHandler(async (event) => {
         title,
         seriesIndex,
         coverImagePath,
-        coverThumbnailUrl: coverImagePath ? coverThumbUrl(coverImagePath) : null,
+        coverThumbnailUrl: coverImagePath
+          ? coverThumbUrl(coverImagePath)
+          : null,
       });
 
       booksBySeriesId.set(sid, list);

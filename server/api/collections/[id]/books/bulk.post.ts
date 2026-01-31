@@ -152,7 +152,8 @@ export default defineEventHandler(async (event) => {
     if (excludedBookIds.length) {
       throw createError({
         statusCode: 400,
-        statusMessage: 'Do not provide excludedBookIds when allInCollection=false',
+        statusMessage:
+          'Do not provide excludedBookIds when allInCollection=false',
       });
     }
   }
@@ -169,7 +170,10 @@ export default defineEventHandler(async (event) => {
 
   const targetCollection = targetCollectionRow[0];
   if (!targetCollection) {
-    throw createError({ statusCode: 404, statusMessage: 'Collection not found' });
+    throw createError({
+      statusCode: 404,
+      statusMessage: 'Collection not found',
+    });
   }
 
   // Must be owner/editor of the *scope collection* to apply bulk operations from this view.

@@ -13,7 +13,10 @@ export type GlobalSettingsRow = {
 export async function getGlobalSettingsRow(): Promise<GlobalSettingsRow | null> {
   try {
     const rows = await cloudDb
-      .select({ settings: globalSettings.settings, updatedAt: globalSettings.updatedAt })
+      .select({
+        settings: globalSettings.settings,
+        updatedAt: globalSettings.updatedAt,
+      })
       .from(globalSettings)
       .where(eq(globalSettings.id, GLOBAL_SETTINGS_ID))
       .limit(1);
@@ -25,4 +28,3 @@ export async function getGlobalSettingsRow(): Promise<GlobalSettingsRow | null> 
     return null;
   }
 }
-

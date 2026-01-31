@@ -1,9 +1,9 @@
-import { eq } from "drizzle-orm";
+import { eq } from 'drizzle-orm';
 
-import { cloudDb } from "~~/server/utils/db/cloud";
-import { collections, collectionMembers } from "~/utils/db/schema";
-import { logger } from "~/utils/logger";
-import { auth } from "~/utils/auth";
+import { cloudDb } from '~~/server/utils/db/cloud';
+import { collections, collectionMembers } from '~/utils/db/schema';
+import { logger } from '~/utils/logger';
+import { auth } from '~/utils/auth';
 
 /**
  * GET /api/collections
@@ -17,14 +17,14 @@ import { auth } from "~/utils/auth";
  * - client can filter further if desired
  */
 export default defineEventHandler(async (event) => {
-  logger.debug("GET /api/collections");
+  logger.debug('GET /api/collections');
 
   const session = await auth.api.getSession({
     headers: event.headers,
   });
 
   if (!session) {
-    throw createError({ statusCode: 401, statusMessage: "Unauthorized" });
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
   }
 
   const userId = session.user.id;
@@ -70,7 +70,7 @@ export default defineEventHandler(async (event) => {
       if (!c) return null;
 
       const role =
-        memberships.find((m) => m.collectionId === id)?.role ?? "viewer";
+        memberships.find((m) => m.collectionId === id)?.role ?? 'viewer';
 
       return { ...c, role };
     }),

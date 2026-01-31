@@ -209,7 +209,12 @@ function isGoogleBookItem(input: unknown): input is GoogleBookItem {
   if (!('volumeInfo' in input)) return false;
   const id = (input as { id?: unknown }).id;
   const volumeInfo = (input as { volumeInfo?: unknown }).volumeInfo;
-  return typeof id === 'string' && !!id.trim() && !!volumeInfo && typeof volumeInfo === 'object';
+  return (
+    typeof id === 'string' &&
+    !!id.trim() &&
+    !!volumeInfo &&
+    typeof volumeInfo === 'object'
+  );
 }
 
 /**
@@ -373,7 +378,8 @@ async function addBookToCollectionsMissing(opts: {
   const uniqueCollectionIds = Array.from(new Set(opts.collectionIds)).filter(
     Boolean,
   );
-  if (!uniqueCollectionIds.length) return { addedCollectionIds: [] as string[] };
+  if (!uniqueCollectionIds.length)
+    return { addedCollectionIds: [] as string[] };
 
   const existing = await cloudDb
     .select({ collectionId: collectionBooks.collectionId })
@@ -506,7 +512,9 @@ export default defineEventHandler(async (event) => {
   const industryIdentifiers = Array.isArray(vi.industryIdentifiers)
     ? vi.industryIdentifiers
         .map((x) => ({
-          type: normalizeIdentifierTypeFromProvider((x as { type?: unknown })?.type),
+          type: normalizeIdentifierTypeFromProvider(
+            (x as { type?: unknown })?.type,
+          ),
           value: normalizeIdentifierValue(
             (x as { identifier?: unknown })?.identifier,
           ),
@@ -643,9 +651,14 @@ export default defineEventHandler(async (event) => {
       update.seriesIndex = null;
     }
 
-    await cloudDb.update(books).set(update as never).where(eq(books.id, replaceBookId));
+    await cloudDb
+      .update(books)
+      .set(update as never)
+      .where(eq(books.id, replaceBookId));
 
-    await cloudDb.delete(bookAuthors).where(eq(bookAuthors.bookId, replaceBookId));
+    await cloudDb
+      .delete(bookAuthors)
+      .where(eq(bookAuthors.bookId, replaceBookId));
     for (let i = 0; i < authorsToAttach.length; i++) {
       const name = authorsToAttach[i]!;
       const author = await findOrCreateAuthorByName(name);
@@ -660,7 +673,9 @@ export default defineEventHandler(async (event) => {
     if (categories.length) {
       for (const name of categories) {
         const t = await findOrCreateTagByName(name);
-        await cloudDb.insert(bookTags).values({ bookId: replaceBookId, tagId: t.id });
+        await cloudDb
+          .insert(bookTags)
+          .values({ bookId: replaceBookId, tagId: t.id });
       }
     }
 
@@ -732,7 +747,10 @@ export default defineEventHandler(async (event) => {
           .where(eq(books.id, replaceBookId));
       } catch (e) {
         logger.warn(
-          { bookId: replaceBookId, err: e instanceof Error ? e.message : String(e) },
+          {
+            bookId: replaceBookId,
+            err: e instanceof Error ? e.message : String(e),
+          },
           'metadata-import: cover (replace): failed (continuing without cover)',
         );
       }
@@ -750,7 +768,10 @@ export default defineEventHandler(async (event) => {
       await moveBookStorageToCanonical({ bookId: replaceBookId });
     } catch (e) {
       logger.warn(
-        { bookId: replaceBookId, err: e instanceof Error ? e.message : String(e) },
+        {
+          bookId: replaceBookId,
+          err: e instanceof Error ? e.message : String(e),
+        },
         'metadata-import: replace: move-to-canonical failed',
       );
     }

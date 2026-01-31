@@ -1,9 +1,9 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq } from 'drizzle-orm';
 
-import { cloudDb } from "~~/server/utils/db/cloud";
-import { auth } from "~/utils/auth";
-import { logger } from "~/utils/logger";
-import { collectionMembers, collections } from "~/utils/db/schema";
+import { cloudDb } from '~~/server/utils/db/cloud';
+import { auth } from '~/utils/auth';
+import { logger } from '~/utils/logger';
+import { collectionMembers, collections } from '~/utils/db/schema';
 
 /**
  * DELETE /api/collections/:id/members/:userId
@@ -21,13 +21,13 @@ import { collectionMembers, collections } from "~/utils/db/schema";
  */
 export default defineEventHandler(async (event) => {
   const id =
-    typeof event.context?.params?.id === "string"
+    typeof event.context?.params?.id === 'string'
       ? event.context.params.id
-      : "";
+      : '';
   const targetUserId =
-    typeof event.context?.params?.userId === "string"
+    typeof event.context?.params?.userId === 'string'
       ? event.context.params.userId
-      : "";
+      : '';
 
   logger.debug(`DELETE /api/collections/${id}/members/${targetUserId}`);
 
@@ -36,20 +36,20 @@ export default defineEventHandler(async (event) => {
   });
 
   if (!session) {
-    throw createError({ statusCode: 401, statusMessage: "Unauthorized" });
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
   }
 
   if (!id) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Collection id is required",
+      statusMessage: 'Collection id is required',
     });
   }
 
   if (!targetUserId) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Member user id is required",
+      statusMessage: 'Member user id is required',
     });
   }
 
@@ -67,14 +67,14 @@ export default defineEventHandler(async (event) => {
   if (!collection?.id) {
     throw createError({
       statusCode: 404,
-      statusMessage: "Collection not found",
+      statusMessage: 'Collection not found',
     });
   }
 
   if (collection.isPersonal) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Personal collections are not shareable",
+      statusMessage: 'Personal collections are not shareable',
     });
   }
 
@@ -93,8 +93,8 @@ export default defineEventHandler(async (event) => {
     .limit(1);
 
   const actingRole = actingMembership[0]?.role;
-  if (actingRole !== "owner" && actingRole !== "editor") {
-    throw createError({ statusCode: 403, statusMessage: "Forbidden" });
+  if (actingRole !== 'owner' && actingRole !== 'editor') {
+    throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
   }
 
   // v1 guard: you cannot remove yourself (owner must delete or transfer ownership)
@@ -102,7 +102,7 @@ export default defineEventHandler(async (event) => {
     throw createError({
       statusCode: 400,
       statusMessage:
-        "You cannot remove yourself from a collection. Delete the collection or transfer ownership instead.",
+        'You cannot remove yourself from a collection. Delete the collection or transfer ownership instead.',
     });
   }
 

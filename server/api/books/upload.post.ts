@@ -122,9 +122,8 @@ async function parseBookMetadataFromBuffer(opts: {
       identifiers: [
         meta.ISBN ? { type: 'isbn', value: meta.ISBN } : null,
         meta.UUID ? { type: 'uuid', value: meta.UUID } : null,
-      ].filter(
-        (x): x is { type: string; value: string } =>
-          Boolean(x && x.type && x.value),
+      ].filter((x): x is { type: string; value: string } =>
+        Boolean(x && x.type && x.value),
       ),
       description: meta.description,
       language: meta.language,
@@ -238,7 +237,10 @@ async function processOneBookUpload(
 
   if (input.replaceBookId) {
     if (!input.allowDuplicate) {
-      throw createError({ statusCode: 400, statusMessage: 'Missing allowDuplicate for replace' });
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Missing allowDuplicate for replace',
+      });
     }
 
     await deleteBook({
@@ -494,11 +496,12 @@ export default defineEventHandler(async (event) => {
       return s === '1' || s === 'true' || s === 'yes' || s === 'on';
     });
 
-  const replaceBookId = form
-    .filter((p) => p.name === 'replaceBookId')
-    .map((p) => (typeof p.data === 'string' ? p.data : p.data?.toString()))
-    .map((s) => (s ?? '').toString().trim())
-    .find((s) => s.length > 0) ?? null;
+  const replaceBookId =
+    form
+      .filter((p) => p.name === 'replaceBookId')
+      .map((p) => (typeof p.data === 'string' ? p.data : p.data?.toString()))
+      .map((s) => (s ?? '').toString().trim())
+      .find((s) => s.length > 0) ?? null;
 
   if (replaceBookId && !allowDuplicate) {
     throw createError({

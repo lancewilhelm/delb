@@ -1,4 +1,4 @@
-import path from "node:path";
+import path from 'node:path';
 
 /**
  * Create a filesystem-safe segment (directory/file name component).
@@ -12,15 +12,15 @@ import path from "node:path";
  * This is intentionally conservative for an MVP. You can later swap to a more
  * sophisticated slugger while keeping the same exported API.
  */
-export function toSafePathSegment(input: string, fallback = "unknown"): string {
-  const raw = (input ?? "").toString().trim();
+export function toSafePathSegment(input: string, fallback = 'unknown'): string {
+  const raw = (input ?? '').toString().trim();
   if (!raw) return fallback;
 
   // Normalize Unicode to reduce weird equivalence issues (e.g. accents)
-  let s = raw.normalize("NFKC");
+  let s = raw.normalize('NFKC');
 
   // Replace path separators & common unsafe characters with spaces
-  s = s.replace(/[\\/]/g, " ");
+  s = s.replace(/[\\/]/g, ' ');
 
   // Avoid embedding control characters in regex literals (lint rule: `no-control-regex`).
   // Filter control chars via codepoints instead of regex.
@@ -31,21 +31,21 @@ export function toSafePathSegment(input: string, fallback = "unknown"): string {
       // Exclude ASCII control chars + DEL
       return !(cp <= 0x1f || cp === 0x7f);
     })
-    .join("");
+    .join('');
 
   // Windows-reserved characters (NUL already removed above)
-  s = s.replace(/[<>:"|?*]/g, " ");
+  s = s.replace(/[<>:"|?*]/g, ' ');
 
   // Avoid dot segments / traversal
-  s = s.replace(/\.\.+/g, ".");
-  s = s.replace(/^\.+/, ""); // leading dots
-  s = s.replace(/\.+$/, ""); // trailing dots
+  s = s.replace(/\.\.+/g, '.');
+  s = s.replace(/^\.+/, ''); // leading dots
+  s = s.replace(/\.+$/, ''); // trailing dots
 
   // Collapse whitespace
-  s = s.replace(/\s+/g, " ").trim();
+  s = s.replace(/\s+/g, ' ').trim();
 
   // Windows: cannot end with space or dot
-  s = s.replace(/[. ]+$/g, "");
+  s = s.replace(/[. ]+$/g, '');
 
   if (!s) return fallback;
 
@@ -66,13 +66,13 @@ export function buildBookRelativePath(opts: {
   title: string;
   filename: string;
 }): string {
-  const authorDir = toSafePathSegment(opts.author, "Unknown Author");
-  const titleDir = toSafePathSegment(opts.title, "Untitled");
-  const fileName = toSafePathSegment(opts.filename, "book");
+  const authorDir = toSafePathSegment(opts.author, 'Unknown Author');
+  const titleDir = toSafePathSegment(opts.title, 'Untitled');
+  const fileName = toSafePathSegment(opts.filename, 'book');
 
   // Always store as a forward-slash path in DB for portability.
   // (We'll resolve to an absolute FS path at runtime server-side.)
-  return ["library", authorDir, titleDir, fileName].join("/");
+  return ['library', authorDir, titleDir, fileName].join('/');
 }
 
 /**

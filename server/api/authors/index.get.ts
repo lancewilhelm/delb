@@ -106,7 +106,8 @@ export default defineEventHandler(async (event) => {
       id: r.id,
       name: r.name,
       // SQLite returns integers for COUNT; coerce defensively
-      bookCount: typeof r.bookCount === 'number' ? r.bookCount : Number(r.bookCount),
+      bookCount:
+        typeof r.bookCount === 'number' ? r.bookCount : Number(r.bookCount),
     }));
 
     const authorIds = outBase.map((a) => a.id).filter(Boolean);
@@ -131,7 +132,9 @@ export default defineEventHandler(async (event) => {
               and(
                 inArray(bookAuthors.authorId, authorIds),
                 eq(collectionMembers.userId, session.user.id),
-                collectionId ? eq(collectionBooks.collectionId, collectionId) : undefined,
+                collectionId
+                  ? eq(collectionBooks.collectionId, collectionId)
+                  : undefined,
               ),
             )
             // Avoid duplicates when the same book is in multiple collections within scope.
@@ -168,7 +171,9 @@ export default defineEventHandler(async (event) => {
         id: bid,
         title,
         coverImagePath,
-        coverThumbnailUrl: coverImagePath ? coverThumbUrl(coverImagePath) : null,
+        coverThumbnailUrl: coverImagePath
+          ? coverThumbUrl(coverImagePath)
+          : null,
       });
       booksByAuthorId.set(aid, list);
     }

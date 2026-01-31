@@ -13,17 +13,20 @@ This document explains how user/global settings are persisted, how they are load
 ## Storage Strategy
 
 ### Client-side persistence
+
 Settings are persisted locally via Pinia persisted state with storage set to **localStorage** in `nuxt.config.ts`:
 
 - `piniaPluginPersistedstate.storage = 'localStorage'`
 - Stores using `persist: true` will now persist to localStorage.
 
 This applies to:
+
 - `userSettings`
 - `globalSettings`
 - `ui`
 
 ### Server-side source of truth
+
 Settings are stored in the DB and fetched through:
 
 - `GET /api/settings` → returns `userSettings`, `globalSettings`, and capabilities
@@ -56,6 +59,7 @@ This ensures that the theme is already in place **before HTML is delivered**.
 ## Theme Initialization
 
 ### Server
+
 - `app/plugins/init-theme.server.ts`
 - Uses `userSettingsStore.activeSettings.theme` to set:
   ```html
@@ -63,6 +67,7 @@ This ensures that the theme is already in place **before HTML is delivered**.
   ```
 
 ### Client
+
 - `app/plugins/init-theme.client.ts`
 - Watches `userSettingsStore.activeSettings.theme` and loads the theme with `loadTheme(...)`.
 
@@ -97,12 +102,12 @@ On logout:
 
 ## Summary
 
-| Concern | Strategy |
-|--------|----------|
-| Persistence | localStorage (Pinia persisted state) |
-| SSR theme correctness | SSR preload via `/api/settings` |
-| Avoid FOUC | Apply theme on SSR using hydrated store |
-| Source of truth | DB via `/api/settings` |
+| Concern               | Strategy                                |
+| --------------------- | --------------------------------------- |
+| Persistence           | localStorage (Pinia persisted state)    |
+| SSR theme correctness | SSR preload via `/api/settings`         |
+| Avoid FOUC            | Apply theme on SSR using hydrated store |
+| Source of truth       | DB via `/api/settings`                  |
 
 ---
 

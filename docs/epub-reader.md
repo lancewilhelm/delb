@@ -7,6 +7,7 @@ This document covers the initial EPUB reader implementation and how reading posi
 The EPUB reader is a full-screen experience powered by `epubjs`. It is accessible from the book detail page when an EPUB file is available.
 
 Key features:
+
 - Full-screen reader layout
 - Previous/Next navigation
 - Keyboard navigation (Left/Right arrows)
@@ -21,6 +22,7 @@ The reader lives at:
 - `app/pages/books/[id]/read.vue`
 
 This page:
+
 - Loads the EPUB from the download endpoint using `format=epub` (and `fileId` when available)
 - Restores the last saved reading position (if any)
 - Saves position automatically when the reader relocates
@@ -39,6 +41,7 @@ Reading position is stored per user and per book.
 ### Table: `user_book_reading_position`
 
 Fields:
+
 - `userId` (string, required)
 - `bookId` (string, required)
 - `location` (string, required)
@@ -46,6 +49,7 @@ Fields:
 - `updatedAt` (timestamp)
 
 Notes:
+
 - `location` stores the EPUB.js CFI (or other serialized location)
 - `progress` is a percentage (0..100) when available
 
@@ -56,6 +60,7 @@ Notes:
 `GET /api/books/:id/download`
 
 Query params:
+
 - `format`: when set to `epub`, forces an EPUB response (reader requirement)
 - `fileId`: optionally downloads a specific stored file for the book (used to disambiguate when multiple files exist)
 
@@ -64,6 +69,7 @@ Query params:
 `GET /api/books/:id/reading-position`
 
 Response:
+
 - `{ success: true, data: { location: string | null, progress: number | null } }`
 
 ### Update reading position
@@ -71,9 +77,11 @@ Response:
 `PUT /api/books/:id/reading-position`
 
 Request:
+
 - `{ location: string | null, progress?: number | null }`
 
 Behavior:
+
 - If `location` is null/empty, the position is cleared.
 - Otherwise, it upserts the record.
 
@@ -87,6 +95,7 @@ Behavior:
 ## Future Enhancements
 
 Potential upgrades:
+
 - Persisting position on `beforeunload`
 - Font size / theme controls
 - Highlights, notes, and bookmarks

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed } from 'vue';
 
 const props = defineProps<{
   theme: {
@@ -14,8 +14,8 @@ const props = defineProps<{
   favoriteContext?: boolean;
 }>();
 const emit = defineEmits<{
-  (e: "select", theme: typeof props.theme): void;
-  (e: "preview" | "deleteFavorite" | "addFavorite", name: string): void;
+  (e: 'select', theme: typeof props.theme): void;
+  (e: 'preview' | 'deleteFavorite' | 'addFavorite', name: string): void;
 }>();
 
 const userSettingsStore = useUserSettingsStore();
@@ -28,17 +28,17 @@ const isCurrentTheme = computed(
 );
 
 function handleClick() {
-  emit("select", props.theme);
+  emit('select', props.theme);
 }
 function handleMouseOver() {
   isHovered.value = true;
-  emit("preview", props.theme.name);
+  emit('preview', props.theme.name);
 }
 function handleDeleteFavorite() {
-  emit("deleteFavorite", props.theme.name);
+  emit('deleteFavorite', props.theme.name);
 }
 function handleAddFavorite() {
-  emit("addFavorite", props.theme.name);
+  emit('addFavorite', props.theme.name);
 }
 
 const isHovered = ref(false);

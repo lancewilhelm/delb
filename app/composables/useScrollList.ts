@@ -37,7 +37,7 @@ export function useScrollList({ nearBottomThreshold = 75 } = {}) {
   }
 
   onMounted(() => {
-    containerRef.value?.addEventListener("scroll", handleScroll);
+    containerRef.value?.addEventListener('scroll', handleScroll);
     nextTick(() => {
       setTimeout(() => {
         if (!containerRef.value) return;
@@ -47,7 +47,7 @@ export function useScrollList({ nearBottomThreshold = 75 } = {}) {
   });
 
   onBeforeUnmount(() => {
-    containerRef.value?.removeEventListener("scroll", handleScroll);
+    containerRef.value?.removeEventListener('scroll', handleScroll);
   });
 
   return {

@@ -24,7 +24,10 @@ async function getPersonalCollectionIdForUser(userId: string): Promise<string> {
     .from(collectionMembers)
     .innerJoin(collections, eq(collectionMembers.collectionId, collections.id))
     .where(
-      and(eq(collectionMembers.userId, userId), eq(collections.isPersonal, true)),
+      and(
+        eq(collectionMembers.userId, userId),
+        eq(collections.isPersonal, true),
+      ),
     )
     .limit(1);
 
@@ -103,7 +106,8 @@ export async function resolveDropboxTarget(): Promise<DropboxTarget> {
     });
   }
 
-  const personalCollectionId = await getPersonalCollectionIdForUser(ownerUserId);
+  const personalCollectionId =
+    await getPersonalCollectionIdForUser(ownerUserId);
 
   // Additional collections (admin-configured). We intentionally exclude Personal;
   // Personal is always included via `personalCollectionId`.

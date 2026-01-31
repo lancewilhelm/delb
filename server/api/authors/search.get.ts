@@ -1,8 +1,8 @@
-import { like } from "drizzle-orm";
-import { cloudDb } from "~~/server/utils/db/cloud";
-import { authors } from "~/utils/db/schema";
-import { logger } from "~/utils/logger";
-import { auth } from "~/utils/auth";
+import { like } from 'drizzle-orm';
+import { cloudDb } from '~~/server/utils/db/cloud';
+import { authors } from '~/utils/db/schema';
+import { logger } from '~/utils/logger';
+import { auth } from '~/utils/auth';
 
 /**
  * GET /api/authors/search?q=...
@@ -21,7 +21,7 @@ import { auth } from "~/utils/auth";
  *   that still feels good for typeahead.
  */
 export default defineEventHandler(async (event) => {
-  logger.debug("GET /api/authors/search");
+  logger.debug('GET /api/authors/search');
 
   const session = await auth.api.getSession({
     headers: event.headers,
@@ -29,9 +29,9 @@ export default defineEventHandler(async (event) => {
 
   if (
     !session ||
-    (session.user.role !== "admin" && session.user.role !== "owner")
+    (session.user.role !== 'admin' && session.user.role !== 'owner')
   ) {
-    throw createError({ statusCode: 401, statusMessage: "Unauthorized" });
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
   }
 
   const { q, limit } = getQuery(event) as {
@@ -39,7 +39,7 @@ export default defineEventHandler(async (event) => {
     limit?: string;
   };
 
-  const raw = (q ?? "").toString().trim();
+  const raw = (q ?? '').toString().trim();
 
   if (!raw) {
     return {
@@ -59,7 +59,7 @@ export default defineEventHandler(async (event) => {
   // SQLite LIKE supports % and _ as wildcards; backslash escaping works in many setups,
   // but to stay simple we just replace them with escaped versions. Drizzle will parameterize it.
   const escapeLike = (s: string) =>
-    s.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+    s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 
   const needle = escapeLike(raw);
   const prefix = `${needle}%`;
@@ -97,7 +97,7 @@ export default defineEventHandler(async (event) => {
 
     const scored = unique
       .map((r) => {
-        const name = r.name ?? "";
+        const name = r.name ?? '';
         const lower = name.toLowerCase();
 
         const starts = lower.startsWith(lowerNeedle);
@@ -128,10 +128,10 @@ export default defineEventHandler(async (event) => {
       },
     };
   } catch (error: unknown) {
-    logger.error(error, "GET /api/authors/search: failed");
+    logger.error(error, 'GET /api/authors/search: failed');
     throw createError({
       statusCode: 500,
-      statusMessage: "Failed to search authors",
+      statusMessage: 'Failed to search authors',
     });
   }
 });

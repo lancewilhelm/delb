@@ -92,7 +92,9 @@ const canEditScopeCollection = computed(() => {
   return c.role === 'owner' || c.role === 'editor';
 });
 
-const isInCollectionScope = computed(() => Boolean(activeScopeCollectionId.value));
+const isInCollectionScope = computed(() =>
+  Boolean(activeScopeCollectionId.value),
+);
 const showBar = computed(() => props.enabled && selectionStore.selectMode);
 
 const selectedSummary = computed(() => {
@@ -174,18 +176,17 @@ async function removeFromScopeCollection() {
   removeBusy.value = true;
 
   try {
-    const body =
-      selectionStore.allSelectedInScope
-        ? {
-            allInCollection: true,
-            excludedBookIds: getExcludedBookIds(),
-            removeFromCollectionIds: [scopeId],
-          }
-        : {
-            allInCollection: false,
-            bookIds: getExplicitSelectedBookIds(),
-            removeFromCollectionIds: [scopeId],
-          };
+    const body = selectionStore.allSelectedInScope
+      ? {
+          allInCollection: true,
+          excludedBookIds: getExcludedBookIds(),
+          removeFromCollectionIds: [scopeId],
+        }
+      : {
+          allInCollection: false,
+          bookIds: getExplicitSelectedBookIds(),
+          removeFromCollectionIds: [scopeId],
+        };
 
     const res = await $fetch<BulkResponse>(
       `/api/collections/${encodeURIComponent(scopeId)}/books/bulk`,
@@ -256,18 +257,17 @@ async function addToTargetCollection() {
     // In collection scope we can use the collection bulk endpoint (supports allInCollection + excluded).
     const scopeId = activeScopeCollectionId.value;
     if (scopeId) {
-      const body =
-        selectionStore.allSelectedInScope
-          ? {
-              allInCollection: true,
-              excludedBookIds: getExcludedBookIds(),
-              addToCollectionIds: [targetId],
-            }
-          : {
-              allInCollection: false,
-              bookIds: getExplicitSelectedBookIds(),
-              addToCollectionIds: [targetId],
-            };
+      const body = selectionStore.allSelectedInScope
+        ? {
+            allInCollection: true,
+            excludedBookIds: getExcludedBookIds(),
+            addToCollectionIds: [targetId],
+          }
+        : {
+            allInCollection: false,
+            bookIds: getExplicitSelectedBookIds(),
+            addToCollectionIds: [targetId],
+          };
 
       const res = await $fetch<BulkResponse>(
         `/api/collections/${encodeURIComponent(scopeId)}/books/bulk`,
@@ -334,7 +334,10 @@ async function addToTargetCollection() {
       <div class="text-sm opacity-80 min-w-0">
         <span class="font-medium">{{ selectedSummary }}</span>
         <span> selected</span>
-        <span v-if="isInCollectionScope && activeScopeCollection" class="opacity-70">
+        <span
+          v-if="isInCollectionScope && activeScopeCollection"
+          class="opacity-70"
+        >
           in {{ activeScopeCollection.name }}
         </span>
       </div>
@@ -353,7 +356,9 @@ async function addToTargetCollection() {
           v-if="isInCollectionScope"
           class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
           type="button"
-          :disabled="!canEditScopeCollection || selectionIsEmpty() || removeBusy"
+          :disabled="
+            !canEditScopeCollection || selectionIsEmpty() || removeBusy
+          "
           @click="removeFromScopeCollection"
         >
           {{ removeBusy ? 'Removing…' : 'Remove from this collection' }}
@@ -405,11 +410,7 @@ async function addToTargetCollection() {
             :disabled="pickerSubmitting"
           >
             <option value="" disabled>Select a collection…</option>
-            <option
-              v-for="c in editableCollections"
-              :key="c.id"
-              :value="c.id"
-            >
+            <option v-for="c in editableCollections" :key="c.id" :value="c.id">
               {{ c.name }}
             </option>
           </select>
@@ -449,7 +450,8 @@ async function addToTargetCollection() {
 
         <div class="text-xs opacity-70">
           <div v-if="selectionStore.allSelectedInScope && !isInCollectionScope">
-            Note: “Select all” in the All view is not supported for bulk add yet.
+            Note: “Select all” in the All view is not supported for bulk add
+            yet.
           </div>
         </div>
       </div>

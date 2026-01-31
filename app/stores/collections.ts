@@ -1,6 +1,6 @@
-import { defineStore } from "pinia";
+import { defineStore } from 'pinia';
 
-export type CollectionRole = "owner" | "editor" | "viewer";
+export type CollectionRole = 'owner' | 'editor' | 'viewer';
 
 export type Collection = {
   id: string;
@@ -33,7 +33,7 @@ type CollectionsApiResponse = {
 type UpdateCollectionApiResponse = {
   success: boolean;
   data?: {
-    collection?: Pick<Collection, "id" | "name">;
+    collection?: Pick<Collection, 'id' | 'name'>;
   };
   message?: string;
 };
@@ -81,11 +81,11 @@ type TransferOwnershipApiResponse = {
 };
 
 export type ActiveCollectionSelection =
-  | { kind: "all" }
-  | { kind: "collection"; collectionId: string };
+  | { kind: 'all' }
+  | { kind: 'collection'; collectionId: string };
 
 export const useCollectionsStore = defineStore(
-  "collections",
+  'collections',
   () => {
     const collections = ref<Collection[]>([]);
     const loading = ref(false);
@@ -96,27 +96,27 @@ export const useCollectionsStore = defineStore(
 
     // "All" means: show books from all collections the user is a member of.
     // Otherwise, a specific collection governs the visible books list.
-    const activeSelection = ref<ActiveCollectionSelection>({ kind: "all" });
+    const activeSelection = ref<ActiveCollectionSelection>({ kind: 'all' });
 
     const activeCollectionId = computed(() => {
       const sel = activeSelection.value;
-      if (sel.kind === "collection") return sel.collectionId;
+      if (sel.kind === 'collection') return sel.collectionId;
       return null;
     });
 
     const activeCollection = computed(() => {
       const sel = activeSelection.value;
-      if (sel.kind !== "collection") return null;
+      if (sel.kind !== 'collection') return null;
 
       return collections.value.find((c) => c.id === sel.collectionId) ?? null;
     });
 
     function setActiveAll() {
-      activeSelection.value = { kind: "all" };
+      activeSelection.value = { kind: 'all' };
     }
 
     function setActiveCollection(collectionId: string) {
-      activeSelection.value = { kind: "collection", collectionId };
+      activeSelection.value = { kind: 'collection', collectionId };
     }
 
     async function fetchCollections() {
@@ -124,15 +124,15 @@ export const useCollectionsStore = defineStore(
       errorMessage.value = null;
 
       try {
-        const res = await $fetch<CollectionsApiResponse>("/api/collections", {
-          method: "GET",
+        const res = await $fetch<CollectionsApiResponse>('/api/collections', {
+          method: 'GET',
         });
 
         collections.value = res?.data?.collections ?? [];
 
         // If the user had a specific collection selected and it no longer exists,
         // fall back to "All".
-        if (activeSelection.value.kind === "collection") {
+        if (activeSelection.value.kind === 'collection') {
           const sel = activeSelection.value;
           if (!collections.value.some((c) => c.id === sel.collectionId)) {
             setActiveAll();
@@ -148,7 +148,7 @@ export const useCollectionsStore = defineStore(
           e?.data?.message ||
           e?.statusMessage ||
           e?.message ||
-          "Failed to load collections";
+          'Failed to load collections';
       } finally {
         loading.value = false;
       }
@@ -159,25 +159,25 @@ export const useCollectionsStore = defineStore(
      * This enforces "owner/editor" on the server; client should still gate the UI.
      */
     async function updateCollectionName(collectionId: string, name: string) {
-      const trimmed = (name ?? "").trim();
+      const trimmed = (name ?? '').trim();
       if (!trimmed) {
-        throw new Error("Collection name is required");
+        throw new Error('Collection name is required');
       }
       if (trimmed.length > 120) {
-        throw new Error("Collection name is too long");
+        throw new Error('Collection name is too long');
       }
 
       const res = await $fetch<UpdateCollectionApiResponse>(
         `/api/collections/${encodeURIComponent(collectionId)}`,
         {
-          method: "PUT",
+          method: 'PUT',
           body: { name: trimmed },
         },
       );
 
       const updated = res?.data?.collection;
       if (!updated?.id) {
-        throw new Error(res?.message || "Failed to update collection");
+        throw new Error(res?.message || 'Failed to update collection');
       }
 
       const idx = collections.value.findIndex((c) => c.id === updated.id);
@@ -198,7 +198,7 @@ export const useCollectionsStore = defineStore(
     async function fetchCollectionMembers(collectionId: string) {
       const res = await $fetch<CollectionMembersApiResponse>(
         `/api/collections/${encodeURIComponent(collectionId)}/members`,
-        { method: "GET" },
+        { method: 'GET' },
       );
 
       const members = res?.data?.members ?? [];
@@ -219,20 +219,20 @@ export const useCollectionsStore = defineStore(
       email: string;
       role: CollectionRole;
     }) {
-      const email = (opts.email ?? "").trim().toLowerCase();
-      if (!email) throw new Error("Email is required");
+      const email = (opts.email ?? '').trim().toLowerCase();
+      if (!email) throw new Error('Email is required');
 
       const res = await $fetch<UpsertCollectionMemberApiResponse>(
         `/api/collections/${encodeURIComponent(opts.collectionId)}/members`,
         {
-          method: "PUT",
+          method: 'PUT',
           body: { email, role: opts.role },
         },
       );
 
       const updated = res?.data?.member;
       if (!updated?.userId) {
-        throw new Error(res?.message || "Failed to update member");
+        throw new Error(res?.message || 'Failed to update member');
       }
 
       const existing = membersByCollectionId.value[opts.collectionId] ?? [];
@@ -264,16 +264,16 @@ export const useCollectionsStore = defineStore(
       collectionId: string;
       userId: string;
     }) {
-      const userId = (opts.userId ?? "").trim();
-      if (!userId) throw new Error("User id is required");
+      const userId = (opts.userId ?? '').trim();
+      if (!userId) throw new Error('User id is required');
 
       const res = await $fetch<RemoveCollectionMemberApiResponse>(
         `/api/collections/${encodeURIComponent(opts.collectionId)}/members/${encodeURIComponent(userId)}`,
-        { method: "DELETE" },
+        { method: 'DELETE' },
       );
 
       if (!res?.success) {
-        throw new Error(res?.message || "Failed to remove member");
+        throw new Error(res?.message || 'Failed to remove member');
       }
 
       const existing = membersByCollectionId.value[opts.collectionId] ?? [];
@@ -294,11 +294,11 @@ export const useCollectionsStore = defineStore(
     async function leaveCollection(collectionId: string) {
       const res = await $fetch<LeaveCollectionApiResponse>(
         `/api/collections/${encodeURIComponent(collectionId)}/leave`,
-        { method: "POST" },
+        { method: 'POST' },
       );
 
       if (!res?.success) {
-        throw new Error(res?.message || "Failed to leave collection");
+        throw new Error(res?.message || 'Failed to leave collection');
       }
 
       // Membership is gone, so refresh the list.
@@ -313,7 +313,7 @@ export const useCollectionsStore = defineStore(
       membersByCollectionId.value = nextMembers;
 
       if (
-        activeSelection.value.kind === "collection" &&
+        activeSelection.value.kind === 'collection' &&
         activeSelection.value.collectionId === collectionId
       ) {
         setActiveAll();
@@ -334,16 +334,16 @@ export const useCollectionsStore = defineStore(
       collectionId: string;
       email: string;
     }) {
-      const email = (opts.email ?? "").trim().toLowerCase();
-      if (!email) throw new Error("Email is required");
+      const email = (opts.email ?? '').trim().toLowerCase();
+      if (!email) throw new Error('Email is required');
 
       const res = await $fetch<TransferOwnershipApiResponse>(
         `/api/collections/${encodeURIComponent(opts.collectionId)}/transfer-ownership`,
-        { method: "POST", body: { email } },
+        { method: 'POST', body: { email } },
       );
 
       if (!res?.success) {
-        throw new Error(res?.message || "Failed to transfer ownership");
+        throw new Error(res?.message || 'Failed to transfer ownership');
       }
 
       // Ownership affects permissions and visible UI, so refresh.
@@ -364,11 +364,11 @@ export const useCollectionsStore = defineStore(
     async function deleteCollection(collectionId: string) {
       const res = await $fetch<DeleteCollectionApiResponse>(
         `/api/collections/${encodeURIComponent(collectionId)}`,
-        { method: "DELETE" },
+        { method: 'DELETE' },
       );
 
       if (!res?.success) {
-        throw new Error(res?.message || "Failed to delete collection");
+        throw new Error(res?.message || 'Failed to delete collection');
       }
 
       // Update local state eagerly
@@ -383,7 +383,7 @@ export const useCollectionsStore = defineStore(
       membersByCollectionId.value = nextMembers;
 
       if (
-        activeSelection.value.kind === "collection" &&
+        activeSelection.value.kind === 'collection' &&
         activeSelection.value.collectionId === collectionId
       ) {
         setActiveAll();
@@ -395,17 +395,17 @@ export const useCollectionsStore = defineStore(
     /**
      * Convenience for UI logic: can the current user upload/add books to this collection?
      */
-    function canEditCollection(collection: Pick<Collection, "role">) {
+    function canEditCollection(collection: Pick<Collection, 'role'>) {
       // owner/editor can rename (and later: manage books)
-      return collection.role === "owner" || collection.role === "editor";
+      return collection.role === 'owner' || collection.role === 'editor';
     }
 
     /**
      * Convenience for UI logic: can the current user manage sharing/members?
      * v1: owner and editor can add/remove members (but not remove self-owner; see API)
      */
-    function canManageMembers(collection: Pick<Collection, "role">) {
-      return collection.role === "owner" || collection.role === "editor";
+    function canManageMembers(collection: Pick<Collection, 'role'>) {
+      return collection.role === 'owner' || collection.role === 'editor';
     }
 
     /**
@@ -413,10 +413,10 @@ export const useCollectionsStore = defineStore(
      * v1: owner-only.
      */
     function canTransferOwnership(
-      collection: Pick<Collection, "role" | "isPersonal">,
+      collection: Pick<Collection, 'role' | 'isPersonal'>,
     ) {
       if (collection.isPersonal) return false;
-      return collection.role === "owner";
+      return collection.role === 'owner';
     }
 
     /**
@@ -424,10 +424,10 @@ export const useCollectionsStore = defineStore(
      * v1: owner-only (Personal must be blocked server-side too).
      */
     function canDeleteCollection(
-      collection: Pick<Collection, "role" | "isPersonal">,
+      collection: Pick<Collection, 'role' | 'isPersonal'>,
     ) {
       if (collection.isPersonal) return false;
-      return collection.role === "owner";
+      return collection.role === 'owner';
     }
 
     function $reset() {
@@ -435,7 +435,7 @@ export const useCollectionsStore = defineStore(
       membersByCollectionId.value = {};
       loading.value = false;
       errorMessage.value = null;
-      activeSelection.value = { kind: "all" };
+      activeSelection.value = { kind: 'all' };
     }
 
     return {

@@ -1,7 +1,7 @@
-import path from "node:path";
-import { readFile, stat } from "node:fs/promises";
+import path from 'node:path';
+import { readFile, stat } from 'node:fs/promises';
 
-import { logger } from "~/utils/logger";
+import { logger } from '~/utils/logger';
 
 /**
  * Serves cover images stored under:
@@ -30,23 +30,23 @@ import { logger } from "~/utils/logger";
  * - If you later want auth gating, you can add session checks here.
  */
 export default defineEventHandler(async (event) => {
-  const raw = getRouterParam(event, "path");
+  const raw = getRouterParam(event, 'path');
   const parts = Array.isArray(raw)
     ? raw
-    : typeof raw === "string"
-      ? raw.split("/").filter(Boolean)
+    : typeof raw === 'string'
+      ? raw.split('/').filter(Boolean)
       : [];
 
   const kindRaw = getQuery(event)?.kind;
   const kind =
-    typeof kindRaw === "string" ? kindRaw.trim().toLowerCase() : null;
+    typeof kindRaw === 'string' ? kindRaw.trim().toLowerCase() : null;
 
-  if (kind && kind !== "thumb" && kind !== "source") {
-    throw createError({ statusCode: 400, statusMessage: "Invalid kind" });
+  if (kind && kind !== 'thumb' && kind !== 'source') {
+    throw createError({ statusCode: 400, statusMessage: 'Invalid kind' });
   }
 
   // Base directory for all book assets
-  const booksBaseAbs = path.resolve(process.cwd(), "library");
+  const booksBaseAbs = path.resolve(process.cwd(), 'library');
 
   // Join provided path under the base dir
   // Note: route params come URL-decoded by Nitro, but we decode defensively.
@@ -56,14 +56,14 @@ export default defineEventHandler(async (event) => {
   // Path traversal protection: ensure requestedAbs is within booksBaseAbs
   const relToBaseInitial = path.relative(booksBaseAbs, requestedAbsInitial);
   if (
-    relToBaseInitial.startsWith("..") ||
+    relToBaseInitial.startsWith('..') ||
     relToBaseInitial.includes(`..${path.sep}`)
   ) {
     logger.warn(
       { requestedRel },
-      "GET /api/media/covers: blocked path traversal attempt",
+      'GET /api/media/covers: blocked path traversal attempt',
     );
-    throw createError({ statusCode: 400, statusMessage: "Invalid path" });
+    throw createError({ statusCode: 400, statusMessage: 'Invalid path' });
   }
 
   const isFile = async (absPath: string) => {
@@ -86,7 +86,7 @@ export default defineEventHandler(async (event) => {
 
   const resolveToThumbPath = async (abs: string): Promise<string | null> => {
     const dirAbs = (await isDir(abs)) ? abs : path.dirname(abs);
-    const thumbAbs = path.join(dirAbs, "thumb.webp");
+    const thumbAbs = path.join(dirAbs, 'thumb.webp');
     if (await isFile(thumbAbs)) return thumbAbs;
     return null;
   };
@@ -96,25 +96,25 @@ export default defineEventHandler(async (event) => {
 
     // Preference order: canonical-ish cover names, then legacy names, then Calibre's cover.*
     const candidates = [
-      "cover.jpg",
-      "cover.jpeg",
-      "cover.png",
-      "cover.webp",
-      "cover.gif",
-      "cover.svg",
-      "cover.avif",
-      "cover.tiff",
-      "cover.source.jpg",
-      "cover.source.jpeg",
-      "cover.source.png",
-      "cover.source.webp",
-      "source.jpg",
-      "source.jpeg",
-      "source.png",
-      "source.webp",
-      "cover.jpg",
-      "cover.jpeg",
-      "cover.png",
+      'cover.jpg',
+      'cover.jpeg',
+      'cover.png',
+      'cover.webp',
+      'cover.gif',
+      'cover.svg',
+      'cover.avif',
+      'cover.tiff',
+      'cover.source.jpg',
+      'cover.source.jpeg',
+      'cover.source.png',
+      'cover.source.webp',
+      'source.jpg',
+      'source.jpeg',
+      'source.png',
+      'source.webp',
+      'cover.jpg',
+      'cover.jpeg',
+      'cover.png',
     ];
 
     const seen = new Set<string>();
@@ -132,17 +132,17 @@ export default defineEventHandler(async (event) => {
   // Determine final requested path (may be rewritten by `kind`)
   let requestedAbs = requestedAbsInitial;
 
-  if (kind === "thumb") {
+  if (kind === 'thumb') {
     // If the user asked for a thumb explicitly, always attempt to serve thumb.webp from the folder.
     const thumbAbs = await resolveToThumbPath(requestedAbsInitial);
     if (!thumbAbs) {
-      throw createError({ statusCode: 404, statusMessage: "Not found" });
+      throw createError({ statusCode: 404, statusMessage: 'Not found' });
     }
     requestedAbs = thumbAbs;
-  } else if (kind === "source") {
+  } else if (kind === 'source') {
     const sourceAbs = await resolveToSourcePath(requestedAbsInitial);
     if (!sourceAbs) {
-      throw createError({ statusCode: 404, statusMessage: "Not found" });
+      throw createError({ statusCode: 404, statusMessage: 'Not found' });
     }
     requestedAbs = sourceAbs;
   }
@@ -150,20 +150,20 @@ export default defineEventHandler(async (event) => {
   // Only allow common image extensions for covers
   const ext = path.extname(requestedAbs).toLowerCase();
   const allowed = new Set([
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".webp",
-    ".gif",
-    ".svg",
-    ".avif",
-    ".tif",
-    ".tiff",
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.webp',
+    '.gif',
+    '.svg',
+    '.avif',
+    '.tif',
+    '.tiff',
   ]);
   if (!allowed.has(ext)) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Unsupported file type",
+      statusMessage: 'Unsupported file type',
     });
   }
 
@@ -171,29 +171,29 @@ export default defineEventHandler(async (event) => {
     const buf = await readFile(requestedAbs);
 
     const contentType =
-      ext === ".jpg" || ext === ".jpeg"
-        ? "image/jpeg"
-        : ext === ".png"
-          ? "image/png"
-          : ext === ".webp"
-            ? "image/webp"
-            : ext === ".gif"
-              ? "image/gif"
-              : ext === ".svg"
-                ? "image/svg+xml"
-                : ext === ".avif"
-                  ? "image/avif"
-                  : ext === ".tif" || ext === ".tiff"
-                    ? "image/tiff"
-                    : "application/octet-stream";
+      ext === '.jpg' || ext === '.jpeg'
+        ? 'image/jpeg'
+        : ext === '.png'
+          ? 'image/png'
+          : ext === '.webp'
+            ? 'image/webp'
+            : ext === '.gif'
+              ? 'image/gif'
+              : ext === '.svg'
+                ? 'image/svg+xml'
+                : ext === '.avif'
+                  ? 'image/avif'
+                  : ext === '.tif' || ext === '.tiff'
+                    ? 'image/tiff'
+                    : 'application/octet-stream';
 
-    setHeader(event, "Content-Type", contentType);
+    setHeader(event, 'Content-Type', contentType);
     // Cache a bit in dev too; adjust later (or make immutable if fingerprinted)
-    setHeader(event, "Cache-Control", "public, max-age=3600");
+    setHeader(event, 'Cache-Control', 'public, max-age=3600');
 
     return buf;
   } catch {
     // File not found (or unreadable)
-    throw createError({ statusCode: 404, statusMessage: "Not found" });
+    throw createError({ statusCode: 404, statusMessage: 'Not found' });
   }
 });

@@ -32,7 +32,10 @@ function normalizePosix(p: string): string {
     .replace(/\/$/, '');
 }
 
-function resolveUnderLibrary(libraryBaseAbs: string, storedPath: string): string {
+function resolveUnderLibrary(
+  libraryBaseAbs: string,
+  storedPath: string,
+): string {
   const stored = normalizePosix(storedPath);
   const relFromLibrary = stored
     .replace(/^library\//, '')
@@ -141,11 +144,15 @@ export async function deleteBook(opts: {
     }
   }
 
-  await cloudDb.delete(collectionBooks).where(eq(collectionBooks.bookId, bookId));
+  await cloudDb
+    .delete(collectionBooks)
+    .where(eq(collectionBooks.bookId, bookId));
   await cloudDb.delete(bookFiles).where(eq(bookFiles.bookId, bookId));
   await cloudDb.delete(bookAuthors).where(eq(bookAuthors.bookId, bookId));
   await cloudDb.delete(bookTags).where(eq(bookTags.bookId, bookId));
-  await cloudDb.delete(bookIdentifiers).where(eq(bookIdentifiers.bookId, bookId));
+  await cloudDb
+    .delete(bookIdentifiers)
+    .where(eq(bookIdentifiers.bookId, bookId));
   await cloudDb.delete(userBookStatus).where(eq(userBookStatus.bookId, bookId));
   await cloudDb.delete(bookRatings).where(eq(bookRatings.bookId, bookId));
   await cloudDb.delete(bookNotes).where(eq(bookNotes.bookId, bookId));
@@ -153,4 +160,3 @@ export async function deleteBook(opts: {
 
   return { mode };
 }
-

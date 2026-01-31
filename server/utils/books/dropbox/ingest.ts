@@ -12,7 +12,13 @@ import {
 import { eq } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { authors, bookAuthors, bookFiles, books, collectionBooks } from '~/utils/db/schema';
+import {
+  authors,
+  bookAuthors,
+  bookFiles,
+  books,
+  collectionBooks,
+} from '~/utils/db/schema';
 import { logger } from '~/utils/logger';
 
 import { parseEpubMetadataFromBuffer } from '~~/server/utils/books/epub';
@@ -60,7 +66,9 @@ function ensureSupportedBookFormat(filename: string): SupportedBookFormat {
   return ext;
 }
 
-async function parseNonEpubMetadataFromFilename(filename: string): Promise<ParsedBookMetadata> {
+async function parseNonEpubMetadataFromFilename(
+  filename: string,
+): Promise<ParsedBookMetadata> {
   const fallbackTitle = path.basename(filename, path.extname(filename));
   return { title: fallbackTitle || 'Untitled', author: 'Unknown Author' };
 }
@@ -70,10 +78,15 @@ async function parseBookMetadataFromBuffer(opts: {
   format: SupportedBookFormat;
   filename: string;
 }): Promise<ParsedBookMetadata> {
-  const fallbackTitle = path.basename(opts.filename, path.extname(opts.filename));
+  const fallbackTitle = path.basename(
+    opts.filename,
+    path.extname(opts.filename),
+  );
 
   if (opts.format === 'epub') {
-    const meta = await parseEpubMetadataFromBuffer(opts.buffer, { fallbackTitle });
+    const meta = await parseEpubMetadataFromBuffer(opts.buffer, {
+      fallbackTitle,
+    });
     return {
       title: meta.title || fallbackTitle || 'Untitled',
       author: meta.author || 'Unknown Author',
@@ -232,7 +245,10 @@ export async function ingestDropboxFile(opts: {
         updatedAt: now,
       });
 
-      const author = await findOrCreateAuthorByName(tx as unknown as DbLike, authorName);
+      const author = await findOrCreateAuthorByName(
+        tx as unknown as DbLike,
+        authorName,
+      );
       await tx.insert(bookAuthors).values({
         bookId,
         authorId: author.id,

@@ -180,7 +180,9 @@ const targetUserId = computed({
         />
         <span
           class="h-5 w-5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
-          :class="!isAdmin ? 'peer-checked:bg-(--sub-color) cursor-default!' : ''"
+          :class="
+            !isAdmin ? 'peer-checked:bg-(--sub-color) cursor-default!' : ''
+          "
         ></span>
         <span class="font-semibold">enabled</span>
       </label>
@@ -283,7 +285,9 @@ const targetUserId = computed({
             />
             <span
               class="h-5 w-5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
-              :class="!isAdmin ? 'peer-checked:bg-(--sub-color) cursor-default!' : ''"
+              :class="
+                !isAdmin ? 'peer-checked:bg-(--sub-color) cursor-default!' : ''
+              "
             ></span>
             <span class="truncate">{{ c.name }}</span>
           </label>

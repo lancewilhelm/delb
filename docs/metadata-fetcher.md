@@ -3,6 +3,7 @@
 The metadata fetcher feature allows administrators to search for and import book metadata from external sources.
 
 Currently supported sources:
+
 - Google Books (public API)
 - Hardcover (GraphQL API; requires an admin-configured token stored server-side)
 
@@ -12,7 +13,7 @@ When editing a book, administrators can search for and import metadata from exte
 
 Cover images shown in the metadata search results display a small resolution badge (e.g. `1200×1800`) so you can quickly gauge cover quality before importing.
 
-In addition, the **Add book** modal supports importing a *full* book record from metadata (no per-field selection). This is designed for fast entry workflows like barcode/ISBN scanning.
+In addition, the **Add book** modal supports importing a _full_ book record from metadata (no per-field selection). This is designed for fast entry workflows like barcode/ISBN scanning.
 
 ## Provider Selection
 
@@ -42,12 +43,14 @@ Tip: The cover preview on the edit page uses the full-resolution stored cover wh
 ## Add Book Modal (Full Import)
 
 From the Add Book modal ("By metadata" tab), you can either:
+
 - **Add top result** (single step): intended for barcode/ISBN scanning where you want the top match immediately.
 - **Search results** (choose from a list): browse a list of matches and import the entire selected book.
 
 ### Possible duplicates (Add Book modal)
 
 When a possible duplicate is detected while importing a book from metadata, the UI offers:
+
 - **Cancel** (do nothing)
 - **Add existing to collections** (adds the existing candidate book to any selected collections it isn’t already in)
 - **Replace selected** (admin-only; overwrites the selected existing book’s canonical metadata with the incoming metadata, then adds it to missing selected collections)
@@ -56,6 +59,7 @@ When a possible duplicate is detected while importing a book from metadata, the 
 ## Current Implementation Status
 
 ### Phase 1: Search and Selective Import UI (Completed)
+
 - ✅ Google Books API integration via server proxy
 - ✅ Search modal with auto-search capability
 - ✅ Display search results with thumbnails, authors, publisher, published date, and ISBN
@@ -64,12 +68,14 @@ When a possible duplicate is detected while importing a book from metadata, the 
 - ✅ Support for importing: title, authors, description, publisher, published date, language, tags/categories, and cover
 
 ### Hardcover (Provider Setup + Server Proxy)
+
 - ✅ Server-side Hardcover GraphQL search endpoint
 - ✅ Admin UI for configuring Hardcover token (stored server-side; never returned to clients)
 - ✅ Metadata search modal provider toggle (disabled unless token is configured)
 - ✅ Multi-provider search (search Google Books and Hardcover together)
 
 ### Phase 2: Backend Import Logic (In Progress)
+
 - ⏳ Map Google Books data to internal book schema
 - ⏳ Handle authors array → authorChips conversion
 - ⏳ Handle categories → tagChips conversion
@@ -82,6 +88,7 @@ When a possible duplicate is detected while importing a book from metadata, the 
 ### Components
 
 **`BookMetadataSearchModal.vue`**
+
 - Modal component for searching and displaying metadata results
 - Auto-searches when opened with an initial query
 - Handles search state, loading, and error messages
@@ -91,12 +98,14 @@ When a possible duplicate is detected while importing a book from metadata, the 
 - Tracks field selection state for each search result independently
 
 **API Endpoint: `/api/books/metadata/search`**
+
 - Server-side proxy to Google Books API
 - GET endpoint accepting `q` query parameter
 - Returns raw Google Books API response
 - Maximum 20 results per search
 
 **API Endpoint: `/api/books/metadata/hardcover/search`**
+
 - Server-side proxy to Hardcover GraphQL API
 - GET endpoint accepting `q` query parameter
 - Requires a Hardcover token configured by an admin (stored server-side)
@@ -122,7 +131,7 @@ interface GoogleBookItem {
     publishedDate?: string;
     description?: string;
     industryIdentifiers?: Array<{
-      type: string;  // 'ISBN_13' or 'ISBN_10'
+      type: string; // 'ISBN_13' or 'ISBN_10'
       identifier: string;
     }>;
     pageCount?: number;
@@ -140,16 +149,16 @@ interface GoogleBookItem {
 
 The following Google Books API fields map to the internal schema:
 
-| Google Books Field | Internal Schema Field | Type |
-|-------------------|----------------------|------|
-| `volumeInfo.title` | `books.title` | Direct |
-| `volumeInfo.authors[]` | `authors.name` (via `bookAuthors`) | Many-to-many |
-| `volumeInfo.description` | `books.description` | Direct |
-| `volumeInfo.publisher` | `publishers.name` (via `publisherId`) | Foreign key |
-| `volumeInfo.publishedDate` | `books.published` | Direct (string) |
-| `volumeInfo.language` | `books.language` | Direct |
-| `volumeInfo.categories[]` | `tags.name` (via `bookTags`) | Many-to-many |
-| `volumeInfo.imageLinks.thumbnail` | `books.coverImagePath` | Download & convert |
+| Google Books Field                | Internal Schema Field                 | Type               |
+| --------------------------------- | ------------------------------------- | ------------------ |
+| `volumeInfo.title`                | `books.title`                         | Direct             |
+| `volumeInfo.authors[]`            | `authors.name` (via `bookAuthors`)    | Many-to-many       |
+| `volumeInfo.description`          | `books.description`                   | Direct             |
+| `volumeInfo.publisher`            | `publishers.name` (via `publisherId`) | Foreign key        |
+| `volumeInfo.publishedDate`        | `books.published`                     | Direct (string)    |
+| `volumeInfo.language`             | `books.language`                      | Direct             |
+| `volumeInfo.categories[]`         | `tags.name` (via `bookTags`)          | Many-to-many       |
+| `volumeInfo.imageLinks.thumbnail` | `books.coverImagePath`                | Download & convert |
 
 ### Security Considerations
 
@@ -175,6 +184,7 @@ Delb stores the Hardcover token server-side and never returns it to clients. The
 To test the metadata fetcher:
 
 ### Google Books
+
 1. Start the development server: `pnpm run dev`
 2. Log in as an admin user
 3. Navigate to any book's edit page
@@ -187,6 +197,7 @@ To test the metadata fetcher:
 6. Verify that results display correctly with thumbnails and metadata
 
 ### Hardcover (token + endpoint)
+
 1. Log in as an admin user
 2. Go to Admin Settings → Metadata
 3. Paste your Hardcover token (raw token or `Bearer <token>`) and click “save”

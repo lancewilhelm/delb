@@ -1,20 +1,20 @@
 <script setup lang="ts">
 const pages = {
   home: {
-    name: "home",
+    name: 'home',
     action: () => {
-      navigateTo("/");
+      navigateTo('/');
     },
-    url: "/home", // Use a consistent URL for the home page, not the real path
-    icon: "lucide:home",
+    url: '/home', // Use a consistent URL for the home page, not the real path
+    icon: 'lucide:home',
   },
   settings: {
-    name: "settings",
+    name: 'settings',
     action: () => {
-      navigateTo("/settings");
+      navigateTo('/settings');
     },
-    url: "/settings",
-    icon: "lucide:settings",
+    url: '/settings',
+    icon: 'lucide:settings',
   },
 };
 
@@ -24,7 +24,7 @@ const popupRef = ref<HTMLElement | null>(null);
 // Compute the current page based on the route parameter
 const route = useRoute();
 const currentPage = computed(() => {
-  if (route.path === "/") {
+  if (route.path === '/') {
     return pages.home;
   }
 
@@ -42,19 +42,19 @@ const handleClickOutside = (event: MouseEvent) => {
 };
 
 const handleEscapeKey = (event: KeyboardEvent) => {
-  if (event.key === "Escape") {
+  if (event.key === 'Escape') {
     popupVisible.value = false;
   }
 };
 
 onMounted(() => {
-  document.addEventListener("mousedown", handleClickOutside);
-  document.addEventListener("keydown", handleEscapeKey);
+  document.addEventListener('mousedown', handleClickOutside);
+  document.addEventListener('keydown', handleEscapeKey);
 });
 
 onBeforeUnmount(() => {
-  document.removeEventListener("mousedown", handleClickOutside);
-  document.removeEventListener("keydown", handleEscapeKey);
+  document.removeEventListener('mousedown', handleClickOutside);
+  document.removeEventListener('keydown', handleEscapeKey);
 });
 </script>
 

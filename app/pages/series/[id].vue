@@ -54,8 +54,7 @@ const books = ref<Book[]>([]);
 // Sort books by seriesIndex
 const sortedBooks = computed(() => {
   return [...books.value].sort(
-    (a, b) =>
-      (a.seriesIndex ?? 999) - (b.seriesIndex ?? 999),
+    (a, b) => (a.seriesIndex ?? 999) - (b.seriesIndex ?? 999),
   );
 });
 

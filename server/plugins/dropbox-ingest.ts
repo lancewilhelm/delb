@@ -7,4 +7,3 @@ export default defineNitroPlugin((nitroApp) => {
     await watcher.stop();
   });
 });
-

@@ -1,4 +1,4 @@
-import { defu } from "defu";
+import { defu } from 'defu';
 
 type MiddlewareOptions =
   | false
@@ -6,7 +6,7 @@ type MiddlewareOptions =
       /**
        * Only apply auth middleware to guest or user
        */
-      only?: "guest" | "user";
+      only?: 'guest' | 'user';
       /**
        * Redirect authenticated user to this route
        */
@@ -17,13 +17,13 @@ type MiddlewareOptions =
       redirectGuestTo?: string;
     };
 
-declare module "#app" {
+declare module '#app' {
   interface PageMeta {
     auth?: MiddlewareOptions;
   }
 }
 
-declare module "vue-router" {
+declare module 'vue-router' {
   interface RouteMeta {
     auth?: MiddlewareOptions;
   }
@@ -42,9 +42,9 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   // Optional: first-time setup redirect
   if (!loggedIn.value) {
-    const userCount = await $fetch<number>("/api/auth/user-count");
-    if (userCount === 0 && to.path !== "/register") {
-      return navigateTo("/register");
+    const userCount = await $fetch<number>('/api/auth/user-count');
+    if (userCount === 0 && to.path !== '/register') {
+      return navigateTo('/register');
     }
   }
 
@@ -55,13 +55,13 @@ export default defineNuxtRouteMiddleware(async (to) => {
   // }
 
   // Guest-only pages
-  if (only === "guest" && loggedIn.value) {
+  if (only === 'guest' && loggedIn.value) {
     if (to.path === redirectUserTo) return;
     return navigateTo(redirectUserTo);
   }
 
   // User-only pages
-  if (!loggedIn.value && only === "user") {
+  if (!loggedIn.value && only === 'user') {
     if (to.path === redirectGuestTo) return;
     return navigateTo(redirectGuestTo);
   }

@@ -13,7 +13,7 @@
  * - collapse internal runs of whitespace to a single space
  */
 function normalizeSpaces(input: string): string {
-  return (input ?? "").replace(/\s+/g, " ").trim();
+  return (input ?? '').replace(/\s+/g, ' ').trim();
 }
 
 /**
@@ -28,11 +28,11 @@ function normalizeSpaces(input: string): string {
  */
 export function makeTitleSortKey(title: string): string {
   const t = normalizeSpaces(title);
-  if (!t) return "";
+  if (!t) return '';
 
   // Only strip the exact leading article word "The" followed by whitespace.
   // This ensures we don't transform titles like "Then..." or "Theatre...".
-  const stripped = t.replace(/^the\s+/i, "");
+  const stripped = t.replace(/^the\s+/i, '');
   return stripped;
 }
 
@@ -53,16 +53,16 @@ export function makeTitleSortKey(title: string): string {
  */
 export function makeAuthorSortKey(name: string): string {
   const n = normalizeSpaces(name);
-  if (!n) return "";
+  if (!n) return '';
 
   // If already in "Last, First" form, keep it (just normalized).
-  if (n.includes(",")) return n;
+  if (n.includes(',')) return n;
 
-  const parts = n.split(" ").filter(Boolean);
+  const parts = n.split(' ').filter(Boolean);
   if (parts.length <= 1) return n;
 
-  const last = parts[parts.length - 1] ?? "";
-  const rest = parts.slice(0, -1).join(" ").trim();
+  const last = parts[parts.length - 1] ?? '';
+  const rest = parts.slice(0, -1).join(' ').trim();
 
   return rest ? `${last}, ${rest}` : last;
 }

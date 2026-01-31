@@ -157,7 +157,10 @@ async function resolveMenuItems(): Promise<ContextMenuItem[]> {
 
 async function onContextMenu(e: MouseEvent) {
   if (!props.contextMenuItems) return;
-  if (Array.isArray(props.contextMenuItems) && props.contextMenuItems.length === 0) {
+  if (
+    Array.isArray(props.contextMenuItems) &&
+    props.contextMenuItems.length === 0
+  ) {
     return;
   }
 
@@ -422,10 +425,15 @@ const menuItems = computed(() => rootMenuItems.value);
               : 'hover:bg-black/6 cursor-pointer'
           "
           :aria-disabled="item.disabled ? 'true' : 'false'"
-          @click="onMenuItemClick(item, $event.currentTarget as HTMLElement | null)"
+          @click="
+            onMenuItemClick(item, $event.currentTarget as HTMLElement | null)
+          "
           @keydown="onMenuItemKeydown($event, item)"
           @pointerenter="
-            onMenuItemPointerEnter(item, $event.currentTarget as HTMLElement | null)
+            onMenuItemPointerEnter(
+              item,
+              $event.currentTarget as HTMLElement | null,
+            )
           "
         >
           <span class="flex items-center justify-between gap-2">

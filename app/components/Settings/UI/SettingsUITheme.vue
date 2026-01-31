@@ -55,9 +55,10 @@ const userSettingsStore = useUserSettingsStore();
         :style="{ text: theme.textColor }"
         @click.stop="
           userSettingsStore.updateSettings({
-            favoriteThemes: userSettingsStore.activeSettings.favoriteThemes.filter(
-              (t: string) => t !== theme.name,
-            ),
+            favoriteThemes:
+              userSettingsStore.activeSettings.favoriteThemes.filter(
+                (t: string) => t !== theme.name,
+              ),
           })
         "
       />

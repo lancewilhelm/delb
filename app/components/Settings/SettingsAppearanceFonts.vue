@@ -145,30 +145,30 @@ const userSettingsStore = useUserSettingsStore();
 
 <style scoped>
 .georgia {
-  font-family: "Georgia", serif;
+  font-family: 'Georgia', serif;
 }
 .fira-code {
-  font-family: "Fira Code", monospace;
+  font-family: 'Fira Code', monospace;
 }
 .ibm-plex-mono {
-  font-family: "IBM Plex Mono", monospace;
+  font-family: 'IBM Plex Mono', monospace;
 }
 .inter {
-  font-family: "Inter", sans-serif;
+  font-family: 'Inter', sans-serif;
 }
 .montserrat {
-  font-family: "Montserrat", sans-serif;
+  font-family: 'Montserrat', sans-serif;
 }
 .nunito {
-  font-family: "Nunito", sans-serif;
+  font-family: 'Nunito', sans-serif;
 }
 .poppins {
-  font-family: "Poppins", sans-serif;
+  font-family: 'Poppins', sans-serif;
 }
 .geist {
-  font-family: "Geist", sans-serif;
+  font-family: 'Geist', sans-serif;
 }
 .roboto-mono {
-  font-family: "Roboto Mono", monospace;
+  font-family: 'Roboto Mono', monospace;
 }
 </style>

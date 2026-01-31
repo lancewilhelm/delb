@@ -6,7 +6,7 @@ export default defineNuxtPlugin(async (nuxtApp) => {
     Boolean(nuxtApp.payload.isCached)
   ) {
     // To avoid hydration mismatch
-    nuxtApp.hook("app:mounted", async () => {
+    nuxtApp.hook('app:mounted', async () => {
       await useAuth().fetchSession();
     });
   }

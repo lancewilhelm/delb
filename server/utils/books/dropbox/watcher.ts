@@ -3,7 +3,10 @@ import { mkdir, readdir, rename, stat, writeFile } from 'node:fs/promises';
 
 import { logger } from '~/utils/logger';
 
-import { getDropboxIngestConfigFromSettings, type DropboxIngestConfig } from './config';
+import {
+  getDropboxIngestConfigFromSettings,
+  type DropboxIngestConfig,
+} from './config';
 import { ingestDropboxFile } from './ingest';
 import { resolveDropboxTarget, type DropboxTarget } from './target';
 import { getGlobalSettingsRow } from './settings';
@@ -64,11 +67,7 @@ async function moveToFailed(opts: {
   }
 
   try {
-    await writeFile(
-      `${dest}.error.txt`,
-      `${opts.reason}\n`,
-      'utf8',
-    );
+    await writeFile(`${dest}.error.txt`, `${opts.reason}\n`, 'utf8');
   } catch {
     // ignore
   }
@@ -212,10 +211,7 @@ export function startDropboxIngestWatcher(): DropboxWatcherState {
               ? String((err as { message?: unknown }).message)
               : 'Failed to ingest';
 
-          logger.error(
-            { err, filename: r.filename },
-            'dropbox: ingest failed',
-          );
+          logger.error({ err, filename: r.filename }, 'dropbox: ingest failed');
           await moveToFailed({
             failedDirAbs: cfg.failedDirAbs,
             fileAbs: processingAbs,

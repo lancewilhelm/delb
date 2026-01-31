@@ -482,9 +482,11 @@ async function runCalibreAction(
         <div v-if="healthReport" class="space-y-3">
           <div class="flex flex-wrap items-center gap-2 text-sm">
             <span class="font-semibold">overall:</span>
-            <span class="font-mono" :class="statusClass(healthReport.overall)">{{
-              healthReport.overall
-            }}</span>
+            <span
+              class="font-mono"
+              :class="statusClass(healthReport.overall)"
+              >{{ healthReport.overall }}</span
+            >
             <span class="opacity-70">
               ({{ healthReport.mode }}, {{ healthReport.startedAt }} →
               {{ healthReport.finishedAt }})
@@ -512,9 +514,7 @@ async function runCalibreAction(
                 v-if="(r.sample && r.sample.length) || r.meta"
                 class="mt-2 text-xs opacity-80"
               >
-                <summary class="cursor-pointer select-none">
-                  details
-                </summary>
+                <summary class="cursor-pointer select-none">details</summary>
                 <div v-if="r.meta" class="mt-2">
                   <pre class="whitespace-pre-wrap">{{
                     JSON.stringify(r.meta, null, 2)

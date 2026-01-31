@@ -72,8 +72,7 @@ function parseIntSetting(v: unknown, fallback: number): number {
 }
 
 function parseExtensions(v: unknown): ReadonlySet<string> {
-  const rawList =
-    Array.isArray(v) ? v.map((x) => (x ?? '').toString()) : null;
+  const rawList = Array.isArray(v) ? v.map((x) => (x ?? '').toString()) : null;
   const rawString = !rawList ? (v ?? '').toString().trim() : '';
 
   const parts = rawList
@@ -111,7 +110,8 @@ export function getDropboxIngestConfigFromSettings(
   );
 
   const dropboxDirRel =
-    (dropbox.dir ?? '').toString().trim() || DEFAULT_DROPBOX_INGEST_SETTINGS.dir;
+    (dropbox.dir ?? '').toString().trim() ||
+    DEFAULT_DROPBOX_INGEST_SETTINGS.dir;
   const dropboxDirAbs = path.resolve(process.cwd(), dropboxDirRel);
 
   const failedDirAbs = path.join(dropboxDirAbs, 'failed');

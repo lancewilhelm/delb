@@ -105,12 +105,8 @@
           "name": "accounts_user_id_users_id_fk",
           "tableFrom": "accounts",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -162,9 +158,7 @@
       "indexes": {
         "authors_name_unique": {
           "name": "authors_name_unique",
-          "columns": [
-            "name"
-          ],
+          "columns": ["name"],
           "isUnique": true
         }
       },
@@ -201,10 +195,7 @@
       "indexes": {
         "book_authors_book_id_author_id_unique": {
           "name": "book_authors_book_id_author_id_unique",
-          "columns": [
-            "book_id",
-            "author_id"
-          ],
+          "columns": ["book_id", "author_id"],
           "isUnique": true
         }
       },
@@ -213,12 +204,8 @@
           "name": "book_authors_book_id_books_id_fk",
           "tableFrom": "book_authors",
           "tableTo": "books",
-          "columnsFrom": [
-            "book_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["book_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -226,12 +213,8 @@
           "name": "book_authors_author_id_authors_id_fk",
           "tableFrom": "book_authors",
           "tableTo": "authors",
-          "columnsFrom": [
-            "author_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["author_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -282,10 +265,7 @@
       "indexes": {
         "book_files_book_id_relative_path_unique": {
           "name": "book_files_book_id_relative_path_unique",
-          "columns": [
-            "book_id",
-            "relative_path"
-          ],
+          "columns": ["book_id", "relative_path"],
           "isUnique": true
         }
       },
@@ -294,12 +274,8 @@
           "name": "book_files_book_id_books_id_fk",
           "tableFrom": "book_files",
           "tableTo": "books",
-          "columnsFrom": [
-            "book_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["book_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -336,10 +312,7 @@
       "indexes": {
         "book_identifiers_book_id_type_unique": {
           "name": "book_identifiers_book_id_type_unique",
-          "columns": [
-            "book_id",
-            "type"
-          ],
+          "columns": ["book_id", "type"],
           "isUnique": true
         }
       },
@@ -348,12 +321,8 @@
           "name": "book_identifiers_book_id_books_id_fk",
           "tableFrom": "book_identifiers",
           "tableTo": "books",
-          "columnsFrom": [
-            "book_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["book_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -414,12 +383,8 @@
           "name": "book_notes_user_id_users_id_fk",
           "tableFrom": "book_notes",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -427,12 +392,8 @@
           "name": "book_notes_book_id_books_id_fk",
           "tableFrom": "book_notes",
           "tableTo": "books",
-          "columnsFrom": [
-            "book_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["book_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -476,10 +437,7 @@
       "indexes": {
         "book_ratings_user_book_unique": {
           "name": "book_ratings_user_book_unique",
-          "columns": [
-            "user_id",
-            "book_id"
-          ],
+          "columns": ["user_id", "book_id"],
           "isUnique": true
         }
       },
@@ -488,12 +446,8 @@
           "name": "book_ratings_user_id_users_id_fk",
           "tableFrom": "book_ratings",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -501,12 +455,8 @@
           "name": "book_ratings_book_id_books_id_fk",
           "tableFrom": "book_ratings",
           "tableTo": "books",
-          "columnsFrom": [
-            "book_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["book_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -536,10 +486,7 @@
       "indexes": {
         "book_tags_book_id_tag_id_unique": {
           "name": "book_tags_book_id_tag_id_unique",
-          "columns": [
-            "book_id",
-            "tag_id"
-          ],
+          "columns": ["book_id", "tag_id"],
           "isUnique": true
         }
       },
@@ -548,12 +495,8 @@
           "name": "book_tags_book_id_books_id_fk",
           "tableFrom": "book_tags",
           "tableTo": "books",
-          "columnsFrom": [
-            "book_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["book_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -561,12 +504,8 @@
           "name": "book_tags_tag_id_tags_id_fk",
           "tableFrom": "book_tags",
           "tableTo": "tags",
-          "columnsFrom": [
-            "tag_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tag_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -695,9 +634,7 @@
       "indexes": {
         "books_calibre_book_id_unique": {
           "name": "books_calibre_book_id_unique",
-          "columns": [
-            "calibre_book_id"
-          ],
+          "columns": ["calibre_book_id"],
           "isUnique": true
         }
       },
@@ -706,12 +643,8 @@
           "name": "books_publisher_id_publishers_id_fk",
           "tableFrom": "books",
           "tableTo": "publishers",
-          "columnsFrom": [
-            "publisher_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["publisher_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -719,12 +652,8 @@
           "name": "books_series_id_series_id_fk",
           "tableFrom": "books",
           "tableTo": "series",
-          "columnsFrom": [
-            "series_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["series_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -732,12 +661,8 @@
           "name": "books_created_by_user_id_users_id_fk",
           "tableFrom": "books",
           "tableTo": "users",
-          "columnsFrom": [
-            "created_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -781,10 +706,7 @@
       "indexes": {
         "collection_books_collection_id_book_id_unique": {
           "name": "collection_books_collection_id_book_id_unique",
-          "columns": [
-            "collection_id",
-            "book_id"
-          ],
+          "columns": ["collection_id", "book_id"],
           "isUnique": true
         }
       },
@@ -793,12 +715,8 @@
           "name": "collection_books_collection_id_collections_id_fk",
           "tableFrom": "collection_books",
           "tableTo": "collections",
-          "columnsFrom": [
-            "collection_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["collection_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -806,12 +724,8 @@
           "name": "collection_books_book_id_books_id_fk",
           "tableFrom": "collection_books",
           "tableTo": "books",
-          "columnsFrom": [
-            "book_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["book_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -819,12 +733,8 @@
           "name": "collection_books_added_by_user_id_users_id_fk",
           "tableFrom": "collection_books",
           "tableTo": "users",
-          "columnsFrom": [
-            "added_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["added_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -871,12 +781,8 @@
           "name": "collection_members_collection_id_collections_id_fk",
           "tableFrom": "collection_members",
           "tableTo": "collections",
-          "columnsFrom": [
-            "collection_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["collection_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -884,12 +790,8 @@
           "name": "collection_members_user_id_users_id_fk",
           "tableFrom": "collection_members",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -947,10 +849,7 @@
       "indexes": {
         "collections_owner_is_personal_idx": {
           "name": "collections_owner_is_personal_idx",
-          "columns": [
-            "owner_user_id",
-            "is_personal"
-          ],
+          "columns": ["owner_user_id", "is_personal"],
           "isUnique": false
         }
       },
@@ -959,12 +858,8 @@
           "name": "collections_owner_user_id_users_id_fk",
           "tableFrom": "collections",
           "tableTo": "users",
-          "columnsFrom": [
-            "owner_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["owner_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1072,9 +967,7 @@
       "indexes": {
         "publishers_name_unique": {
           "name": "publishers_name_unique",
-          "columns": [
-            "name"
-          ],
+          "columns": ["name"],
           "isUnique": true
         }
       },
@@ -1118,9 +1011,7 @@
       "indexes": {
         "series_name_unique": {
           "name": "series_name_unique",
-          "columns": [
-            "name"
-          ],
+          "columns": ["name"],
           "isUnique": true
         }
       },
@@ -1199,9 +1090,7 @@
       "indexes": {
         "sessions_token_unique": {
           "name": "sessions_token_unique",
-          "columns": [
-            "token"
-          ],
+          "columns": ["token"],
           "isUnique": true
         }
       },
@@ -1210,12 +1099,8 @@
           "name": "sessions_user_id_users_id_fk",
           "tableFrom": "sessions",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1259,9 +1144,7 @@
       "indexes": {
         "tags_name_unique": {
           "name": "tags_name_unique",
-          "columns": [
-            "name"
-          ],
+          "columns": ["name"],
           "isUnique": true
         }
       },
@@ -1312,17 +1195,12 @@
       "indexes": {
         "user_book_reading_position_user_book_unique": {
           "name": "user_book_reading_position_user_book_unique",
-          "columns": [
-            "user_id",
-            "book_id"
-          ],
+          "columns": ["user_id", "book_id"],
           "isUnique": true
         },
         "user_book_reading_position_user_idx": {
           "name": "user_book_reading_position_user_idx",
-          "columns": [
-            "user_id"
-          ],
+          "columns": ["user_id"],
           "isUnique": false
         }
       },
@@ -1331,12 +1209,8 @@
           "name": "user_book_reading_position_user_id_users_id_fk",
           "tableFrom": "user_book_reading_position",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1344,12 +1218,8 @@
           "name": "user_book_reading_position_book_id_books_id_fk",
           "tableFrom": "user_book_reading_position",
           "tableTo": "books",
-          "columnsFrom": [
-            "book_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["book_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1393,18 +1263,12 @@
       "indexes": {
         "user_book_status_user_book_unique": {
           "name": "user_book_status_user_book_unique",
-          "columns": [
-            "user_id",
-            "book_id"
-          ],
+          "columns": ["user_id", "book_id"],
           "isUnique": true
         },
         "user_book_status_user_status_idx": {
           "name": "user_book_status_user_status_idx",
-          "columns": [
-            "user_id",
-            "status"
-          ],
+          "columns": ["user_id", "status"],
           "isUnique": false
         }
       },
@@ -1413,12 +1277,8 @@
           "name": "user_book_status_user_id_users_id_fk",
           "tableFrom": "user_book_status",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1426,12 +1286,8 @@
           "name": "user_book_status_book_id_books_id_fk",
           "tableFrom": "user_book_status",
           "tableTo": "books",
-          "columnsFrom": [
-            "book_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["book_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1469,9 +1325,7 @@
       "indexes": {
         "user_settings_user_id_unique": {
           "name": "user_settings_user_id_unique",
-          "columns": [
-            "user_id"
-          ],
+          "columns": ["user_id"],
           "isUnique": true
         }
       },
@@ -1564,9 +1418,7 @@
       "indexes": {
         "users_email_unique": {
           "name": "users_email_unique",
-          "columns": [
-            "email"
-          ],
+          "columns": ["email"],
           "isUnique": true
         }
       },

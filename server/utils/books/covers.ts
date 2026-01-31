@@ -1,7 +1,7 @@
-import path from "node:path";
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import path from 'node:path';
+import { mkdir, stat, writeFile } from 'node:fs/promises';
 
-import sharp from "sharp";
+import sharp from 'sharp';
 
 export type StoredCover = {
   /**
@@ -81,7 +81,7 @@ export type CoverProcessingOptions = {
    *
    * Default: "original"
    */
-  sourceFormat?: "original" | "jpg" | "png" | "webp";
+  sourceFormat?: 'original' | 'jpg' | 'png' | 'webp';
 
   /**
    * If transcoding source, quality (0-100). Used for jpg/webp.
@@ -91,16 +91,16 @@ export type CoverProcessingOptions = {
 };
 
 function normalizePosix(p: string): string {
-  return (p ?? "")
+  return (p ?? '')
     .toString()
-    .replace(/\\/g, "/")
-    .replace(/\/+/g, "/")
-    .replace(/\/$/, "");
+    .replace(/\\/g, '/')
+    .replace(/\/+/g, '/')
+    .replace(/\/$/, '');
 }
 
 function ensureRelUnderLibraryDir(relPosix: string) {
   const norm = normalizePosix(relPosix);
-  if (!norm.startsWith("library/")) {
+  if (!norm.startsWith('library/')) {
     throw createError({
       statusCode: 500,
       statusMessage: `Expected a path under library/, got: ${relPosix}`,
@@ -109,23 +109,23 @@ function ensureRelUnderLibraryDir(relPosix: string) {
 }
 
 function extFromMime(mime: string): string | null {
-  const m = (mime ?? "").toLowerCase();
-  if (m.includes("image/jpeg") || m.includes("image/jpg")) return "jpg";
-  if (m.includes("image/png")) return "png";
-  if (m.includes("image/webp")) return "webp";
-  if (m.includes("image/gif")) return "gif";
-  if (m.includes("image/svg")) return "svg";
+  const m = (mime ?? '').toLowerCase();
+  if (m.includes('image/jpeg') || m.includes('image/jpg')) return 'jpg';
+  if (m.includes('image/png')) return 'png';
+  if (m.includes('image/webp')) return 'webp';
+  if (m.includes('image/gif')) return 'gif';
+  if (m.includes('image/svg')) return 'svg';
   return null;
 }
 
 function mimeFromExt(ext: string): string {
-  const e = (ext ?? "").toLowerCase();
-  if (e === "jpg" || e === "jpeg") return "image/jpeg";
-  if (e === "png") return "image/png";
-  if (e === "webp") return "image/webp";
-  if (e === "gif") return "image/gif";
-  if (e === "svg") return "image/svg+xml";
-  return "application/octet-stream";
+  const e = (ext ?? '').toLowerCase();
+  if (e === 'jpg' || e === 'jpeg') return 'image/jpeg';
+  if (e === 'png') return 'image/png';
+  if (e === 'webp') return 'image/webp';
+  if (e === 'gif') return 'image/gif';
+  if (e === 'svg') return 'image/svg+xml';
+  return 'application/octet-stream';
 }
 
 async function fileExists(absPath: string): Promise<boolean> {
@@ -146,29 +146,29 @@ async function sniffImageInfo(bytes: Buffer): Promise<{
   try {
     const meta = await sharp(bytes).metadata();
     const mimeType =
-      typeof meta.format === "string" && meta.format.toLowerCase() === "jpeg"
-        ? "image/jpeg"
-        : typeof meta.format === "string" && meta.format.toLowerCase() === "png"
-          ? "image/png"
-          : typeof meta.format === "string" &&
-              meta.format.toLowerCase() === "webp"
-            ? "image/webp"
-            : typeof meta.format === "string" &&
-                meta.format.toLowerCase() === "gif"
-              ? "image/gif"
-              : typeof meta.format === "string" &&
-                  meta.format.toLowerCase() === "svg"
-                ? "image/svg+xml"
-                : "application/octet-stream";
+      typeof meta.format === 'string' && meta.format.toLowerCase() === 'jpeg'
+        ? 'image/jpeg'
+        : typeof meta.format === 'string' && meta.format.toLowerCase() === 'png'
+          ? 'image/png'
+          : typeof meta.format === 'string' &&
+              meta.format.toLowerCase() === 'webp'
+            ? 'image/webp'
+            : typeof meta.format === 'string' &&
+                meta.format.toLowerCase() === 'gif'
+              ? 'image/gif'
+              : typeof meta.format === 'string' &&
+                  meta.format.toLowerCase() === 'svg'
+                ? 'image/svg+xml'
+                : 'application/octet-stream';
 
     return {
       mimeType,
-      width: typeof meta.width === "number" ? meta.width : undefined,
-      height: typeof meta.height === "number" ? meta.height : undefined,
+      width: typeof meta.width === 'number' ? meta.width : undefined,
+      height: typeof meta.height === 'number' ? meta.height : undefined,
     };
   } catch {
     // Unknown/unsupported; fall back
-    return { mimeType: "application/octet-stream" };
+    return { mimeType: 'application/octet-stream' };
   }
 }
 
@@ -176,7 +176,7 @@ async function buildStoredCoverFromDisk(opts: {
   absPath: string;
   relPosix: string;
 }): Promise<StoredCover> {
-  const ext = path.extname(opts.absPath).replace(/^\./, "").toLowerCase();
+  const ext = path.extname(opts.absPath).replace(/^\./, '').toLowerCase();
   const mimeType = mimeFromExt(ext);
   const st = await stat(opts.absPath);
 
@@ -185,12 +185,12 @@ async function buildStoredCoverFromDisk(opts: {
   let width: number | undefined;
   let height: number | undefined;
   try {
-    const buf = await import("node:fs/promises").then((m) =>
+    const buf = await import('node:fs/promises').then((m) =>
       m.readFile(opts.absPath),
     );
     const meta = await sharp(buf).metadata();
-    width = typeof meta.width === "number" ? meta.width : undefined;
-    height = typeof meta.height === "number" ? meta.height : undefined;
+    width = typeof meta.width === 'number' ? meta.width : undefined;
+    height = typeof meta.height === 'number' ? meta.height : undefined;
   } catch {
     // ignore
   }
@@ -199,7 +199,7 @@ async function buildStoredCoverFromDisk(opts: {
     relativePath: opts.relPosix,
     absPath: opts.absPath,
     mimeType,
-    extension: ext || "bin",
+    extension: ext || 'bin',
     byteLength: st.size,
     width,
     height,
@@ -249,48 +249,48 @@ export async function ensureCoverOutputsFromBytes(opts: {
   const thumbMaxWidth = p.thumbMaxWidth ?? 320;
   const thumbWebpQuality = p.thumbWebpQuality ?? 80;
 
-  const sourceBaseName = (p.sourceBaseName ?? "cover.source").trim();
-  const thumbFileName = (p.thumbFileName ?? "cover.thumb.webp").trim();
+  const sourceBaseName = (p.sourceBaseName ?? 'cover.source').trim();
+  const thumbFileName = (p.thumbFileName ?? 'cover.thumb.webp').trim();
 
-  const sourceFormat = p.sourceFormat ?? "original";
+  const sourceFormat = p.sourceFormat ?? 'original';
 
   // Determine "original" characteristics
   const sniffed = await sniffImageInfo(opts.sourceBytes);
   const inputMime =
-    (opts.sourceMimeTypeHint ?? "").toString().trim() || sniffed.mimeType;
+    (opts.sourceMimeTypeHint ?? '').toString().trim() || sniffed.mimeType;
   const inputExt =
     extFromMime(inputMime) ||
-    (opts.sourceExtensionHint ?? "").toString().trim().toLowerCase() ||
-    "bin";
+    (opts.sourceExtensionHint ?? '').toString().trim().toLowerCase() ||
+    'bin';
 
   // Decide source output ext/mime and bytes
   let sourceOutExt: string;
   let sourceOutMime: string;
   let sourceOutBytes: Buffer;
 
-  if (sourceFormat === "original") {
-    sourceOutExt = inputExt === "jpeg" ? "jpg" : inputExt;
+  if (sourceFormat === 'original') {
+    sourceOutExt = inputExt === 'jpeg' ? 'jpg' : inputExt;
     sourceOutMime = mimeFromExt(sourceOutExt);
     // "true original": store bytes as provided
     sourceOutBytes = opts.sourceBytes;
-  } else if (sourceFormat === "jpg") {
-    sourceOutExt = "jpg";
-    sourceOutMime = "image/jpeg";
-    const q = typeof p.sourceQuality === "number" ? p.sourceQuality : 85;
+  } else if (sourceFormat === 'jpg') {
+    sourceOutExt = 'jpg';
+    sourceOutMime = 'image/jpeg';
+    const q = typeof p.sourceQuality === 'number' ? p.sourceQuality : 85;
     sourceOutBytes = await sharp(opts.sourceBytes)
       .rotate()
       .jpeg({ quality: q })
       .toBuffer();
-  } else if (sourceFormat === "png") {
-    sourceOutExt = "png";
-    sourceOutMime = "image/png";
+  } else if (sourceFormat === 'png') {
+    sourceOutExt = 'png';
+    sourceOutMime = 'image/png';
     // PNG doesn't use "quality" in the same way; keep defaults
     sourceOutBytes = await sharp(opts.sourceBytes).rotate().png().toBuffer();
   } else {
     // webp
-    sourceOutExt = "webp";
-    sourceOutMime = "image/webp";
-    const q = typeof p.sourceQuality === "number" ? p.sourceQuality : 90;
+    sourceOutExt = 'webp';
+    sourceOutMime = 'image/webp';
+    const q = typeof p.sourceQuality === 'number' ? p.sourceQuality : 90;
     sourceOutBytes = await sharp(opts.sourceBytes)
       .rotate()
       .webp({ quality: q })
@@ -299,10 +299,10 @@ export async function ensureCoverOutputsFromBytes(opts: {
 
   const sourceFileName = `${sourceBaseName}.${sourceOutExt}`;
   const sourceAbs = path.join(outputDirAbs, sourceFileName);
-  const sourceRelPosix = [outputDirRelPosix, sourceFileName].join("/");
+  const sourceRelPosix = [outputDirRelPosix, sourceFileName].join('/');
 
   const thumbAbs = path.join(outputDirAbs, thumbFileName);
-  const thumbRelPosix = [outputDirRelPosix, thumbFileName].join("/");
+  const thumbRelPosix = [outputDirRelPosix, thumbFileName].join('/');
 
   await mkdir(outputDirAbs, { recursive: true });
 
@@ -333,7 +333,7 @@ export async function ensureCoverOutputsFromBytes(opts: {
 
   // Override stored mime/ext for source when we know better (e.g. original unknown bin)
   sourceStored.mimeType =
-    sourceFormat === "original" ? inputMime : sourceOutMime;
+    sourceFormat === 'original' ? inputMime : sourceOutMime;
   sourceStored.extension = sourceOutExt;
 
   const thumbStored = await buildStoredCoverFromDisk({
@@ -342,8 +342,8 @@ export async function ensureCoverOutputsFromBytes(opts: {
   });
 
   // Ensure thumb is described as webp even if metadata probing fails
-  thumbStored.mimeType = "image/webp";
-  thumbStored.extension = "webp";
+  thumbStored.mimeType = 'image/webp';
+  thumbStored.extension = 'webp';
 
   return {
     covers: { source: sourceStored, thumb: thumbStored },
@@ -374,12 +374,12 @@ export async function ensureCoverOutputsFromExistingFile(opts: {
 }): Promise<EnsureCoverOutputsResult> {
   ensureRelUnderLibraryDir(opts.existingSourceRelPosix);
 
-  const { readFile } = await import("node:fs/promises");
+  const { readFile } = await import('node:fs/promises');
   const bytes = await readFile(opts.existingSourceAbs);
 
   const ext = path
     .extname(opts.existingSourceAbs)
-    .replace(/^\./, "")
+    .replace(/^\./, '')
     .toLowerCase();
 
   const mime = mimeFromExt(ext);

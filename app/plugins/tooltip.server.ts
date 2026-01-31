@@ -1,5 +1,5 @@
-import { defineNuxtPlugin } from "#app";
-import tooltip from "~/directives/tooltip";
+import { defineNuxtPlugin } from '#app';
+import tooltip from '~/directives/tooltip';
 
 /**
  * Register the `v-tooltip` directive during SSR as well.
@@ -10,5 +10,5 @@ import tooltip from "~/directives/tooltip";
  * `getSSRProps` errors.
  */
 export default defineNuxtPlugin((nuxtApp) => {
-  nuxtApp.vueApp.directive("tooltip", tooltip);
+  nuxtApp.vueApp.directive('tooltip', tooltip);
 });

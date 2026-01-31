@@ -87,9 +87,10 @@ function decodeCursor(raw: unknown): Cursor | null {
   }
 }
 
-function normalizeStatusFilter(
-  raw: unknown,
-): { statuses: UserBookStatusValue[]; includeNone: boolean } {
+function normalizeStatusFilter(raw: unknown): {
+  statuses: UserBookStatusValue[];
+  includeNone: boolean;
+} {
   const v = (raw ?? '').toString().trim();
   if (!v) return { statuses: [], includeNone: false };
 

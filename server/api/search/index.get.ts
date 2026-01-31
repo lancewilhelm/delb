@@ -153,7 +153,9 @@ export default defineEventHandler(async (event) => {
       };
 
       type BookRowWithMatch = RawBookRow & {
-        match: { kind: 'titlePrefix' | 'titleContains' | 'author' | 'identifier' };
+        match: {
+          kind: 'titlePrefix' | 'titleContains' | 'author' | 'identifier';
+        };
         matchedIdentifierValue?: string | null;
       };
 
@@ -217,7 +219,9 @@ export default defineEventHandler(async (event) => {
         .limit(Math.max(perBucketLimit * 12, 120));
 
       // Books that match by identifier value (e.g. ISBN) (scoped by membership)
-      const identifierMatchRows: Array<RawBookRow & { matchedIdentifierValue: string | null }> =
+      const identifierMatchRows: Array<
+        RawBookRow & { matchedIdentifierValue: string | null }
+      > =
         isProbablyIdentifierQuery && normalizedIdentNeedle.length >= 4
           ? await cloudDb
               .select({
@@ -250,7 +254,11 @@ export default defineEventHandler(async (event) => {
             String(row.matchedIdentifierValue ?? ''),
           );
           if (ident && ident === normalizedIdentNeedle) return 0; // exact
-          if (ident && normalizedIdentNeedle && ident.startsWith(normalizedIdentNeedle))
+          if (
+            ident &&
+            normalizedIdentNeedle &&
+            ident.startsWith(normalizedIdentNeedle)
+          )
             return 1; // prefix
           return 2; // contains / other
         }

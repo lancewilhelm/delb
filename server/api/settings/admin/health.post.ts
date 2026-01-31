@@ -84,7 +84,10 @@ function resolveStoredPathUnderLibrary(storedPosixPath: string): {
     .trim()
     .replace(/^library[\\/]/, '');
 
-  const abs = path.resolve(libraryBaseAbs, relFromLibraryPosix.split('/').join(path.sep));
+  const abs = path.resolve(
+    libraryBaseAbs,
+    relFromLibraryPosix.split('/').join(path.sep),
+  );
 
   const relToBase = path.relative(libraryBaseAbs, abs);
   if (relToBase.startsWith('..') || relToBase.includes(`..${path.sep}`)) {
@@ -293,7 +296,10 @@ export default defineEventHandler(async (event) => {
       .from(users)
       .leftJoin(
         collections,
-        and(eq(collections.ownerUserId, users.id), eq(collections.isPersonal, true)),
+        and(
+          eq(collections.ownerUserId, users.id),
+          eq(collections.isPersonal, true),
+        ),
       )
       .where(sql`${collections.id} IS NULL`);
 
@@ -530,7 +536,10 @@ export default defineEventHandler(async (event) => {
               isPersonal: collections.isPersonal,
             })
             .from(collectionBooks)
-            .innerJoin(collections, eq(collections.id, collectionBooks.collectionId))
+            .innerJoin(
+              collections,
+              eq(collections.id, collectionBooks.collectionId),
+            )
             .where(inArray(collectionBooks.bookId, ids));
 
           const collectionsByBookId = new Map<
@@ -662,7 +671,9 @@ export default defineEventHandler(async (event) => {
       const rows = await cloudDb
         .select({ id: books.id, coverImagePath: books.coverImagePath })
         .from(books)
-        .where(sql`${books.coverImagePath} IS NOT NULL AND TRIM(${books.coverImagePath}) <> ''`)
+        .where(
+          sql`${books.coverImagePath} IS NOT NULL AND TRIM(${books.coverImagePath}) <> ''`,
+        )
         .limit(maxFilesToStat);
 
       let missing = 0;
@@ -690,7 +701,10 @@ export default defineEventHandler(async (event) => {
         if (!ok) {
           missing++;
           if (sampleMissing.length < sampleLimit) {
-            sampleMissing.push({ bookId: r.id, coverImagePath: r.coverImagePath });
+            sampleMissing.push({
+              bookId: r.id,
+              coverImagePath: r.coverImagePath,
+            });
           }
         }
       }
@@ -722,7 +736,9 @@ export default defineEventHandler(async (event) => {
       const coverRows = await cloudDb
         .select({ coverImagePath: books.coverImagePath })
         .from(books)
-        .where(sql`${books.coverImagePath} IS NOT NULL AND TRIM(${books.coverImagePath}) <> ''`)
+        .where(
+          sql`${books.coverImagePath} IS NOT NULL AND TRIM(${books.coverImagePath}) <> ''`,
+        )
         .limit(maxDirsToStat);
 
       const dirs = new Set<string>();
@@ -792,7 +808,12 @@ export default defineEventHandler(async (event) => {
           missingThumb > 0
             ? 'Regenerate the thumbnail (thumb.webp) for each affected folder.'
             : undefined,
-        meta: { checkedDirs: dirList.length, coverDirs, missingThumb, maxDirsToStat },
+        meta: {
+          checkedDirs: dirList.length,
+          coverDirs,
+          missingThumb,
+          maxDirsToStat,
+        },
         sample: sampleMissing,
       });
     }

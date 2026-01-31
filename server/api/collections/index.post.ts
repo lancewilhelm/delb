@@ -1,9 +1,9 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq } from 'drizzle-orm';
 
-import { cloudDb } from "~~/server/utils/db/cloud";
-import { auth } from "~/utils/auth";
-import { logger } from "~/utils/logger";
-import { collectionMembers, collections } from "~/utils/db/schema";
+import { cloudDb } from '~~/server/utils/db/cloud';
+import { auth } from '~/utils/auth';
+import { logger } from '~/utils/logger';
+import { collectionMembers, collections } from '~/utils/db/schema';
 
 /**
  * POST /api/collections
@@ -16,27 +16,27 @@ import { collectionMembers, collections } from "~/utils/db/schema";
  * - no additional members here yet
  */
 export default defineEventHandler(async (event) => {
-  logger.debug("POST /api/collections");
+  logger.debug('POST /api/collections');
 
   const session = await auth.api.getSession({
     headers: event.headers,
   });
 
   if (!session) {
-    throw createError({ statusCode: 401, statusMessage: "Unauthorized" });
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
   }
 
   const body = (await readBody(event).catch(() => null)) as {
     name?: unknown;
   } | null;
 
-  const rawName = typeof body?.name === "string" ? body?.name : "";
+  const rawName = typeof body?.name === 'string' ? body?.name : '';
   const name = rawName.trim();
 
   if (!name) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Collection name is required",
+      statusMessage: 'Collection name is required',
     });
   }
 
@@ -44,7 +44,7 @@ export default defineEventHandler(async (event) => {
   if (name.length > 120) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Collection name is too long",
+      statusMessage: 'Collection name is too long',
     });
   }
 
@@ -83,7 +83,7 @@ export default defineEventHandler(async (event) => {
   await cloudDb.insert(collectionMembers).values({
     collectionId,
     userId,
-    role: "owner",
+    role: 'owner',
     createdAt: now,
   });
 

@@ -1,6 +1,6 @@
-import path from "node:path";
+import path from 'node:path';
 
-import { toSafePathSegment } from "~~/server/utils/books/fs";
+import { toSafePathSegment } from '~~/server/utils/books/fs';
 
 /**
  * Centralized storage path generation for book folders and files.
@@ -27,25 +27,25 @@ import { toSafePathSegment } from "~~/server/utils/books/fs";
 /** Stored paths are always POSIX-style (forward slashes) for portability. */
 export type PosixRelativePath = string;
 
-export type BookStorageLayout = "library";
+export type BookStorageLayout = 'library';
 
 /** The canonical directory and file names we manage today. */
 export const BOOK_STORAGE_DEFAULTS = Object.freeze({
-  baseDir: "library" as const,
-  coverFilename: "cover.webp" as const,
+  baseDir: 'library' as const,
+  coverFilename: 'cover.webp' as const,
   idSliceLength: 8 as const,
 });
 
 export function normalizeSpaces(input: string): string {
-  return (input ?? "").toString().replace(/\s+/g, " ").trim();
+  return (input ?? '').toString().replace(/\s+/g, ' ').trim();
 }
 
 export function getBookIdSlice(
   bookId: string,
   len = BOOK_STORAGE_DEFAULTS.idSliceLength,
 ): string {
-  const raw = (bookId ?? "").toString().trim();
-  if (!raw) return "unknown";
+  const raw = (bookId ?? '').toString().trim();
+  if (!raw) return 'unknown';
   return raw.slice(0, Math.max(1, Math.min(32, Math.floor(len))));
 }
 
@@ -68,7 +68,7 @@ export type AuthorFolderOptions = {
 
 export function makeAuthorFolderName(opts: AuthorFolderOptions): string {
   const maxAuthorsBeforeEtAl = opts.maxAuthorsBeforeEtAl ?? 2;
-  const fallback = opts.fallback ?? "Unknown Author";
+  const fallback = opts.fallback ?? 'Unknown Author';
 
   const names = (opts.authors ?? [])
     .map((a) => normalizeSpaces(a))
@@ -80,7 +80,7 @@ export function makeAuthorFolderName(opts: AuthorFolderOptions): string {
 
   if (names.length === 1) return first;
 
-  const second = names[1] ?? "";
+  const second = names[1] ?? '';
   const moreThanTwo = names.length > maxAuthorsBeforeEtAl;
 
   // Format: "A & B" or "A & B et al"
@@ -95,7 +95,7 @@ export type BookFolderOptions = {
 
 export function makeBookFolderName(opts: BookFolderOptions): string {
   const title = normalizeSpaces(opts.title);
-  const safeTitle = toSafePathSegment(title, "Untitled");
+  const safeTitle = toSafePathSegment(title, 'Untitled');
 
   const idSlice = getBookIdSlice(opts.bookId);
   // Keep the id slice visible and easy to spot for uniqueness.
@@ -142,16 +142,16 @@ export function buildBookStorageRelativePath(
     maxAuthorsBeforeEtAl: 2,
   });
 
-  const authorDir = toSafePathSegment(authorFolderDisplay, "Unknown Author");
+  const authorDir = toSafePathSegment(authorFolderDisplay, 'Unknown Author');
 
   const bookDir = toSafePathSegment(
     makeBookFolderName({ title: input.title, bookId: input.bookId }),
-    "Untitled",
+    'Untitled',
   );
 
-  const fileName = toSafePathSegment(normalizeSpaces(input.filename), "file");
+  const fileName = toSafePathSegment(normalizeSpaces(input.filename), 'file');
 
-  return [baseDir, authorDir, bookDir, fileName].join("/");
+  return [baseDir, authorDir, bookDir, fileName].join('/');
 }
 
 export type CanonicalBookPaths = {
@@ -194,21 +194,21 @@ export function getCanonicalBookPaths(opts: {
     maxAuthorsBeforeEtAl: 2,
   });
 
-  const authorDir = toSafePathSegment(authorFolderDisplay, "Unknown Author");
+  const authorDir = toSafePathSegment(authorFolderDisplay, 'Unknown Author');
   const bookFolder = toSafePathSegment(
     makeBookFolderName({ title: opts.title, bookId: opts.bookId }),
-    "Untitled",
+    'Untitled',
   );
 
-  const bookDir = [baseDir, authorDir, bookFolder].join("/");
+  const bookDir = [baseDir, authorDir, bookFolder].join('/');
 
-  const titleSafe = toSafePathSegment(normalizeSpaces(opts.title), "Untitled");
+  const titleSafe = toSafePathSegment(normalizeSpaces(opts.title), 'Untitled');
   const epubFilename = `${titleSafe}.epub`;
 
   return {
     bookDir,
-    coverPath: [bookDir, BOOK_STORAGE_DEFAULTS.coverFilename].join("/"),
-    epubPath: [bookDir, toSafePathSegment(epubFilename, "book.epub")].join("/"),
+    coverPath: [bookDir, BOOK_STORAGE_DEFAULTS.coverFilename].join('/'),
+    epubPath: [bookDir, toSafePathSegment(epubFilename, 'book.epub')].join('/'),
   };
 }
 
@@ -217,9 +217,9 @@ export function getCanonicalBookPaths(opts: {
  * Keep these in one place so we do not accidentally introduce Windows separators into the DB.
  */
 export function posixToOsPath(posixPath: PosixRelativePath): string {
-  return posixPath.split("/").join(path.sep);
+  return posixPath.split('/').join(path.sep);
 }
 
 export function osToPosixPath(osPath: string): PosixRelativePath {
-  return osPath.split(path.sep).join("/");
+  return osPath.split(path.sep).join('/');
 }

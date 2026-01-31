@@ -106,7 +106,8 @@ export default defineEventHandler(async (event) => {
       id: r.id,
       name: r.name,
       // SQLite returns integers for COUNT; coerce defensively
-      bookCount: typeof r.bookCount === 'number' ? r.bookCount : Number(r.bookCount),
+      bookCount:
+        typeof r.bookCount === 'number' ? r.bookCount : Number(r.bookCount),
     }));
 
     const tagIds = outBase.map((t) => t.id).filter(Boolean);
@@ -131,10 +132,17 @@ export default defineEventHandler(async (event) => {
               and(
                 inArray(bookTags.tagId, tagIds),
                 eq(collectionMembers.userId, session.user.id),
-                collectionId ? eq(collectionBooks.collectionId, collectionId) : undefined,
+                collectionId
+                  ? eq(collectionBooks.collectionId, collectionId)
+                  : undefined,
               ),
             )
-            .groupBy(bookTags.tagId, books.id, books.title, books.coverImagePath)
+            .groupBy(
+              bookTags.tagId,
+              books.id,
+              books.title,
+              books.coverImagePath,
+            )
             .orderBy(asc(bookTags.tagId), asc(books.title), asc(books.id))
         : [];
 
@@ -162,7 +170,9 @@ export default defineEventHandler(async (event) => {
         id: bid,
         title,
         coverImagePath,
-        coverThumbnailUrl: coverImagePath ? coverThumbUrl(coverImagePath) : null,
+        coverThumbnailUrl: coverImagePath
+          ? coverThumbUrl(coverImagePath)
+          : null,
       });
       booksByTagId.set(tid, list);
     }

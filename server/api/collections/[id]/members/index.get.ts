@@ -1,9 +1,9 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq } from 'drizzle-orm';
 
-import { cloudDb } from "~~/server/utils/db/cloud";
-import { auth } from "~/utils/auth";
-import { logger } from "~/utils/logger";
-import { collectionMembers, collections, users } from "~/utils/db/schema";
+import { cloudDb } from '~~/server/utils/db/cloud';
+import { auth } from '~/utils/auth';
+import { logger } from '~/utils/logger';
+import { collectionMembers, collections, users } from '~/utils/db/schema';
 
 /**
  * GET /api/collections/:id/members
@@ -17,9 +17,9 @@ import { collectionMembers, collections, users } from "~/utils/db/schema";
  */
 export default defineEventHandler(async (event) => {
   const id =
-    typeof event.context?.params?.id === "string"
+    typeof event.context?.params?.id === 'string'
       ? event.context.params.id
-      : "";
+      : '';
   logger.debug(`GET /api/collections/${id}/members`);
 
   const session = await auth.api.getSession({
@@ -27,13 +27,13 @@ export default defineEventHandler(async (event) => {
   });
 
   if (!session) {
-    throw createError({ statusCode: 401, statusMessage: "Unauthorized" });
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
   }
 
   if (!id) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Collection id is required",
+      statusMessage: 'Collection id is required',
     });
   }
 
@@ -51,14 +51,14 @@ export default defineEventHandler(async (event) => {
   if (!collection?.id) {
     throw createError({
       statusCode: 404,
-      statusMessage: "Collection not found",
+      statusMessage: 'Collection not found',
     });
   }
 
   if (collection.isPersonal) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Personal collections are not shareable",
+      statusMessage: 'Personal collections are not shareable',
     });
   }
 
@@ -77,8 +77,8 @@ export default defineEventHandler(async (event) => {
     .limit(1);
 
   const role = membership[0]?.role;
-  if (role !== "owner" && role !== "editor") {
-    throw createError({ statusCode: 403, statusMessage: "Forbidden" });
+  if (role !== 'owner' && role !== 'editor') {
+    throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
   }
 
   // Join users so the UI can display emails
@@ -98,7 +98,7 @@ export default defineEventHandler(async (event) => {
       members: members.map((m) => ({
         userId: m.userId,
         email: m.email,
-        role: m.role as "owner" | "editor" | "viewer",
+        role: m.role as 'owner' | 'editor' | 'viewer',
       })),
     },
   };

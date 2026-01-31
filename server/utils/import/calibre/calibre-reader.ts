@@ -1,9 +1,9 @@
-import path from "node:path";
-import { existsSync, readdirSync } from "node:fs";
+import path from 'node:path';
+import { existsSync, readdirSync } from 'node:fs';
 
-import { createClient, type Client, type ResultSet } from "@libsql/client";
-import { createError } from "h3";
-import { logger } from "~/utils/logger";
+import { createClient, type Client, type ResultSet } from '@libsql/client';
+import { createError } from 'h3';
+import { logger } from '~/utils/logger';
 
 /**
  * Calibre metadata.db reader (import helper)
@@ -111,12 +111,12 @@ export type CalibreFormatFile = {
 };
 
 function asNumber(v: unknown): number | null {
-  if (typeof v === "number") return Number.isFinite(v) ? v : null;
-  if (typeof v === "bigint") {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v === 'bigint') {
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }
-  if (typeof v === "string" && v.trim() !== "") {
+  if (typeof v === 'string' && v.trim() !== '') {
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }
@@ -124,11 +124,11 @@ function asNumber(v: unknown): number | null {
 }
 
 function safeString(v: unknown): string {
-  return (v ?? "").toString();
+  return (v ?? '').toString();
 }
 
 function normalizeFormat(input: string): string {
-  return (input ?? "").toString().trim().toLowerCase();
+  return (input ?? '').toString().trim().toLowerCase();
 }
 
 type Row = Record<string, unknown>;
@@ -179,7 +179,7 @@ class LibsqlFileDb {
       // Not always present in typings / some transports
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const c = this.client as any;
-      if (typeof c.close === "function") await c.close();
+      if (typeof c.close === 'function') await c.close();
     } catch {
       // ignore
     }
@@ -197,7 +197,7 @@ export class CalibreReader {
   constructor(opts: CalibreReaderOptions) {
     this.libraryRootAbs = opts.libraryRootAbs;
 
-    const filename = opts.metadataDbFilename ?? "metadata.db";
+    const filename = opts.metadataDbFilename ?? 'metadata.db';
     const dbAbs = path.resolve(opts.libraryRootAbs, filename);
 
     if (!existsSync(dbAbs)) {
@@ -218,7 +218,7 @@ export class CalibreReader {
 
   /** Very small identifier escaper for PRAGMA uses (table names/columns only). */
   private escapeIdent(ident: string): string {
-    const safe = (ident ?? "").toString().replace(/"/g, '""');
+    const safe = (ident ?? '').toString().replace(/"/g, '""');
     return `"${safe}"`;
   }
 
@@ -246,7 +246,7 @@ export class CalibreReader {
    * Requires `books.path` to exist in the DB for the given book.
    */
   resolveBookDirAbs(book: CalibreBookRow): string | null {
-    const rel = (book.path ?? "").toString().trim();
+    const rel = (book.path ?? '').toString().trim();
     if (!rel) return null;
     return path.resolve(this.libraryRootAbs, rel);
   }
@@ -260,26 +260,26 @@ export class CalibreReader {
     relativePath: string;
     absPath: string;
   }> {
-    const relDir = (book.path ?? "").toString().trim();
+    const relDir = (book.path ?? '').toString().trim();
     if (!relDir) return [];
 
     const candidates = [
-      "thumb.webp",
-      "cover.source.jpg",
-      "cover.source.jpeg",
-      "cover.source.png",
-      "cover.source.webp",
-      "source.jpg",
-      "source.jpeg",
-      "source.png",
-      "source.webp",
-      "cover.jpg",
-      "cover.jpeg",
-      "cover.png",
+      'thumb.webp',
+      'cover.source.jpg',
+      'cover.source.jpeg',
+      'cover.source.png',
+      'cover.source.webp',
+      'source.jpg',
+      'source.jpeg',
+      'source.png',
+      'source.webp',
+      'cover.jpg',
+      'cover.jpeg',
+      'cover.png',
     ];
 
     return candidates.map((filename) => {
-      const relativePath = ["library", relDir, filename].join("/");
+      const relativePath = ['library', relDir, filename].join('/');
       const absPath = path.resolve(this.libraryRootAbs, relDir, filename);
       return { filename, relativePath, absPath };
     });
@@ -299,32 +299,32 @@ export class CalibreReader {
    * - books.series_index (optional)
    */
   async getBooks(): Promise<CalibreBookRow[]> {
-    if (!(await this.hasTable("books"))) {
+    if (!(await this.hasTable('books'))) {
       throw createError({
         statusCode: 400,
-        statusMessage: "Calibre metadata.db is missing required table: books",
+        statusMessage: 'Calibre metadata.db is missing required table: books',
       });
     }
 
-    const fields: string[] = ["id as calibreBookId", "title as title"];
+    const fields: string[] = ['id as calibreBookId', 'title as title'];
 
-    if (await this.hasColumn("books", "sort")) fields.push("sort as sort");
-    if (await this.hasColumn("books", "timestamp"))
-      fields.push("timestamp as timestamp");
-    if (await this.hasColumn("books", "pubdate"))
-      fields.push("pubdate as pubdate");
-    if (await this.hasColumn("books", "last_modified"))
-      fields.push("last_modified as lastModified");
-    if (await this.hasColumn("books", "path")) fields.push("path as path");
-    if (await this.hasColumn("books", "series_index"))
-      fields.push("series_index as seriesIndex");
+    if (await this.hasColumn('books', 'sort')) fields.push('sort as sort');
+    if (await this.hasColumn('books', 'timestamp'))
+      fields.push('timestamp as timestamp');
+    if (await this.hasColumn('books', 'pubdate'))
+      fields.push('pubdate as pubdate');
+    if (await this.hasColumn('books', 'last_modified'))
+      fields.push('last_modified as lastModified');
+    if (await this.hasColumn('books', 'path')) fields.push('path as path');
+    if (await this.hasColumn('books', 'series_index'))
+      fields.push('series_index as seriesIndex');
 
-    const sql = `SELECT ${fields.join(", ")} FROM books ORDER BY id ASC`;
+    const sql = `SELECT ${fields.join(', ')} FROM books ORDER BY id ASC`;
     const rows = await this.db.all(sql);
 
     return rows.map((r) => ({
       calibreBookId: asNumber(r.calibreBookId) ?? 0,
-      title: safeString(r.title) || "Unknown",
+      title: safeString(r.title) || 'Unknown',
       sort: r.sort !== undefined ? (r.sort as string | null) : undefined,
       timestamp:
         r.timestamp !== undefined ? (r.timestamp as string | null) : undefined,
@@ -337,7 +337,7 @@ export class CalibreReader {
       path: r.path !== undefined ? (r.path as string | null) : undefined,
       seriesIndex:
         r.seriesIndex !== undefined
-          ? typeof r.seriesIndex === "number"
+          ? typeof r.seriesIndex === 'number'
             ? r.seriesIndex
             : asNumber(r.seriesIndex)
           : undefined,
@@ -346,48 +346,48 @@ export class CalibreReader {
 
   /** Read all authors. */
   async getAuthors(): Promise<CalibreAuthorRow[]> {
-    if (!(await this.hasTable("authors"))) return [];
+    if (!(await this.hasTable('authors'))) return [];
 
-    const fields: string[] = ["id as calibreAuthorId", "name as name"];
-    if (await this.hasColumn("authors", "sort")) fields.push("sort as sort");
+    const fields: string[] = ['id as calibreAuthorId', 'name as name'];
+    if (await this.hasColumn('authors', 'sort')) fields.push('sort as sort');
 
-    const sql = `SELECT ${fields.join(", ")} FROM authors ORDER BY id ASC`;
+    const sql = `SELECT ${fields.join(', ')} FROM authors ORDER BY id ASC`;
     const rows = await this.db.all(sql);
 
     return rows.map((r) => ({
       calibreAuthorId: asNumber(r.calibreAuthorId) ?? 0,
-      name: safeString(r.name) || "Unknown",
+      name: safeString(r.name) || 'Unknown',
       sort: r.sort !== undefined ? (r.sort as string | null) : undefined,
     }));
   }
 
   /** Read all tags. */
   async getTags(): Promise<CalibreTagRow[]> {
-    if (!(await this.hasTable("tags"))) return [];
+    if (!(await this.hasTable('tags'))) return [];
 
     const sql = `SELECT id as calibreTagId, name as name FROM tags ORDER BY id ASC`;
     const rows = await this.db.all(sql);
 
     return rows.map((r) => ({
       calibreTagId: asNumber(r.calibreTagId) ?? 0,
-      name: safeString(r.name) || "Unknown",
+      name: safeString(r.name) || 'Unknown',
     }));
   }
 
   /** Read all publishers. */
   async getPublishers(): Promise<CalibrePublisherRow[]> {
-    if (!(await this.hasTable("publishers"))) return [];
+    if (!(await this.hasTable('publishers'))) return [];
 
-    const fields: string[] = ["id as calibrePublisherId", "name as name"];
-    if (await this.hasColumn("publishers", "sort")) fields.push("sort as sort");
-    if (await this.hasColumn("publishers", "link")) fields.push("link as link");
+    const fields: string[] = ['id as calibrePublisherId', 'name as name'];
+    if (await this.hasColumn('publishers', 'sort')) fields.push('sort as sort');
+    if (await this.hasColumn('publishers', 'link')) fields.push('link as link');
 
-    const sql = `SELECT ${fields.join(", ")} FROM publishers ORDER BY id ASC`;
+    const sql = `SELECT ${fields.join(', ')} FROM publishers ORDER BY id ASC`;
     const rows = await this.db.all(sql);
 
     return rows.map((r) => ({
       calibrePublisherId: asNumber(r.calibrePublisherId) ?? 0,
-      name: safeString(r.name) || "Unknown",
+      name: safeString(r.name) || 'Unknown',
       sort: r.sort !== undefined ? (r.sort as string | null) : undefined,
       link: r.link !== undefined ? (r.link as string | null) : undefined,
     }));
@@ -395,18 +395,18 @@ export class CalibreReader {
 
   /** Read all series. */
   async getSeries(): Promise<CalibreSeriesRow[]> {
-    if (!(await this.hasTable("series"))) return [];
+    if (!(await this.hasTable('series'))) return [];
 
-    const fields: string[] = ["id as calibreSeriesId", "name as name"];
-    if (await this.hasColumn("series", "sort")) fields.push("sort as sort");
-    if (await this.hasColumn("series", "link")) fields.push("link as link");
+    const fields: string[] = ['id as calibreSeriesId', 'name as name'];
+    if (await this.hasColumn('series', 'sort')) fields.push('sort as sort');
+    if (await this.hasColumn('series', 'link')) fields.push('link as link');
 
-    const sql = `SELECT ${fields.join(", ")} FROM series ORDER BY id ASC`;
+    const sql = `SELECT ${fields.join(', ')} FROM series ORDER BY id ASC`;
     const rows = await this.db.all(sql);
 
     return rows.map((r) => ({
       calibreSeriesId: asNumber(r.calibreSeriesId) ?? 0,
-      name: safeString(r.name) || "Unknown",
+      name: safeString(r.name) || 'Unknown',
       sort: r.sort !== undefined ? (r.sort as string | null) : undefined,
       link: r.link !== undefined ? (r.link as string | null) : undefined,
     }));
@@ -419,18 +419,18 @@ export class CalibreReader {
    * - author (authors.id)
    */
   async getBookAuthorLinks(): Promise<CalibreBookAuthorLink[]> {
-    const table = "books_authors_link";
+    const table = 'books_authors_link';
     if (!(await this.hasTable(table))) return [];
 
-    const bookCol = (await this.hasColumn(table, "book"))
-      ? "book"
-      : (await this.hasColumn(table, "book_id"))
-        ? "book_id"
+    const bookCol = (await this.hasColumn(table, 'book'))
+      ? 'book'
+      : (await this.hasColumn(table, 'book_id'))
+        ? 'book_id'
         : null;
-    const authorCol = (await this.hasColumn(table, "author"))
-      ? "author"
-      : (await this.hasColumn(table, "author_id"))
-        ? "author_id"
+    const authorCol = (await this.hasColumn(table, 'author'))
+      ? 'author'
+      : (await this.hasColumn(table, 'author_id'))
+        ? 'author_id'
         : null;
 
     if (!bookCol || !authorCol) return [];
@@ -453,18 +453,18 @@ export class CalibreReader {
    * - tag
    */
   async getBookTagLinks(): Promise<CalibreBookTagLink[]> {
-    const table = "books_tags_link";
+    const table = 'books_tags_link';
     if (!(await this.hasTable(table))) return [];
 
-    const bookCol = (await this.hasColumn(table, "book"))
-      ? "book"
-      : (await this.hasColumn(table, "book_id"))
-        ? "book_id"
+    const bookCol = (await this.hasColumn(table, 'book'))
+      ? 'book'
+      : (await this.hasColumn(table, 'book_id'))
+        ? 'book_id'
         : null;
-    const tagCol = (await this.hasColumn(table, "tag"))
-      ? "tag"
-      : (await this.hasColumn(table, "tag_id"))
-        ? "tag_id"
+    const tagCol = (await this.hasColumn(table, 'tag'))
+      ? 'tag'
+      : (await this.hasColumn(table, 'tag_id'))
+        ? 'tag_id'
         : null;
 
     if (!bookCol || !tagCol) return [];
@@ -490,19 +490,19 @@ export class CalibreReader {
    * Some Calibre variants also have `books.publisher` as a FK; we fall back to that if the link table isn't present.
    */
   async getBookPublisherLinks(): Promise<CalibreBookPublisherLink[]> {
-    const linkTable = "books_publishers_link";
+    const linkTable = 'books_publishers_link';
 
     // Preferred: link table
     if (await this.hasTable(linkTable)) {
-      const bookCol = (await this.hasColumn(linkTable, "book"))
-        ? "book"
-        : (await this.hasColumn(linkTable, "book_id"))
-          ? "book_id"
+      const bookCol = (await this.hasColumn(linkTable, 'book'))
+        ? 'book'
+        : (await this.hasColumn(linkTable, 'book_id'))
+          ? 'book_id'
           : null;
-      const publisherCol = (await this.hasColumn(linkTable, "publisher"))
-        ? "publisher"
-        : (await this.hasColumn(linkTable, "publisher_id"))
-          ? "publisher_id"
+      const publisherCol = (await this.hasColumn(linkTable, 'publisher'))
+        ? 'publisher'
+        : (await this.hasColumn(linkTable, 'publisher_id'))
+          ? 'publisher_id'
           : null;
 
       if (bookCol && publisherCol) {
@@ -521,8 +521,8 @@ export class CalibreReader {
     }
 
     // Fallback: books.publisher FK (older/alternate schema assumptions)
-    if (!(await this.hasTable("books"))) return [];
-    if (!(await this.hasColumn("books", "publisher"))) return [];
+    if (!(await this.hasTable('books'))) return [];
+    if (!(await this.hasColumn('books', 'publisher'))) return [];
 
     const sql = `SELECT id as calibreBookId, publisher as calibrePublisherId FROM books WHERE publisher IS NOT NULL`;
     const rows = await this.db.all(sql);
@@ -546,25 +546,25 @@ export class CalibreReader {
    * Some Calibre variants also have `books.series` as a FK; we fall back to that if the link table isn't present.
    */
   async getBookSeriesLinks(): Promise<CalibreBookSeriesLink[]> {
-    const linkTable = "books_series_link";
+    const linkTable = 'books_series_link';
 
     const indexCol =
-      (await this.hasTable("books")) &&
-      (await this.hasColumn("books", "series_index"))
-        ? "series_index"
+      (await this.hasTable('books')) &&
+      (await this.hasColumn('books', 'series_index'))
+        ? 'series_index'
         : null;
 
     // Preferred: link table
     if (await this.hasTable(linkTable)) {
-      const bookCol = (await this.hasColumn(linkTable, "book"))
-        ? "book"
-        : (await this.hasColumn(linkTable, "book_id"))
-          ? "book_id"
+      const bookCol = (await this.hasColumn(linkTable, 'book'))
+        ? 'book'
+        : (await this.hasColumn(linkTable, 'book_id'))
+          ? 'book_id'
           : null;
-      const seriesCol = (await this.hasColumn(linkTable, "series"))
-        ? "series"
-        : (await this.hasColumn(linkTable, "series_id"))
-          ? "series_id"
+      const seriesCol = (await this.hasColumn(linkTable, 'series'))
+        ? 'series'
+        : (await this.hasColumn(linkTable, 'series_id'))
+          ? 'series_id'
           : null;
 
       if (!bookCol || !seriesCol) return [];
@@ -574,7 +574,7 @@ export class CalibreReader {
 
       // If we can, enrich with series_index from books table
       let seriesIndexByBookId: Map<number, number | null> | null = null;
-      if (indexCol && (await this.hasTable("books"))) {
+      if (indexCol && (await this.hasTable('books'))) {
         const idxRows = await this.db.all(
           `SELECT id as calibreBookId, ${this.escapeIdent(indexCol)} as seriesIndex FROM books`,
         );
@@ -586,7 +586,7 @@ export class CalibreReader {
 
           const seriesIndex =
             r.seriesIndex !== undefined
-              ? typeof r.seriesIndex === "number"
+              ? typeof r.seriesIndex === 'number'
                 ? r.seriesIndex
                 : asNumber(r.seriesIndex)
               : null;
@@ -614,16 +614,16 @@ export class CalibreReader {
     }
 
     // Fallback: books.series FK
-    if (!(await this.hasTable("books"))) return [];
-    if (!(await this.hasColumn("books", "series"))) return [];
+    if (!(await this.hasTable('books'))) return [];
+    if (!(await this.hasColumn('books', 'series'))) return [];
 
     const fields = [
-      "id as calibreBookId",
-      "series as calibreSeriesId",
+      'id as calibreBookId',
+      'series as calibreSeriesId',
       ...(indexCol ? [`${this.escapeIdent(indexCol)} as seriesIndex`] : []),
     ];
 
-    const sql = `SELECT ${fields.join(", ")} FROM books WHERE series IS NOT NULL`;
+    const sql = `SELECT ${fields.join(', ')} FROM books WHERE series IS NOT NULL`;
     const rows = await this.db.all(sql);
 
     return rows
@@ -632,7 +632,7 @@ export class CalibreReader {
         calibreSeriesId: asNumber(r.calibreSeriesId) ?? 0,
         seriesIndex:
           r.seriesIndex !== undefined
-            ? typeof r.seriesIndex === "number"
+            ? typeof r.seriesIndex === 'number'
               ? r.seriesIndex
               : asNumber(r.seriesIndex)
             : undefined,
@@ -647,15 +647,15 @@ export class CalibreReader {
    * - text
    */
   async getComments(): Promise<CalibreCommentRow[]> {
-    const table = "comments";
+    const table = 'comments';
     if (!(await this.hasTable(table))) return [];
 
-    const bookCol = (await this.hasColumn(table, "book"))
-      ? "book"
-      : (await this.hasColumn(table, "book_id"))
-        ? "book_id"
+    const bookCol = (await this.hasColumn(table, 'book'))
+      ? 'book'
+      : (await this.hasColumn(table, 'book_id'))
+        ? 'book_id'
         : null;
-    const textCol = (await this.hasColumn(table, "text")) ? "text" : null;
+    const textCol = (await this.hasColumn(table, 'text')) ? 'text' : null;
 
     if (!bookCol || !textCol) return [];
 
@@ -677,19 +677,19 @@ export class CalibreReader {
    * - columns: book, type, val
    */
   async getIdentifiers(): Promise<CalibreIdentifierRow[]> {
-    const table = "identifiers";
+    const table = 'identifiers';
     if (!(await this.hasTable(table))) return [];
 
-    const bookCol = (await this.hasColumn(table, "book"))
-      ? "book"
-      : (await this.hasColumn(table, "book_id"))
-        ? "book_id"
+    const bookCol = (await this.hasColumn(table, 'book'))
+      ? 'book'
+      : (await this.hasColumn(table, 'book_id'))
+        ? 'book_id'
         : null;
-    const typeCol = (await this.hasColumn(table, "type")) ? "type" : null;
-    const valCol = (await this.hasColumn(table, "val"))
-      ? "val"
-      : (await this.hasColumn(table, "value"))
-        ? "value"
+    const typeCol = (await this.hasColumn(table, 'type')) ? 'type' : null;
+    const valCol = (await this.hasColumn(table, 'val'))
+      ? 'val'
+      : (await this.hasColumn(table, 'value'))
+        ? 'value'
         : null;
 
     if (!bookCol || !typeCol || !valCol) return [];
@@ -717,19 +717,19 @@ export class CalibreReader {
    * Returns list of (bookId, langCode).
    */
   async getLanguages(): Promise<CalibreLanguageRow[]> {
-    const linkTable = "books_languages_link";
+    const linkTable = 'books_languages_link';
     if (!(await this.hasTable(linkTable))) return [];
 
-    const bookCol = (await this.hasColumn(linkTable, "book"))
-      ? "book"
-      : (await this.hasColumn(linkTable, "book_id"))
-        ? "book_id"
+    const bookCol = (await this.hasColumn(linkTable, 'book'))
+      ? 'book'
+      : (await this.hasColumn(linkTable, 'book_id'))
+        ? 'book_id'
         : null;
 
-    const directLangCol = (await this.hasColumn(linkTable, "lang_code"))
-      ? "lang_code"
-      : (await this.hasColumn(linkTable, "lang"))
-        ? "lang"
+    const directLangCol = (await this.hasColumn(linkTable, 'lang_code'))
+      ? 'lang_code'
+      : (await this.hasColumn(linkTable, 'lang'))
+        ? 'lang'
         : null;
 
     // Direct language code stored in the link table
@@ -745,23 +745,23 @@ export class CalibreReader {
     }
 
     // Link table references a languages table
-    const langIdCol = (await this.hasColumn(linkTable, "language"))
-      ? "language"
-      : (await this.hasColumn(linkTable, "lang_id"))
-        ? "lang_id"
+    const langIdCol = (await this.hasColumn(linkTable, 'language'))
+      ? 'language'
+      : (await this.hasColumn(linkTable, 'lang_id'))
+        ? 'lang_id'
         : null;
 
-    if (!bookCol || !langIdCol || !(await this.hasTable("languages")))
+    if (!bookCol || !langIdCol || !(await this.hasTable('languages')))
       return [];
 
-    const languagesTable = "languages";
-    const langPk = (await this.hasColumn(languagesTable, "id")) ? "id" : null;
-    const codeCol = (await this.hasColumn(languagesTable, "lang_code"))
-      ? "lang_code"
-      : (await this.hasColumn(languagesTable, "code"))
-        ? "code"
-        : (await this.hasColumn(languagesTable, "lang"))
-          ? "lang"
+    const languagesTable = 'languages';
+    const langPk = (await this.hasColumn(languagesTable, 'id')) ? 'id' : null;
+    const codeCol = (await this.hasColumn(languagesTable, 'lang_code'))
+      ? 'lang_code'
+      : (await this.hasColumn(languagesTable, 'code'))
+        ? 'code'
+        : (await this.hasColumn(languagesTable, 'lang'))
+          ? 'lang'
           : null;
 
     if (!langPk || !codeCol) return [];
@@ -797,27 +797,27 @@ export class CalibreReader {
 
     // DB-derived attempt (best-effort)
     try {
-      const linkTable = "books_data_link";
+      const linkTable = 'books_data_link';
       if (await this.hasTable(linkTable)) {
-        const bookCol = (await this.hasColumn(linkTable, "book"))
-          ? "book"
-          : (await this.hasColumn(linkTable, "book_id"))
-            ? "book_id"
+        const bookCol = (await this.hasColumn(linkTable, 'book'))
+          ? 'book'
+          : (await this.hasColumn(linkTable, 'book_id'))
+            ? 'book_id'
             : null;
-        const dataCol = (await this.hasColumn(linkTable, "data"))
-          ? "data"
-          : (await this.hasColumn(linkTable, "data_id"))
-            ? "data_id"
+        const dataCol = (await this.hasColumn(linkTable, 'data'))
+          ? 'data'
+          : (await this.hasColumn(linkTable, 'data_id'))
+            ? 'data_id'
             : null;
-        const formatCol = (await this.hasColumn(linkTable, "format"))
-          ? "format"
+        const formatCol = (await this.hasColumn(linkTable, 'format'))
+          ? 'format'
           : null;
 
-        if (bookCol && dataCol && formatCol && (await this.hasTable("data"))) {
-          const dataTable = "data";
-          const dataPk = (await this.hasColumn(dataTable, "id")) ? "id" : null;
-          const nameCol = (await this.hasColumn(dataTable, "name"))
-            ? "name"
+        if (bookCol && dataCol && formatCol && (await this.hasTable('data'))) {
+          const dataTable = 'data';
+          const dataPk = (await this.hasColumn(dataTable, 'id')) ? 'id' : null;
+          const nameCol = (await this.hasColumn(dataTable, 'name'))
+            ? 'name'
             : null;
 
           if (dataPk && nameCol) {
@@ -844,8 +844,8 @@ export class CalibreReader {
               if (!book?.path || !name || !format || !calibreBookId) continue;
 
               const rel = path.posix.join(
-                book.path.replaceAll("\\", "/"),
-                name.replaceAll("\\", "/"),
+                book.path.replaceAll('\\', '/'),
+                name.replaceAll('\\', '/'),
               );
 
               out.push({ calibreBookId, format, relativePath: rel });
@@ -854,7 +854,7 @@ export class CalibreReader {
         }
       }
     } catch (e) {
-      logger.warn(e, "CalibreReader: failed to load formats from DB");
+      logger.warn(e, 'CalibreReader: failed to load formats from DB');
     }
 
     if (out.length > 0) return out;
@@ -876,24 +876,24 @@ export class CalibreReader {
       }
 
       for (const file of entries) {
-        const ext = path.extname(file).replace(/^\./, "").toUpperCase();
+        const ext = path.extname(file).replace(/^\./, '').toUpperCase();
         if (!ext) continue;
 
         const isKnown =
-          ext === "EPUB" ||
-          ext === "MOBI" ||
-          ext === "AZW" ||
-          ext === "AZW3" ||
-          ext === "PDF" ||
-          ext === "CBZ" ||
-          ext === "CBR" ||
-          ext === "TXT" ||
-          ext === "RTF" ||
-          ext === "DJVU" ||
-          ext === "DOC" ||
-          ext === "DOCX" ||
-          ext === "HTML" ||
-          ext === "HTM";
+          ext === 'EPUB' ||
+          ext === 'MOBI' ||
+          ext === 'AZW' ||
+          ext === 'AZW3' ||
+          ext === 'PDF' ||
+          ext === 'CBZ' ||
+          ext === 'CBR' ||
+          ext === 'TXT' ||
+          ext === 'RTF' ||
+          ext === 'DJVU' ||
+          ext === 'DOC' ||
+          ext === 'DOCX' ||
+          ext === 'HTML' ||
+          ext === 'HTM';
 
         if (!isKnown) continue;
 
@@ -901,8 +901,8 @@ export class CalibreReader {
           calibreBookId: b.calibreBookId,
           format: ext,
           relativePath: path.posix.join(
-            b.path.replaceAll("\\", "/"),
-            file.replaceAll("\\", "/"),
+            b.path.replaceAll('\\', '/'),
+            file.replaceAll('\\', '/'),
           ),
         });
       }

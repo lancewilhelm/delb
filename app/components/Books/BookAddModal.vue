@@ -128,7 +128,9 @@ function extractFetchErrorMessage(err: FetchErrorLike): string | null {
   return null;
 }
 
-function extractPossibleDuplicatePayload(err: unknown): PossibleDuplicatePayload | null {
+function extractPossibleDuplicatePayload(
+  err: unknown,
+): PossibleDuplicatePayload | null {
   const data = (err as { data?: unknown } | null)?.data;
   if (!data) return null;
 
@@ -335,7 +337,10 @@ async function uploadBooks() {
   } catch (err) {
     const e = err as FetchErrorLike;
     errorMessage.value =
-      extractFetchErrorMessage(e) || e?.statusMessage || e?.message || 'Upload failed';
+      extractFetchErrorMessage(e) ||
+      e?.statusMessage ||
+      e?.message ||
+      'Upload failed';
   } finally {
     uploading.value = false;
   }
@@ -376,9 +381,7 @@ function coverThumbUrl(coverImagePath: string | null | undefined): string {
   return `/api/media/covers/${p.replace(/^library\//, '')}`;
 }
 
-function isGoogleLikeMetadataItem(
-  input: unknown,
-): input is {
+function isGoogleLikeMetadataItem(input: unknown): input is {
   id: string;
   volumeInfo: {
     title?: string;
@@ -391,7 +394,9 @@ function isGoogleLikeMetadataItem(
   if (!('id' in input) || !('volumeInfo' in input)) return false;
   const id = (input as { id?: unknown }).id;
   const vi = (input as { volumeInfo?: unknown }).volumeInfo;
-  return typeof id === 'string' && !!id.trim() && !!vi && typeof vi === 'object';
+  return (
+    typeof id === 'string' && !!id.trim() && !!vi && typeof vi === 'object'
+  );
 }
 
 function incomingCoverUrl(): string | null {
@@ -510,7 +515,10 @@ async function uploadAnyway() {
   } catch (err) {
     const e = err as FetchErrorLike;
     errorMessage.value =
-      extractFetchErrorMessage(e) || e?.statusMessage || e?.message || 'Upload failed';
+      extractFetchErrorMessage(e) ||
+      e?.statusMessage ||
+      e?.message ||
+      'Upload failed';
   } finally {
     uploading.value = false;
   }
@@ -605,7 +613,10 @@ async function replaceSelected() {
   } catch (err) {
     const e = err as FetchErrorLike;
     errorMessage.value =
-      extractFetchErrorMessage(e) || e?.statusMessage || e?.message || 'Upload failed';
+      extractFetchErrorMessage(e) ||
+      e?.statusMessage ||
+      e?.message ||
+      'Upload failed';
   } finally {
     uploading.value = false;
   }
@@ -1090,7 +1101,9 @@ function handleMetadataSearchSelect(selection: {
               <div class="flex-1 min-w-0">
                 <div class="flex items-center justify-between gap-2">
                   <div class="font-semibold truncate">
-                    {{ parseIncoming(duplicateReview.details).title || 'Untitled' }}
+                    {{
+                      parseIncoming(duplicateReview.details).title || 'Untitled'
+                    }}
                   </div>
                   <div class="text-xs opacity-70 font-mono">
                     <span v-if="duplicateReview.kind === 'metadata'">
@@ -1101,7 +1114,10 @@ function handleMetadataSearchSelect(selection: {
                 </div>
 
                 <div class="text-sm opacity-80 truncate">
-                  {{ parseIncoming(duplicateReview.details).author || 'Unknown Author' }}
+                  {{
+                    parseIncoming(duplicateReview.details).author ||
+                    'Unknown Author'
+                  }}
                 </div>
 
                 <div

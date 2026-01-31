@@ -1,9 +1,9 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq } from 'drizzle-orm';
 
-import { cloudDb } from "~~/server/utils/db/cloud";
-import { auth } from "~/utils/auth";
-import { logger } from "~/utils/logger";
-import { collectionMembers, collections } from "~/utils/db/schema";
+import { cloudDb } from '~~/server/utils/db/cloud';
+import { auth } from '~/utils/auth';
+import { logger } from '~/utils/logger';
+import { collectionMembers, collections } from '~/utils/db/schema';
 
 /**
  * POST /api/collections/:id/leave
@@ -20,7 +20,9 @@ import { collectionMembers, collections } from "~/utils/db/schema";
  */
 export default defineEventHandler(async (event) => {
   const id =
-    typeof event.context?.params?.id === "string" ? event.context.params.id : "";
+    typeof event.context?.params?.id === 'string'
+      ? event.context.params.id
+      : '';
   logger.debug(`POST /api/collections/${id}/leave`);
 
   const session = await auth.api.getSession({
@@ -28,13 +30,13 @@ export default defineEventHandler(async (event) => {
   });
 
   if (!session) {
-    throw createError({ statusCode: 401, statusMessage: "Unauthorized" });
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
   }
 
   if (!id) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Collection id is required",
+      statusMessage: 'Collection id is required',
     });
   }
 
@@ -50,13 +52,16 @@ export default defineEventHandler(async (event) => {
 
   const c = cRows[0];
   if (!c?.id) {
-    throw createError({ statusCode: 404, statusMessage: "Collection not found" });
+    throw createError({
+      statusCode: 404,
+      statusMessage: 'Collection not found',
+    });
   }
 
   if (c.isPersonal) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Personal collections cannot be left",
+      statusMessage: 'Personal collections cannot be left',
     });
   }
 
@@ -67,11 +72,18 @@ export default defineEventHandler(async (event) => {
     .select({ role: collectionMembers.role })
     .from(collectionMembers)
     .where(
-      and(eq(collectionMembers.collectionId, id), eq(collectionMembers.userId, userId)),
+      and(
+        eq(collectionMembers.collectionId, id),
+        eq(collectionMembers.userId, userId),
+      ),
     )
     .limit(1);
 
-  const role = membershipRows[0]?.role as "owner" | "editor" | "viewer" | undefined;
+  const role = membershipRows[0]?.role as
+    | 'owner'
+    | 'editor'
+    | 'viewer'
+    | undefined;
 
   // If they're not a member, treat as no-op (don't leak membership state via errors)
   if (!role) {
@@ -81,18 +93,21 @@ export default defineEventHandler(async (event) => {
     };
   }
 
-  if (role === "owner") {
+  if (role === 'owner') {
     throw createError({
       statusCode: 400,
       statusMessage:
-        "Owners cannot leave a collection. Delete the collection or transfer ownership instead.",
+        'Owners cannot leave a collection. Delete the collection or transfer ownership instead.',
     });
   }
 
   await cloudDb
     .delete(collectionMembers)
     .where(
-      and(eq(collectionMembers.collectionId, id), eq(collectionMembers.userId, userId)),
+      and(
+        eq(collectionMembers.collectionId, id),
+        eq(collectionMembers.userId, userId),
+      ),
     );
 
   return {

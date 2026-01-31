@@ -17,5 +17,5 @@ export DATABASE_URL="${DATABASE_URL:-file:$DB_PATH}"
 echo "Running database migrations..."
 NODE_ENV=production node ./.drizzle/migrate.mjs
 
-echo "Starting Nuxt app..."
+echo "Starting Delb..."
 exec "$@"

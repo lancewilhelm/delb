@@ -1,16 +1,16 @@
-import path from "node:path";
-import { mkdir, rename, rm, stat, readdir } from "node:fs/promises";
+import path from 'node:path';
+import { mkdir, rename, rm, stat, readdir } from 'node:fs/promises';
 
-import { eq } from "drizzle-orm";
+import { eq } from 'drizzle-orm';
 
-import { cloudDb } from "~~/server/utils/db/cloud";
-import { authors, bookAuthors, bookFiles, books } from "~/utils/db/schema";
-import { logger } from "~/utils/logger";
+import { cloudDb } from '~~/server/utils/db/cloud';
+import { authors, bookAuthors, bookFiles, books } from '~/utils/db/schema';
+import { logger } from '~/utils/logger';
 import {
   BOOK_STORAGE_DEFAULTS,
   getCanonicalBookPaths,
   posixToOsPath,
-} from "~~/server/utils/books/storage/paths";
+} from '~~/server/utils/books/storage/paths';
 
 /**
  * Move a book's on-disk storage to match the canonical folder structure derived from
@@ -39,10 +39,10 @@ import {
 export type MoveBookStorageResult = {
   moved: boolean;
   reason?:
-    | "no-files"
-    | "already-canonical"
-    | "moved"
-    | "skipped-missing-on-disk";
+    | 'no-files'
+    | 'already-canonical'
+    | 'moved'
+    | 'skipped-missing-on-disk';
   fromDir?: string;
   toDir?: string;
   updatedFileCount?: number;
@@ -60,15 +60,15 @@ function resolveUnderLibraryOrThrow(storedPosixPath: string): {
   );
 
   // Normalize to "relative to library/..." and then resolve against the base.
-  const relFromLibraryPosix = (storedPosixPath ?? "")
+  const relFromLibraryPosix = (storedPosixPath ?? '')
     .toString()
-    .replace(/^library[\\/]/, ""); // accept either separator in stored string
+    .replace(/^library[\\/]/, ''); // accept either separator in stored string
 
   const abs = path.resolve(libraryBaseAbs, posixToOsPath(relFromLibraryPosix));
 
   const relToBase = path.relative(libraryBaseAbs, abs);
-  if (relToBase.startsWith("..") || relToBase.includes(`..${path.sep}`)) {
-    throw createError({ statusCode: 400, statusMessage: "Invalid path" });
+  if (relToBase.startsWith('..') || relToBase.includes(`..${path.sep}`)) {
+    throw createError({ statusCode: 400, statusMessage: 'Invalid path' });
   }
 
   return {
@@ -79,9 +79,9 @@ function resolveUnderLibraryOrThrow(storedPosixPath: string): {
 }
 
 function dirnamePosix(posixPath: string): string {
-  const parts = (posixPath ?? "").split("/").filter((p) => p.length > 0);
-  if (parts.length <= 1) return parts[0] ?? "";
-  return parts.slice(0, -1).join("/");
+  const parts = (posixPath ?? '').split('/').filter((p) => p.length > 0);
+  if (parts.length <= 1) return parts[0] ?? '';
+  return parts.slice(0, -1).join('/');
 }
 
 async function fileExists(absPath: string): Promise<boolean> {
@@ -117,7 +117,7 @@ export async function moveBookStorageToCanonical(opts: {
 
   const book = bookRows[0];
   if (!book) {
-    throw createError({ statusCode: 404, statusMessage: "Book not found" });
+    throw createError({ statusCode: 404, statusMessage: 'Book not found' });
   }
 
   const authorLinks = await cloudDb
@@ -133,17 +133,17 @@ export async function moveBookStorageToCanonical(opts: {
   const ordered = authorLinks
     .slice()
     .sort((a, b) => {
-      const aPos = typeof a.position === "number" ? a.position : 10_000;
-      const bPos = typeof b.position === "number" ? b.position : 10_000;
+      const aPos = typeof a.position === 'number' ? a.position : 10_000;
+      const bPos = typeof b.position === 'number' ? b.position : 10_000;
       if (aPos !== bPos) return aPos - bPos;
-      return (a.name ?? "").localeCompare(b.name ?? "");
+      return (a.name ?? '').localeCompare(b.name ?? '');
     })
     .map((a) => a.name)
-    .filter((n): n is string => typeof n === "string" && n.length > 0);
+    .filter((n): n is string => typeof n === 'string' && n.length > 0);
 
   const canonical = getCanonicalBookPaths({
     authorNames: ordered,
-    title: book.title ?? "",
+    title: book.title ?? '',
     bookId,
   });
 
@@ -154,16 +154,16 @@ export async function moveBookStorageToCanonical(opts: {
     .where(eq(bookFiles.bookId, bookId));
 
   if (!files.length) {
-    return { moved: false, reason: "no-files" };
+    return { moved: false, reason: 'no-files' };
   }
 
   // Determine "current directory" by looking at a preferred file.
   const preferred =
-    files.find((f) => (f.format ?? "").toLowerCase() === "epub") ?? files[0];
+    files.find((f) => (f.format ?? '').toLowerCase() === 'epub') ?? files[0];
 
   const currentRel = preferred?.relativePath;
   if (!currentRel) {
-    return { moved: false, reason: "no-files" };
+    return { moved: false, reason: 'no-files' };
   }
 
   // Current dir is the dirname of the preferred file.
@@ -175,7 +175,7 @@ export async function moveBookStorageToCanonical(opts: {
     // but for now treat as already canonical.
     return {
       moved: false,
-      reason: "already-canonical",
+      reason: 'already-canonical',
       fromDir: currentDirPosix,
       toDir: targetDirPosix,
     };
@@ -187,7 +187,7 @@ export async function moveBookStorageToCanonical(opts: {
   );
   const targetDirAbs = path.resolve(
     libraryBaseAbs,
-    posixToOsPath(targetDirPosix.replace(/^library\//, "")),
+    posixToOsPath(targetDirPosix.replace(/^library\//, '')),
   );
   await mkdir(targetDirAbs, { recursive: true });
 
@@ -205,7 +205,7 @@ export async function moveBookStorageToCanonical(opts: {
     if (!srcExists) {
       logger.warn(
         { bookId, relativePath: rel },
-        "moveBookStorageToCanonical: source file missing on disk; skipping move",
+        'moveBookStorageToCanonical: source file missing on disk; skipping move',
       );
       continue;
     }
@@ -226,7 +226,7 @@ export async function moveBookStorageToCanonical(opts: {
     const destRelPosix = [
       BOOK_STORAGE_DEFAULTS.baseDir,
       ...path.relative(libraryBaseAbs, dest).split(path.sep),
-    ].join("/");
+    ].join('/');
 
     await cloudDb
       .update(bookFiles)
@@ -263,7 +263,7 @@ export async function moveBookStorageToCanonical(opts: {
       const destCoverRelPosix = [
         BOOK_STORAGE_DEFAULTS.baseDir,
         ...path.relative(libraryBaseAbs, destCoverAbs).split(path.sep),
-      ].join("/");
+      ].join('/');
 
       await cloudDb
         .update(books)
@@ -282,7 +282,7 @@ export async function moveBookStorageToCanonical(opts: {
     );
     const oldDirAbs = path.resolve(
       libraryBaseAbs,
-      posixToOsPath(currentDirPosix.replace(/^library\//, "")),
+      posixToOsPath(currentDirPosix.replace(/^library\//, '')),
     );
     await tryRemoveDirIfEmpty(oldDirAbs);
   } catch {
@@ -291,7 +291,7 @@ export async function moveBookStorageToCanonical(opts: {
 
   return {
     moved: true,
-    reason: "moved",
+    reason: 'moved',
     fromDir: currentDirPosix,
     toDir: targetDirPosix,
     updatedFileCount,
@@ -300,9 +300,9 @@ export async function moveBookStorageToCanonical(opts: {
 }
 
 function normalizePosix(p: string): string {
-  return (p ?? "")
+  return (p ?? '')
     .toString()
-    .replace(/\\/g, "/")
-    .replace(/\/+/g, "/")
-    .replace(/\/$/, "");
+    .replace(/\\/g, '/')
+    .replace(/\/+/g, '/')
+    .replace(/\/$/, '');
 }
