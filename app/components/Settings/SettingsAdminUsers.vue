@@ -6,6 +6,8 @@ const sortedUsers = ref<UserWithRole[]>([]);
 
 const globalSettingsStore = useGlobalSettingsStore();
 
+type EditableRole = 'admin' | 'user';
+
 // Fetch users data
 const fetchUsers = async () => {
   const { admin } = useAuth();
@@ -158,6 +160,135 @@ function canEditUser(user: UserWithRole) {
   if (user.role === 'owner') return false; // Can't edit owner
   return true;
 }
+
+// Edit user handlers
+const editUserModalVisible = ref(false);
+const editUserOriginal = ref<UserWithRole | null>(null);
+const editUserId = ref('');
+const editUserName = ref('');
+const editUserEmail = ref('');
+const editUserRole = ref<EditableRole>('user');
+const editUserNewPassword = ref('');
+const editUserSaving = ref(false);
+const editUserPasswordSaving = ref(false);
+const editUserEmailInput = ref<HTMLInputElement | null>(null);
+
+function openEditUser(user: UserWithRole) {
+  if (!canEditUser(user)) return;
+  editUserOriginal.value = user;
+  editUserId.value = user.id;
+  editUserName.value = (user.name ?? '').toString();
+  editUserEmail.value = (user.email ?? '').toString();
+  editUserRole.value = user.role === 'admin' ? 'admin' : 'user';
+  editUserNewPassword.value = '';
+  editUserModalVisible.value = true;
+  nextTick(() => {
+    editUserEmailInput.value?.focus();
+  });
+}
+
+function closeEditUser() {
+  editUserModalVisible.value = false;
+  editUserOriginal.value = null;
+  editUserId.value = '';
+  editUserName.value = '';
+  editUserEmail.value = '';
+  editUserRole.value = 'user';
+  editUserNewPassword.value = '';
+  editUserSaving.value = false;
+  editUserPasswordSaving.value = false;
+}
+
+function generatePassword(length = 16) {
+  const charset =
+    'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*-_=+';
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => charset[b % charset.length]).join('');
+}
+
+async function copyToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function showAlert(message: string) {
+  alert(message);
+}
+
+async function saveUserEdits() {
+  if (!editUserOriginal.value || !editUserId.value) return;
+
+  const name = editUserName.value.trim();
+  const email = editUserEmail.value.trim().toLowerCase();
+
+  if (!name) {
+    alert('Please provide a name');
+    return;
+  }
+  if (!email) {
+    alert('Please provide an email');
+    return;
+  }
+
+  const data: Record<string, unknown> = {};
+  if ((editUserOriginal.value.name ?? '') !== name) data.name = name;
+  if ((editUserOriginal.value.email ?? '') !== email) data.email = email;
+  if ((editUserOriginal.value.role ?? 'user') !== editUserRole.value)
+    data.role = editUserRole.value;
+
+  if (Object.keys(data).length === 0) {
+    alert('No changes to save');
+    return;
+  }
+
+  editUserSaving.value = true;
+  try {
+    const { admin } = useAuth();
+    const { error } = await admin.updateUser({
+      userId: editUserId.value,
+      data,
+    });
+    if (error) {
+      alert(`Error updating user: ${error.message}`);
+      return;
+    }
+    closeEditUser();
+    await fetchUsers();
+  } finally {
+    editUserSaving.value = false;
+  }
+}
+
+async function setUserPassword() {
+  if (!editUserId.value) return;
+  const newPassword = editUserNewPassword.value;
+  if (!newPassword) {
+    alert('Please provide a new password');
+    return;
+  }
+
+  editUserPasswordSaving.value = true;
+  try {
+    const { admin } = useAuth();
+    const { error } = await admin.setUserPassword({
+      userId: editUserId.value,
+      newPassword,
+    });
+    if (error) {
+      alert(`Error setting password: ${error.message}`);
+      return;
+    }
+    alert('Password updated. Be sure to share it securely with the user.');
+    editUserNewPassword.value = '';
+  } finally {
+    editUserPasswordSaving.value = false;
+  }
+}
 </script>
 
 <template>
@@ -197,7 +328,7 @@ function canEditUser(user: UserWithRole) {
                   <div v-if="canEditUser(u)" class="flex gap-2">
                     <button
                       class="flex items-center bg-(--sub-alt-color) p-2 rounded-lg text-(--text-color)"
-                      @click="() => console.log('Edit user', u.id)"
+                      @click="() => openEditUser(u)"
                     >
                       <Icon
                         name="lucide:user-pen"
@@ -401,6 +532,108 @@ function canEditUser(user: UserWithRole) {
             @click="banUserModalVisible = false"
           >
             cancel
+          </button>
+        </div>
+      </div>
+    </ModalWindow>
+
+    <!-- Edit User Modal -->
+    <ModalWindow :open="editUserModalVisible" @close="closeEditUser">
+      <div class="flex flex-col gap-4 items-center">
+        <div class="text-(--main-color) text-lg self-start">edit user</div>
+
+        <div class="flex flex-col gap-2 w-62.5">
+          <input
+            v-model="editUserName"
+            type="text"
+            placeholder="name"
+            class="w-full p-2 border border-(--sub-color) rounded-lg"
+            :disabled="editUserSaving"
+            @keyup.enter="saveUserEdits"
+          />
+          <input
+            ref="editUserEmailInput"
+            v-model="editUserEmail"
+            type="email"
+            placeholder="email"
+            class="w-full p-2 border border-(--sub-color) rounded-lg"
+            :disabled="editUserSaving"
+            @keyup.enter="saveUserEdits"
+          />
+          <select
+            v-model="editUserRole"
+            class="w-full p-2 border border-(--sub-color) rounded-lg"
+            :disabled="editUserSaving"
+          >
+            <option value="user">user</option>
+            <option value="admin">admin</option>
+          </select>
+        </div>
+
+        <div class="w-full border-t border-(--sub-color) pt-4">
+          <div class="text-(--text-color) text-sm mb-2">password reset</div>
+          <div class="flex flex-col gap-2 w-62.5">
+            <input
+              v-model="editUserNewPassword"
+              type="text"
+              placeholder="new password"
+              class="w-full p-2 border border-(--sub-color) rounded-lg"
+              :disabled="editUserPasswordSaving"
+              @keyup.enter="setUserPassword"
+            />
+            <div class="flex gap-2">
+              <button
+                class="flex-1 bg-(--sub-alt-color) text-(--text-color) p-2 rounded-lg"
+                :disabled="editUserPasswordSaving"
+                @click="
+                  () => {
+                    editUserNewPassword = generatePassword(18);
+                  }
+                "
+              >
+                generate
+              </button>
+              <button
+                class="flex-1 bg-(--sub-alt-color) text-(--text-color) p-2 rounded-lg"
+                :disabled="!editUserNewPassword || editUserPasswordSaving"
+                @click="
+                  async () => {
+                    const ok = await copyToClipboard(editUserNewPassword);
+                    if (!ok) showAlert('Failed to copy to clipboard');
+                  }
+                "
+              >
+                copy
+              </button>
+            </div>
+            <button
+              class="bg-(--error-color) text-(--bg-color) p-2 rounded-lg"
+              :disabled="!editUserNewPassword || editUserPasswordSaving"
+              @click="setUserPassword"
+            >
+              set password
+            </button>
+            <div class="text-(--sub-color) text-xs">
+              No email provider is configured. This sets the user&apos;s password
+              directly; share it with them securely.
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-2 w-full justify-end">
+          <button
+            class="bg-(--sub-alt-color) text-(--text-color) p-2 rounded-lg"
+            :disabled="editUserSaving"
+            @click="closeEditUser"
+          >
+            cancel
+          </button>
+          <button
+            class="bg-(--main-color) text-(--bg-color) p-2 rounded-lg"
+            :disabled="editUserSaving"
+            @click="saveUserEdits"
+          >
+            save
           </button>
         </div>
       </div>
