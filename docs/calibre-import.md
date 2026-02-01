@@ -19,6 +19,8 @@ Delb reads Calibre’s `library/metadata.db` using the `@libsql/client` SQLite d
 - Delb reads Calibre’s database but writes Delb’s database to:
   - `data/delb.db`
 - Delb stores **file pointers** (relative paths under `library/`) and uses those pointers for downloads.
+- If you want Delb to **update covers or delete files**, the runtime user must have
+  write access to the mounted `library/` directory.
 
 ---
 
@@ -43,6 +45,14 @@ And often contain:
 - one or more ebook format files (e.g. `.epub`, `.pdf`, `.mobi`, `.azw3`)
 - `metadata.opf` (sidecar metadata)
 - `cover.jpg` / `cover.jpeg` / `cover.png`
+
+### 1a) Cover updates (import-in-place)
+
+When you upload a new cover for a Calibre-imported book, Delb writes the new
+`cover.<ext>` and `thumb.webp` into the **existing Calibre book folder**.
+If Delb cannot resolve that folder (missing `metadata.db`, missing file pointers,
+or missing on-disk directory), it will **refuse to create a new folder** to avoid
+duplicating Calibre paths. Re-scan the Calibre library to restore file pointers.
 
 ### 2) Delb database location
 

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, stat, writeFile } from 'node:fs/promises';
 
 import { and, eq, inArray } from 'drizzle-orm';
 import sharp from 'sharp';
@@ -7,6 +7,7 @@ import sharp from 'sharp';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { resolveDataPath } from '~~/server/utils/books/fs';
 import { getCanonicalBookPaths } from '~~/server/utils/books/storage/paths';
+import { CalibreReader } from '~~/server/utils/import/calibre/calibre-reader';
 import {
   authors,
   bookAuthors,
@@ -148,6 +149,57 @@ export default defineEventHandler(async (event) => {
       }
     };
 
+    const ensureExistingDirOrThrow = async (
+      candidateAbs: string,
+      logCtx: Record<string, unknown>,
+    ) => {
+      try {
+        const st = await stat(candidateAbs);
+        if (!st.isDirectory()) throw new Error('not a directory');
+      } catch (error) {
+        logger.warn(
+          { err: error, id, ...logCtx },
+          'POST /api/books/:id/cover: book directory missing on disk',
+        );
+        throw createError({
+          statusCode: 409,
+          statusMessage:
+            'Book directory missing on disk; re-scan Calibre or restore the library folder.',
+        });
+      }
+    };
+
+    const resolveCalibreBookDirAbs = async (
+      calibreBookId: number,
+    ): Promise<string | null> => {
+      let reader: CalibreReader | null = null;
+      try {
+        reader = new CalibreReader({
+          libraryRootAbs: libraryBaseAbs,
+          readonly: true,
+        });
+
+        const calibreBook = await reader.getBookById(calibreBookId);
+        const relDir = (calibreBook?.path ?? '').toString().trim();
+        if (!relDir) return null;
+
+        const dirAbs = path.resolve(libraryBaseAbs, relDir);
+        ensureUnderLibraryOrThrow(dirAbs, {
+          calibreBookId,
+          from: 'calibre',
+        });
+        return dirAbs;
+      } catch (error) {
+        logger.warn(
+          error,
+          'POST /api/books/:id/cover: failed to resolve Calibre book path',
+        );
+        return null;
+      } finally {
+        if (reader) await reader.close();
+      }
+    };
+
     let bookDirAbs: string | null = null;
 
     if (files.length) {
@@ -170,49 +222,71 @@ export default defineEventHandler(async (event) => {
       });
       bookDirAbs = path.dirname(bookFileAbs);
     } else {
-      const coverImagePathRaw = (book.coverImagePath ?? '').toString().trim();
+      const calibreBookId =
+        typeof book.calibreBookId === 'number' &&
+        Number.isFinite(book.calibreBookId)
+          ? book.calibreBookId
+          : null;
 
-      if (coverImagePathRaw) {
-        const relFromLibrary = coverImagePathRaw.replace(/^library[\\/]/, '');
-        const coverAbs = path.resolve(libraryBaseAbs, relFromLibrary);
-        ensureUnderLibraryOrThrow(coverAbs, {
-          coverImagePath: coverImagePathRaw,
-          from: 'books.coverImagePath',
-        });
-        bookDirAbs = path.dirname(coverAbs);
-      } else {
-        const authorLinks = await cloudDb
-          .select({
-            name: authors.name,
-            position: bookAuthors.position,
-          })
-          .from(bookAuthors)
-          .innerJoin(authors, eq(authors.id, bookAuthors.authorId))
-          .where(eq(bookAuthors.bookId, id));
+      if (calibreBookId) {
+        const calibreDirAbs = await resolveCalibreBookDirAbs(calibreBookId);
+        if (calibreDirAbs) {
+          await ensureExistingDirOrThrow(calibreDirAbs, { calibreBookId });
+          bookDirAbs = calibreDirAbs;
+        } else {
+          throw createError({
+            statusCode: 409,
+            statusMessage:
+              'Calibre book path unavailable; re-scan Calibre before updating covers.',
+          });
+        }
+      }
 
-        const orderedAuthorNames = authorLinks
-          .slice()
-          .sort((a, b) => {
-            const aPos = typeof a.position === 'number' ? a.position : 10_000;
-            const bPos = typeof b.position === 'number' ? b.position : 10_000;
-            if (aPos !== bPos) return aPos - bPos;
-            return (a.name ?? '').localeCompare(b.name ?? '');
-          })
-          .map((a) => a.name)
-          .filter((n): n is string => typeof n === 'string' && n.length > 0);
+      if (!bookDirAbs) {
+        const coverImagePathRaw = (book.coverImagePath ?? '').toString().trim();
 
-        const canonical = getCanonicalBookPaths({
-          authorNames: orderedAuthorNames,
-          title: book.title ?? '',
-          bookId: id,
-        });
+        if (coverImagePathRaw) {
+          const relFromLibrary = coverImagePathRaw.replace(/^library[\\/]/, '');
+          const coverAbs = path.resolve(libraryBaseAbs, relFromLibrary);
+          ensureUnderLibraryOrThrow(coverAbs, {
+            coverImagePath: coverImagePathRaw,
+            from: 'books.coverImagePath',
+          });
+          bookDirAbs = path.dirname(coverAbs);
+        } else {
+          const authorLinks = await cloudDb
+            .select({
+              name: authors.name,
+              position: bookAuthors.position,
+            })
+            .from(bookAuthors)
+            .innerJoin(authors, eq(authors.id, bookAuthors.authorId))
+            .where(eq(bookAuthors.bookId, id));
 
-        const dirAbs = resolveDataPath(canonical.bookDir);
-        ensureUnderLibraryOrThrow(dirAbs, {
-          canonicalBookDir: canonical.bookDir,
-          from: 'canonical',
-        });
-        bookDirAbs = dirAbs;
+          const orderedAuthorNames = authorLinks
+            .slice()
+            .sort((a, b) => {
+              const aPos = typeof a.position === 'number' ? a.position : 10_000;
+              const bPos = typeof b.position === 'number' ? b.position : 10_000;
+              if (aPos !== bPos) return aPos - bPos;
+              return (a.name ?? '').localeCompare(b.name ?? '');
+            })
+            .map((a) => a.name)
+            .filter((n): n is string => typeof n === 'string' && n.length > 0);
+
+          const canonical = getCanonicalBookPaths({
+            authorNames: orderedAuthorNames,
+            title: book.title ?? '',
+            bookId: id,
+          });
+
+          const dirAbs = resolveDataPath(canonical.bookDir);
+          ensureUnderLibraryOrThrow(dirAbs, {
+            canonicalBookDir: canonical.bookDir,
+            from: 'canonical',
+          });
+          bookDirAbs = dirAbs;
+        }
       }
     }
 

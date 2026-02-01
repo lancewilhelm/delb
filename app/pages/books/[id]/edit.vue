@@ -231,6 +231,7 @@ type Book = {
   id: string;
   title: string;
   coverImagePath?: string | null;
+  updatedAt?: string | number | Date;
   description?: string | null;
   published?: string | null;
   language?: string | null;
@@ -291,6 +292,14 @@ const book = ref<Book | null>(null);
 
 const coverResetPending = ref(false);
 
+const coverCacheKey = computed(() => {
+  const raw = book.value?.updatedAt;
+  if (!raw) return null;
+  const ts = new Date(raw).getTime();
+  if (Number.isNaN(ts)) return null;
+  return String(ts);
+});
+
 const coverThumbUrl = computed(() => {
   // If the user has requested a reset, reflect that immediately in the edit UI,
   // but do not persist until Save is pressed.
@@ -301,7 +310,9 @@ const coverThumbUrl = computed(() => {
 
   // Stored as: library/<author>/<title>/thumb.webp (default)
   // API expects: /api/media/covers/<path under library>
-  return `/api/media/covers/${b.coverImagePath.replace(/^library\//, '')}`;
+  const base = `/api/media/covers/${b.coverImagePath.replace(/^library\//, '')}`;
+  const key = coverCacheKey.value;
+  return key ? `${base}?v=${encodeURIComponent(key)}` : base;
 });
 
 const coverSourceUrl = computed(() => {
@@ -1153,24 +1164,6 @@ function resetForm() {
 
 function backToBook() {
   const targetPath = `/books/${encodeURIComponent(bookId.value)}`;
-
-  // If the previous history entry is already the book page, going "back" avoids
-  // duplicating the book route (book → edit → replace-to-book => book twice).
-  if (import.meta.client) {
-    const back = (window.history.state as { back?: unknown } | null)?.back;
-    if (typeof back === 'string') {
-      try {
-        const backUrl = new URL(back, window.location.origin);
-        if (backUrl.pathname === targetPath) {
-          router.back();
-          return;
-        }
-      } catch {
-        // Ignore invalid URLs and fall back to replace.
-      }
-    }
-  }
-
   router.replace(targetPath);
 }
 

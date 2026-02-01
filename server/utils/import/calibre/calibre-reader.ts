@@ -344,6 +344,56 @@ export class CalibreReader {
     }));
   }
 
+  /** Read a single Calibre book by id (best-effort; returns null if missing). */
+  async getBookById(calibreBookId: number): Promise<CalibreBookRow | null> {
+    const id = asNumber(calibreBookId);
+    if (!id || id <= 0) return null;
+
+    if (!(await this.hasTable('books'))) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Calibre metadata.db is missing required table: books',
+      });
+    }
+
+    const fields: string[] = ['id as calibreBookId', 'title as title'];
+    if (await this.hasColumn('books', 'sort')) fields.push('sort as sort');
+    if (await this.hasColumn('books', 'timestamp'))
+      fields.push('timestamp as timestamp');
+    if (await this.hasColumn('books', 'pubdate'))
+      fields.push('pubdate as pubdate');
+    if (await this.hasColumn('books', 'last_modified'))
+      fields.push('last_modified as lastModified');
+    if (await this.hasColumn('books', 'path')) fields.push('path as path');
+    if (await this.hasColumn('books', 'series_index'))
+      fields.push('series_index as seriesIndex');
+
+    const sql = `SELECT ${fields.join(', ')} FROM books WHERE id = ? LIMIT 1`;
+    const row = await this.db.get(sql, [id]);
+    if (!row) return null;
+
+    return {
+      calibreBookId: asNumber(row.calibreBookId) ?? id,
+      title: safeString(row.title) || 'Unknown',
+      sort: row.sort !== undefined ? (row.sort as string | null) : undefined,
+      timestamp:
+        row.timestamp !== undefined ? (row.timestamp as string | null) : undefined,
+      pubdate:
+        row.pubdate !== undefined ? (row.pubdate as string | null) : undefined,
+      lastModified:
+        row.lastModified !== undefined
+          ? (row.lastModified as string | null)
+          : undefined,
+      path: row.path !== undefined ? (row.path as string | null) : undefined,
+      seriesIndex:
+        row.seriesIndex !== undefined
+          ? typeof row.seriesIndex === 'number'
+            ? row.seriesIndex
+            : asNumber(row.seriesIndex)
+          : undefined,
+    };
+  }
+
   /** Read all authors. */
   async getAuthors(): Promise<CalibreAuthorRow[]> {
     if (!(await this.hasTable('authors'))) return [];
