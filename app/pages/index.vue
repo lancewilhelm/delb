@@ -136,15 +136,20 @@ onMounted(async () => {
             </div>
 
             <!-- Collection info -->
-            <div class="text-center text-md opacity-80">
-              Active collection:
-              <span v-if="collectionsStore.activeSelection.kind === 'all'"
+            <div
+              class="text-center text-lg opacity-80 flex justify-center items-center gap-1.5"
+            >
+              Collection:
+              <span
+                v-if="collectionsStore.activeSelection.kind === 'all'"
+                class="text-2xl"
                 >All</span
               >
               <span
                 v-else-if="
                   collectionsStore.activeSelection.kind === 'collection'
                 "
+                class="text-2xl"
                 >{{ collectionsStore.activeCollection?.name }}</span
               >
             </div>

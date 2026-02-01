@@ -1152,7 +1152,26 @@ function resetForm() {
 }
 
 function backToBook() {
-  router.replace(`/books/${encodeURIComponent(bookId.value)}`);
+  const targetPath = `/books/${encodeURIComponent(bookId.value)}`;
+
+  // If the previous history entry is already the book page, going "back" avoids
+  // duplicating the book route (book → edit → replace-to-book => book twice).
+  if (import.meta.client) {
+    const back = (window.history.state as { back?: unknown } | null)?.back;
+    if (typeof back === 'string') {
+      try {
+        const backUrl = new URL(back, window.location.origin);
+        if (backUrl.pathname === targetPath) {
+          router.back();
+          return;
+        }
+      } catch {
+        // Ignore invalid URLs and fall back to replace.
+      }
+    }
+  }
+
+  router.replace(targetPath);
 }
 
 // Metadata search modal
