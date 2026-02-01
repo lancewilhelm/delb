@@ -241,11 +241,21 @@ const globalSettingsStore = useGlobalSettingsStore();
 const searchQuery = ref(props.initialQuery || '');
 const searching = ref(false);
 const errorMessage = ref('');
+const searchNonce = ref(0);
 
 const // unified results for display (could be from multiple providers)
   searchResults = ref<SearchResult[]>([]);
 
 const selectedFields = ref<Record<string, ImportFields>>({});
+
+function resetSearchState() {
+  // Invalidate any in-flight searches so their results can't repopulate state after close.
+  searchNonce.value += 1;
+  searching.value = false;
+  errorMessage.value = '';
+  searchResults.value = [];
+  selectedFields.value = {};
+}
 
 /**
  * Provider toggles:
@@ -298,7 +308,11 @@ async function persistProvidersToUserSettings() {
 watch(
   () => props.open,
   async (isOpen) => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      // Clear stored search state so the next open can auto-fetch for the new query.
+      resetSearchState();
+      return;
+    }
 
     // Ensure we have latest capability flags (Hardcover availability)
     await globalSettingsStore.pullLatest();
@@ -306,8 +320,13 @@ watch(
     hydrateProvidersFromUserSettings();
     ensureProviderValidity();
 
-    // Auto-search when modal opens with an initial query
-    if (props.initialQuery && searchResults.value.length === 0) {
+    // Keep the input in sync when opening via a parent-provided query.
+    if (typeof props.initialQuery === 'string') {
+      searchQuery.value = props.initialQuery;
+    }
+
+    // Auto-search when modal opens with an initial query.
+    if (props.initialQuery?.trim()) {
       performSearch();
     }
   },
@@ -343,14 +362,19 @@ function activeProviders(): MetadataProviderKey[] {
 }
 
 async function performSearch() {
+  const nonce = (searchNonce.value += 1);
+  const isActive = () => props.open && nonce === searchNonce.value;
+
   if (!searchQuery.value.trim()) {
-    errorMessage.value = 'Please enter a search term';
+    if (isActive()) errorMessage.value = 'Please enter a search term';
     return;
   }
 
-  searching.value = true;
-  errorMessage.value = '';
-  searchResults.value = [];
+  if (isActive()) {
+    searching.value = true;
+    errorMessage.value = '';
+    searchResults.value = [];
+  }
 
   const providers = activeProviders();
 
@@ -368,6 +392,8 @@ async function performSearch() {
     const resultsByProvider = await Promise.all(tasks);
     const merged = resultsByProvider.flat();
 
+    if (!isActive()) return;
+
     if (merged.length > 0) {
       searchResults.value = merged;
 
@@ -382,9 +408,9 @@ async function performSearch() {
     }
   } catch (error) {
     console.error('Search error:', error);
-    errorMessage.value = 'Failed to search. Please try again.';
+    if (isActive()) errorMessage.value = 'Failed to search. Please try again.';
   } finally {
-    searching.value = false;
+    if (isActive()) searching.value = false;
   }
 }
 

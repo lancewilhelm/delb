@@ -40,6 +40,8 @@ Hardcover is only selectable when the server has a configured Hardcover token. I
 
 Tip: The cover preview on the edit page uses the full-resolution stored cover when available, and shows its resolution in the corner.
 
+Note: when the modal is opened with a pre-filled query, it auto-runs the search; closing the modal clears the prior results so the next open reflects the current query.
+
 ## Add Book Modal (Full Import)
 
 From the Add Book modal ("By metadata" tab), you can either:
