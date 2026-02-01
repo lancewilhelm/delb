@@ -123,16 +123,30 @@ onMounted(async () => {
           class="flex-1 min-h-0 overflow-auto p-4 space-y-8 flex items-center justify-center max-w-225 self-center"
         >
           <div v-if="loading" class="text-sm opacity-80">Loading…</div>
-          <div v-else-if="errorMessage" class="text-sm text-red-600">
+          <div v-else-if="errorMessage" class="text-sm text-(--error-color)">
             {{ errorMessage }}
           </div>
 
-          <div v-else class="space-y-8">
+          <div v-else class="flex flex-col gap-4">
             <!-- Hero -->
             <div
               class="w-full flex items-center justify-center text-center text-5xl font-thin font-serif"
             >
               Hello, {{ displayName }}.
+            </div>
+
+            <!-- Collection info -->
+            <div class="text-center text-md opacity-80">
+              Active collection:
+              <span v-if="collectionsStore.activeSelection.kind === 'all'"
+                >All</span
+              >
+              <span
+                v-else-if="
+                  collectionsStore.activeSelection.kind === 'collection'
+                "
+                >{{ collectionsStore.activeCollection?.name }}</span
+              >
             </div>
 
             <!-- Cards -->
