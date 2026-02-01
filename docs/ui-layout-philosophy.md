@@ -181,6 +181,12 @@ Server-side sorting is supported via the books list endpoint:
 
 Book grids use cursor pagination on the API and virtualized rendering in the client. Pagination keeps payloads and memory bounded, while virtualization keeps DOM size stable as users scroll through large libraries.
 
+Implementation notes:
+
+- The grid stabilizes row height using a hidden row sizer so virtualization does not shift when rows have missing metadata.
+- The grid uses content width (excluding padding) and fixes item height to keep scroll math aligned.
+- See `app/components/Books/BooksInfiniteGrid.vue` and `app/components/BookThumbnail.vue`.
+
 ### Filters = refinement
 
 Filters narrow the result set _within the current scope + view_. Filters are always optional and stackable.

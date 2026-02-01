@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { ComponentPublicInstance } from 'vue';
 /* eslint-disable vue/require-default-prop */
 defineOptions({ name: 'BooksInfiniteGrid' });
 
@@ -161,11 +160,12 @@ function clampInt(
 }
 
 const scrollContainerRef = ref<HTMLElement | null>(null);
+const contentRef = ref<HTMLElement | null>(null);
 const sentinelRef = ref<HTMLElement | null>(null);
 const scrollTop = ref(0);
 const containerSize = ref({ width: 0, height: 0 });
 const measuredRowHeight = ref<number | null>(null);
-const gridItemRefs = ref<HTMLElement[]>([]);
+const rowSizerRef = ref<HTMLElement | null>(null);
 
 let measureRaf: number | null = null;
 let measureTimer: number | null = null;
@@ -173,35 +173,27 @@ let measureTimer: number | null = null;
 let resizeObserver: ResizeObserver | null = null;
 const layoutKey = ref<string | null>(null);
 
-onBeforeUpdate(() => {
-  gridItemRefs.value = [];
-});
-
-function setGridItemRef(el: Element | ComponentPublicInstance | null) {
-  if (!el) return;
-  const resolved =
-    el instanceof HTMLElement
-      ? el
-      : (el as ComponentPublicInstance).$el instanceof HTMLElement
-        ? (el as ComponentPublicInstance).$el
-        : null;
-  if (!resolved) return;
-  gridItemRefs.value.push(resolved);
-}
+const rowSizerBook: Book = {
+  id: '__row-sizer__',
+  title: 'Sample Title',
+  authors: [{ id: '__author__', name: 'Sample Author' }],
+  authorNames: ['Sample Author'],
+  author: 'Sample Author',
+  series: { id: '__series__', name: 'Sample Series' },
+  publisher: null,
+  coverImagePath: null,
+  createdAt: 0,
+};
 
 function updateMeasuredRowHeight() {
-  const items = gridItemRefs.value;
-  if (!items.length) return;
+  const sizer = rowSizerRef.value;
+  if (!sizer) return;
 
-  const rects = items.map((el) => el.getBoundingClientRect());
-  const firstTop = Math.min(...rects.map((r) => r.top));
-  const firstRowRects = rects.filter((r) => Math.abs(r.top - firstTop) < 1);
-
-  if (!firstRowRects.length) return;
-
-  const maxHeight = Math.max(...firstRowRects.map((r) => r.height));
-  if (maxHeight > 0 && maxHeight !== measuredRowHeight.value) {
-    measuredRowHeight.value = maxHeight;
+  const rect = sizer.getBoundingClientRect();
+  const next = Math.round(rect.height * 100) / 100;
+  if (!Number.isFinite(next) || next <= 0) return;
+  if (next !== measuredRowHeight.value) {
+    measuredRowHeight.value = next;
   }
 }
 
@@ -232,8 +224,17 @@ function scheduleRowHeightMeasure(opts: { debounceMs?: number } = {}) {
 function updateContainerSize() {
   const container = scrollContainerRef.value;
   if (!container) return;
+  let width = container.clientWidth;
+  const content = contentRef.value;
+  if (content) {
+    const style = window.getComputedStyle(content);
+    const left = Number.parseFloat(style.paddingLeft || '0') || 0;
+    const right = Number.parseFloat(style.paddingRight || '0') || 0;
+    const next = content.clientWidth - left - right;
+    width = Number.isFinite(next) ? Math.max(0, next) : width;
+  }
   containerSize.value = {
-    width: container.clientWidth,
+    width,
     height: container.clientHeight,
   };
 }
@@ -251,6 +252,15 @@ const errorMessage = ref<string | null>(null);
 
 const hasMore = computed(() => Boolean(nextCursor.value));
 
+function debugLog(message: string, data?: Record<string, unknown>) {
+  if (!props.debug) return;
+  if (data) {
+    console.debug('[BooksInfiniteGrid]', message, data);
+    return;
+  }
+  console.debug('[BooksInfiniteGrid]', message);
+}
+
 watch(
   () => books.value.length,
   async (n) => {
@@ -267,6 +277,14 @@ watch(
   { immediate: true, flush: 'post' },
 );
 
+watch(
+  () => measuredRowHeight.value,
+  (next, prev) => {
+    if (!next || next === prev) return;
+    debugLog('rowHeightChanged', { prev, next });
+  },
+);
+
 const gridColumns = computed(() => {
   const w = containerSize.value.width;
   if (!w) return 1;
@@ -275,6 +293,23 @@ const gridColumns = computed(() => {
   const gap = bookGridGapPx.value;
 
   return Math.max(1, Math.floor((w + gap) / (cardW + gap)));
+});
+
+const gridColumnWidthPx = computed(() => {
+  const w = containerSize.value.width;
+  if (!w) return gridCoverWidthPresetPx.value;
+
+  const cols = gridColumns.value;
+  if (!cols) return gridCoverWidthPresetPx.value;
+
+  if (userSettingsStore.activeSettings.bookGrid?.dynamicCoverSizing) {
+    const gap = bookGridGapPx.value;
+    const totalGap = gap * Math.max(0, cols - 1);
+    const raw = (w - totalGap) / cols;
+    return Math.max(1, Math.round(raw * 100) / 100);
+  }
+
+  return gridCoverWidthPresetPx.value;
 });
 
 const limit = computed(() => {
@@ -326,6 +361,7 @@ const gridMetrics = computed(() => {
   return {
     cols,
     rowHeight,
+    itemHeight: measuredRowHeight.value ?? bookCardHeightPx.value,
     totalRows,
     totalHeight,
     startRow,
@@ -336,16 +372,20 @@ const gridMetrics = computed(() => {
   };
 });
 
+const rowSizerStyle = computed<Record<string, string>>(() => ({
+  width: `${gridColumnWidthPx.value}px`,
+}));
+
+const gridItemStyle = computed<Record<string, string>>(() => ({
+  height: `${gridMetrics.value.itemHeight}px`,
+}));
+
 const visibleBooks = computed(() =>
   books.value.slice(gridMetrics.value.startIndex, gridMetrics.value.endIndex),
 );
 
 watch(
-  () => [
-    gridMetrics.value.startRow,
-    gridColumns.value,
-    containerSize.value.width,
-  ],
+  () => [gridColumnWidthPx.value, containerSize.value.width],
   async () => {
     await nextTick();
     scheduleRowHeightMeasure({ debounceMs: 60 });
@@ -441,6 +481,13 @@ async function fetchPage(opts: { cursor?: string | null; append: boolean }) {
   errorMessage.value = null;
 
   try {
+    debugLog('fetchPage:start', {
+      append: opts.append,
+      cursor: opts.cursor ?? null,
+      limit: limit.value,
+      current: books.value.length,
+    });
+
     const query: Record<string, string | number> = {
       limit: limit.value,
     };
@@ -472,6 +519,12 @@ async function fetchPage(opts: { cursor?: string | null; append: boolean }) {
     }
 
     nextCursor.value = cursor;
+
+    debugLog('fetchPage:done', {
+      received: page.length,
+      total: books.value.length,
+      nextCursor: cursor,
+    });
   } catch (err) {
     const e = err as FetchErrorLike;
     const msg =
@@ -570,16 +623,27 @@ onBeforeUnmount(() => {
 
 <template>
   <!-- This component owns the scroll container so the view selector (outside) does not scroll. -->
-  <div ref="scrollContainerRef" class="flex-1 overflow-auto" @scroll="onScroll">
-    <div class="px-4 py-4">
+  <div
+    ref="scrollContainerRef"
+    class="flex-1 overflow-auto [overflow-anchor:none]"
+    @scroll="onScroll"
+  >
+    <div ref="contentRef" class="px-4 py-4">
       <div v-if="errorMessage" class="text-sm text-(--error-color) mb-3">
         {{ errorMessage }}
       </div>
 
       <div v-if="debug" class="text-xs opacity-70 mb-3">
-        books={{ books.length }} limit={{ limit }} loading={{
-          loading
+        books={{ books.length }} limit={{ limit }} cols={{
+          gridMetrics.cols
         }}
+        row={{ gridMetrics.rowHeight.toFixed(1) }} item={{
+          gridMetrics.itemHeight.toFixed(1)
+        }}
+        range={{ gridMetrics.startIndex }}-{{ gridMetrics.endIndex }} scroll={{
+          Math.round(scrollTop)
+        }}
+        total={{ Math.round(gridMetrics.totalHeight) }} loading={{ loading }}
         hasMore={{ hasMore }} nextCursor={{ nextCursor ?? 'null' }}
       </div>
 
@@ -593,8 +657,16 @@ onBeforeUnmount(() => {
 
       <div v-else class="w-full">
         <div class="relative w-full" :style="gridSpacerStyle">
+          <div
+            ref="rowSizerRef"
+            class="absolute top-0 left-0 opacity-0 pointer-events-none"
+            :style="rowSizerStyle"
+            aria-hidden="true"
+          >
+            <BookThumbnail :book="rowSizerBook" :lock-aspect-ratio="true" />
+          </div>
           <div class="w-full" :style="[gridStyle, gridOffsetStyle]">
-            <div v-for="b in visibleBooks" :key="b.id" :ref="setGridItemRef">
+            <div v-for="b in visibleBooks" :key="b.id" :style="gridItemStyle">
               <BookThumbnail
                 :book="b"
                 :lock-aspect-ratio="true"
