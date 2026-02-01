@@ -21,6 +21,7 @@
     "release:minor": "standard-version --release-as minor",
     "release:patch": "standard-version --release-as patch",
     "release:major": "standard-version --release-as major",
+    "icons:generate": "node scripts/generate-icons.mjs",
     "format": "prettier --check .",
     "format:fix": "prettier --write ."
   },
