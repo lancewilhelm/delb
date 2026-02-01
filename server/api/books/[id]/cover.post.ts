@@ -5,7 +5,11 @@ import { and, eq, inArray } from 'drizzle-orm';
 import sharp from 'sharp';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
+import { resolveDataPath } from '~~/server/utils/books/fs';
+import { getCanonicalBookPaths } from '~~/server/utils/books/storage/paths';
 import {
+  authors,
+  bookAuthors,
   bookFiles,
   books,
   collectionBooks,
@@ -38,8 +42,9 @@ import { auth } from '~/utils/auth';
  * - Blocks path traversal by ensuring writes stay within `<projectRoot>/library`.
  *
  * Notes:
- * - The canonical directory for a book is derived from an existing `book_files.relativePath`
- *   (e.g. `library/<author(s)>/<title (id8)>/<title>.epub`).
+ * - If the book has stored files (`book_files`), covers are stored alongside those files.
+ * - If the book has no files yet, covers are stored in the canonical directory derived from
+ *   current metadata (author(s)+title+id slice), so metadata-only books can still have covers.
  * - Overwrite semantics for both files:
  *   - `cover.<ext>` is overwritten
  *   - `thumb.webp` is overwritten
@@ -118,48 +123,105 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
     }
 
-    // Find a canonical file path for this book to determine its directory.
-    // Prefer EPUB if present; else use any existing format.
+    const libraryBaseAbs = path.resolve(process.cwd(), 'library');
+
+    // Determine the target directory for the cover:
+    // - Prefer an existing book file dir (keeps parity with previous behavior)
+    // - Else fall back to existing cover dir (e.g. Calibre import-in-place without formats)
+    // - Else use the canonical folder derived from book metadata (metadata-only books)
     const files = await cloudDb
       .select()
       .from(bookFiles)
       .where(eq(bookFiles.bookId, id));
 
-    if (!files.length) {
+    const ensureUnderLibraryOrThrow = (
+      candidateAbs: string,
+      logCtx: Record<string, unknown>,
+    ) => {
+      const relToBase = path.relative(libraryBaseAbs, candidateAbs);
+      if (relToBase.startsWith('..') || relToBase.includes(`..${path.sep}`)) {
+        logger.warn(
+          { id, ...logCtx },
+          'POST /api/books/:id/cover: blocked path traversal attempt',
+        );
+        throw createError({ statusCode: 400, statusMessage: 'Invalid path' });
+      }
+    };
+
+    let bookDirAbs: string | null = null;
+
+    if (files.length) {
+      const preferred =
+        files.find((f) => (f.format || '').toLowerCase() === 'epub') ?? files[0];
+
+      if (!preferred?.relativePath) {
+        throw createError({
+          statusCode: 409,
+          statusMessage: 'Book file path missing; cannot store cover',
+        });
+      }
+
+      // relativePath is stored like: "library/<author(s)>/<title (id8)>/<file>"
+      const relFromLibrary = preferred.relativePath.replace(/^library[\\/]/, '');
+      const bookFileAbs = path.resolve(libraryBaseAbs, relFromLibrary);
+      ensureUnderLibraryOrThrow(bookFileAbs, {
+        relativePath: preferred.relativePath,
+        from: 'book_files',
+      });
+      bookDirAbs = path.dirname(bookFileAbs);
+    } else {
+      const coverImagePathRaw = (book.coverImagePath ?? '').toString().trim();
+
+      if (coverImagePathRaw) {
+        const relFromLibrary = coverImagePathRaw.replace(/^library[\\/]/, '');
+        const coverAbs = path.resolve(libraryBaseAbs, relFromLibrary);
+        ensureUnderLibraryOrThrow(coverAbs, {
+          coverImagePath: coverImagePathRaw,
+          from: 'books.coverImagePath',
+        });
+        bookDirAbs = path.dirname(coverAbs);
+      } else {
+        const authorLinks = await cloudDb
+          .select({
+            name: authors.name,
+            position: bookAuthors.position,
+          })
+          .from(bookAuthors)
+          .innerJoin(authors, eq(authors.id, bookAuthors.authorId))
+          .where(eq(bookAuthors.bookId, id));
+
+        const orderedAuthorNames = authorLinks
+          .slice()
+          .sort((a, b) => {
+            const aPos = typeof a.position === 'number' ? a.position : 10_000;
+            const bPos = typeof b.position === 'number' ? b.position : 10_000;
+            if (aPos !== bPos) return aPos - bPos;
+            return (a.name ?? '').localeCompare(b.name ?? '');
+          })
+          .map((a) => a.name)
+          .filter((n): n is string => typeof n === 'string' && n.length > 0);
+
+        const canonical = getCanonicalBookPaths({
+          authorNames: orderedAuthorNames,
+          title: book.title ?? '',
+          bookId: id,
+        });
+
+        const dirAbs = resolveDataPath(canonical.bookDir);
+        ensureUnderLibraryOrThrow(dirAbs, {
+          canonicalBookDir: canonical.bookDir,
+          from: 'canonical',
+        });
+        bookDirAbs = dirAbs;
+      }
+    }
+
+    if (!bookDirAbs) {
       throw createError({
-        statusCode: 409,
-        statusMessage: 'Book has no files; cannot determine storage directory',
+        statusCode: 500,
+        statusMessage: 'Failed to determine storage directory for cover',
       });
     }
-
-    const preferred =
-      files.find((f) => (f.format || '').toLowerCase() === 'epub') ?? files[0];
-
-    if (!preferred?.relativePath) {
-      throw createError({
-        statusCode: 409,
-        statusMessage: 'Book file path missing; cannot store cover',
-      });
-    }
-
-    // Resolve target directory under <projectRoot>/library
-    const libraryBaseAbs = path.resolve(process.cwd(), 'library');
-
-    // relativePath is stored like: "library/<author(s)>/<title (id8)>/<file>"
-    const relFromLibrary = preferred.relativePath.replace(/^library[\\/]/, '');
-    const bookFileAbs = path.resolve(libraryBaseAbs, relFromLibrary);
-
-    // Path traversal protection for the source-derived path
-    const relToBase = path.relative(libraryBaseAbs, bookFileAbs);
-    if (relToBase.startsWith('..') || relToBase.includes(`..${path.sep}`)) {
-      logger.warn(
-        { id, relativePath: preferred.relativePath },
-        'POST /api/books/:id/cover: blocked path traversal attempt',
-      );
-      throw createError({ statusCode: 400, statusMessage: 'Invalid path' });
-    }
-
-    const bookDirAbs = path.dirname(bookFileAbs);
 
     // Detect the uploaded image format so we can persist the true original as `cover.<ext>`.
     const meta = await sharp(filePart.data).rotate().metadata();

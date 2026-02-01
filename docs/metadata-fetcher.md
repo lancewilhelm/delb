@@ -160,6 +160,13 @@ The following Google Books API fields map to the internal schema:
 | `volumeInfo.categories[]`         | `tags.name` (via `bookTags`)          | Many-to-many       |
 | `volumeInfo.imageLinks.thumbnail` | `books.coverImagePath`                | Download & convert |
 
+### Storage Behavior (Metadata-only Books)
+
+Books created via metadata import may exist before any format file is uploaded. Delb still treats these as first-class books:
+
+- A canonical book folder is created under `library/<author(s)>/<title (id8)>/` during metadata import (even if no cover was imported).
+- Uploading/replacing a cover via `/api/books/:id/cover` works even when the book has no rows in `book_files`; the cover and thumbnail are stored in that canonical folder.
+
 ### Security Considerations
 
 - Metadata endpoints are server-side to avoid CORS issues and to keep provider details off the client.

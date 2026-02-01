@@ -693,6 +693,29 @@ export default defineEventHandler(async (event) => {
     }
 
     // Cover (best-effort): same logic as create, but targets the existing book id.
+    // Ensure the canonical folder exists even if we do not have a cover URL.
+    try {
+      const dirMarkerRel = buildBookStorageRelativePath({
+        authorNames: authorsToAttach,
+        title,
+        bookId: replaceBookId,
+        filename: 'dir.marker',
+        baseDir: 'library',
+      });
+
+      const outputDirRelPosix = path.posix.dirname(dirMarkerRel);
+      const outputDirAbs = resolveDataPath(outputDirRelPosix);
+      await mkdir(outputDirAbs, { recursive: true });
+    } catch (e) {
+      logger.warn(
+        {
+          bookId: replaceBookId,
+          err: e instanceof Error ? e.message : String(e),
+        },
+        'metadata-import: failed to ensure canonical book directory (replace; continuing)',
+      );
+    }
+
     if (coverUrl) {
       try {
         logger.debug(
@@ -865,6 +888,26 @@ export default defineEventHandler(async (event) => {
         value: ident.value,
       });
     }
+  }
+
+  // Ensure the canonical storage directory exists even when we didn't fetch a cover
+  // (and before any book file upload exists).
+  try {
+    const dirMarkerRel = buildBookStorageRelativePath({
+      authorNames: authorsToAttach,
+      title,
+      bookId,
+      filename: 'dir.marker',
+      baseDir: 'library',
+    });
+    const outputDirRelPosix = path.posix.dirname(dirMarkerRel);
+    const outputDirAbs = resolveDataPath(outputDirRelPosix);
+    await mkdir(outputDirAbs, { recursive: true });
+  } catch (e) {
+    logger.warn(
+      { bookId, err: e instanceof Error ? e.message : String(e) },
+      'metadata-import: failed to ensure canonical book directory (continuing)',
+    );
   }
 
   // Cover: download the cover image via the existing metadata cover proxy,
