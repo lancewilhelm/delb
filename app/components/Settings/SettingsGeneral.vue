@@ -171,12 +171,12 @@ async function handleUpdateProfile() {
       class="flex flex-col gap-2"
     >
       <DelbLogo fill="var(--main-color)" />
-      <div class="text-(--sub-color) italic">
-        version: {{ config.public.appVersion || 'manual' }}
-      </div>
       <div class="logo text-2xl">Delb</div>
       <div class="italic text-(--sub-color) font-light text-sm">
         Donde está la biblioteca
+      </div>
+      <div class="text-(--sub-color) italic">
+        version: {{ config.public.appVersion || 'manual' }}
       </div>
       <NuxtLink
         to="https://github.com/lancewilhelm/delb"

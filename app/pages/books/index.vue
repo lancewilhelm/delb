@@ -15,6 +15,7 @@ useHead({
 const uiStore = useUiStore();
 const collectionsStore = useCollectionsStore();
 const selectionStore = useBookSelectionStore();
+const booksFiltersStore = useBooksIndexFiltersStore();
 const route = useRoute();
 
 type FetchErrorLike = {
@@ -560,12 +561,33 @@ const filtersOpen = ref(false);
 const filterAnchorRef = ref<HTMLElement | null>(null);
 const filterPanelRef = ref<HTMLElement | null>(null);
 
-/**
- * Date inputs are stored as YYYY-MM-DD (from <input type="date">).
- * We send them to the server as addedStart/addedEnd query params.
- */
-const addedStart = ref<string>('');
-const addedEnd = ref<string>('');
+const filtersHydrated = ref(false);
+
+// Avoid SSR hydration mismatches for persisted localStorage state by rendering defaults
+// until the client has mounted (unless the URL explicitly deep-links a status filter).
+const hasStatusDeepLink = computed(() => {
+  const raw = route.query.status;
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  return typeof v === 'string' && Boolean(v.trim());
+});
+
+const shouldApplyPersistedFilters = computed(() => {
+  return filtersHydrated.value || hasStatusDeepLink.value;
+});
+
+const addedStart = computed<string>({
+  get: () => (shouldApplyPersistedFilters.value ? booksFiltersStore.addedStart : ''),
+  set: (v) => {
+    booksFiltersStore.addedStart = v;
+  },
+});
+
+const addedEnd = computed<string>({
+  get: () => (shouldApplyPersistedFilters.value ? booksFiltersStore.addedEnd : ''),
+  set: (v) => {
+    booksFiltersStore.addedEnd = v;
+  },
+});
 
 function closeFiltersDropdown() {
   filtersOpen.value = false;
@@ -573,11 +595,6 @@ function closeFiltersDropdown() {
 
 function toggleFiltersDropdown() {
   filtersOpen.value = !filtersOpen.value;
-}
-
-function clearAddedDateFilter() {
-  addedStart.value = '';
-  addedEnd.value = '';
 }
 
 // ------------------------------
@@ -590,49 +607,34 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'dnf' as const, label: 'DNF' },
 ] as const;
 
-const selectedStatuses = ref<UserBookStatus[]>([]);
-const includeNoStatus = ref(false);
+const includeNoStatus = computed<boolean>(() => {
+  return shouldApplyPersistedFilters.value
+    ? booksFiltersStore.includeNoStatus
+    : false;
+});
 
 function isStatusSelected(status: UserBookStatus) {
-  return selectedStatuses.value.includes(status);
+  if (!shouldApplyPersistedFilters.value) return false;
+  return booksFiltersStore.selectedStatuses.includes(status);
 }
 
 function toggleStatusSelected(status: UserBookStatus) {
-  const set = new Set(selectedStatuses.value);
-  if (set.has(status)) set.delete(status);
-  else set.add(status);
-  selectedStatuses.value = Array.from(set);
+  booksFiltersStore.toggleStatusSelected(status);
 }
 
 function toggleNoStatus() {
-  includeNoStatus.value = !includeNoStatus.value;
+  booksFiltersStore.toggleNoStatus();
 }
 
 function clearFilters() {
-  clearAddedDateFilter();
-  selectedStatuses.value = [];
-  includeNoStatus.value = false;
+  booksFiltersStore.clearAll();
 }
 
-const statusQuery = computed<Record<string, string>>(() => {
-  const q: Record<string, string> = {};
-  const tokens: string[] = [];
-  if (includeNoStatus.value) tokens.push('none');
-  for (const s of selectedStatuses.value) tokens.push(s);
-  if (tokens.length) q.status = tokens.join(',');
-  return q;
-});
-
-const addedDateQuery = computed<Record<string, string>>(() => {
-  // Keep the endpoint stable: only include params when set
-  const q: Record<string, string> = {};
-  if (addedStart.value) q.addedStart = addedStart.value;
-  if (addedEnd.value) q.addedEnd = addedEnd.value;
-  return q;
-});
-
 const booksEndpoint = computed(() => {
-  const q = { ...addedDateQuery.value, ...statusQuery.value };
+  const q = {
+    ...booksFiltersStore.addedDateQuery,
+    ...booksFiltersStore.statusQuery,
+  };
   const pairs = Object.entries(q).filter(([, v]) => typeof v === 'string' && v);
   if (!pairs.length) return '/api/books';
 
@@ -649,28 +651,7 @@ watch(
   (raw) => {
     const v = Array.isArray(raw) ? raw[0] : raw;
     if (typeof v !== 'string' || !v.trim()) return;
-
-    const tokens = v
-      .split(',')
-      .map((t) => t.trim())
-      .filter(Boolean);
-
-    includeNoStatus.value = tokens.includes('none');
-
-    const allowed = new Set<UserBookStatus>([
-      'to_be_read',
-      'reading',
-      'finished',
-      'dnf',
-    ]);
-
-    selectedStatuses.value = Array.from(
-      new Set(
-        tokens.filter((t): t is UserBookStatus =>
-          allowed.has(t as UserBookStatus),
-        ),
-      ),
-    );
+    booksFiltersStore.setStatusFilterFromQueryParam(v);
   },
   { immediate: true },
 );
@@ -705,14 +686,8 @@ onBeforeUnmount(() => {
 });
 
 const isFiltersApplied = computed(() => {
-  if (
-    addedStart.value ||
-    addedEnd.value ||
-    selectedStatuses.value.length ||
-    includeNoStatus.value
-  )
-    return true;
-  return false;
+  if (!shouldApplyPersistedFilters.value) return false;
+  return booksFiltersStore.isApplied;
 });
 
 // Direction toggles by re-selecting the active sort option in the dropdown.
@@ -793,6 +768,8 @@ const booksSortKey = computed(() => uiStore.booksSortKey);
 const booksSortDir = computed(() => uiStore.booksSortDirection);
 
 onMounted(async () => {
+  filtersHydrated.value = true;
+
   // Ensure collections are loaded so collection-scoped queries are valid after navigation.
   if (!collectionsStore.collections.length) {
     await collectionsStore.fetchCollections();
@@ -1308,9 +1285,7 @@ onMounted(async () => {
           <div class="flex flex-col flex-1 min-h-0">
             <!-- Only the books grid scrolls (BooksInfiniteGrid owns the scroller) -->
             <BooksInfiniteGrid
-              :key="`${booksGridKey}-${booksSortKey}-${booksSortDir}-${JSON.stringify(
-                { ...addedDateQuery, ...statusQuery },
-              )}`"
+              :key="`${booksGridKey}-${booksSortKey}-${booksSortDir}-${booksEndpoint}`"
               :collection-id="activeCollectionId"
               :sort="booksSortKey"
               :sort-dir="booksSortDir"
