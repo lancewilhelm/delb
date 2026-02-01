@@ -156,7 +156,8 @@ pnpm run db:studio
 
 ## Storage
 
-Books are stored in the `library/` directory at the project root with the structure:
+Books are stored in the `library/` directory at the project root. New Delb-created
+entries use the canonical structure:
 
 ```
 library/
@@ -166,7 +167,9 @@ library/
         └── cover.webp
 ```
 
-The database stores relative paths and metadata for each book.
+The database stores relative paths and metadata for each book. Delb is folder-agnostic
+for existing entries: it will read/write files in whatever directory the DB points to
+and does not move folders when metadata changes.
 
 Delb also supports **reference-only books** (no associated file in `library/`). This allows using Delb as a “physical library” catalog in addition to a file-backed ebook library.
 

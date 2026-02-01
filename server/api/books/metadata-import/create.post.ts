@@ -22,7 +22,6 @@ import {
 
 import { resolveDataPath } from '~~/server/utils/books/fs';
 import { buildBookStorageRelativePath } from '~~/server/utils/books/storage/paths';
-import { moveBookStorageToCanonical } from '~~/server/utils/books/storage/move/move-book-storage';
 import { ensureCoverOutputsFromBytes } from '~~/server/utils/books/covers';
 import { makeAuthorSortKey, makeTitleSortKey } from '~~/server/utils/sort/keys';
 import { normalizePublishedAt } from '~~/server/utils/books/published';
@@ -785,19 +784,6 @@ export default defineEventHandler(async (event) => {
       bookId: replaceBookId,
       collectionIds,
     });
-
-    // Best-effort: keep storage canonical if title/authors changed.
-    try {
-      await moveBookStorageToCanonical({ bookId: replaceBookId });
-    } catch (e) {
-      logger.warn(
-        {
-          bookId: replaceBookId,
-          err: e instanceof Error ? e.message : String(e),
-        },
-        'metadata-import: replace: move-to-canonical failed',
-      );
-    }
 
     return {
       success: true,

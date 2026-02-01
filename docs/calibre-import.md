@@ -54,6 +54,12 @@ If Delb cannot resolve that folder (missing `metadata.db`, missing file pointers
 or missing on-disk directory), it will **refuse to create a new folder** to avoid
 duplicating Calibre paths. Re-scan the Calibre library to restore file pointers.
 
+### 1b) Folder-agnostic policy
+
+Delb does **not** move or rename existing Calibre book folders after import.
+It treats the stored DB paths as the source of truth for where files live,
+and will only write updates (covers, etc.) into those existing directories.
+
 ### 2) Delb database location
 
 Delb uses its own SQLite DB:

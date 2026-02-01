@@ -1,16 +1,12 @@
 import path from 'node:path';
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { stat, writeFile } from 'node:fs/promises';
 
 import { and, eq, inArray } from 'drizzle-orm';
 import sharp from 'sharp';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { resolveDataPath } from '~~/server/utils/books/fs';
-import { getCanonicalBookPaths } from '~~/server/utils/books/storage/paths';
 import { CalibreReader } from '~~/server/utils/import/calibre/calibre-reader';
 import {
-  authors,
-  bookAuthors,
   bookFiles,
   books,
   collectionBooks,
@@ -23,8 +19,8 @@ import { auth } from '~/utils/auth';
  * POST /api/books/:id/cover
  *
  * Endpoint that accepts an uploaded image and stores:
- * - Original bytes as: `library/<author(s)>/<title (id8)>/cover.<ext>` (true original)
- * - Thumbnail as:     `library/<author(s)>/<title (id8)>/thumb.webp` (320px wide)
+ * - Original bytes as: `<book directory>/cover.<ext>` (true original)
+ * - Thumbnail as:     `<book directory>/thumb.webp` (320px wide)
  *
  * Then updates `books.coverImagePath` to point at the thumbnail (`thumb.webp`).
  *
@@ -128,8 +124,9 @@ export default defineEventHandler(async (event) => {
 
     // Determine the target directory for the cover:
     // - Prefer an existing book file dir (keeps parity with previous behavior)
-    // - Else fall back to existing cover dir (e.g. Calibre import-in-place without formats)
-    // - Else use the canonical folder derived from book metadata (metadata-only books)
+    // - Else use Calibre's book folder when available
+    // - Else fall back to existing cover dir
+    // Note: we do NOT create new folders when updating an existing book.
     const files = await cloudDb
       .select()
       .from(bookFiles)
@@ -201,6 +198,7 @@ export default defineEventHandler(async (event) => {
     };
 
     let bookDirAbs: string | null = null;
+    let bookDirSource: string | null = null;
 
     if (files.length) {
       const preferred =
@@ -221,6 +219,7 @@ export default defineEventHandler(async (event) => {
         from: 'book_files',
       });
       bookDirAbs = path.dirname(bookFileAbs);
+      bookDirSource = 'book_files';
     } else {
       const calibreBookId =
         typeof book.calibreBookId === 'number' &&
@@ -233,6 +232,7 @@ export default defineEventHandler(async (event) => {
         if (calibreDirAbs) {
           await ensureExistingDirOrThrow(calibreDirAbs, { calibreBookId });
           bookDirAbs = calibreDirAbs;
+          bookDirSource = 'calibre';
         } else {
           throw createError({
             statusCode: 409,
@@ -253,49 +253,22 @@ export default defineEventHandler(async (event) => {
             from: 'books.coverImagePath',
           });
           bookDirAbs = path.dirname(coverAbs);
-        } else {
-          const authorLinks = await cloudDb
-            .select({
-              name: authors.name,
-              position: bookAuthors.position,
-            })
-            .from(bookAuthors)
-            .innerJoin(authors, eq(authors.id, bookAuthors.authorId))
-            .where(eq(bookAuthors.bookId, id));
-
-          const orderedAuthorNames = authorLinks
-            .slice()
-            .sort((a, b) => {
-              const aPos = typeof a.position === 'number' ? a.position : 10_000;
-              const bPos = typeof b.position === 'number' ? b.position : 10_000;
-              if (aPos !== bPos) return aPos - bPos;
-              return (a.name ?? '').localeCompare(b.name ?? '');
-            })
-            .map((a) => a.name)
-            .filter((n): n is string => typeof n === 'string' && n.length > 0);
-
-          const canonical = getCanonicalBookPaths({
-            authorNames: orderedAuthorNames,
-            title: book.title ?? '',
-            bookId: id,
-          });
-
-          const dirAbs = resolveDataPath(canonical.bookDir);
-          ensureUnderLibraryOrThrow(dirAbs, {
-            canonicalBookDir: canonical.bookDir,
-            from: 'canonical',
-          });
-          bookDirAbs = dirAbs;
+          bookDirSource = 'books.coverImagePath';
         }
       }
     }
 
     if (!bookDirAbs) {
       throw createError({
-        statusCode: 500,
-        statusMessage: 'Failed to determine storage directory for cover',
+        statusCode: 409,
+        statusMessage:
+          'Book storage directory not found; re-scan/import or upload a book file first.',
       });
     }
+
+    await ensureExistingDirOrThrow(bookDirAbs, {
+      from: bookDirSource ?? 'resolved',
+    });
 
     // Detect the uploaded image format so we can persist the true original as `cover.<ext>`.
     const meta = await sharp(filePart.data).rotate().metadata();
@@ -330,8 +303,6 @@ export default defineEventHandler(async (event) => {
       })
       .webp({ quality: 80 })
       .toBuffer();
-
-    await mkdir(bookDirAbs, { recursive: true });
 
     if (ext === 'jpg') {
       // If we had to fall back (unknown format), store a high-quality JPEG as the "source".
