@@ -19,6 +19,7 @@ export type DuplicateCandidate = {
     id: string;
     title: string;
     coverImagePath: string | null;
+    updatedAt?: string | number | Date;
     authorNames: string[];
     identifiers: IdentifierInput[];
   };
@@ -103,6 +104,7 @@ async function loadBooksForCandidates(bookIds: string[]) {
       id: books.id,
       title: books.title,
       coverImagePath: books.coverImagePath,
+      updatedAt: books.updatedAt,
     })
     .from(books)
     .where(inArray(books.id, ids));
@@ -149,6 +151,7 @@ async function loadBooksForCandidates(bookIds: string[]) {
       id: b.id,
       title: b.title,
       coverImagePath: b.coverImagePath ?? null,
+      updatedAt: b.updatedAt ?? null,
       authorNames: authorNamesByBookId.get(b.id) ?? [],
       identifiers: identifiersByBookId.get(b.id) ?? [],
     });

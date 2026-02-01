@@ -188,8 +188,14 @@ export default defineEventHandler(async (event) => {
                     : 'application/octet-stream';
 
     setHeader(event, 'Content-Type', contentType);
-    // Cache a bit in dev too; adjust later (or make immutable if fingerprinted)
-    setHeader(event, 'Cache-Control', 'public, max-age=3600');
+    const cacheKey = getQuery(event)?.v;
+    if (typeof cacheKey === 'string' && cacheKey.trim().length > 0) {
+      // Versioned URLs can be cached aggressively.
+      setHeader(event, 'Cache-Control', 'public, max-age=31536000, immutable');
+    } else {
+      // Cache a bit in dev too; adjust later (or make immutable if fingerprinted)
+      setHeader(event, 'Cache-Control', 'public, max-age=3600');
+    }
 
     return buf;
   } catch {

@@ -9,6 +9,7 @@ type GlobalSearchResultItem = {
   identifiers?: Array<{ type: string; value: string }>;
   icon?: string;
   coverImagePath?: string | null;
+  updatedAt?: string | number | Date;
 };
 
 type GroupedResults = {
@@ -37,6 +38,7 @@ type SearchApiResponse = {
         identifiers?: Array<{ type: string; value: string }>;
         published?: string | null;
         coverImagePath?: string | null;
+        updatedAt?: string | number | Date;
       }>;
       authors: SearchApiBucketRow[];
       series: SearchApiBucketRow[];
@@ -163,10 +165,17 @@ function toNameTitle(row: SearchApiBucketRow) {
   return String(row.name ?? row.title ?? '').trim();
 }
 
-function coverThumbUrl(coverImagePath: string) {
+function coverThumbUrl(
+  coverImagePath: string,
+  updatedAt?: string | number | Date,
+) {
   // Stored as a relative `library/...` path (typically `.../thumb.webp`)
   // API expects: /api/media/covers/<path under library>
-  return `/api/media/covers/${coverImagePath.replace(/^library\//, '')}`;
+  const base = `/api/media/covers/${coverImagePath.replace(/^library\//, '')}`;
+  if (!updatedAt) return base;
+  const ts = new Date(updatedAt).getTime();
+  if (Number.isNaN(ts)) return base;
+  return `${base}?v=${encodeURIComponent(String(ts))}`;
 }
 
 function formatIsbnIdentifier(ident: { type: string; value: string }): string {
@@ -225,6 +234,7 @@ async function runSearch(q: string) {
           return parts.length ? parts.join(' • ') : null;
         })(),
         coverImagePath: b.coverImagePath ?? null,
+        updatedAt: b.updatedAt ?? undefined,
         icon: 'lucide:book',
       })) ?? [];
 
@@ -460,7 +470,12 @@ onBeforeUnmount(() => {
                 <BookCover
                   v-else
                   class="w-auto! aspect-2/3! shrink-0"
-                  :src="coverThumbUrl(item.coverImagePath || '')"
+                  :src="
+                    coverThumbUrl(
+                      item.coverImagePath || '',
+                      item.updatedAt ?? undefined,
+                    )
+                  "
                 />
                 <div class="flex flex-col min-w-0">
                   <div class="truncate">{{ item.title }}</div>

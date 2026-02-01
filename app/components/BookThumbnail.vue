@@ -6,6 +6,7 @@ type BookThumb = {
   title: string;
 
   coverImagePath?: string | null;
+  updatedAt?: string | number | Date;
 
   // Optional: used for subtitle display
   authors?: { id: string; name: string }[];
@@ -50,6 +51,20 @@ const props = withDefaults(
   },
 );
 
+const coverCacheKey = computed(() => {
+  const raw = props.book.updatedAt;
+  if (!raw) return null;
+  const ts = new Date(raw).getTime();
+  if (Number.isNaN(ts)) return null;
+  return String(ts);
+});
+
+function withCoverCacheKey(url: string): string {
+  const key = coverCacheKey.value;
+  if (!key) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}v=${encodeURIComponent(key)}`;
+}
+
 const coverSrc = computed(() => {
   const p = props.book.coverImagePath;
   if (!p) return null;
@@ -71,11 +86,11 @@ const coverSrc = computed(() => {
     /\/source\.[^/]+$/i.test(normalized);
 
   if (looksLikeSourceCover) {
-    return `/api/media/covers/${thumbRel}`;
+    return withCoverCacheKey(`/api/media/covers/${thumbRel}`);
   }
 
   // API expects: /api/media/covers/<path under library>
-  return `/api/media/covers/${base}`;
+  return withCoverCacheKey(`/api/media/covers/${base}`);
 });
 
 type BookFile = {

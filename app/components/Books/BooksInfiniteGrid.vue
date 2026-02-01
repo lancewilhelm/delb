@@ -21,6 +21,7 @@ type Book = {
 
   coverImagePath?: string | null;
   createdAt: string | number | Date;
+  updatedAt?: string | number | Date;
 };
 
 type BooksListResponse = {

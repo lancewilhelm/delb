@@ -60,8 +60,12 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  function coverThumbUrl(coverImagePath: string) {
-    return `/api/media/covers/${coverImagePath.replace(/^library\//, '')}`;
+  function coverThumbUrl(coverImagePath: string, updatedAt?: unknown) {
+    const base = `/api/media/covers/${coverImagePath.replace(/^library\//, '')}`;
+    if (!updatedAt) return base;
+    const ts = new Date(updatedAt as string | number | Date).getTime();
+    if (Number.isNaN(ts)) return base;
+    return `${base}?v=${encodeURIComponent(String(ts))}`;
   }
 
   try {
@@ -118,6 +122,7 @@ export default defineEventHandler(async (event) => {
               bookId: books.id,
               title: books.title,
               coverImagePath: books.coverImagePath,
+              updatedAt: books.updatedAt,
             })
             .from(books)
             .innerJoin(collectionBooks, eq(collectionBooks.bookId, books.id))
@@ -149,6 +154,7 @@ export default defineEventHandler(async (event) => {
         id: string;
         title: string;
         coverImagePath: string | null;
+        updatedAt?: string | number | Date;
         coverThumbnailUrl: string | null;
       }>
     >();
@@ -159,6 +165,7 @@ export default defineEventHandler(async (event) => {
       const title = (row.title ?? '').toString();
       const coverImagePathRaw = (row.coverImagePath ?? '').toString().trim();
       const coverImagePath = coverImagePathRaw ? coverImagePathRaw : null;
+      const updatedAt = row.updatedAt ?? null;
 
       if (!pid || !bid) continue;
 
@@ -167,8 +174,9 @@ export default defineEventHandler(async (event) => {
         id: bid,
         title,
         coverImagePath,
+        updatedAt,
         coverThumbnailUrl: coverImagePath
-          ? coverThumbUrl(coverImagePath)
+          ? coverThumbUrl(coverImagePath, updatedAt)
           : null,
       });
       booksByPublisherId.set(pid, list);

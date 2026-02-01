@@ -21,6 +21,7 @@ type Book = {
   series?: { id: string; name: string } | null;
   coverImagePath?: string | null;
   createdAt: string | number | Date;
+  updatedAt?: string | number | Date;
 };
 
 type BooksListResponse = {

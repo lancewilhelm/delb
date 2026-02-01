@@ -149,6 +149,7 @@ export default defineEventHandler(async (event) => {
         title: string | null;
         published: string | null;
         createdAt: unknown;
+        updatedAt: unknown;
         coverImagePath: string | null;
       };
 
@@ -166,6 +167,7 @@ export default defineEventHandler(async (event) => {
           title: books.title,
           published: books.published,
           createdAt: books.createdAt,
+          updatedAt: books.updatedAt,
           coverImagePath: books.coverImagePath,
         })
         .from(books)
@@ -185,6 +187,7 @@ export default defineEventHandler(async (event) => {
           title: books.title,
           published: books.published,
           createdAt: books.createdAt,
+          updatedAt: books.updatedAt,
           coverImagePath: books.coverImagePath,
         })
         .from(books)
@@ -204,6 +207,7 @@ export default defineEventHandler(async (event) => {
           title: books.title,
           published: books.published,
           createdAt: books.createdAt,
+          updatedAt: books.updatedAt,
           coverImagePath: books.coverImagePath,
         })
         .from(books)
@@ -229,6 +233,7 @@ export default defineEventHandler(async (event) => {
                 title: books.title,
                 published: books.published,
                 createdAt: books.createdAt,
+                updatedAt: books.updatedAt,
                 coverImagePath: books.coverImagePath,
                 matchedIdentifierValue: bookIdentifiers.value,
               })
@@ -396,6 +401,7 @@ export default defineEventHandler(async (event) => {
           identifiers,
           published: b.published ?? null,
           coverImagePath: b.coverImagePath ?? null,
+          updatedAt: b.updatedAt ?? null,
         };
       });
     })();

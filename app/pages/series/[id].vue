@@ -16,6 +16,7 @@ type Book = {
   id: string;
   title: string;
   coverImagePath?: string | null;
+  updatedAt?: string | number | Date;
 
   // List API denormalized fields (best-effort)
   authors?: { id: string; name: string }[];
@@ -67,10 +68,17 @@ function deriveSeriesNameFromBooks(list: Book[], id: string) {
   return 'Series';
 }
 
-function coverThumbUrl(coverImagePath: string) {
+function coverThumbUrl(
+  coverImagePath: string,
+  updatedAt?: string | number | Date,
+) {
   // Stored as a relative `library/...` path (typically `.../thumb.webp`)
   // API expects: /api/media/covers/<path under library>
-  return `/api/media/covers/${coverImagePath.replace(/^library\//, '')}`;
+  const base = `/api/media/covers/${coverImagePath.replace(/^library\//, '')}`;
+  if (!updatedAt) return base;
+  const ts = new Date(updatedAt).getTime();
+  if (Number.isNaN(ts)) return base;
+  return `${base}?v=${encodeURIComponent(String(ts))}`;
 }
 
 function sanitizeDescriptionHtml(input: string): string {
@@ -298,7 +306,7 @@ watch(
               {{ b.seriesIndex }}
             </div>
             <BookCover
-              :src="coverThumbUrl(b.coverImagePath ?? '')"
+              :src="coverThumbUrl(b.coverImagePath ?? '', b.updatedAt ?? undefined)"
               :alt="b.title"
               :title="b.title"
               class="cursor-pointer w-25! sm:w-40!"
