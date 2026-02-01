@@ -29,7 +29,11 @@ definePageMeta({
         const createdByUserId = res?.data?.book?.createdByUserId ?? null;
         const currentUserId = auth.user.value?.id ?? null;
 
-        if (!createdByUserId || !currentUserId || createdByUserId !== currentUserId) {
+        if (
+          !createdByUserId ||
+          !currentUserId ||
+          createdByUserId !== currentUserId
+        ) {
           return navigateTo('/', { replace: true });
         }
       } catch {
@@ -1793,11 +1797,11 @@ watch(
                     Searching…
                   </div>
 
-                  <button
+                  <div
                     v-for="s in authorSuggestions"
                     :key="s.id"
                     type="button"
-                    class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10"
+                    class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10 cursor-pointer"
                     @click="
                       authorChips = chipAddFromSuggestion(authorChips, s);
                       authorInput = '';
@@ -1805,7 +1809,7 @@ watch(
                     "
                   >
                     {{ s.name }}
-                  </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1908,19 +1912,17 @@ watch(
                       Searching…
                     </div>
 
-                    <button
+                    <div
                       v-for="s in seriesSuggestions"
                       :key="s.id"
-                      type="button"
-                      class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10"
-                      @click="
+                      class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10 cursor-pointer"
+                      @pointerdown.prevent="
                         form.series = s.name;
-                        seriesInput = s.name;
                         seriesSuggestOpen = false;
                       "
                     >
                       {{ s.name }}
-                    </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2056,11 +2058,10 @@ watch(
                     Searching…
                   </div>
 
-                  <button
+                  <div
                     v-for="s in tagSuggestions"
                     :key="s.id"
-                    type="button"
-                    class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10"
+                    class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10 cursor-pointer"
                     @click="
                       tagChips = chipAddFromSuggestion(tagChips, s);
                       tagInput = '';
@@ -2068,7 +2069,7 @@ watch(
                     "
                   >
                     {{ s.name }}
-                  </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2144,19 +2145,17 @@ watch(
                       Searching…
                     </div>
 
-                    <button
+                    <div
                       v-for="s in publisherSuggestions"
                       :key="s.id"
-                      type="button"
-                      class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10"
-                      @click="
+                      class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10 cursor-pointer"
+                      @pointerdown.prevent="
                         form.publisher = s.name;
-                        publisherInput = s.name;
                         publisherSuggestOpen = false;
                       "
                     >
                       {{ s.name }}
-                    </button>
+                    </div>
                   </div>
                 </div>
               </div>
