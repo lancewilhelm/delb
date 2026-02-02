@@ -71,6 +71,8 @@ export default defineNuxtConfig({
       { name: 'Nunito', provider: 'google', global: true },
       { name: 'Poppins', provider: 'google', weight: 'bold', global: true },
       { name: 'Roboto Mono', provider: 'google', global: true },
+      { name: 'PT Serif', provider: 'google', global: true },
+      { name: 'Noto Serif', provider: 'google', global: true },
     ],
   },
   piniaPluginPersistedstate: {

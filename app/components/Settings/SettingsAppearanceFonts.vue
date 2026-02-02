@@ -89,6 +89,24 @@ const userSettingsStore = useUserSettingsStore();
     >
       Montserrat
     </button>
+
+    <button
+      class="rounded-lg noto-serif"
+      :class="
+        userSettingsStore.activeSettings.fontFamily === 'Noto Serif'
+          ? 'bg-(--main-color) text-(--bg-color)'
+          : 'bg-(--sub-color)'
+      "
+      @click="
+        () => {
+          userSettingsStore.updateSettings({
+            fontFamily: 'Noto Serif',
+          });
+        }
+      "
+    >
+      Noto Serif
+    </button>
     <button
       class="rounded-lg nunito"
       :class="
@@ -124,6 +142,23 @@ const userSettingsStore = useUserSettingsStore();
       Poppins
     </button>
     <button
+      class="rounded-lg pt-serif"
+      :class="
+        userSettingsStore.activeSettings.fontFamily === 'PT Serif'
+          ? 'bg-(--main-color) text-(--bg-color)'
+          : 'bg-(--sub-color)'
+      "
+      @click="
+        () => {
+          userSettingsStore.updateSettings({
+            fontFamily: 'PT Serif',
+          });
+        }
+      "
+    >
+      PT Serif
+    </button>
+    <button
       class="rounded-lg roboto-mono"
       :class="
         userSettingsStore.activeSettings.fontFamily === 'Roboto Mono'
@@ -144,14 +179,14 @@ const userSettingsStore = useUserSettingsStore();
 </template>
 
 <style scoped>
-.georgia {
-  font-family: 'Georgia', serif;
-}
 .fira-code {
   font-family: 'Fira Code', monospace;
 }
 .ibm-plex-mono {
   font-family: 'IBM Plex Mono', monospace;
+}
+.roboto-mono {
+  font-family: 'Roboto Mono', monospace;
 }
 .inter {
   font-family: 'Inter', sans-serif;
@@ -168,7 +203,10 @@ const userSettingsStore = useUserSettingsStore();
 .geist {
   font-family: 'Geist', sans-serif;
 }
-.roboto-mono {
-  font-family: 'Roboto Mono', monospace;
+.pt-serif {
+  font-family: 'PT Serif', serif;
+}
+.noto-serif {
+  font-family: 'Noto Serif', serif;
 }
 </style>

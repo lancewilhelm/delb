@@ -42,14 +42,14 @@ interface Tab {
 
 const tabs: Record<string, Tab> = {
   general: {
-    name: 'general',
+    name: 'General',
     component: resolveComponent('SettingsGeneral'),
     icon: 'lucide:settings',
     path: '/settings/general',
     admin: false,
   },
   appearance: {
-    name: 'appearance',
+    name: 'Appearance',
     component: resolveComponent('SettingsAppearance'),
     icon: 'lucide:palette',
     path: '/settings/appearance',
@@ -63,7 +63,7 @@ const tabs: Record<string, Tab> = {
   //     admin: false,
   // },
   admin: {
-    name: 'admin',
+    name: 'Admin',
     component: resolveComponent('SettingsAdmin'),
     icon: 'lucide:shield-check',
     path: '/settings/admin',

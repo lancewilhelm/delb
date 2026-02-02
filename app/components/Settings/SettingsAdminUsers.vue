@@ -293,7 +293,7 @@ async function setUserPassword() {
 
 <template>
   <div class="w-full">
-    <SettingsUIGroup title="users" icon="lucide:users">
+    <SettingsUIGroup title="Users" icon="lucide:users">
       <div class="w-full mt-4 overflow-x-auto">
         <table class="min-w-full">
           <thead class="bg-(--sub-color) text-(--main-color)">
@@ -410,7 +410,7 @@ async function setUserPassword() {
         </button>
       </div>
     </SettingsUIGroup>
-    <SettingsUIGroup title="allow registration" icon="lucide:lock">
+    <SettingsUIGroup title="Allow Registration" icon="lucide:lock">
       <SettingsUIToggle
         v-model="allowRegistration"
         description="allow users to register themselves at /register"
@@ -614,8 +614,8 @@ async function setUserPassword() {
               set password
             </button>
             <div class="text-(--sub-color) text-xs">
-              No email provider is configured. This sets the user&apos;s password
-              directly; share it with them securely.
+              No email provider is configured. This sets the user&apos;s
+              password directly; share it with them securely.
             </div>
           </div>
         </div>

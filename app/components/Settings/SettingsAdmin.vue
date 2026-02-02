@@ -20,25 +20,25 @@ interface Tab {
 
 const tabs: Record<string, Tab> = {
   library: {
-    name: 'library',
+    name: 'Library',
     component: resolveComponent('SettingsAdminLibrary'),
     icon: 'lucide:library',
     path: '/settings/admin/library',
   },
   dropbox: {
-    name: 'dropbox',
+    name: 'Dropbox',
     component: resolveComponent('SettingsAdminDropbox'),
     icon: 'lucide:inbox',
     path: '/settings/admin/dropbox',
   },
   metadata: {
-    name: 'metadata',
+    name: 'Metadata',
     component: resolveComponent('SettingsAdminMetadata'),
     icon: 'lucide:book-open',
     path: '/settings/admin/metadata',
   },
   users: {
-    name: 'users',
+    name: 'Users',
     component: resolveComponent('SettingsAdminUsers'),
     icon: 'lucide:users',
     path: '/settings/admin/users',

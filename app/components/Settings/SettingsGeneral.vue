@@ -111,7 +111,7 @@ async function handleUpdateProfile() {
 </script>
 <template>
   <div class="w-full">
-    <SettingsUIGroup title="credentials" icon="lucide:lock">
+    <SettingsUIGroup title="Credentials" icon="lucide:lock">
       <div class="flex items-center gap-2">
         <button
           class="flex items-center gap-1 px-4 py-2 text-left rounded-lg bg-(--sub-alt-color)"
@@ -128,7 +128,7 @@ async function handleUpdateProfile() {
         </div>
       </div>
     </SettingsUIGroup>
-    <SettingsUIGroup title="profile" icon="lucide:user" class="flex flex-col">
+    <SettingsUIGroup title="Profile" icon="lucide:user" class="flex flex-col">
       <div class="flex flex-col gap-2 max-w-[320px]">
         <input
           v-model="profileName"
@@ -166,7 +166,7 @@ async function handleUpdateProfile() {
       </div>
     </SettingsUIGroup>
     <SettingsUIGroup
-      title="about"
+      title="About"
       icon="lucide:info"
       class="flex flex-col gap-2"
     >

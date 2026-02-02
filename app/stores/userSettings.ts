@@ -10,6 +10,8 @@ export const fontFamilyOptions = [
   'Montserrat',
   'Nunito',
   'Poppins',
+  'PT Serif',
+  'Noto Serif',
   'Roboto Mono',
 ] as const;
 export type FontFamily = (typeof fontFamilyOptions)[number];

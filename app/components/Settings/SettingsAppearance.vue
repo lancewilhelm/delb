@@ -312,7 +312,7 @@ function handleSortChange(target: string) {
     >
       <SettingsAppearanceFonts />
     </SettingsUIGroup>
-    <SettingsUIGroup title="themes" icon="lucide:palette">
+    <SettingsUIGroup title="Themes" icon="lucide:palette">
       <div class="w-full flex gap-2 mb-4">
         <button
           :class="[
@@ -365,7 +365,7 @@ function handleSortChange(target: string) {
       </div>
       <SettingsUISubGroup
         v-if="favoriteThemes.length"
-        title="favorite themes"
+        title="Favorite Themes"
         icon="lucide:star"
       >
         <div class="grid grid-cols-2 md:grid-cols-3 gap-2 w-full">
@@ -385,7 +385,7 @@ function handleSortChange(target: string) {
           />
         </div>
       </SettingsUISubGroup>
-      <SettingsUISubGroup title="themes" icon="lucide:palette">
+      <SettingsUISubGroup title="Themes" icon="lucide:palette">
         <div class="grid grid-cols-2 md:grid-cols-3 gap-2 w-full">
           <SettingsUITheme
             v-for="theme in allThemes"

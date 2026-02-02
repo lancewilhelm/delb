@@ -8,7 +8,7 @@ export default defineNuxtPlugin(() => {
           {
             innerHTML: `
               body, html {
-                font-family: ${family || 'Geist, sans-serif'} !important;
+                font-family: ${family || 'Nunito, sans-serif'} !important;
               }
             `,
             id: 'currentFontFamilyStyle',

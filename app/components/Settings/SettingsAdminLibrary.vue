@@ -246,7 +246,7 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
 <template>
   <div class="w-full">
     <SettingsUIGroup
-      title="library management"
+      title="Library Management"
       icon="lucide:library"
       description="migrate an existing Calibre library mounted at ./calibre into Delb’s library"
     >
@@ -321,7 +321,7 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
     </SettingsUIGroup>
 
     <SettingsUIGroup
-      title="import from calibre"
+      title="Import From Calibre"
       icon="lucide:download"
       description="one-time import of metadata + file pointers (idempotent via calibre book id)"
     >
@@ -368,7 +368,7 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
     </SettingsUIGroup>
 
     <SettingsUIGroup
-      title="health checks"
+      title="Health Checks"
       icon="lucide:heart-pulse"
       description="find common library/database issues that affect the user experience"
     >
@@ -450,7 +450,7 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
 
     <SettingsUIGroup
       v-if="lastResult"
-      title="last run summary"
+      title="Last Run Summary"
       icon="lucide:clipboard-list"
       description="results from the most recent import"
     >

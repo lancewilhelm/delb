@@ -166,7 +166,7 @@ const targetUserId = computed({
 
 <template>
   <SettingsUIGroup
-    title="dropbox ingestion"
+    title="Dropbox Ingestion"
     icon="lucide:inbox"
     description="watch a local folder and auto-ingest supported book files"
   >

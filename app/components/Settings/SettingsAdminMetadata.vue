@@ -68,7 +68,7 @@ async function clearToken() {
 
 <template>
   <SettingsUIGroup
-    title="metadata providers"
+    title="Metadata Providers"
     icon="lucide:book-open"
     description="configure external metadata sources (Hardcover, Google Books, etc.)"
   >
