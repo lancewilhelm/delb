@@ -79,6 +79,17 @@ function selectionIsEmpty(): boolean {
   return selectionStore.selectedBookIds.size === 0;
 }
 
+function toggleSelectAllInScope() {
+  if (!selectionStore.selectMode) return;
+
+  if (selectionStore.allSelectedInScope) {
+    selectionStore.setSelectedAllInScope(false);
+    return;
+  }
+
+  selectionStore.setSelectedAllInScope(true);
+}
+
 const selectedCountLabel = computed(() => {
   if (!selectionStore.selectMode) return '';
   if (selectionStore.allSelectedInScope) {
@@ -855,6 +866,32 @@ onMounted(async () => {
                 >
                   {{ selectedCountLabel }} selected
                 </div>
+
+                <!-- Select All Button -->
+                <button
+                  v-if="selectionStore.selectMode"
+                  class="p-1 flex items-center gap-2 h-full!"
+                  type="button"
+                  :aria-pressed="
+                    selectionStore.allSelectedInScope ? 'true' : 'false'
+                  "
+                  @click="toggleSelectAllInScope"
+                >
+                  <Icon
+                    :name="
+                      selectionStore.allSelectedInScope
+                        ? 'lucide:x-square'
+                        : 'lucide:list-checks'
+                    "
+                    class="text-(--main-color) opacity-80 shrink-0 text-xl sm:text-lg"
+                  />
+                  <span class="hidden lg:block text-sm opacity-80">
+                    <span v-if="selectionStore.allSelectedInScope"
+                      >Clear all</span
+                    >
+                    <span v-else>Select all</span>
+                  </span>
+                </button>
 
                 <!-- Toggle Select Button -->
                 <button

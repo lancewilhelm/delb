@@ -179,6 +179,31 @@ export const useBookSelectionStore = defineStore('bookSelection', () => {
     selectedBookIds.value = next;
   }
 
+  function applySelectionRange(bookIds: string[], selected: boolean) {
+    if (!Array.isArray(bookIds) || bookIds.length === 0) return;
+
+    if (allSelectedInScope.value) {
+      const next = new Set(excludedBookIds.value);
+      for (const raw of bookIds) {
+        const id = normalizeId(raw);
+        if (!id) continue;
+        if (selected) next.delete(id);
+        else next.add(id);
+      }
+      excludedBookIds.value = next;
+      return;
+    }
+
+    const next = new Set(selectedBookIds.value);
+    for (const raw of bookIds) {
+      const id = normalizeId(raw);
+      if (!id) continue;
+      if (selected) next.add(id);
+      else next.delete(id);
+    }
+    selectedBookIds.value = next;
+  }
+
   /**
    * Sets "select all" state.
    *
@@ -260,6 +285,7 @@ export const useBookSelectionStore = defineStore('bookSelection', () => {
     toggle,
     select,
     deselect,
+    applySelectionRange,
 
     setSelectedAllInScope,
   };

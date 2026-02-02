@@ -188,6 +188,16 @@ Implementation notes:
 - The grid uses content width (excluding padding) and fixes item height to keep scroll math aligned.
 - See `app/components/Books/BooksInfiniteGrid.vue` and `app/components/BookThumbnail.vue`.
 
+### Multi-select behavior (Books grid)
+
+Selection mode is a header-driven toggle. When active, the grid turns each book into a selectable card.
+
+Key behaviors:
+
+- **Select all** uses a scope-wide selection model (all in scope, with explicit exclusions), so it does not require all books to be loaded.
+- **Shift-click** selects or deselects a contiguous range within the currently loaded books list, based on the sorted order returned by the API.
+- Implementation references: `app/stores/bookSelection.ts`, `app/components/Books/BooksInfiniteGrid.vue`, `app/components/BookThumbnail.vue`, `app/pages/books/index.vue`.
+
 ### Filters = refinement
 
 Filters narrow the result set _within the current scope + view_. Filters are always optional and stackable.

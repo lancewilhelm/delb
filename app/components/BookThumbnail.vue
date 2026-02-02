@@ -281,20 +281,20 @@ const authorLabel = computed(() => {
 
 const emit = defineEmits<{
   /** Fired when in selection mode and the user toggles selection for this book. */
-  (e: 'toggle-select', bookId: string): void;
+  (e: 'toggle-select', bookId: string, meta?: { shiftKey?: boolean }): void;
 }>();
 
-function onOpenBook() {
+function onOpenBook(e?: MouseEvent) {
   if (props.selectable) {
-    emit('toggle-select', props.book.id);
+    emit('toggle-select', props.book.id, { shiftKey: e?.shiftKey });
     return;
   }
 
   navigateTo(`/books/${props.book.id}`);
 }
 
-function onToggleSelect() {
-  emit('toggle-select', props.book.id);
+function onToggleSelect(e: MouseEvent) {
+  emit('toggle-select', props.book.id, { shiftKey: e.shiftKey });
 }
 
 const userSettingsStore = useUserSettingsStore();

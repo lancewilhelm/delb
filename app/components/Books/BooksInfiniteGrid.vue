@@ -100,6 +100,7 @@ const emit = defineEmits<{
 // Selection mode (Phase 3)
 // ------------------------------
 const selectionStore = useBookSelectionStore();
+const lastRangeAnchorId = ref<string | null>(null);
 
 const selectionScope = computed(() => {
   if (props.collectionId) {
@@ -114,8 +115,16 @@ watch(
   (s) => {
     if (!props.selectionEnabled) return;
     selectionStore.resetForScope(s);
+    lastRangeAnchorId.value = null;
   },
   { deep: true, immediate: true },
+);
+
+watch(
+  () => selectionStore.selectMode,
+  (enabled) => {
+    if (!enabled) lastRangeAnchorId.value = null;
+  },
 );
 
 // BookThumbnail sizing assumptions (current standard)
@@ -244,6 +253,43 @@ function onScroll() {
   const container = scrollContainerRef.value;
   if (!container) return;
   scrollTop.value = container.scrollTop;
+}
+
+function getBookIndex(bookId: string) {
+  return books.value.findIndex((b) => b.id === bookId);
+}
+
+function onBookToggleSelect(
+  bookId: string,
+  meta?: { shiftKey?: boolean },
+) {
+  if (!props.selectionEnabled) return;
+
+  const isShift = Boolean(meta?.shiftKey);
+  const anchorId = lastRangeAnchorId.value;
+
+  if (!isShift || !anchorId) {
+    selectionStore.toggle(bookId);
+    lastRangeAnchorId.value = bookId;
+    return;
+  }
+
+  const anchorIndex = getBookIndex(anchorId);
+  const targetIndex = getBookIndex(bookId);
+
+  if (anchorIndex < 0 || targetIndex < 0) {
+    selectionStore.toggle(bookId);
+    lastRangeAnchorId.value = bookId;
+    return;
+  }
+
+  const start = Math.min(anchorIndex, targetIndex);
+  const end = Math.max(anchorIndex, targetIndex);
+  const ids = books.value.slice(start, end + 1).map((b) => b.id);
+  const shouldSelect = !selectionStore.isSelected(bookId);
+
+  selectionStore.applySelectionRange(ids, shouldSelect);
+  lastRangeAnchorId.value = bookId;
 }
 
 const books = ref<Book[]>([]);
@@ -462,6 +508,7 @@ function reset() {
   books.value = [];
   nextCursor.value = null;
   errorMessage.value = null;
+  lastRangeAnchorId.value = null;
 
   if (scrollContainerRef.value) {
     scrollContainerRef.value.scrollTop = 0;
@@ -675,7 +722,7 @@ onBeforeUnmount(() => {
                   props.selectionEnabled && selectionStore.selectMode
                 "
                 :selected="selectionStore.isSelected(b.id)"
-                @toggle-select="selectionStore.toggle"
+                @toggle-select="onBookToggleSelect"
               />
             </div>
           </div>
