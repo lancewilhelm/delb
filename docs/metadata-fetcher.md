@@ -13,7 +13,7 @@ When editing a book, book owners and administrators can search for and import me
 
 Cover images shown in the metadata search results display a small resolution badge (e.g. `1200×1800`) so you can quickly gauge cover quality before importing.
 
-In addition, the **Add book** modal supports importing a _full_ book record from metadata (no per-field selection). This is designed for fast entry workflows like barcode/ISBN scanning.
+In addition, the **Add book** modal supports importing a _full_ book record from metadata (no per-field selection). This is designed for fast entry workflows like barcode/ISBN scanning. It also includes a **Manual entry** option that opens a blank edit screen; the record is created when you save.
 
 ## Provider Selection
 

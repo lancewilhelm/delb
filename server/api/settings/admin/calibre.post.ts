@@ -913,7 +913,6 @@ export default defineEventHandler(async (event) => {
             .where(
               and(
                 eq(bookFiles.bookId, delbBookId),
-                eq(bookFiles.format, format),
                 eq(bookFiles.relativePath, relativePath),
               ),
             )

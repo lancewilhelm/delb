@@ -149,7 +149,7 @@ export function buildBookStorageRelativePath(
     'Untitled',
   );
 
-  const fileName = toSafePathSegment(normalizeSpaces(input.filename), 'file');
+  const fileName = toSafeFilename(normalizeSpaces(input.filename), 'file');
 
   return [baseDir, authorDir, bookDir, fileName].join('/');
 }
@@ -210,6 +210,26 @@ export function getCanonicalBookPaths(opts: {
     coverPath: [bookDir, BOOK_STORAGE_DEFAULTS.coverFilename].join('/'),
     epubPath: [bookDir, toSafePathSegment(epubFilename, 'book.epub')].join('/'),
   };
+}
+
+function toSafeFilename(input: string, fallback = 'file'): string {
+  const raw = (input ?? '').toString().trim();
+  if (!raw) return fallback;
+
+  const extRaw = path.extname(raw);
+  const baseRaw = extRaw ? raw.slice(0, -extRaw.length) : raw;
+
+  const extClean = extRaw
+    .toLowerCase()
+    .replace(/^\.+/, '')
+    .replace(/[^a-z0-9]+/g, '');
+  const extPart = extClean ? `.${extClean}` : '';
+
+  const maxBase = Math.max(1, 80 - extPart.length);
+  let safeBase = toSafePathSegment(baseRaw, fallback, { maxLength: maxBase });
+  if (!safeBase) safeBase = fallback;
+
+  return `${safeBase}${extPart}`;
 }
 
 /**

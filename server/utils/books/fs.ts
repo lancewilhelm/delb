@@ -12,7 +12,11 @@ import path from 'node:path';
  * This is intentionally conservative for an MVP. You can later swap to a more
  * sophisticated slugger while keeping the same exported API.
  */
-export function toSafePathSegment(input: string, fallback = 'unknown'): string {
+export function toSafePathSegment(
+  input: string,
+  fallback = 'unknown',
+  opts?: { maxLength?: number },
+): string {
   const raw = (input ?? '').toString().trim();
   if (!raw) return fallback;
 
@@ -49,8 +53,9 @@ export function toSafePathSegment(input: string, fallback = 'unknown'): string {
 
   if (!s) return fallback;
 
+  const maxLength = opts?.maxLength ?? 80;
   // Keep paths reasonably short (per-segment). 80 is arbitrary but practical.
-  if (s.length > 80) s = s.slice(0, 80).trim();
+  if (s.length > maxLength) s = s.slice(0, maxLength).trim();
 
   return s || fallback;
 }

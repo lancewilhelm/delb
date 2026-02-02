@@ -98,10 +98,11 @@ Future direction:
 
 ### Unified “Add book” modal (single collection selector)
 
-Delb uses a single **Add book** modal that supports two flows:
+Delb uses a single **Add book** modal that supports three flows:
 
 - **Upload files** (EPUB/PDF/MOBI/AZW3)
 - **Add by metadata** (search + create book record)
+- **Manual entry** (opens a blank editor; record is created on Save)
 
 Both flows share the same **collection selection** UI and rules:
 

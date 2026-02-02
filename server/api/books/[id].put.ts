@@ -470,6 +470,12 @@ export default defineEventHandler(async (event) => {
 
   const title = normalizeOptionalString((body as PutBookBody).title);
   if (title !== undefined) {
+    if (!title) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Title is required',
+      });
+    }
     update.title = title ?? '';
     update.sortTitle = makeTitleSortKey(update.title);
     shouldMoveStorage = true;
@@ -571,6 +577,13 @@ export default defineEventHandler(async (event) => {
           ? [authorSingle]
           : null
         : undefined;
+
+  if (newAuthors !== undefined && (!newAuthors || !newAuthors.length)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'At least one author is required',
+    });
+  }
 
   // Ensure there's something to update besides updatedAt.
   const keys = Object.keys(update).filter((k) => k !== 'updatedAt');

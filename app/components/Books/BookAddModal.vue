@@ -12,7 +12,7 @@ const emit = defineEmits<{
   (e: 'added' | 'book-uploaded'): void;
 }>();
 
-type Mode = 'upload' | 'metadata';
+type Mode = 'upload' | 'metadata' | 'manual';
 
 type CollectionOption = {
   id: string;
@@ -939,14 +939,20 @@ const actionDisabled = computed(() => {
 
 const busy = computed(() => uploading.value || creating.value);
 
-const titleText = computed(() =>
-  mode.value === 'upload' ? 'Add books' : 'Add book by metadata',
-);
-const subtitleText = computed(() =>
-  mode.value === 'upload'
-    ? 'Drop ebook files here or browse (EPUB, PDF, MOBI, AZW3). Metadata will be extracted from the file.'
-    : 'Search using the default metadata provider and add the top result. No file will be downloaded.',
-);
+const titleText = computed(() => {
+  if (mode.value === 'upload') return 'Add books';
+  if (mode.value === 'metadata') return 'Add book by metadata';
+  return 'Add book manually';
+});
+const subtitleText = computed(() => {
+  if (mode.value === 'upload') {
+    return 'Drop ebook files here or browse (EPUB, PDF, MOBI, AZW3). Metadata will be extracted from the file.';
+  }
+  if (mode.value === 'metadata') {
+    return 'Search using the default metadata provider and add the top result. No file will be downloaded.';
+  }
+  return 'Create a new book entry from scratch. The record is created when you save.';
+});
 
 function handleMetadataSearchSelect(selection: {
   source: MetadataProviderKey;
@@ -958,6 +964,19 @@ function handleMetadataSearchSelect(selection: {
     item: selection.item,
     sourceLabel: selection.source === 'hardcover' ? 'Hardcover' : 'Google',
   });
+}
+
+function startManualEntry() {
+  const collectionIds = selectedCollectionIds.value.filter(Boolean);
+  if (!collectionIds.length) {
+    errorMessage.value = 'Select at least one collection.';
+    successMessage.value = null;
+    return;
+  }
+
+  const query = `?collections=${encodeURIComponent(collectionIds.join(','))}`;
+  close();
+  navigateTo(`/books/new${query}`);
 }
 </script>
 
@@ -1012,6 +1031,23 @@ function handleMetadataSearchSelect(selection: {
           <span class="flex items-center justify-center gap-2">
             <Icon name="lucide:search" />
             <span>By metadata</span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          class="flex-1 border border-(--sub-color) p-2 rounded-md transition"
+          :class="
+            mode === 'manual'
+              ? 'bg-(--main-color)/20'
+              : 'hover:bg-(--main-color)/10'
+          "
+          :disabled="busy"
+          @click="mode = 'manual'"
+        >
+          <span class="flex items-center justify-center gap-2">
+            <Icon name="lucide:pen-line" />
+            <span>Manual entry</span>
           </span>
         </button>
       </div>
@@ -1376,7 +1412,7 @@ function handleMetadataSearchSelect(selection: {
       </div>
 
       <!-- Metadata mode -->
-      <div v-else class="space-y-2">
+      <div v-else-if="mode === 'metadata'" class="space-y-2">
         <div class="space-y-1">
           <div class="text-sm font-semibold">Search query</div>
           <input
@@ -1429,6 +1465,27 @@ function handleMetadataSearchSelect(selection: {
           >
             Search results
           </button>
+        </div>
+      </div>
+
+      <!-- Manual mode -->
+      <div v-else class="space-y-2">
+        <div class="text-sm opacity-80">
+          You’ll be taken to a blank edit page. The book is created when you
+          click Save.
+        </div>
+
+        <button
+          type="button"
+          class="w-full border border-(--sub-color) p-2 rounded-md bg-(--sub-color)/15 hover:bg-(--sub-color)/25 transition"
+          :disabled="busy || !selectedCollectionIds.length"
+          @click="startManualEntry"
+        >
+          Start manual entry
+        </button>
+
+        <div v-if="!selectedCollectionIds.length" class="text-xs opacity-70">
+          Select at least one collection first.
         </div>
       </div>
 

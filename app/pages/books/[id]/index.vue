@@ -1101,7 +1101,10 @@ const { copy } = useClipboard();
 
           <!-- Right lower details grid -->
           <!-- Publisher -->
-          <div class="grid grid-cols-[110px_1fr] gap-2 text-sm">
+          <div
+            v-if="book.publisher"
+            class="grid grid-cols-[110px_1fr] gap-2 text-sm"
+          >
             <div class="opacity-70">Publisher</div>
             <div class="min-w-0">
               {{ book.publisher?.name ?? '' }}
