@@ -15,6 +15,7 @@ import { cloudDb } from '~~/server/utils/db/cloud';
 import {
   authors,
   bookAuthors,
+  bookFiles,
   books,
   collectionBooks,
   collectionMembers,
@@ -126,6 +127,17 @@ function normalizeStatusFilter(raw: unknown): {
   return { statuses, includeNone };
 }
 
+function normalizeFilesFilter(raw: unknown): 'has' | 'none' | null {
+  const v = (raw ?? '').toString().trim().toLowerCase();
+  if (!v) return null;
+  if (v === 'has') return 'has';
+  if (v === 'none') return 'none';
+  throw createError({
+    statusCode: 400,
+    statusMessage: 'Invalid files filter. Expected one of: has, none',
+  });
+}
+
 export default defineEventHandler(async (event) => {
   logger.debug('GET /api/books');
 
@@ -154,6 +166,7 @@ export default defineEventHandler(async (event) => {
   // - addedStart=<YYYY-MM-DD> optional (inclusive)
   // - addedEnd=<YYYY-MM-DD> optional (inclusive)
   // - status=<csv> optional (e.g. "reading,to_be_read,none")
+  // - files=<has|none> optional
   const q = getQuery(event) as {
     collectionId?: string;
     limit?: string;
@@ -163,6 +176,7 @@ export default defineEventHandler(async (event) => {
     addedStart?: string;
     addedEnd?: string;
     status?: string;
+    files?: string;
     debug?: string;
   };
 
@@ -175,6 +189,7 @@ export default defineEventHandler(async (event) => {
 
   const cursor = decodeCursor(q.cursor);
   const statusFilter = normalizeStatusFilter(q.status);
+  const filesFilter = normalizeFilesFilter(q.files);
 
   // Added date range filter (books.createdAt)
   // Inputs are expected as YYYY-MM-DD from <input type="date">.
@@ -416,6 +431,19 @@ export default defineEventHandler(async (event) => {
       addedEndSec !== null
         ? sql`CAST(${books.createdAt} AS INTEGER) <= ${addedEndSec}`
         : undefined,
+      filesFilter === 'has'
+        ? sql`EXISTS (
+            SELECT 1
+            FROM ${bookFiles}
+            WHERE ${bookFiles.bookId} = ${books.id}
+          )`
+        : filesFilter === 'none'
+          ? sql`NOT EXISTS (
+              SELECT 1
+              FROM ${bookFiles}
+              WHERE ${bookFiles.bookId} = ${books.id}
+            )`
+          : undefined,
     );
 
     const hasStatusFilter =

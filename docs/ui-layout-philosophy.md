@@ -393,6 +393,10 @@ If you’re ever unsure where something belongs, ask:
 For v1 UI implementation:
 
 - `Books` view is real.
+- Books view filters are implemented as a header dropdown (added date, status, file presence) in:
+  - `app/pages/books/index.vue`
+  - `app/stores/booksIndexFilters.ts`
+  - `server/api/books/index.get.ts`
 - `Authors`, `Series`, `Publishers` are placeholders that can render “Coming soon”.
 - Sidebar sections can be present as placeholders even if filtering is not implemented yet.
 - Collection switcher and view selector should be functional controls in the header.

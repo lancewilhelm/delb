@@ -624,6 +624,14 @@ const includeNoStatus = computed<boolean>(() => {
     : false;
 });
 
+const filesFilter = computed<'any' | 'has' | 'none'>({
+  get: () =>
+    shouldApplyPersistedFilters.value ? booksFiltersStore.filesFilter : 'any',
+  set: (v) => {
+    booksFiltersStore.filesFilter = v;
+  },
+});
+
 function isStatusSelected(status: UserBookStatus) {
   if (!shouldApplyPersistedFilters.value) return false;
   return booksFiltersStore.selectedStatuses.includes(status);
@@ -645,6 +653,7 @@ const booksEndpoint = computed(() => {
   const q = {
     ...booksFiltersStore.addedDateQuery,
     ...booksFiltersStore.statusQuery,
+    ...booksFiltersStore.filesQuery,
   };
   const pairs = Object.entries(q).filter(([, v]) => typeof v === 'string' && v);
   if (!pairs.length) return '/api/books';
@@ -1248,6 +1257,64 @@ onMounted(async () => {
                           <div class="text-sm">{{ opt.label }}</div>
                         </div>
                       </label>
+                    </div>
+
+                    <div class="pt-2 border-t border-(--sub-color)"></div>
+
+                    <div class="text-sm font-medium opacity-90">Files</div>
+
+                    <div class="space-y-2">
+                      <label class="flex items-center gap-2 cursor-pointer">
+                        <input
+                          v-model="filesFilter"
+                          type="radio"
+                          name="files-filter"
+                          value="any"
+                          class="peer sr-only"
+                        />
+                        <span
+                          class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                        ></span>
+                        <div class="min-w-0">
+                          <div class="text-sm">Any</div>
+                        </div>
+                      </label>
+
+                      <label class="flex items-center gap-2 cursor-pointer">
+                        <input
+                          v-model="filesFilter"
+                          type="radio"
+                          name="files-filter"
+                          value="has"
+                          class="peer sr-only"
+                        />
+                        <span
+                          class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                        ></span>
+                        <div class="min-w-0">
+                          <div class="text-sm">Has files</div>
+                        </div>
+                      </label>
+
+                      <label class="flex items-center gap-2 cursor-pointer">
+                        <input
+                          v-model="filesFilter"
+                          type="radio"
+                          name="files-filter"
+                          value="none"
+                          class="peer sr-only"
+                        />
+                        <span
+                          class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                        ></span>
+                        <div class="min-w-0">
+                          <div class="text-sm">No files</div>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div class="text-xs opacity-70">
+                      Filters by whether a book has stored files.
                     </div>
                   </div>
                 </div>

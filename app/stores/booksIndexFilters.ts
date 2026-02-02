@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 
 export type UserBookStatus = 'to_be_read' | 'reading' | 'finished' | 'dnf';
+export type BookFilesFilter = 'any' | 'has' | 'none';
 
 export const useBooksIndexFiltersStore = defineStore(
   'booksIndexFilters',
@@ -14,6 +15,7 @@ export const useBooksIndexFiltersStore = defineStore(
 
     const selectedStatuses = ref<UserBookStatus[]>([]);
     const includeNoStatus = ref(false);
+    const filesFilter = ref<BookFilesFilter>('any');
 
     const statusQuery = computed<Record<string, string>>(() => {
       const q: Record<string, string> = {};
@@ -31,12 +33,20 @@ export const useBooksIndexFiltersStore = defineStore(
       return q;
     });
 
+    const filesQuery = computed<Record<string, string>>(() => {
+      const q: Record<string, string> = {};
+      if (filesFilter.value === 'has') q.files = 'has';
+      if (filesFilter.value === 'none') q.files = 'none';
+      return q;
+    });
+
     const isApplied = computed<boolean>(() => {
       return Boolean(
         addedStart.value ||
           addedEnd.value ||
           selectedStatuses.value.length ||
-          includeNoStatus.value,
+          includeNoStatus.value ||
+          filesFilter.value !== 'any',
       );
     });
 
@@ -45,6 +55,7 @@ export const useBooksIndexFiltersStore = defineStore(
       addedEnd.value = '';
       selectedStatuses.value = [];
       includeNoStatus.value = false;
+      filesFilter.value = 'any';
     }
 
     function toggleNoStatus() {
@@ -87,9 +98,11 @@ export const useBooksIndexFiltersStore = defineStore(
       addedEnd,
       selectedStatuses,
       includeNoStatus,
+      filesFilter,
 
       statusQuery,
       addedDateQuery,
+      filesQuery,
       isApplied,
 
       clearAll,
@@ -100,4 +113,3 @@ export const useBooksIndexFiltersStore = defineStore(
   },
   { persist: true },
 );
-
