@@ -11,7 +11,7 @@ import { logger } from '~/utils/logger';
  * Goals:
  * - Avoid native Node addons (e.g. better-sqlite3) for container portability
  * - Be resilient (schema varies across Calibre versions)
- * - Prefer import-in-place: compute format file paths relative to Calibre library root
+ * - Prefer migration: compute format file paths relative to Calibre library root
  *
  * Note: This is intentionally a *thin* reader, not a full Calibre ORM.
  */
@@ -838,7 +838,7 @@ export class CalibreReader {
    * 1) Try a common-ish DB-derived mapping (books_data_link + data) when present.
    * 2) Optionally fall back to scanning each book folder for known extensions.
    *
-   * Note: For import-in-place we store paths relative to the Calibre library root.
+   * Note: For migration we store paths relative to the Calibre library root.
    */
   async getFormatFiles(opts?: {
     scanDiskFallback?: boolean;

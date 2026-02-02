@@ -358,7 +358,7 @@ export const bookFiles = sqliteTable(
   },
   (t) => ({
     // Prevent duplicate file pointers per book.
-    // This is the safest uniqueness constraint for import-in-place.
+    // This is the safest uniqueness constraint for Calibre migration/rescan.
     bookIdRelativePathUnique: uniqueIndex(
       'book_files_book_id_relative_path_unique',
     ).on(t.bookId, t.relativePath),

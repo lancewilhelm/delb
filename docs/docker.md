@@ -11,12 +11,13 @@ Delb’s Docker image runs the Nuxt server and maintains a persistent SQLite DB.
 This expects:
 
 - a persistent volume mounted to `/app/data` for `data/delb.db`
-- (optional) a Calibre library mounted to `/app/library`
+- (optional) a Calibre library mounted to `/app/calibre` (read-only input)
+- a writable Delb library mounted to `/app/library`
 - `BETTER_AUTH_SECRET` provided via env
 
 Example:
 
-`docker run --rm -p 3000:3000 -e BETTER_AUTH_SECRET=... -v delb-data:/app/data -v /path/to/calibre:/app/library delb`
+`docker run --rm -p 3000:3000 -e BETTER_AUTH_SECRET=... -v delb-data:/app/data -v /path/to/calibre:/app/calibre:ro -v /path/to/delb-library:/app/library delb`
 
 ## Permissions
 
@@ -32,8 +33,8 @@ If your host uses a different owner (e.g. Unraid’s `nobody:users`), either:
 - change ownership/permissions on the host so uid/gid 1001 can write, or
 - run the container with a matching `--user` (uid:gid) for the mounted library.
 
-If you mount a Calibre library read-only, Delb can import metadata but cannot
-write new covers or delete files in that library.
+Calibre can be mounted read-only at `/app/calibre`. Delb writes all managed files
+to `/app/library`.
 
 ## Migrations
 

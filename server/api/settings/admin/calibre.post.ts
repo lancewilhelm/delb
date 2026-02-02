@@ -1,9 +1,14 @@
 import path from 'node:path';
-import { readdir, stat } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, stat } from 'node:fs/promises';
 
 import { and, eq, sql } from 'drizzle-orm';
 import { normalizePublishedAt } from '~~/server/utils/books/published';
-import sharp from 'sharp';
+import {
+  buildBookStorageRelativePath,
+  getCanonicalBookPaths,
+} from '~~/server/utils/books/storage/paths';
+import { resolveDataPath } from '~~/server/utils/books/fs';
+import { ensureCoverOutputsFromBytes } from '~~/server/utils/books/covers';
 
 import { auth } from '~/utils/auth';
 import { logger } from '~/utils/logger';
@@ -31,7 +36,7 @@ import { makeAuthorSortKey, makeTitleSortKey } from '~~/server/utils/sort/keys';
 type Body = {
   /**
    * Action:
-   * - "import": Import all books from Calibre `library/metadata.db` into Delb, idempotently.
+   * - "import": Import all books from Calibre `calibre/metadata.db` into Delb, idempotently.
    * - "rescan": Re-read Calibre `metadata.db` and refresh files/covers/metadata for previously imported books
    *   (and optionally import new books, controlled by `importNew`).
    */
@@ -199,16 +204,16 @@ async function assertCanAddToCollections(opts: {
  * Try to discover book format files on disk by scanning the book directory, when
  * Calibre DB doesn't provide file info (common).
  *
- * Returns Delb-style `library/<calibreRelDir>/<filename>` relative paths.
+ * Returns Calibre-style `<calibreRelDir>/<filename>` relative paths.
  */
 async function scanBookDirForFormats(opts: {
   calibreBook: CalibreBookRow;
-  libraryRootAbs: string;
+  calibreRootAbs: string;
 }): Promise<CalibreFormatFile[]> {
   const relDir = safeNonEmptyString(opts.calibreBook.path);
   if (!relDir) return [];
 
-  const dirAbs = path.resolve(opts.libraryRootAbs, relDir);
+  const dirAbs = path.resolve(opts.calibreRootAbs, relDir);
 
   try {
     const entries = await readdir(dirAbs, { withFileTypes: true });
@@ -242,9 +247,8 @@ async function scanBookDirForFormats(opts: {
       out.push({
         calibreBookId: opts.calibreBook.calibreBookId,
         format: ext,
-        // CalibreReader (libsql) returns paths relative to the library root.
-        // Delb stores paths under `library/...`.
-        relativePath: ['library', relDir, filename].join('/'),
+        // CalibreReader (libsql) returns paths relative to the Calibre root.
+        relativePath: [relDir, filename].join('/'),
       });
     }
 
@@ -261,6 +265,13 @@ async function fileExists(absPath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function copyFileIfMissing(srcAbs: string, destAbs: string) {
+  if (await fileExists(destAbs)) return false;
+  await mkdir(path.dirname(destAbs), { recursive: true });
+  await copyFile(srcAbs, destAbs);
+  return true;
 }
 
 export default defineEventHandler(async (event) => {
@@ -282,9 +293,9 @@ export default defineEventHandler(async (event) => {
   const dryRun = !!body.dryRun;
   const importNew = !!body.importNew;
 
-  // Calibre library is mounted at Delb's `library/` folder.
-  const libraryRootAbs = path.resolve(process.cwd(), 'library');
-  const calibreDbPathAbs = path.resolve(libraryRootAbs, 'metadata.db');
+  // Calibre library is mounted at Delb's `calibre/` folder.
+  const calibreRootAbs = path.resolve(process.cwd(), 'calibre');
+  const calibreDbPathAbs = path.resolve(calibreRootAbs, 'metadata.db');
 
   // Collections:
   // - Required for import
@@ -298,7 +309,10 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const reader = new CalibreReader({ libraryRootAbs, readonly: true });
+  const reader = new CalibreReader({
+    libraryRootAbs: calibreRootAbs,
+    readonly: true,
+  });
 
   try {
     const snap = await reader.getSnapshot();
@@ -306,8 +320,8 @@ export default defineEventHandler(async (event) => {
     const summary: ImportSummary = {
       action,
       dryRun,
-      libraryRoot: 'library',
-      calibreDbPath: 'library/metadata.db',
+      libraryRoot: 'calibre',
+      calibreDbPath: 'calibre/metadata.db',
       scanned: {
         // entity counts
         calibreBooks: snap.books.length,
@@ -609,9 +623,11 @@ export default defineEventHandler(async (event) => {
         ? authorNames
         : ['Unknown Author'];
 
+      const bookTitle = calibreBook.title || 'Unknown';
+
       // Create/book upsert
       const now = new Date();
-      let delbBookId = knownDelbBookId ?? null;
+      const delbBookId = knownDelbBookId ?? crypto.randomUUID();
 
       // Publisher/Series (optional)
       const calibrePublisherId = calibrePublisherByBookId.get(
@@ -647,57 +663,60 @@ export default defineEventHandler(async (event) => {
 
       const publishedAt = published ? normalizePublishedAt(published) : null;
 
+      const delbBookPaths = getCanonicalBookPaths({
+        authorNames: effectiveAuthorNames,
+        title: bookTitle,
+        bookId: delbBookId,
+      });
+
+      const delbBookDirRelPosix = delbBookPaths.bookDir;
+      const delbBookDirAbs = resolveDataPath(delbBookDirRelPosix);
+
       // Cover:
       // - Calibre typically stores a full-res `cover.jpg/png` in the book directory.
-      // - Delb should use a lightweight `thumb.webp` almost everywhere, and only serve
-      //   the full-res source on demand.
+      // - Delb should store a source cover + a lightweight `thumb.webp` in its own library.
       //
       // Policy here:
-      // - If a Calibre cover exists, generate/ensure `thumb.webp` next to it (idempotent).
+      // - If a Calibre cover exists, copy it into Delb's canonical folder and generate thumb.webp.
       // - Store `books.coverImagePath` as the thumbnail path (`library/<dir>/thumb.webp`).
       let coverImagePath: string | null = null;
       const coverCandidates = reader.getCoverCandidates(calibreBook);
       summary.results.coverCandidatesFound += coverCandidates.length;
 
       for (const c of coverCandidates) {
-        if (await fileExists(c.absPath)) {
-          const relDir = (calibreBook.path ?? '').toString().trim();
-          if (!relDir) break;
+        if (!(await fileExists(c.absPath))) continue;
 
-          const bookDirAbs = reader.resolveBookDirAbs(calibreBook);
-          if (!bookDirAbs) break;
+        try {
+          if (!dryRun) {
+            const srcBytes = await readFile(c.absPath);
+            const ext = path.extname(c.filename).replace(/^\./, '').toLowerCase();
 
-          const thumbAbs = path.resolve(bookDirAbs, 'thumb.webp');
-          const thumbRelPosix = ['library', relDir, 'thumb.webp'].join('/');
+            const ensured = await ensureCoverOutputsFromBytes({
+              sourceBytes: srcBytes,
+              sourceExtensionHint: ext || null,
+              processing: {
+                outputDirAbs: delbBookDirAbs,
+                outputDirRelPosix: delbBookDirRelPosix,
+                sourceBaseName: 'cover',
+                thumbFileName: 'thumb.webp',
+                thumbMaxWidth: 320,
+                thumbWebpQuality: 80,
+              },
+            });
 
-          // Generate thumb only if it doesn't already exist (keeps imports fast on re-scan)
-          if (!(await fileExists(thumbAbs))) {
-            try {
-              const { readFile, writeFile } = await import('node:fs/promises');
-              const srcBytes = await readFile(c.absPath);
-
-              const thumbBytes = await sharp(srcBytes)
-                .rotate()
-                .resize({ width: 320, withoutEnlargement: true })
-                .webp({ quality: 80 })
-                .toBuffer();
-
-              await writeFile(thumbAbs, thumbBytes);
-            } catch (e) {
-              // If thumbnail generation fails, fall back to pointing at the original cover
-              // (still correct, just heavier).
-              logger.warn(
-                e,
-                'calibre import: failed to generate thumb.webp; falling back to source cover path',
-              );
-              coverImagePath = c.relativePath;
-              break;
-            }
+            coverImagePath = ensured.covers.thumb.relativePath;
+          } else {
+            coverImagePath = path.posix.join(delbBookDirRelPosix, 'thumb.webp');
           }
-
-          coverImagePath = thumbRelPosix;
-          break;
+        } catch (e) {
+          logger.warn(
+            e,
+            'calibre import: failed to generate Delb cover assets (continuing without cover)',
+          );
+          coverImagePath = null;
         }
+
+        break;
       }
 
       if (knownDelbBookId) {
@@ -706,10 +725,10 @@ export default defineEventHandler(async (event) => {
           await cloudDb
             .update(books)
             .set({
-              title: calibreBook.title || 'Unknown',
+              title: bookTitle,
               sortTitle:
                 safeNonEmptyString(calibreBook.sort) ??
-                makeTitleSortKey(calibreBook.title || ''),
+                makeTitleSortKey(bookTitle),
               description,
               language,
               published,
@@ -727,17 +746,15 @@ export default defineEventHandler(async (event) => {
             .where(eq(books.id, knownDelbBookId));
         }
         summary.results.booksUpdated += 1;
-        delbBookId = knownDelbBookId;
       } else {
         // Create
-        const newId = crypto.randomUUID();
         if (!dryRun) {
           await cloudDb.insert(books).values({
-            id: newId,
-            title: calibreBook.title || 'Unknown',
+            id: delbBookId,
+            title: bookTitle,
             sortTitle:
               safeNonEmptyString(calibreBook.sort) ??
-              makeTitleSortKey(calibreBook.title || ''),
+              makeTitleSortKey(bookTitle),
             description,
             language,
             published,
@@ -756,8 +773,7 @@ export default defineEventHandler(async (event) => {
           });
         }
         summary.results.booksCreated += 1;
-        delbBookId = newId;
-        delbBookIdByCalibreBookId.set(calibreBook.calibreBookId, newId);
+        delbBookIdByCalibreBookId.set(calibreBook.calibreBookId, delbBookId);
       }
 
       if (!delbBookId) continue;
@@ -835,7 +851,7 @@ export default defineEventHandler(async (event) => {
       if (!formatFiles.length) {
         const scanned = await scanBookDirForFormats({
           calibreBook,
-          libraryRootAbs,
+          calibreRootAbs,
         });
         if (scanned.length) {
           summary.results.filesDiscoveredByDirScan += scanned.length;
@@ -850,18 +866,42 @@ export default defineEventHandler(async (event) => {
         const rawRelativePath = safeNonEmptyString(f.relativePath);
         if (!rawRelativePath) continue;
 
-        // CalibreReader returns paths relative to the Calibre library root (e.g. "Author/Title (1)/Book.epub").
-        // Delb stores paths under `library/...`.
-        const relativePath = rawRelativePath.startsWith('library/')
-          ? rawRelativePath
-          : ['library', rawRelativePath].join('/');
+        // CalibreReader returns paths relative to the Calibre root.
+        const sourceRel = rawRelativePath
+          .replace(/^library[\\/]/, '')
+          .replace(/^calibre[\\/]/, '');
+        const sourceAbs = path.resolve(calibreRootAbs, sourceRel);
 
-        // We only store paths under `library/...`. The download endpoint protects traversal.
-        if (!relativePath.startsWith('library/')) {
+        const destFileName = `${bookTitle}.${format}`;
+        const relativePath = buildBookStorageRelativePath({
+          authorNames: effectiveAuthorNames,
+          title: bookTitle,
+          bookId: delbBookId,
+          filename: destFileName,
+          baseDir: 'library',
+        });
+        const destAbs = resolveDataPath(relativePath);
+
+        if (!(await fileExists(sourceAbs))) {
           summary.results.warnings.push(
-            `Skipping non-library path for calibreBookId=${calibreBook.calibreBookId}: ${relativePath}`,
+            `Missing source file for calibreBookId=${calibreBook.calibreBookId}: ${sourceRel}`,
           );
           continue;
+        }
+
+        if (!dryRun) {
+          try {
+            await copyFileIfMissing(sourceAbs, destAbs);
+          } catch (error) {
+            logger.warn(
+              error,
+              'calibre import: failed to copy format file',
+            );
+            summary.results.warnings.push(
+              `Failed to copy file for calibreBookId=${calibreBook.calibreBookId}: ${sourceRel}`,
+            );
+            continue;
+          }
         }
 
         if (!dryRun) {

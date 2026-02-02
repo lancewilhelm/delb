@@ -1,12 +1,15 @@
 import path from 'node:path';
-import { stat, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 
 import { and, eq, inArray } from 'drizzle-orm';
 import sharp from 'sharp';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { CalibreReader } from '~~/server/utils/import/calibre/calibre-reader';
+import { resolveDataPath } from '~~/server/utils/books/fs';
+import { getCanonicalBookPaths } from '~~/server/utils/books/storage/paths';
 import {
+  authors,
+  bookAuthors,
   bookFiles,
   books,
   collectionBooks,
@@ -124,9 +127,8 @@ export default defineEventHandler(async (event) => {
 
     // Determine the target directory for the cover:
     // - Prefer an existing book file dir (keeps parity with previous behavior)
-    // - Else use Calibre's book folder when available
-    // - Else fall back to existing cover dir
-    // Note: we do NOT create new folders when updating an existing book.
+    // - Else fall back to existing cover dir (e.g. imported without formats)
+    // - Else use the canonical folder derived from book metadata (metadata-only books)
     const files = await cloudDb
       .select()
       .from(bookFiles)
@@ -146,59 +148,7 @@ export default defineEventHandler(async (event) => {
       }
     };
 
-    const ensureExistingDirOrThrow = async (
-      candidateAbs: string,
-      logCtx: Record<string, unknown>,
-    ) => {
-      try {
-        const st = await stat(candidateAbs);
-        if (!st.isDirectory()) throw new Error('not a directory');
-      } catch (error) {
-        logger.warn(
-          { err: error, id, ...logCtx },
-          'POST /api/books/:id/cover: book directory missing on disk',
-        );
-        throw createError({
-          statusCode: 409,
-          statusMessage:
-            'Book directory missing on disk; re-scan Calibre or restore the library folder.',
-        });
-      }
-    };
-
-    const resolveCalibreBookDirAbs = async (
-      calibreBookId: number,
-    ): Promise<string | null> => {
-      let reader: CalibreReader | null = null;
-      try {
-        reader = new CalibreReader({
-          libraryRootAbs: libraryBaseAbs,
-          readonly: true,
-        });
-
-        const calibreBook = await reader.getBookById(calibreBookId);
-        const relDir = (calibreBook?.path ?? '').toString().trim();
-        if (!relDir) return null;
-
-        const dirAbs = path.resolve(libraryBaseAbs, relDir);
-        ensureUnderLibraryOrThrow(dirAbs, {
-          calibreBookId,
-          from: 'calibre',
-        });
-        return dirAbs;
-      } catch (error) {
-        logger.warn(
-          error,
-          'POST /api/books/:id/cover: failed to resolve Calibre book path',
-        );
-        return null;
-      } finally {
-        if (reader) await reader.close();
-      }
-    };
-
     let bookDirAbs: string | null = null;
-    let bookDirSource: string | null = null;
 
     if (files.length) {
       const preferred =
@@ -219,56 +169,61 @@ export default defineEventHandler(async (event) => {
         from: 'book_files',
       });
       bookDirAbs = path.dirname(bookFileAbs);
-      bookDirSource = 'book_files';
     } else {
-      const calibreBookId =
-        typeof book.calibreBookId === 'number' &&
-        Number.isFinite(book.calibreBookId)
-          ? book.calibreBookId
-          : null;
+      const coverImagePathRaw = (book.coverImagePath ?? '').toString().trim();
 
-      if (calibreBookId) {
-        const calibreDirAbs = await resolveCalibreBookDirAbs(calibreBookId);
-        if (calibreDirAbs) {
-          await ensureExistingDirOrThrow(calibreDirAbs, { calibreBookId });
-          bookDirAbs = calibreDirAbs;
-          bookDirSource = 'calibre';
-        } else {
-          throw createError({
-            statusCode: 409,
-            statusMessage:
-              'Calibre book path unavailable; re-scan Calibre before updating covers.',
-          });
-        }
-      }
+      if (coverImagePathRaw) {
+        const relFromLibrary = coverImagePathRaw.replace(/^library[\\/]/, '');
+        const coverAbs = path.resolve(libraryBaseAbs, relFromLibrary);
+        ensureUnderLibraryOrThrow(coverAbs, {
+          coverImagePath: coverImagePathRaw,
+          from: 'books.coverImagePath',
+        });
+        bookDirAbs = path.dirname(coverAbs);
+      } else {
+        const authorLinks = await cloudDb
+          .select({
+            name: authors.name,
+            position: bookAuthors.position,
+          })
+          .from(bookAuthors)
+          .innerJoin(authors, eq(authors.id, bookAuthors.authorId))
+          .where(eq(bookAuthors.bookId, id));
 
-      if (!bookDirAbs) {
-        const coverImagePathRaw = (book.coverImagePath ?? '').toString().trim();
+        const orderedAuthorNames = authorLinks
+          .slice()
+          .sort((a, b) => {
+            const aPos = typeof a.position === 'number' ? a.position : 10_000;
+            const bPos = typeof b.position === 'number' ? b.position : 10_000;
+            if (aPos !== bPos) return aPos - bPos;
+            return (a.name ?? '').localeCompare(b.name ?? '');
+          })
+          .map((a) => a.name)
+          .filter((n): n is string => typeof n === 'string' && n.length > 0);
 
-        if (coverImagePathRaw) {
-          const relFromLibrary = coverImagePathRaw.replace(/^library[\\/]/, '');
-          const coverAbs = path.resolve(libraryBaseAbs, relFromLibrary);
-          ensureUnderLibraryOrThrow(coverAbs, {
-            coverImagePath: coverImagePathRaw,
-            from: 'books.coverImagePath',
-          });
-          bookDirAbs = path.dirname(coverAbs);
-          bookDirSource = 'books.coverImagePath';
-        }
+        const canonical = getCanonicalBookPaths({
+          authorNames: orderedAuthorNames,
+          title: book.title ?? '',
+          bookId: id,
+        });
+
+        const dirAbs = resolveDataPath(canonical.bookDir);
+        ensureUnderLibraryOrThrow(dirAbs, {
+          canonicalBookDir: canonical.bookDir,
+          from: 'canonical',
+        });
+        bookDirAbs = dirAbs;
       }
     }
 
     if (!bookDirAbs) {
       throw createError({
-        statusCode: 409,
-        statusMessage:
-          'Book storage directory not found; re-scan/import or upload a book file first.',
+        statusCode: 500,
+        statusMessage: 'Failed to determine storage directory for cover',
       });
     }
 
-    await ensureExistingDirOrThrow(bookDirAbs, {
-      from: bookDirSource ?? 'resolved',
-    });
+    await mkdir(bookDirAbs, { recursive: true });
 
     // Detect the uploaded image format so we can persist the true original as `cover.<ext>`.
     const meta = await sharp(filePart.data).rotate().metadata();

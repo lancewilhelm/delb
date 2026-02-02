@@ -1,15 +1,13 @@
 <script setup lang="ts">
-// Admin Library Management (Calibre import-in-place)
+// Admin Library Management (Calibre migration)
 //
 // Assumptions:
-// - Calibre library is mounted at Delb's `library/` folder
-// - Calibre metadata DB exists at `library/metadata.db`
+// - Calibre library is mounted at Delb's `calibre/` folder
+// - Calibre metadata DB exists at `calibre/metadata.db`
 // - Server endpoint exists: POST /api/settings/admin/calibre
 //
 // This UI intentionally stays lightweight and reports the server summary.
 defineOptions({ name: 'SettingsAdminLibrary' });
-
-type ImportAction = 'import' | 'rescan';
 
 type HealthMode = 'quick' | 'deep';
 type HealthStatus = 'ok' | 'warn' | 'error';
@@ -33,7 +31,7 @@ type HealthReport = {
 };
 
 type ImportSummary = {
-  action: ImportAction;
+  action: 'import';
   dryRun: boolean;
   libraryRoot: string;
   calibreDbPath: string;
@@ -101,10 +99,6 @@ const lastResult = ref<ImportSummary | null>(null);
 const errorMessage = ref<string | null>(null);
 
 const importDryRun = ref(false);
-
-const rescanImportNew = ref(false);
-const rescanDryRun = ref(false);
-const rescanAttachToCollections = ref(false);
 
 type HealthApiResponse =
   | { success: true; data: HealthReport }
@@ -207,10 +201,7 @@ async function runHealthChecks(mode: HealthMode) {
   }
 }
 
-async function runCalibreAction(
-  action: ImportAction,
-  opts?: { dryRun?: boolean },
-) {
+async function runCalibreImport(opts?: { dryRun?: boolean }) {
   if (runBusy.value) return;
 
   runBusy.value = true;
@@ -218,20 +209,11 @@ async function runCalibreAction(
   lastResult.value = null;
 
   try {
-    const body: Record<string, unknown> = { action };
-
-    if (action === 'import') {
-      body.collectionIds = selectedCollectionIds.value;
-      body.dryRun = !!opts?.dryRun;
-    } else {
-      // rescan
-      body.importNew = !!rescanImportNew.value;
-      body.dryRun = !!opts?.dryRun;
-
-      if (rescanAttachToCollections.value) {
-        body.collectionIds = selectedCollectionIds.value;
-      }
-    }
+    const body: Record<string, unknown> = {
+      action: 'import',
+      collectionIds: selectedCollectionIds.value,
+      dryRun: !!opts?.dryRun,
+    };
 
     const res = await $fetch<ApiResponse>('/api/settings/admin/calibre', {
       method: 'POST',
@@ -266,23 +248,24 @@ async function runCalibreAction(
     <SettingsUIGroup
       title="library management"
       icon="lucide:library"
-      description="import an existing Calibre library mounted at ./library (import-in-place)"
+      description="migrate an existing Calibre library mounted at ./calibre into Delb’s library"
     >
       <div class="mt-2 space-y-3">
         <div class="text-sm opacity-80">
           <div class="flex items-center gap-2">
             <span class="font-semibold">Calibre mount:</span>
-            <code class="px-2 py-1 rounded bg-(--sub-color)/15">library/</code>
+            <code class="px-2 py-1 rounded bg-(--sub-color)/15">calibre/</code>
           </div>
           <div class="flex items-center gap-2 mt-1">
             <span class="font-semibold">Calibre DB:</span>
             <code class="px-2 py-1 rounded bg-(--sub-color)/15"
-              >library/metadata.db</code
+              >calibre/metadata.db</code
             >
           </div>
           <div class="mt-2 text-xs opacity-70">
             Delb will create/update records in
-            <code>data/delb.db</code> and will not move/rename files.
+            <code>data/delb.db</code> and will copy files into
+            <code>library/</code>.
           </div>
         </div>
 
@@ -361,7 +344,7 @@ async function runCalibreAction(
           <button
             class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
             :disabled="runBusy || !isValidSelectionForImport()"
-            @click="runCalibreAction('import', { dryRun: importDryRun })"
+            @click="runCalibreImport({ dryRun: importDryRun })"
           >
             {{ runBusy ? 'Running...' : 'Import from Calibre' }}
           </button>
@@ -380,73 +363,6 @@ async function runCalibreAction(
           class="text-xs text-(--error-color)"
         >
           Select at least one collection before importing.
-        </div>
-      </div>
-    </SettingsUIGroup>
-
-    <SettingsUIGroup
-      title="re-scan calibre"
-      icon="lucide:refresh-cw"
-      description="refresh metadata, covers, and linked files from library/metadata.db"
-    >
-      <div class="mt-4 space-y-3">
-        <label class="flex items-center gap-2 text-sm">
-          <input
-            v-model="rescanDryRun"
-            type="checkbox"
-            :disabled="runBusy"
-            class="peer sr-only"
-          />
-          <span
-            class="h-5 w-5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
-          ></span>
-          <span>dry run (preview only; no changes)</span>
-        </label>
-
-        <label class="flex items-center gap-2 text-sm">
-          <input
-            v-model="rescanImportNew"
-            type="checkbox"
-            :disabled="runBusy"
-            class="peer sr-only"
-          />
-          <span
-            class="h-5 w-5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
-          ></span>
-          <span>import new books discovered during rescan</span>
-        </label>
-
-        <label class="flex items-center gap-2 text-sm">
-          <input
-            v-model="rescanAttachToCollections"
-            type="checkbox"
-            :disabled="runBusy"
-            class="peer sr-only"
-          />
-          <span
-            class="h-5 w-5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
-          ></span>
-          <span>also add (updated/imported) books to selected collections</span>
-        </label>
-
-        <div class="flex gap-2">
-          <button
-            class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
-            :disabled="
-              runBusy ||
-              (rescanAttachToCollections && !selectedCollectionIds.length)
-            "
-            @click="runCalibreAction('rescan', { dryRun: rescanDryRun })"
-          >
-            {{ runBusy ? 'Running...' : 'Re-scan Calibre' }}
-          </button>
-        </div>
-
-        <div
-          v-if="rescanAttachToCollections && !selectedCollectionIds.length"
-          class="text-xs text-(--error-color)"
-        >
-          Select at least one collection (or disable “add to collections”).
         </div>
       </div>
     </SettingsUIGroup>
@@ -536,7 +452,7 @@ async function runCalibreAction(
       v-if="lastResult"
       title="last run summary"
       icon="lucide:clipboard-list"
-      description="results from the most recent import/rescan"
+      description="results from the most recent import"
     >
       <div class="mt-4 space-y-3 text-sm">
         <div class="flex flex-wrap gap-2 items-center">

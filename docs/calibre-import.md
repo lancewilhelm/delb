@@ -1,26 +1,25 @@
-# Calibre Import (Import-in-Place)
+# Calibre Import (Migration)
 
-This document describes how Delb imports an existing **Calibre** library when you mount that Calibre library directly at Delb’s `library/` directory.
+This document describes how Delb imports an existing **Calibre** library by **copying** files into Delb’s own `library/` structure.
 
-> Goal: pull in as much metadata as possible while **not moving or renaming any files** in the Calibre library.
+> Goal: a **one-way migration** where Delb becomes the source of truth. Calibre remains read-only input.
 
 ## How Delb reads `metadata.db`
 
-Delb reads Calibre’s `library/metadata.db` using the `@libsql/client` SQLite driver (local `file:` URL). This avoids relying on native Node addons for reading the Calibre database, which improves portability in Docker deployments.
+Delb reads Calibre’s `calibre/metadata.db` using the `@libsql/client` SQLite driver (local `file:` URL). This avoids relying on native Node addons for reading the Calibre database, which improves portability in Docker deployments.
 
 ---
 
 ## Summary
 
-- Delb can import a Calibre library **in place**.
-- Calibre must be mounted/copied to Delb’s `library/` folder and must include:
-  - `library/metadata.db`
-  - The Calibre book directories/files underneath `library/`
-- Delb reads Calibre’s database but writes Delb’s database to:
+- Delb imports a Calibre library by **copying** files into its own `library/` structure.
+- Calibre must be mounted to Delb’s `calibre/` folder and must include:
+  - `calibre/metadata.db`
+  - The Calibre book directories/files underneath `calibre/`
+- Delb writes its own database to:
   - `data/delb.db`
-- Delb stores **file pointers** (relative paths under `library/`) and uses those pointers for downloads.
-- If you want Delb to **update covers or delete files**, the runtime user must have
-  write access to the mounted `library/` directory.
+- After migration, Delb manages files in `library/` and is **not** kept in sync with Calibre.
+- If you keep Calibre around, treat it as **read-only** archive input.
 
 ---
 
@@ -28,17 +27,17 @@ Delb reads Calibre’s `library/metadata.db` using the `@libsql/client` SQLite d
 
 ### 1) Library layout
 
-Delb expects your Calibre library root to be mounted at:
+Delb expects your **Calibre** library root to be mounted at:
 
-- `library/`
+- `calibre/`
 
 And to contain the Calibre DB at:
 
-- `library/metadata.db`
+- `calibre/metadata.db`
 
 Calibre book directories typically look like:
 
-- `library/<Author>/<Title> (<id>)/...`
+- `calibre/<Author>/<Title> (<id>)/...`
 
 And often contain:
 
@@ -46,19 +45,15 @@ And often contain:
 - `metadata.opf` (sidecar metadata)
 - `cover.jpg` / `cover.jpeg` / `cover.png`
 
-### 1a) Cover updates (import-in-place)
+### 1a) Delb library layout
 
-When you upload a new cover for a Calibre-imported book, Delb writes the new
-`cover.<ext>` and `thumb.webp` into the **existing Calibre book folder**.
-If Delb cannot resolve that folder (missing `metadata.db`, missing file pointers,
-or missing on-disk directory), it will **refuse to create a new folder** to avoid
-duplicating Calibre paths. Re-scan the Calibre library to restore file pointers.
+Delb writes migrated books into its own storage root:
 
-### 1b) Folder-agnostic policy
+- `library/`
 
-Delb does **not** move or rename existing Calibre book folders after import.
-It treats the stored DB paths as the source of truth for where files live,
-and will only write updates (covers, etc.) into those existing directories.
+Example Delb storage (canonical):
+
+- `library/<Author>/<Title> (<id8>)/...`
 
 ### 2) Delb database location
 
@@ -81,21 +76,14 @@ The import is triggered from the Admin settings page:
 You’ll see controls for:
 
 - **Import from Calibre**
-- **Re-scan Calibre**
 - Optional **Dry run** (preview only)
-
-### Import vs Re-scan
 
 #### Import (`action: "import"`)
 
-- One-time import of Calibre metadata and file pointers
+- One-time import of Calibre metadata and **file copies** into Delb’s `library/`
 - Requires selecting at least one target collection
 - Adds imported books to the selected collection(s)
-
-#### Re-scan (`action: "rescan"`)
-
-- Refreshes Delb data from the current state of Calibre’s `metadata.db`
-- Optionally can “import new books discovered during rescan”
+- Safe to run again if you need to reimport from the same Calibre library (idempotent via `calibre_book_id`)
 
 ---
 
@@ -123,14 +111,14 @@ Calibre supports many additional fields and “custom columns”; those are not 
 
 ---
 
-## Files and formats (import-in-place)
+## Files and formats (migration)
 
-Delb does **not** copy or move book files during import-in-place.
+Delb **copies** supported format files from Calibre into its own `library/` folder.
 
-Instead, Delb records each discovered format as a row in `book_files`:
+Delb records each discovered format as a row in `book_files`:
 
 - `book_files.format` (lowercased extension, e.g. `epub`, `pdf`)
-- `book_files.relative_path` (a `library/...` relative path pointing to the existing file)
+- `book_files.relative_path` (a `library/...` relative path pointing to the **copied** file)
 
 ### Supported formats today
 
@@ -148,7 +136,7 @@ Calibre’s format/file schema varies by version. Delb uses a “best effort” 
 1. Try to locate format info via Calibre DB tables (when present)
 2. If DB discovery is incomplete, Delb falls back to scanning the on-disk Calibre book directory for supported files
 
-This is intentional: for import-in-place, the filesystem is the most reliable source of “what is actually present”.
+This is intentional: the filesystem is the most reliable source of “what is actually present”.
 
 ---
 
@@ -157,25 +145,23 @@ This is intentional: for import-in-place, the filesystem is the most reliable so
 Delb uses a **two-file cover model**:
 
 - **Thumbnail (default/UI):** `thumb.webp` (320px wide)
-- **Source (full resolution):** the original Calibre cover image (typically `cover.jpg` / `cover.png`)
+- **Source (full resolution):** a copied source cover (typically `cover.jpg` / `cover.png`)
 
 ### What gets stored during Calibre import
 
-When a Calibre cover exists inside the Calibre book folder, Delb will:
+When a Calibre cover exists, Delb will:
 
-1. Keep the **original** Calibre cover file as-is (full resolution), e.g.
+1. Copy the source cover into Delb’s book folder (full resolution), e.g.
    - `cover.jpg`
    - `cover.jpeg`
    - `cover.png`
 
-2. Generate a lightweight thumbnail **next to it** (idempotent):
+2. Generate a lightweight thumbnail alongside it:
    - `thumb.webp` (320px wide)
 
 Delb sets `books.cover_image_path` to point to the thumbnail:
 
-- `library/<calibreRelDir>/thumb.webp`
-
-This keeps list/grid views fast and avoids transferring large images to the client by default.
+- `library/<author>/<title (id8)>/thumb.webp`
 
 ### How the UI serves covers
 
@@ -184,15 +170,15 @@ This keeps list/grid views fast and avoids transferring large images to the clie
 
 ### Notes and caveats
 
-- Delb does **not** move or rename Calibre files during import-in-place.
-- Thumbnails are generated only when missing (so re-scan stays fast).
-- If thumbnail generation fails for a given book (corrupt/unsupported cover), Delb may fall back to using the original Calibre cover path for that book, which can be heavier.
+- Delb does **not** modify Calibre files during migration.
+- Thumbnails are generated only when missing (so repeat imports stay fast).
+- If cover generation fails for a given book (corrupt/unsupported cover), Delb will continue without a cover for that book.
 
 ---
 
 ## Idempotency and `calibre_book_id`
 
-To avoid duplicate imports and enable re-scan updates, Delb stores Calibre’s per-book ID:
+To avoid duplicate imports and enable repeatable imports, Delb stores Calibre’s per-book ID:
 
 - Delb: `books.calibre_book_id`
 - Calibre: `metadata.db` table `books.id`
@@ -209,30 +195,19 @@ Delb enforces uniqueness so that a single Calibre book maps to a single Delb boo
 
 ## Caveats / Risks / “Can I go back to Calibre?”
 
-### Safe scenario (recommended): Delb does not modify Calibre files
-
-If you run import-in-place and then edit metadata in Delb, and Delb is only updating `data/delb.db`:
-
-- Calibre’s `library/metadata.db` and file layout remain unchanged
-- You can stop using Delb and open the same library in Calibre without surprises
-
-### Risky scenario: moving/renaming files under `library/`
-
-If Delb (or a user action) moves/renames Calibre’s book directories or files inside `library/` without also updating Calibre’s DB:
-
-- Calibre may show missing books/formats/covers
-- Returning to Calibre becomes harder (may require repairing the library or restoring from backup)
-
-**Practical guidance:** treat `library/` as Calibre-owned when using import-in-place.
+- Calibre’s `calibre/metadata.db` and file layout remain unchanged.
+- Delb’s edits **do not** flow back to Calibre after migration.
+- If you want a path back to Calibre, keep the original Calibre library as a read-only archive.
 
 ### Backup guidance
 
-Even with import-in-place, it’s wise to keep backups of:
+Even with migration, it’s wise to keep backups of:
 
-- `library/` (Calibre library folder, including `metadata.db`)
+- `calibre/` (Calibre library folder, including `metadata.db`)
+- `library/` (Delb-managed library)
 - `data/` (Delb database)
 
-If you plan to experiment with file moves/renames under `library/`, you should duplicate the Calibre library first.
+If you plan to experiment with file moves/renames under `library/`, you should duplicate the Delb library first.
 
 ---
 
@@ -257,8 +232,8 @@ Common causes:
 
 Try:
 
-- Re-scan in Delb
-- Verify the file exists under `library/` on disk
+- Run the import again (it is idempotent)
+- Verify the file exists under `calibre/` (source) and `library/` (Delb copy)
 - Confirm the file extension is supported
 
 ---
@@ -267,9 +242,10 @@ Try:
 
 Typical deployment expectation:
 
-- mount Calibre library into the container at `/app/library` (or wherever Delb expects `library/`)
+- mount Calibre library into the container at `/app/calibre` (read-only input)
+- mount Delb library into the container at `/app/library` (writable)
 - mount Delb data volume for `/app/data`
 
-Delb reads from `library/metadata.db` and writes to `data/delb.db`.
+Delb reads from `calibre/metadata.db` and writes to `data/delb.db`.
 
 ---

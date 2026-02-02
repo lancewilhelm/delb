@@ -30,22 +30,20 @@ Only one `owner` is allowed per collection. Non-owners may leave a shared collec
 
 See `docs/ui-layout-philosophy.md` for the complete philosophy and UI implications.
 
-## Calibre import (import-in-place)
+## Calibre import (migration)
 
-Delb can **import an existing Calibre library in place**.
+Delb can **migrate** an existing Calibre library into its own managed `library/` structure.
 
-- Calibre library root is mounted at: `library/`
-- Calibre database is read from: `library/metadata.db`
+- Calibre library root is mounted at: `calibre/`
+- Calibre database is read from: `calibre/metadata.db`
 - Delb writes its own database to: `data/delb.db`
-- Delb **does not copy/move** book files during this import; it stores pointers to existing files under `library/...`.
+- Delb **copies** book files into `library/...` and manages them thereafter.
 
 ### Caveats (important)
 
-- **Filesystem ownership:** With import-in-place, treat `library/` as **Calibre-owned** storage.
-  - If Delb moves/renames files under `library/`, Calibre may no longer be able to find formats and covers referenced by `metadata.db`.
-- **Editing metadata in Delb:** Editing titles/authors/tags in Delb updates `data/delb.db` only. It does **not** update Calibre’s `metadata.db`.
-  - That means Calibre will still show its original metadata unless you manually sync it in Calibre.
-- **Recommendation:** If you plan to keep using Calibre alongside Delb, keep a backup of your Calibre library before running any tools that might reorganize files.
+- **One-way migration:** Delb edits do **not** flow back to Calibre after migration.
+- **Editing metadata in Delb:** Editing titles/authors/tags in Delb updates `data/delb.db` and may move files in `library/` to keep paths human-readable.
+- **Recommendation:** Keep your original Calibre library as a read-only archive if you might need to return to Calibre.
 
 See:
 
@@ -128,7 +126,7 @@ delb/
 
 - [Known Issues](docs/known-issues.md) - Known bugs and workarounds
 - [Tooltip Guide](docs/tooltip.md) - Component documentation
-- [Calibre Import](docs/calibre-import.md) - Import-in-place process + caveats
+- [Calibre Import](docs/calibre-import.md) - Migration process + caveats
 - [Calibre Database Schema](docs/calibre-database-schema.md) - Reference schema
 - [Health Checks](docs/health-checks.md) - Planned library/database integrity checks
 
@@ -167,9 +165,9 @@ library/
         └── cover.webp
 ```
 
-The database stores relative paths and metadata for each book. Delb is folder-agnostic
-for existing entries: it will read/write files in whatever directory the DB points to
-and does not move folders when metadata changes.
+The database stores relative paths and metadata for each book. Delb manages the
+on-disk library layout and will move/rename folders when author/title metadata
+changes so the filesystem stays human-readable.
 
 Delb also supports **reference-only books** (no associated file in `library/`). This allows using Delb as a “physical library” catalog in addition to a file-backed ebook library.
 
