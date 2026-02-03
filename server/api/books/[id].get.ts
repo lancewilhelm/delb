@@ -13,6 +13,7 @@ import {
   publishers,
   series,
   tags,
+  userBookPreferences,
   userBookStatus,
   USER_BOOK_STATUSES,
 } from '~/utils/db/schema';
@@ -169,7 +170,13 @@ export default defineEventHandler(async (event) => {
     const statusRow =
       (
         await cloudDb
-          .select({ status: userBookStatus.status })
+          .select({
+            status: userBookStatus.status,
+            startedAt: userBookStatus.startedAt,
+            finishedAt: userBookStatus.finishedAt,
+            dnfAt: userBookStatus.dnfAt,
+            tbrRank: userBookStatus.tbrRank,
+          })
           .from(userBookStatus)
           .where(
             and(
@@ -185,6 +192,28 @@ export default defineEventHandler(async (event) => {
       statusRaw && (USER_BOOK_STATUSES as readonly string[]).includes(statusRaw)
         ? statusRaw
         : null;
+    const userStatusStartedAt = userStatus ? statusRow?.startedAt ?? null : null;
+    const userStatusFinishedAt = userStatus ? statusRow?.finishedAt ?? null : null;
+    const userStatusDnfAt = userStatus ? statusRow?.dnfAt ?? null : null;
+    const userStatusTbrRank = userStatus ? statusRow?.tbrRank ?? null : null;
+
+    const prefsRow =
+      (
+        await cloudDb
+          .select({
+            progressSyncEnabled: userBookPreferences.progressSyncEnabled,
+          })
+          .from(userBookPreferences)
+          .where(
+            and(
+              eq(userBookPreferences.bookId, id),
+              eq(userBookPreferences.userId, userId),
+            ),
+          )
+          .limit(1)
+      )[0] ?? null;
+
+    const userProgressSyncEnabled = prefsRow?.progressSyncEnabled ?? false;
 
     return {
       success: true,
@@ -197,6 +226,11 @@ export default defineEventHandler(async (event) => {
           identifiers: bookIdentifiersOut,
           userRating,
           userStatus,
+          userStatusStartedAt,
+          userStatusFinishedAt,
+          userStatusDnfAt,
+          userStatusTbrRank,
+          userProgressSyncEnabled,
         },
         authors: bookAuthorsOut,
         files,

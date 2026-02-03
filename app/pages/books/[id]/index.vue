@@ -31,6 +31,11 @@ type Book = {
    * Mutually exclusive. Null means "unset".
    */
   userStatus?: UserBookStatus | null;
+  userStatusStartedAt?: string | number | Date | null;
+  userStatusFinishedAt?: string | number | Date | null;
+  userStatusDnfAt?: string | number | Date | null;
+  userStatusTbrRank?: number | null;
+  userProgressSyncEnabled?: boolean | null;
 
   // New schema: authors are related entities (many-to-many)
   authors?: { id: string; name: string }[];
@@ -129,6 +134,49 @@ const STATUS_OPTIONS = [
 
 const statusSaving = ref(false);
 const statusErrorMessage = ref<string | null>(null);
+const statusMetaSaving = ref(false);
+const statusMetaErrorMessage = ref<string | null>(null);
+
+const startedAtInput = ref('');
+const finishedAtInput = ref('');
+const dnfAtInput = ref('');
+const tbrRankInput = ref('');
+
+const progressSyncSaving = ref(false);
+const progressSyncErrorMessage = ref<string | null>(null);
+const progressSyncEnabledValue = ref(false);
+
+const progressMode = ref<'percent' | 'page'>('percent');
+const progressPercentInput = ref('');
+const progressPageInput = ref('');
+const progressDateInput = ref('');
+const progressLogSaving = ref(false);
+const progressLogErrorMessage = ref<string | null>(null);
+
+function formatDateInput(value?: string | number | Date | null): string {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function syncStatusDateInputs() {
+  startedAtInput.value = formatDateInput(book.value?.userStatusStartedAt);
+  finishedAtInput.value = formatDateInput(book.value?.userStatusFinishedAt);
+  dnfAtInput.value = formatDateInput(book.value?.userStatusDnfAt);
+  const rawRank = book.value?.userStatusTbrRank;
+  tbrRankInput.value =
+    typeof rawRank === 'number' && Number.isFinite(rawRank)
+      ? String(rawRank)
+      : '';
+}
+
+function syncProgressSyncValue() {
+  progressSyncEnabledValue.value = Boolean(book.value?.userProgressSyncEnabled);
+}
 
 const selectedStatusValue = computed<string>({
   get() {
@@ -144,6 +192,32 @@ const selectedStatusValue = computed<string>({
     ) as UserBookStatus | null;
   },
 });
+
+function applyStatusResponse(data?: {
+  status?: UserBookStatus | null;
+  startedAt?: string | number | Date | null;
+  finishedAt?: string | number | Date | null;
+  dnfAt?: string | number | Date | null;
+  tbrRank?: number | null;
+}) {
+  if (!book.value) return;
+  if (data && 'status' in data) {
+    book.value.userStatus = (data?.status ?? null) as UserBookStatus | null;
+  }
+  if (data && 'startedAt' in data) {
+    book.value.userStatusStartedAt = data?.startedAt ?? null;
+  }
+  if (data && 'finishedAt' in data) {
+    book.value.userStatusFinishedAt = data?.finishedAt ?? null;
+  }
+  if (data && 'dnfAt' in data) {
+    book.value.userStatusDnfAt = data?.dnfAt ?? null;
+  }
+  if (data && 'tbrRank' in data) {
+    book.value.userStatusTbrRank = data?.tbrRank ?? null;
+  }
+  syncStatusDateInputs();
+}
 
 async function saveStatus(next: UserBookStatus | null) {
   if (!bookId.value) return;
@@ -165,7 +239,13 @@ async function saveStatus(next: UserBookStatus | null) {
 
     const json = (text ? JSON.parse(text) : null) as {
       success?: boolean;
-      data?: { status?: UserBookStatus | null };
+      data?: {
+        status?: UserBookStatus | null;
+        startedAt?: string | number | Date | null;
+        finishedAt?: string | number | Date | null;
+        dnfAt?: string | number | Date | null;
+        tbrRank?: number | null;
+      };
       message?: string;
     } | null;
 
@@ -173,10 +253,7 @@ async function saveStatus(next: UserBookStatus | null) {
       throw new Error(json?.message || `Failed to save status (${res.status})`);
     }
 
-    if (book.value) {
-      book.value.userStatus = (json?.data?.status ??
-        null) as UserBookStatus | null;
-    }
+    applyStatusResponse(json?.data);
   } catch (err) {
     const e = err as FetchErrorLike;
     statusErrorMessage.value =
@@ -188,6 +265,277 @@ async function saveStatus(next: UserBookStatus | null) {
     statusSaving.value = false;
   }
 }
+
+async function saveStatusDates(payload: {
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  dnfAt?: string | null;
+}) {
+  if (!bookId.value) return;
+
+  statusMetaSaving.value = true;
+  statusMetaErrorMessage.value = null;
+
+  try {
+    const res = await fetch(
+      `/api/books/${encodeURIComponent(bookId.value)}/status`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      },
+    );
+
+    const text = await res.text().catch(() => '');
+    const json = (text ? JSON.parse(text) : null) as {
+      success?: boolean;
+      data?: {
+        status?: UserBookStatus | null;
+        startedAt?: string | number | Date | null;
+        finishedAt?: string | number | Date | null;
+        dnfAt?: string | number | Date | null;
+        tbrRank?: number | null;
+      };
+      message?: string;
+    } | null;
+
+    if (!res.ok || json?.success === false) {
+      throw new Error(
+        json?.message || `Failed to save status dates (${res.status})`,
+      );
+    }
+
+    applyStatusResponse(json?.data);
+  } catch (err) {
+    const e = err as FetchErrorLike;
+    statusMetaErrorMessage.value =
+      e?.data?.message ||
+      e?.statusMessage ||
+      e?.message ||
+      'Failed to save status dates';
+    syncStatusDateInputs();
+  } finally {
+    statusMetaSaving.value = false;
+  }
+}
+
+async function saveTbrRank(next: string) {
+  if (!bookId.value) return;
+
+  statusMetaSaving.value = true;
+  statusMetaErrorMessage.value = null;
+
+  try {
+    const trimmed = (
+      typeof next === 'string' ? next : next ?? ''
+    )
+      .toString()
+      .trim();
+    const payload: { tbrRank?: number | null } = {};
+    if (!trimmed) {
+      payload.tbrRank = null;
+    } else {
+      const parsed = Number(trimmed);
+      if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+        throw new Error('TBR rank must be a whole number.');
+      }
+      payload.tbrRank = parsed;
+    }
+
+    const res = await fetch(
+      `/api/books/${encodeURIComponent(bookId.value)}/status`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      },
+    );
+
+    const text = await res.text().catch(() => '');
+    const json = (text ? JSON.parse(text) : null) as {
+      success?: boolean;
+      data?: {
+        status?: UserBookStatus | null;
+        startedAt?: string | number | Date | null;
+        finishedAt?: string | number | Date | null;
+        dnfAt?: string | number | Date | null;
+        tbrRank?: number | null;
+      };
+      message?: string;
+    } | null;
+
+    if (!res.ok || json?.success === false) {
+      throw new Error(
+        json?.message || `Failed to save TBR rank (${res.status})`,
+      );
+    }
+
+    applyStatusResponse(json?.data);
+  } catch (err) {
+    const e = err as FetchErrorLike;
+    statusMetaErrorMessage.value =
+      e?.data?.message ||
+      e?.statusMessage ||
+      e?.message ||
+      'Failed to save TBR rank';
+    syncStatusDateInputs();
+  } finally {
+    statusMetaSaving.value = false;
+  }
+}
+
+async function saveProgressSync(next: boolean) {
+  if (!bookId.value) return;
+
+  progressSyncSaving.value = true;
+  progressSyncErrorMessage.value = null;
+
+  try {
+    const res = await fetch(
+      `/api/books/${encodeURIComponent(bookId.value)}/progress-sync`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: next }),
+      },
+    );
+
+    const text = await res.text().catch(() => '');
+    const json = (text ? JSON.parse(text) : null) as {
+      success?: boolean;
+      data?: { progressSyncEnabled?: boolean };
+      message?: string;
+    } | null;
+
+    if (!res.ok || json?.success === false) {
+      throw new Error(
+        json?.message || `Failed to save progress sync (${res.status})`,
+      );
+    }
+
+    if (book.value) {
+      book.value.userProgressSyncEnabled =
+        json?.data?.progressSyncEnabled ?? false;
+    }
+    syncProgressSyncValue();
+  } catch (err) {
+    const e = err as FetchErrorLike;
+    progressSyncErrorMessage.value =
+      e?.data?.message ||
+      e?.statusMessage ||
+      e?.message ||
+      'Failed to save progress sync';
+    syncProgressSyncValue();
+  } finally {
+    progressSyncSaving.value = false;
+  }
+}
+
+async function createProgressLog() {
+  if (!bookId.value) return;
+
+  progressLogSaving.value = true;
+  progressLogErrorMessage.value = null;
+
+  try {
+    const payload: {
+      progressPercent?: number;
+      pageNumber?: number;
+      occurredAt?: string | null;
+    } = {};
+
+    if (progressMode.value === 'percent') {
+      const raw = (
+        typeof progressPercentInput.value === 'string'
+          ? progressPercentInput.value
+          : (progressPercentInput.value ?? '')
+      )
+        .toString()
+        .trim();
+      if (!raw) {
+        throw new Error('Enter a percent to log.');
+      }
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+        throw new Error('Percent must be between 0 and 100.');
+      }
+      payload.progressPercent = parsed;
+    } else {
+      const raw = (
+        typeof progressPageInput.value === 'string'
+          ? progressPageInput.value
+          : (progressPageInput.value ?? '')
+      )
+        .toString()
+        .trim();
+      if (!raw) {
+        throw new Error('Enter a page number to log.');
+      }
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
+        throw new Error('Page must be a whole number >= 0.');
+      }
+      if (!book.value?.pages) {
+        throw new Error('Add a page count before logging by page number.');
+      }
+      payload.pageNumber = parsed;
+    }
+
+    if (progressDateInput.value.trim()) {
+      payload.occurredAt = progressDateInput.value.trim();
+    }
+
+    const res = await fetch(
+      `/api/books/${encodeURIComponent(bookId.value)}/progress-logs`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      },
+    );
+
+    const text = await res.text().catch(() => '');
+    const json = (text ? JSON.parse(text) : null) as {
+      success?: boolean;
+      message?: string;
+    } | null;
+
+    if (!res.ok || json?.success === false) {
+      throw new Error(
+        json?.message || `Failed to log progress (${res.status})`,
+      );
+    }
+  } catch (err) {
+    const e = err as FetchErrorLike;
+    progressLogErrorMessage.value =
+      e?.data?.message ||
+      e?.statusMessage ||
+      e?.message ||
+      'Failed to log progress';
+  } finally {
+    progressLogSaving.value = false;
+  }
+}
+
+const showStartedAt = computed(() => {
+  const status = book.value?.userStatus ?? null;
+  return (
+    status === 'reading' ||
+    status === 'finished' ||
+    status === 'dnf' ||
+    Boolean(book.value?.userStatusStartedAt)
+  );
+});
+
+const showFinishedAt = computed(() => {
+  const status = book.value?.userStatus ?? null;
+  return status === 'finished' || Boolean(book.value?.userStatusFinishedAt);
+});
+
+const showDnfAt = computed(() => {
+  const status = book.value?.userStatus ?? null;
+  return status === 'dnf' || Boolean(book.value?.userStatusDnfAt);
+});
 
 const { isAdmin, user } = useAuth();
 
@@ -908,6 +1256,11 @@ async function loadBook() {
     const json = (await res.json().catch(() => null)) as BookGetResponse | null;
 
     book.value = json?.data?.book ?? null;
+    syncStatusDateInputs();
+    syncProgressSyncValue();
+    if (!progressDateInput.value) {
+      progressDateInput.value = formatDateInput(new Date());
+    }
 
     // Initialize per-user rating state from API response
     ratingValue.value = book.value?.userRating ?? null;
@@ -970,6 +1323,15 @@ watch(
   },
 );
 
+watch(
+  () => book.value?.pages,
+  (pages) => {
+    if (!pages && progressMode.value === 'page') {
+      progressMode.value = 'percent';
+    }
+  },
+);
+
 // Copy composable for the file paths
 const { copy } = useClipboard();
 </script>
@@ -983,7 +1345,7 @@ const { copy } = useClipboard();
     </div>
 
     <div class="flex flex-col w-full h-full p-4 pt-2 sm:pt-4 overflow-auto">
-      <div class="flex items-center gap-2 mb-4 text-(--main-color)">
+      <div class="flex items-center gap-4 mb-4 text-(--main-color)">
         <icon
           v-tooltip="'Go back'"
           class="opacity-80 hover:opacity-100 text-3xl cursor-pointer"
@@ -1000,7 +1362,7 @@ const { copy } = useClipboard();
 
       <div
         v-else-if="book"
-        class="grid sm:grid-cols-[min-content_1fr] sm:grid-rows-2 gap-x-3 gap-y-1! items-start max-w-300 self-center"
+        class="grid sm:grid-cols-[min-content_1fr] sm:grid-rows-2 gap-x-6 gap-y-1! items-start max-w-300 self-center"
       >
         <!-- Keep a consistent aspect ratio; cover itself is max 320px wide -->
         <BookCover
@@ -1501,6 +1863,219 @@ const { copy } = useClipboard();
                   "
                 >
                   Clear
+                </div>
+              </div>
+            </div>
+
+            <!-- Status dates + TBR rank -->
+            <div
+              v-if="
+                showStartedAt ||
+                showFinishedAt ||
+                showDnfAt ||
+                book?.userStatus === 'to_be_read'
+              "
+              class="grid grid-cols-[min-content_1fr] gap-4 items-start"
+            >
+              <div class="font-semibold">Dates</div>
+
+              <div class="flex flex-col items-end gap-2">
+                <div v-if="showStartedAt" class="flex items-center gap-2">
+                  <div
+                    class="text-xs uppercase tracking-wide opacity-60 w-20 text-right"
+                  >
+                    Started
+                  </div>
+                  <input
+                    v-model="startedAtInput"
+                    class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                    type="date"
+                    :disabled="statusMetaSaving"
+                    @change="
+                      () =>
+                        saveStatusDates({
+                          startedAt: startedAtInput || null,
+                        })
+                    "
+                  />
+                </div>
+
+                <div v-if="showFinishedAt" class="flex items-center gap-2">
+                  <div
+                    class="text-xs uppercase tracking-wide opacity-60 w-20 text-right"
+                  >
+                    Finished
+                  </div>
+                  <input
+                    v-model="finishedAtInput"
+                    class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                    type="date"
+                    :disabled="statusMetaSaving"
+                    @change="
+                      () =>
+                        saveStatusDates({
+                          finishedAt: finishedAtInput || null,
+                        })
+                    "
+                  />
+                </div>
+
+                <div v-if="showDnfAt" class="flex items-center gap-2">
+                  <div
+                    class="text-xs uppercase tracking-wide opacity-60 w-20 text-right"
+                  >
+                    DNF
+                  </div>
+                  <input
+                    v-model="dnfAtInput"
+                    class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                    type="date"
+                    :disabled="statusMetaSaving"
+                    @change="
+                      () =>
+                        saveStatusDates({
+                          dnfAt: dnfAtInput || null,
+                        })
+                    "
+                  />
+                </div>
+
+                <div
+                  v-if="book?.userStatus === 'to_be_read'"
+                  class="flex items-center gap-2"
+                >
+                  <div
+                    class="text-xs uppercase tracking-wide opacity-60 w-20 text-right"
+                  >
+                    Rank
+                  </div>
+                  <input
+                    v-model="tbrRankInput"
+                    class="w-28 px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm text-right"
+                    type="number"
+                    min="1"
+                    step="1"
+                    placeholder="Order"
+                    :disabled="statusMetaSaving"
+                    @change="() => saveTbrRank(tbrRankInput)"
+                  />
+                </div>
+
+                <div class="text-xs opacity-70 text-right">
+                  <span v-if="statusMetaSaving">Saving...</span>
+                  <span
+                    v-else-if="statusMetaErrorMessage"
+                    class="text-(--error-color)"
+                  >
+                    {{ statusMetaErrorMessage }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Progress sync -->
+            <div class="grid grid-cols-[min-content_1fr] gap-4 items-center">
+              <div class="font-semibold">Progress sync</div>
+
+              <div class="flex items-center justify-end gap-3">
+                <label class="flex items-center gap-2 text-sm">
+                  <input
+                    v-model="progressSyncEnabledValue"
+                    type="checkbox"
+                    class="accent-(--main-color)"
+                    :disabled="progressSyncSaving"
+                    @change="() => saveProgressSync(progressSyncEnabledValue)"
+                  />
+                  <span>Sync reader & logs</span>
+                </label>
+
+                <div class="text-xs opacity-70">
+                  <span v-if="progressSyncSaving">Saving...</span>
+                  <span
+                    v-else-if="progressSyncErrorMessage"
+                    class="text-(--error-color)"
+                  >
+                    {{ progressSyncErrorMessage }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Progress logging -->
+            <div class="grid grid-cols-[min-content_1fr] gap-4 items-start">
+              <div class="font-semibold">Progress</div>
+
+              <div class="flex flex-col items-end gap-2">
+                <div class="flex flex-wrap items-center justify-end gap-2">
+                  <select
+                    v-model="progressMode"
+                    class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                    :disabled="progressLogSaving"
+                  >
+                    <option value="percent">Percent</option>
+                    <option value="page" :disabled="!book?.pages">Page</option>
+                  </select>
+
+                  <input
+                    v-if="progressMode === 'percent'"
+                    v-model="progressPercentInput"
+                    class="w-28 px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm text-right"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    placeholder="0-100"
+                    :disabled="progressLogSaving"
+                  />
+
+                  <div v-else class="flex items-center gap-2">
+                    <input
+                      v-model="progressPageInput"
+                      class="w-24 px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm text-right"
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="Page"
+                      :disabled="progressLogSaving || !book?.pages"
+                    />
+                    <span v-if="book?.pages" class="text-xs opacity-70">
+                      / {{ book.pages }}
+                    </span>
+                  </div>
+
+                  <input
+                    v-model="progressDateInput"
+                    class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                    type="date"
+                    :disabled="progressLogSaving"
+                  />
+
+                  <button
+                    class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
+                    type="button"
+                    :disabled="
+                      progressLogSaving ||
+                      (progressMode === 'page' && !book?.pages)
+                    "
+                    @click="createProgressLog"
+                  >
+                    {{ progressLogSaving ? 'Saving…' : 'Log progress' }}
+                  </button>
+                </div>
+
+                <div class="text-xs opacity-70 text-right">
+                  <span
+                    v-if="progressMode === 'page' && !book?.pages"
+                    class="opacity-70"
+                  >
+                    Add page count to enable page-based logging.
+                  </span>
+                  <span
+                    v-else-if="progressLogErrorMessage"
+                    class="text-(--error-color)"
+                  >
+                    {{ progressLogErrorMessage }}
+                  </span>
                 </div>
               </div>
             </div>

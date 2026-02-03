@@ -1,10 +1,11 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
   books,
   collectionBooks,
   collectionMembers,
+  userBookProgressLog,
   userBookStatus,
   USER_BOOK_STATUSES,
 } from '~/utils/db/schema';
@@ -174,6 +175,7 @@ export default defineEventHandler(async (event) => {
     }
 
     const updatedAt = new Date();
+    const now = new Date();
 
     if (status === null) {
       // Clear/unset for all visible ids by deleting rows.
@@ -236,6 +238,15 @@ export default defineEventHandler(async (event) => {
     // Insert missing
     // NOTE: If a race causes unique constraint errors, we fall back to per-id update.
     if (missingIds.length) {
+      const dateDefaults =
+        status === 'reading'
+          ? { startedAt: now }
+          : status === 'finished'
+            ? { startedAt: now, finishedAt: now }
+            : status === 'dnf'
+              ? { startedAt: now, dnfAt: now }
+              : {};
+
       try {
         await cloudDb.insert(userBookStatus).values(
           missingIds.map((bookId) => ({
@@ -243,6 +254,7 @@ export default defineEventHandler(async (event) => {
             bookId,
             status,
             updatedAt,
+            ...dateDefaults,
           })),
         );
       } catch (e: unknown) {
@@ -268,6 +280,160 @@ export default defineEventHandler(async (event) => {
           throw e;
         }
       }
+    }
+
+    if (status === 'reading') {
+      await cloudDb
+        .update(userBookStatus)
+        .set({ startedAt: now })
+        .where(
+          and(
+            eq(userBookStatus.userId, userId),
+            inArray(userBookStatus.bookId, visibleBookIds),
+            eq(userBookStatus.status, 'reading'),
+            isNull(userBookStatus.startedAt),
+          ),
+        );
+
+      await cloudDb
+        .update(userBookStatus)
+        .set({ finishedAt: null, dnfAt: null })
+        .where(
+          and(
+            eq(userBookStatus.userId, userId),
+            inArray(userBookStatus.bookId, visibleBookIds),
+            eq(userBookStatus.status, 'reading'),
+          ),
+        );
+    }
+
+    if (status === 'finished') {
+      await cloudDb
+        .update(userBookStatus)
+        .set({ finishedAt: now })
+        .where(
+          and(
+            eq(userBookStatus.userId, userId),
+            inArray(userBookStatus.bookId, visibleBookIds),
+            eq(userBookStatus.status, 'finished'),
+            isNull(userBookStatus.finishedAt),
+          ),
+        );
+
+      await cloudDb
+        .update(userBookStatus)
+        .set({ startedAt: sql`${userBookStatus.finishedAt}` })
+        .where(
+          and(
+            eq(userBookStatus.userId, userId),
+            inArray(userBookStatus.bookId, visibleBookIds),
+            eq(userBookStatus.status, 'finished'),
+            isNull(userBookStatus.startedAt),
+          ),
+        );
+
+      await cloudDb
+        .update(userBookStatus)
+        .set({ dnfAt: null })
+        .where(
+          and(
+            eq(userBookStatus.userId, userId),
+            inArray(userBookStatus.bookId, visibleBookIds),
+            eq(userBookStatus.status, 'finished'),
+          ),
+        );
+
+      try {
+        const existingLogs = await cloudDb
+          .select({ bookId: userBookProgressLog.bookId })
+          .from(userBookProgressLog)
+          .where(
+            and(
+              eq(userBookProgressLog.userId, userId),
+              inArray(userBookProgressLog.bookId, visibleBookIds),
+              eq(userBookProgressLog.source, 'status-finished'),
+            ),
+          );
+
+        const existingSet = new Set(existingLogs.map((row) => row.bookId));
+        const booksWithPages = await cloudDb
+          .select({ id: books.id, pages: books.pages })
+          .from(books)
+          .where(inArray(books.id, visibleBookIds));
+
+        const logsToInsert = booksWithPages
+          .filter((b) => !existingSet.has(b.id))
+          .map((b) => ({
+            id: crypto.randomUUID(),
+            userId,
+            bookId: b.id,
+            progressPercent: 100,
+            pageNumber: b.pages ?? null,
+            location: null,
+            source: 'status-finished',
+            occurredAt: now,
+            createdAt: now,
+          }));
+
+        if (logsToInsert.length) {
+          await cloudDb.insert(userBookProgressLog).values(logsToInsert);
+        }
+      } catch (logError) {
+        logger.error(
+          logError,
+          'POST /api/books/bulk/status: Error logging finished progress',
+        );
+      }
+    }
+
+    if (status === 'dnf') {
+      await cloudDb
+        .update(userBookStatus)
+        .set({ dnfAt: now })
+        .where(
+          and(
+            eq(userBookStatus.userId, userId),
+            inArray(userBookStatus.bookId, visibleBookIds),
+            eq(userBookStatus.status, 'dnf'),
+            isNull(userBookStatus.dnfAt),
+          ),
+        );
+
+      await cloudDb
+        .update(userBookStatus)
+        .set({ startedAt: sql`${userBookStatus.dnfAt}` })
+        .where(
+          and(
+            eq(userBookStatus.userId, userId),
+            inArray(userBookStatus.bookId, visibleBookIds),
+            eq(userBookStatus.status, 'dnf'),
+            isNull(userBookStatus.startedAt),
+          ),
+        );
+
+      await cloudDb
+        .update(userBookStatus)
+        .set({ finishedAt: null })
+        .where(
+          and(
+            eq(userBookStatus.userId, userId),
+            inArray(userBookStatus.bookId, visibleBookIds),
+            eq(userBookStatus.status, 'dnf'),
+          ),
+        );
+    }
+
+    if (status === 'to_be_read') {
+      await cloudDb
+        .update(userBookStatus)
+        .set({ startedAt: null, finishedAt: null, dnfAt: null })
+        .where(
+          and(
+            eq(userBookStatus.userId, userId),
+            inArray(userBookStatus.bookId, visibleBookIds),
+            eq(userBookStatus.status, 'to_be_read'),
+          ),
+        );
     }
 
     return {

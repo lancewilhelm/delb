@@ -8,6 +8,13 @@
       "when": 1769400740951,
       "tag": "0000_medical_naoko",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1770087909396,
+      "tag": "0001_outgoing_vivisector",
+      "breakpoints": true
     }
   ]
 }

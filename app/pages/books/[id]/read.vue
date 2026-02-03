@@ -46,6 +46,8 @@ const bookTitle = ref<string>('Reader');
 const currentProgress = ref<number | null>(null);
 const saveErrorMessage = ref<string | null>(null);
 const epubFileId = ref<string | null>(null);
+const progressSyncEnabled = ref(false);
+const syncedProgressPercent = ref<number | null>(null);
 
 // While EPUB.js locations are generating, progress derived from CFI can be wrong
 // (often 0.0%). We keep showing cached progress and display a pending indicator.
@@ -556,6 +558,32 @@ async function loadReadingPosition() {
   };
 }
 
+async function loadLatestProgressLog() {
+  if (!bookId.value) return null;
+
+  const res = await fetch(
+    `/api/books/${encodeURIComponent(bookId.value)}/progress-logs?limit=1`,
+    { method: 'GET' },
+  );
+
+  if (!res.ok) return null;
+
+  const json = (await res.json().catch(() => null)) as {
+    success?: boolean;
+    data?: {
+      logs?: Array<{ progressPercent?: number | string | null }>;
+    };
+  } | null;
+
+  if (!json?.success) return null;
+
+  const raw = json?.data?.logs?.[0]?.progressPercent;
+  const parsed =
+    typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN;
+  if (!Number.isFinite(parsed)) return null;
+  return parsed;
+}
+
 /**
  * Saves the reading position to the backend db
  * @param location The location to save
@@ -618,6 +646,7 @@ async function loadBookMetadata() {
           published?: string | null;
           language?: string | null;
           pages?: number | null;
+          userProgressSyncEnabled?: boolean | null;
           files?: Array<{
             id?: string;
             format?: string | null;
@@ -636,6 +665,7 @@ async function loadBookMetadata() {
     const title = book?.title?.trim() ?? null;
 
     bookTitle.value = title || bookTitle.value;
+    progressSyncEnabled.value = Boolean(book?.userProgressSyncEnabled);
     if (title) {
       useHead({ title: `Reading · ${title}` });
     }
@@ -702,8 +732,13 @@ async function loadEpub() {
   try {
     await fetchBook();
 
-    const saved = await loadReadingPosition();
+    const [saved, syncedProgress] = await Promise.all([
+      loadReadingPosition(),
+      progressSyncEnabled.value ? loadLatestProgressLog() : Promise.resolve(null),
+    ]);
     const savedLocation = saved?.location ?? null;
+    syncedProgressPercent.value =
+      progressSyncEnabled.value && syncedProgress != null ? syncedProgress : null;
 
     // Always kick off location generation in the background. It can be slow,
     // but it should not block the initial render or cached progress display.
@@ -719,8 +754,13 @@ async function loadEpub() {
 
     // Prefer cached progress immediately (fast) and only replace it once
     // locations are generated and we can compute an authoritative value.
-    if (saved?.progress != null) {
-      currentProgress.value = saved.progress;
+    const initialProgress =
+      progressSyncEnabled.value && syncedProgressPercent.value != null
+        ? syncedProgressPercent.value
+        : saved?.progress ?? null;
+
+    if (initialProgress != null) {
+      currentProgress.value = initialProgress;
       isAwaitingLocations.value = true;
     }
 
@@ -733,16 +773,36 @@ async function loadEpub() {
           .then(() => {
             const fallbackLocation =
               savedLocation ?? renditionRef.value?.location?.start?.cfi ?? null;
+            let targetLocation = fallbackLocation;
 
-            const progress = extractProgress(fallbackLocation);
+            if (
+              progressSyncEnabled.value &&
+              syncedProgressPercent.value != null &&
+              bookInstance?.locations?.cfiFromPercentage
+            ) {
+              const pct = Math.max(
+                0,
+                Math.min(100, syncedProgressPercent.value),
+              );
+              const syncedLocation =
+                bookInstance.locations.cfiFromPercentage(pct / 100);
+              if (syncedLocation) {
+                targetLocation = syncedLocation;
+                if (syncedLocation !== fallbackLocation) {
+                  void rendition.display(syncedLocation).catch(() => null);
+                }
+              }
+            }
+
+            const progress = extractProgress(targetLocation);
 
             // Only update UI and persist if we computed progress from
             // `percentageFromCfi` (i.e., not null).
             if (progress != null) {
               isAwaitingLocations.value = false;
               currentProgress.value = progress;
-              if (fallbackLocation) {
-                void saveReadingPosition(fallbackLocation, progress);
+              if (targetLocation) {
+                void saveReadingPosition(targetLocation, progress);
               }
             }
           })

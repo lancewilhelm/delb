@@ -1,10 +1,12 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
   books,
   collectionBooks,
   collectionMembers,
+  userBookPreferences,
+  userBookProgressLog,
   userBookReadingPosition,
 } from '~/utils/db/schema';
 import { auth } from '~/utils/auth';
@@ -26,6 +28,7 @@ import { logger } from '~/utils/logger';
  */
 export default defineEventHandler(async (event) => {
   logger.debug('PUT /api/books/:id/reading-position');
+  const PROGRESS_LOG_MIN_DELTA = 1;
 
   const session = await auth.api.getSession({ headers: event.headers });
   if (!session) {
@@ -160,6 +163,70 @@ export default defineEventHandler(async (event) => {
         progress,
         updatedAt,
       });
+    }
+
+    if (progress != null) {
+      try {
+        const pref =
+          (
+            await cloudDb
+              .select({
+                progressSyncEnabled: userBookPreferences.progressSyncEnabled,
+              })
+              .from(userBookPreferences)
+              .where(
+                and(
+                  eq(userBookPreferences.userId, userId),
+                  eq(userBookPreferences.bookId, bookId),
+                ),
+              )
+              .limit(1)
+          )[0] ?? null;
+
+        if (pref?.progressSyncEnabled) {
+          const latestLog =
+            (
+              await cloudDb
+                .select({
+                  progressPercent: userBookProgressLog.progressPercent,
+                  occurredAt: userBookProgressLog.occurredAt,
+                })
+                .from(userBookProgressLog)
+                .where(
+                  and(
+                    eq(userBookProgressLog.userId, userId),
+                    eq(userBookProgressLog.bookId, bookId),
+                  ),
+                )
+                .orderBy(desc(userBookProgressLog.occurredAt))
+                .limit(1)
+            )[0] ?? null;
+
+          const shouldLog =
+            !latestLog ||
+            Math.abs(Number(latestLog.progressPercent) - progress) >=
+              PROGRESS_LOG_MIN_DELTA;
+
+          if (shouldLog) {
+            await cloudDb.insert(userBookProgressLog).values({
+              id: crypto.randomUUID(),
+              userId,
+              bookId,
+              progressPercent: progress,
+              pageNumber: null,
+              location,
+              source: 'reader',
+              occurredAt: new Date(),
+              createdAt: new Date(),
+            });
+          }
+        }
+      } catch (logError) {
+        logger.error(
+          logError,
+          'PUT /api/books/:id/reading-position: Error logging progress',
+        );
+      }
     }
 
     return { success: true, data: { location, progress } };

@@ -386,6 +386,12 @@ export const userBookStatus = sqliteTable(
     // Stored as text to allow future custom statuses without a migration to an enum type.
     status: text('status').notNull(),
 
+    // User-facing status dates (editable).
+    startedAt: integer('started_at', { mode: 'timestamp' }),
+    finishedAt: integer('finished_at', { mode: 'timestamp' }),
+    dnfAt: integer('dnf_at', { mode: 'timestamp' }),
+    tbrRank: integer('tbr_rank'),
+
     updatedAt: integer('updated_at', { mode: 'timestamp' })
       .notNull()
       .$defaultFn(() => new Date()),
@@ -437,6 +443,65 @@ export const userBookReadingPosition = sqliteTable(
     userBookReadingPositionUserIdx: index(
       'user_book_reading_position_user_idx',
     ).on(t.userId),
+  }),
+);
+
+export const userBookPreferences = sqliteTable(
+  'user_book_preferences',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    bookId: text('book_id')
+      .notNull()
+      .references(() => books.id, { onDelete: 'cascade' }),
+
+    progressSyncEnabled: integer('progress_sync_enabled', { mode: 'boolean' })
+      .notNull()
+      .$defaultFn(() => false),
+
+    updatedAt: integer('updated_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    userBookPreferencesUserBookUnique: uniqueIndex(
+      'user_book_preferences_user_book_unique',
+    ).on(t.userId, t.bookId),
+    userBookPreferencesUserIdx: index('user_book_preferences_user_idx').on(
+      t.userId,
+    ),
+  }),
+);
+
+export const userBookProgressLog = sqliteTable(
+  'user_book_progress_log',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    bookId: text('book_id')
+      .notNull()
+      .references(() => books.id, { onDelete: 'cascade' }),
+
+    progressPercent: real('progress_percent').notNull(),
+    pageNumber: integer('page_number'),
+    location: text('location'),
+    source: text('source').notNull(),
+
+    occurredAt: integer('occurred_at', { mode: 'timestamp' }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    userBookProgressLogUserBookIdx: index(
+      'user_book_progress_log_user_book_idx',
+    ).on(t.userId, t.bookId),
+    userBookProgressLogUserBookOccurredIdx: index(
+      'user_book_progress_log_user_book_occurred_idx',
+    ).on(t.userId, t.bookId, t.occurredAt),
   }),
 );
 
@@ -542,6 +607,12 @@ export type InsertUserBookStatus = InferInsertModel<typeof userBookStatus>;
 export type InsertUserBookReadingPosition = InferInsertModel<
   typeof userBookReadingPosition
 >;
+export type InsertUserBookPreferences = InferInsertModel<
+  typeof userBookPreferences
+>;
+export type InsertUserBookProgressLog = InferInsertModel<
+  typeof userBookProgressLog
+>;
 export type InsertBookRating = InferInsertModel<typeof bookRatings>;
 export type InsertBookNote = InferInsertModel<typeof bookNotes>;
 
@@ -562,6 +633,12 @@ export type SelectBookIdentifier = InferSelectModel<typeof bookIdentifiers>;
 export type SelectUserBookStatus = InferSelectModel<typeof userBookStatus>;
 export type SelectUserBookReadingPosition = InferSelectModel<
   typeof userBookReadingPosition
+>;
+export type SelectUserBookPreferences = InferSelectModel<
+  typeof userBookPreferences
+>;
+export type SelectUserBookProgressLog = InferSelectModel<
+  typeof userBookProgressLog
 >;
 export type SelectBookRating = InferSelectModel<typeof bookRatings>;
 export type SelectBookNote = InferSelectModel<typeof bookNotes>;

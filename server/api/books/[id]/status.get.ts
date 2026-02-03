@@ -24,7 +24,16 @@ import { logger } from '~/utils/logger';
  *   the book must be present in at least one collection the user is a member of.
  *
  * Response:
- * - { success: true, data: { status: UserBookStatusValue | null } }
+ * - {
+ *     success: true,
+ *     data: {
+ *       status: UserBookStatusValue | null,
+ *       startedAt: string | null,
+ *       finishedAt: string | null,
+ *       dnfAt: string | null,
+ *       tbrRank: number | null,
+ *     }
+ *   }
  */
 export default defineEventHandler(async (event) => {
   logger.debug('GET /api/books/:id/status');
@@ -75,7 +84,13 @@ export default defineEventHandler(async (event) => {
     const row =
       (
         await cloudDb
-          .select({ status: userBookStatus.status })
+          .select({
+            status: userBookStatus.status,
+            startedAt: userBookStatus.startedAt,
+            finishedAt: userBookStatus.finishedAt,
+            dnfAt: userBookStatus.dnfAt,
+            tbrRank: userBookStatus.tbrRank,
+          })
           .from(userBookStatus)
           .where(
             and(
@@ -95,7 +110,16 @@ export default defineEventHandler(async (event) => {
         ? (statusRaw as UserBookStatusValue)
         : null;
 
-    return { success: true, data: { status } };
+    return {
+      success: true,
+      data: {
+        status,
+        startedAt: status ? row?.startedAt ?? null : null,
+        finishedAt: status ? row?.finishedAt ?? null : null,
+        dnfAt: status ? row?.dnfAt ?? null : null,
+        tbrRank: status ? row?.tbrRank ?? null : null,
+      },
+    };
   } catch (error: unknown) {
     // Preserve explicit HTTP errors (401/400/404) thrown above
     if (
