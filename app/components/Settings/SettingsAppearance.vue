@@ -78,6 +78,13 @@ const gridCoverShowSeries = userSettingsStore.settingRef<boolean>(
 );
 
 // ------------------------------
+// Book list appearance controls
+// ------------------------------
+const listRowHeightValue = userSettingsStore.settingRef<number>(
+  'bookList.rowHeightPx',
+);
+
+// ------------------------------
 // Reader settings
 // ------------------------------
 const readerMinSpreadWidth = userSettingsStore.settingRef<number>(
@@ -274,6 +281,22 @@ function handleSortChange(target: string) {
         v-model="gridCoverShowSeries"
         title="Show Book Series"
         description="Show the book series under the cover"
+      />
+    </SettingsUIGroup>
+
+    <SettingsUIGroup
+      title="Book List"
+      icon="lucide:list"
+      description="customize list row sizing"
+    >
+      <SettingsUISlider
+        v-model="listRowHeightValue"
+        title="Row height"
+        description="Sets the height for each row in list view (default: 84px)"
+        :min="56"
+        :max="160"
+        :value-input="true"
+        :suffix="'px'"
       />
     </SettingsUIGroup>
 

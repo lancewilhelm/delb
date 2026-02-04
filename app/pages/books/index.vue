@@ -587,14 +587,16 @@ const shouldApplyPersistedFilters = computed(() => {
 });
 
 const addedStart = computed<string>({
-  get: () => (shouldApplyPersistedFilters.value ? booksFiltersStore.addedStart : ''),
+  get: () =>
+    shouldApplyPersistedFilters.value ? booksFiltersStore.addedStart : '',
   set: (v) => {
     booksFiltersStore.addedStart = v;
   },
 });
 
 const addedEnd = computed<string>({
-  get: () => (shouldApplyPersistedFilters.value ? booksFiltersStore.addedEnd : ''),
+  get: () =>
+    shouldApplyPersistedFilters.value ? booksFiltersStore.addedEnd : '',
   set: (v) => {
     booksFiltersStore.addedEnd = v;
   },
@@ -786,6 +788,14 @@ watch(
 
 const booksSortKey = computed(() => uiStore.booksSortKey);
 const booksSortDir = computed(() => uiStore.booksSortDirection);
+const booksViewMode = computed(() => uiStore.booksViewMode);
+const hydrated = ref(false);
+onMounted(() => {
+  hydrated.value = true;
+});
+const effectiveBooksViewMode = computed(() =>
+  hydrated.value ? booksViewMode.value : 'grid',
+);
 
 onMounted(async () => {
   filtersHydrated.value = true;
@@ -814,6 +824,10 @@ onMounted(async () => {
 
             <!-- Books sort + filters -->
             <div class="flex items-center gap-1 self-center">
+              <BooksViewToggle />
+
+              <span class="border-r border-(--sub-color) mx-1 h-6" />
+
               <!-- Select / Actions (Books view only) -->
               <div class="flex items-center gap-2">
                 <!-- Actions Menu -->
@@ -912,7 +926,7 @@ onMounted(async () => {
                     :name="
                       selectionStore.selectMode
                         ? 'lucide:check-square'
-                        : 'lucide:layout-grid'
+                        : 'lucide:circle-check-big'
                     "
                     class="text-(--main-color) opacity-80 shrink-0 text-xl sm:text-lg"
                   />
@@ -1389,7 +1403,19 @@ onMounted(async () => {
           <div class="flex flex-col flex-1 min-h-0">
             <!-- Only the books grid scrolls (BooksInfiniteGrid owns the scroller) -->
             <BooksInfiniteGrid
-              :key="`${booksGridKey}-${booksSortKey}-${booksSortDir}-${booksEndpoint}`"
+              v-if="effectiveBooksViewMode === 'grid'"
+              :key="`grid-${booksGridKey}-${booksSortKey}-${booksSortDir}-${booksEndpoint}-${effectiveBooksViewMode}`"
+              :collection-id="activeCollectionId"
+              :sort="booksSortKey"
+              :sort-dir="booksSortDir"
+              :endpoint="booksEndpoint"
+              :selection-enabled="true"
+              class="flex-1 min-h-0"
+              @error="handleBooksGridError"
+            />
+            <BooksInfiniteList
+              v-else
+              :key="`list-${booksGridKey}-${booksSortKey}-${booksSortDir}-${booksEndpoint}-${effectiveBooksViewMode}`"
               :collection-id="activeCollectionId"
               :sort="booksSortKey"
               :sort-dir="booksSortDir"

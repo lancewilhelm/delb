@@ -9,6 +9,7 @@ export type LibraryView =
 
 export type BooksSortKey = 'dateAdded' | 'alphabetical' | 'publishedDate';
 export type SortDirection = 'asc' | 'desc';
+export type BooksViewMode = 'grid' | 'list';
 
 export const useUiStore = defineStore(
   'ui',
@@ -44,6 +45,7 @@ export const useUiStore = defineStore(
      */
     const booksSortKey = ref<BooksSortKey>('dateAdded');
     const booksSortDirection = ref<SortDirection>('desc');
+    const booksViewMode = ref<BooksViewMode>('grid');
 
     function setBooksSortKey(key: BooksSortKey) {
       booksSortKey.value = key;
@@ -68,6 +70,10 @@ export const useUiStore = defineStore(
     function toggleBooksSortDirection() {
       booksSortDirection.value =
         booksSortDirection.value === 'asc' ? 'desc' : 'asc';
+    }
+
+    function setBooksViewMode(mode: BooksViewMode) {
+      booksViewMode.value = mode;
     }
 
     /**
@@ -108,6 +114,7 @@ export const useUiStore = defineStore(
       libraryView.value = 'books';
       booksSortKey.value = 'dateAdded';
       booksSortDirection.value = 'desc';
+      booksViewMode.value = 'grid';
       leftSidebarWidthPx.value = 260;
       leftSidebarCollapsed.value = false;
       addBookModalVisible.value = false;
@@ -129,6 +136,8 @@ export const useUiStore = defineStore(
       booksSortDirection,
       setBooksSortDirection,
       toggleBooksSortDirection,
+      booksViewMode,
+      setBooksViewMode,
 
       leftSidebarWidthPx,
       setLeftSidebarWidthPx,

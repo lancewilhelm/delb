@@ -56,6 +56,13 @@ export interface BaseUserSettings {
   };
 
   /**
+   * List appearance options (book list view).
+   */
+  bookList: {
+    rowHeightPx: number;
+  };
+
+  /**
    * Per-user metadata search provider selection.
    * Used by the metadata search modal to search one or more providers at once.
    */
@@ -122,6 +129,9 @@ function getBaseDefaults(): BaseUserSettings {
       showTitle: true,
       showAuthors: true,
       showSeries: true,
+    },
+    bookList: {
+      rowHeightPx: 84,
     },
     metadataSearch: {
       // Default to Google Books; Hardcover will be enabled client-side only if available.

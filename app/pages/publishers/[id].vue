@@ -13,6 +13,7 @@ type FetchErrorLike = {
 };
 
 const route = useRoute();
+const uiStore = useUiStore();
 const collectionsStore = useCollectionsStore();
 
 const publisherParam = computed(() => String(route.params.id || '').trim());
@@ -34,6 +35,15 @@ const activeCollectionId = computed<string | undefined>(() => {
   }
   return undefined;
 });
+
+const booksViewMode = computed(() => uiStore.booksViewMode);
+const hydrated = ref(false);
+onMounted(() => {
+  hydrated.value = true;
+});
+const effectiveBooksViewMode = computed(() =>
+  hydrated.value ? booksViewMode.value : 'grid',
+);
 
 const gridEndpoint = computed(() => {
   if (!publisherId.value) return '/api/books';
@@ -122,7 +132,10 @@ onMounted(async () => {
   <div class="flex flex-col w-full h-full overflow-hidden">
     <AppHeader class="w-full" />
     <div class="px-2 shrink-0 border-b border-(--sub-color)">
-      <ViewSelectorDropdown />
+      <div class="flex items-center justify-between gap-2">
+        <ViewSelectorDropdown />
+        <BooksViewToggle />
+      </div>
     </div>
 
     <!-- Fixed header + scrollable books grid -->
@@ -155,7 +168,17 @@ onMounted(async () => {
       </div>
 
       <BooksInfiniteGrid
-        :key="gridKey"
+        v-if="effectiveBooksViewMode === 'grid'"
+        :key="`${gridKey}-${effectiveBooksViewMode}`"
+        :endpoint="gridEndpoint"
+        :collection-id="activeCollectionId"
+        class="flex-1 min-h-0"
+        @error="handleGridError"
+        @update:count="(n: number) => (bookCount = n)"
+      />
+      <BooksInfiniteList
+        v-else
+        :key="`${gridKey}-${effectiveBooksViewMode}`"
         :endpoint="gridEndpoint"
         :collection-id="activeCollectionId"
         class="flex-1 min-h-0"

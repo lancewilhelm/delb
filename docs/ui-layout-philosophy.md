@@ -188,6 +188,16 @@ Implementation notes:
 - The grid uses content width (excluding padding) and fixes item height to keep scroll math aligned.
 - See `app/components/Books/BooksInfiniteGrid.vue` and `app/components/BookThumbnail.vue`.
 
+### Paginated, virtualized book lists
+
+Book lists use the same cursor pagination strategy but render a single-column, virtualized list. Row height is fixed to a user setting (Settings → Appearance → Book List) to keep scroll math aligned and predictable.
+
+Implementation notes:
+
+- Row height is configured via `bookList.rowHeightPx` in user settings.
+- List view renders cover, title, authors, and series columns in each row.
+- See `app/components/Books/BooksInfiniteList.vue` and `app/components/Books/BookListRow.vue`.
+
 ### Multi-select behavior (Books grid)
 
 Selection mode is a header-driven toggle. When active, the grid turns each book into a selectable card.
