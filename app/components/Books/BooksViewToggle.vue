@@ -28,11 +28,11 @@ function setMode(mode: 'grid' | 'list') {
     <button
       v-tooltip="'Grid View'"
       type="button"
-      class="flex items-center gap-1 px-2 py-1 rounded text-sm transition"
+      class="flex items-center gap-1 px-2 py-1 rounded text-sm transition text-(--main-color)"
       :class="
         effectiveMode === 'grid'
-          ? 'bg-(--sub-color)/25 text-(--main-color)'
-          : 'text-(--text-color) opacity-70 hover:opacity-100'
+          ? 'bg-(--sub-color)/25'
+          : 'opacity-70 hover:opacity-100'
       "
       :aria-pressed="effectiveMode === 'grid' ? 'true' : 'false'"
       @click="setMode('grid')"
@@ -44,11 +44,11 @@ function setMode(mode: 'grid' | 'list') {
     <button
       v-tooltip="'List View'"
       type="button"
-      class="flex items-center gap-1 px-2 py-1 rounded text-sm transition"
+      class="flex items-center gap-1 px-2 py-1 rounded text-sm transition text-(--main-color)"
       :class="
         effectiveMode === 'list'
-          ? 'bg-(--sub-color)/25 text-(--main-color)'
-          : 'text-(--text-color) opacity-70 hover:opacity-100'
+          ? 'bg-(--sub-color)/25'
+          : 'opacity-70 hover:opacity-100'
       "
       :aria-pressed="effectiveMode === 'list' ? 'true' : 'false'"
       @click="setMode('list')"

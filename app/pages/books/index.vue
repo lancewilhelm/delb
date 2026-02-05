@@ -1414,7 +1414,7 @@ onMounted(async () => {
               @error="handleBooksGridError"
             />
             <BooksInfiniteList
-              v-else
+              v-else-if="effectiveBooksViewMode === 'list'"
               :key="`list-${booksGridKey}-${booksSortKey}-${booksSortDir}-${booksEndpoint}-${effectiveBooksViewMode}`"
               :collection-id="activeCollectionId"
               :sort="booksSortKey"

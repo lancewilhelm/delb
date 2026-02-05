@@ -145,6 +145,12 @@ const listRowGapPx = 0;
 
 const rowPaddingY = 6;
 const rowPaddingX = 10;
+const listColumnGapPx = 16;
+const columnMinWidths = {
+  title: 350,
+  authors: 250,
+  series: 150,
+};
 
 const headerCoverHeightPx = computed(() =>
   Math.max(24, listRowHeightPx.value - rowPaddingY * 2),
@@ -162,11 +168,33 @@ const headerCoverStyle = computed<Record<string, string>>(() => ({
   width: `${headerCoverWidthPx.value}px`,
 }));
 
-const headerColumnStyles = {
-  title: { flex: '2 1 0%', minWidth: '0' },
-  authors: { flex: '1.5 1 0%', minWidth: '0' },
-  series: { flex: '1 1 0%', minWidth: '0' },
-};
+const headerColumnStyles = computed(() => ({
+  title: {
+    flex: `2 1 ${columnMinWidths.title}px`,
+    minWidth: `${columnMinWidths.title}px`,
+  },
+  authors: {
+    flex: `1.5 1 ${columnMinWidths.authors}px`,
+    minWidth: `${columnMinWidths.authors}px`,
+  },
+  series: {
+    flex: `1 1 ${columnMinWidths.series}px`,
+    minWidth: `${columnMinWidths.series}px`,
+  },
+}));
+
+const listContentMinWidthPx = computed(() => {
+  const columnsTotal =
+    columnMinWidths.title + columnMinWidths.authors + columnMinWidths.series;
+  const gapTotal = listColumnGapPx * 3;
+  return (
+    headerCoverWidthPx.value + columnsTotal + gapTotal + rowPaddingX * 2
+  );
+});
+
+const listRowLayoutStyle = computed<Record<string, string>>(() => ({
+  minWidth: `${listContentMinWidthPx.value}px`,
+}));
 
 const scrollContainerRef = ref<HTMLElement | null>(null);
 const contentRef = ref<HTMLElement | null>(null);
@@ -517,10 +545,10 @@ onBeforeUnmount(() => {
   <!-- This component owns the scroll container so the view selector (outside) does not scroll. -->
   <div
     ref="scrollContainerRef"
-    class="flex-1 overflow-auto [overflow-anchor:none]"
+    class="flex-1 overflow-auto overflow-x-auto [overflow-anchor:none]"
     @scroll="onScroll"
   >
-    <div ref="contentRef" class="px-4 py-4">
+    <div ref="contentRef" class="pb-4">
       <div v-if="errorMessage" class="text-sm text-(--error-color) mb-3">
         {{ errorMessage }}
       </div>
@@ -532,7 +560,9 @@ onBeforeUnmount(() => {
         range={{ listMetrics.startIndex }}-{{ listMetrics.endIndex }} scroll={{
           Math.round(scrollTop)
         }}
-        total={{ Math.round(listMetrics.totalHeight) }} loading={{ loading }}
+        total={{ Math.round(listMetrics.totalHeight) }} loading={{
+          loading
+        }}
         hasMore={{ hasMore }} nextCursor={{ nextCursor ?? 'null' }}
       </div>
 
@@ -547,11 +577,16 @@ onBeforeUnmount(() => {
       <div v-else class="w-full">
         <div
           class="sticky top-0 z-10 bg-(--bg-color) border-b border-(--sub-color)/50"
+          :style="listRowLayoutStyle"
         >
-          <div class="flex items-center gap-4 w-full" :style="headerPaddingStyle">
-            <div class="shrink-0 text-xs uppercase tracking-wide opacity-70" :style="headerCoverStyle">
-              Cover
-            </div>
+          <div
+            class="flex items-center gap-4 w-full bg-(--bg-color)"
+            :style="headerPaddingStyle"
+          >
+            <div
+              class="shrink-0 text-xs uppercase tracking-wide opacity-70"
+              :style="headerCoverStyle"
+            />
             <div
               class="text-xs uppercase tracking-wide opacity-70"
               :style="headerColumnStyles.title"
@@ -580,9 +615,9 @@ onBeforeUnmount(() => {
               :key="b.id"
               :book="b"
               :row-height-px="listRowHeightPx"
-              :selectable="
-                props.selectionEnabled && selectionStore.selectMode
-              "
+              :column-min-widths="columnMinWidths"
+              :layout-min-width="listContentMinWidthPx"
+              :selectable="props.selectionEnabled && selectionStore.selectMode"
               :selected="selectionStore.isSelected(b.id)"
               @toggle-select="onBookToggleSelect"
             />
@@ -590,10 +625,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div
-        v-if="books.length > 0"
-        class="mt-6 flex flex-col items-center gap-2"
-      >
+      <div v-if="books.length > 0" class="mt-4 flex flex-col items-center">
         <div ref="sentinelRef" class="h-1 w-full" />
         <div class="text-sm opacity-70">
           <span v-if="loading">Loading…</span>

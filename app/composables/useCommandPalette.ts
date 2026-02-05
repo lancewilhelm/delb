@@ -198,6 +198,32 @@ export function useCommandPalette() {
       ],
     },
     {
+      label: 'book list',
+      icon: 'lucide:list',
+      options: [
+        {
+          label: 'row height',
+          icon: 'lucide:rows',
+          slider: {
+            model: computed({
+              get: () => userSettingsStore.activeSettings.bookList.rowHeightPx,
+              set: (v: number) => {
+                userSettingsStore.updateSettings({
+                  bookList: {
+                    ...userSettingsStore.activeSettings.bookList,
+                    rowHeightPx: Math.round(v),
+                  },
+                });
+              },
+            }),
+            min: 56,
+            max: 140,
+            suffix: 'px',
+          },
+        },
+      ],
+    },
+    {
       label: 'mobile',
       icon: 'lucide:smartphone',
       options: [

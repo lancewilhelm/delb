@@ -21,12 +21,16 @@ const props = withDefaults(
   defineProps<{
     book: Book;
     rowHeightPx: number;
+    columnMinWidths?: { title: number; authors: number; series: number };
+    layoutMinWidth?: number;
     selectable?: boolean;
     selected?: boolean;
   }>(),
   {
     selectable: false,
     selected: false,
+    columnMinWidths: () => ({ title: 0, authors: 0, series: 0 }),
+    layoutMinWidth: 0,
   },
 );
 
@@ -61,11 +65,27 @@ const coverStyle = computed<Record<string, string>>(() => ({
   height: `${coverHeightPx.value}px`,
 }));
 
-const columnStyles = {
-  title: { flex: '2 1 0%', minWidth: '0' },
-  authors: { flex: '1.5 1 0%', minWidth: '0' },
-  series: { flex: '1 1 0%', minWidth: '0' },
-};
+const columnStyles = computed(() => {
+  const widths = props.columnMinWidths ?? { title: 0, authors: 0, series: 0 };
+  return {
+    title: {
+      flex: `2 1 ${widths.title}px`,
+      minWidth: `${widths.title}px`,
+    },
+    authors: {
+      flex: `1.5 1 ${widths.authors}px`,
+      minWidth: `${widths.authors}px`,
+    },
+    series: {
+      flex: `1 1 ${widths.series}px`,
+      minWidth: `${widths.series}px`,
+    },
+  };
+});
+
+const rowLayoutStyle = computed<Record<string, string>>(() => ({
+  minWidth: props.layoutMinWidth ? `${props.layoutMinWidth}px` : 'auto',
+}));
 
 const authorLabel = computed(() => {
   const b = props.book;
@@ -319,9 +339,8 @@ function onRowClick(e?: MouseEvent) {
       props.selected ? 'bg-(--sub-color)/15' : '',
     ]"
     :style="rowStyle"
-    @click="onRowClick"
   >
-    <div class="flex items-center gap-4 w-full h-full min-w-0">
+    <div class="flex items-center gap-4 w-full h-full min-w-0" :style="rowLayoutStyle">
       <div class="shrink-0 relative" :style="coverStyle">
         <BookCover
           :src="coverSrc"
@@ -345,10 +364,10 @@ function onRowClick(e?: MouseEvent) {
         </div>
       </div>
 
-      <div :style="columnStyles.title" class="min-w-0">
+      <div :style="columnStyles.title" class="min-w-0 flex items-center">
         <HoverScrollText>
           <span
-            class="text-sm sm:text-base hover:underline"
+            class="text-sm sm:text-base hover:underline cursor-pointer"
             @click.stop="onRowClick"
           >
             {{ props.book.title }}
@@ -356,7 +375,7 @@ function onRowClick(e?: MouseEvent) {
         </HoverScrollText>
       </div>
 
-      <div :style="columnStyles.authors" class="min-w-0">
+      <div :style="columnStyles.authors" class="min-w-0 flex items-center">
         <HoverScrollText class="text-sm sm:text-base opacity-80">
           <span v-if="props.selectable" @click.stop="onRowClick">
             {{ authorLabel }}
@@ -383,7 +402,7 @@ function onRowClick(e?: MouseEvent) {
         </HoverScrollText>
       </div>
 
-      <div :style="columnStyles.series" class="min-w-0">
+      <div :style="columnStyles.series" class="min-w-0 flex items-center">
         <HoverScrollText class="text-sm sm:text-base opacity-70">
           <span v-if="props.selectable" @click.stop="onRowClick">
             {{ seriesLabel }}
