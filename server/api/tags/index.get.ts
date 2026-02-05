@@ -9,6 +9,7 @@ import {
 } from '~/utils/db/schema';
 import { logger } from '~/utils/logger';
 import { auth } from '~/utils/auth';
+import { buildBookCoverUrl } from '~~/server/utils/books/cover-url';
 
 /**
  * GET /api/tags?collectionId=<optional>
@@ -59,10 +60,6 @@ export default defineEventHandler(async (event) => {
       setResponseStatus(event, 403);
       return { success: false, message: 'Forbidden' };
     }
-  }
-
-  function coverThumbUrl(coverImagePath: string) {
-    return `/api/media/covers/${coverImagePath.replace(/^library\//, '')}`;
   }
 
   try {
@@ -171,7 +168,7 @@ export default defineEventHandler(async (event) => {
         title,
         coverImagePath,
         coverThumbnailUrl: coverImagePath
-          ? coverThumbUrl(coverImagePath)
+          ? buildBookCoverUrl({ bookId: bid, variant: 'thumb' })
           : null,
       });
       booksByTagId.set(tid, list);

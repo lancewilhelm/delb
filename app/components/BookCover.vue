@@ -35,7 +35,7 @@ type ContextMenuItemsProp =
 
 type Props = {
   /**
-   * Image URL/path to render (e.g. `/api/media/covers/.../cover.jpg`)
+   * Image URL/path to render (e.g. `/api/books/<id>/cover?variant=thumb`)
    */
   src?: string | null;
 

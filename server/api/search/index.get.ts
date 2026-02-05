@@ -13,6 +13,7 @@ import {
 } from '~/utils/db/schema';
 import { logger } from '~/utils/logger';
 import { auth } from '~/utils/auth';
+import { buildBookCoverUrl } from '~~/server/utils/books/cover-url';
 
 /**
  * GET /api/search?q=...
@@ -402,6 +403,13 @@ export default defineEventHandler(async (event) => {
           published: b.published ?? null,
           coverImagePath: b.coverImagePath ?? null,
           updatedAt: b.updatedAt ?? null,
+          coverThumbnailUrl: b.coverImagePath
+            ? buildBookCoverUrl({
+                bookId: b.id,
+                updatedAt: b.updatedAt ?? null,
+                variant: 'thumb',
+              })
+            : null,
         };
       });
     })();

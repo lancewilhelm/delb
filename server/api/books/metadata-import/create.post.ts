@@ -31,6 +31,7 @@ import {
   type GoogleBookItem,
 } from '~~/server/utils/books/metadata/top-result';
 import { findPossibleDuplicates } from '~~/server/utils/books/duplicates';
+import { fetchExternalImageBuffer } from '~~/server/utils/books/external-image';
 
 type MetadataProviderKey = 'googleBooks' | 'hardcover';
 
@@ -81,44 +82,6 @@ type Body = {
    */
   allowDuplicate?: boolean;
 };
-
-function makeAbsoluteUrl(
-  event: {
-    node: {
-      req: {
-        headers: Record<string, string | string[] | undefined>;
-      };
-    };
-  },
-  relativeOrAbsolute: string,
-): string {
-  const raw = (relativeOrAbsolute ?? '').toString().trim();
-  if (!raw) return raw;
-
-  // Already absolute
-  if (/^https?:\/\//i.test(raw)) return raw;
-
-  // Build base from incoming request headers (works behind reverse proxies if they forward proto/host)
-  const proto =
-    (event.node.req.headers['x-forwarded-proto'] as string | undefined)
-      ?.split(',')[0]
-      ?.trim() ||
-    (event.node.req.headers['x-forwarded-protocol'] as string | undefined)
-      ?.split(',')[0]
-      ?.trim() ||
-    'http';
-  const host =
-    (event.node.req.headers['x-forwarded-host'] as string | undefined)
-      ?.split(',')[0]
-      ?.trim() ||
-    (event.node.req.headers['host'] as string | undefined)?.trim() ||
-    'localhost';
-
-  const base = `${proto}://${host}`;
-
-  if (raw.startsWith('/')) return `${base}${raw}`;
-  return `${base}/${raw}`;
-}
 
 function uniqByLower(values: string[]): string[] {
   const seen = new Set<string>();
@@ -735,15 +698,7 @@ export default defineEventHandler(async (event) => {
         const outputDirAbs = resolveDataPath(outputDirRelPosix);
         await mkdir(outputDirAbs, { recursive: true });
 
-        const proxiedRelative = `/api/books/metadata/cover?url=${encodeURIComponent(coverUrl)}`;
-        const proxiedAbs = makeAbsoluteUrl(event, proxiedRelative);
-
-        const ab = await $fetch<ArrayBuffer>(proxiedAbs, {
-          method: 'GET',
-          headers: { 'x-delb-internal': '1' },
-          responseType: 'arrayBuffer',
-        });
-        const bytes = Buffer.from(ab);
+        const { bytes } = await fetchExternalImageBuffer(coverUrl);
 
         const ensured = await ensureCoverOutputsFromBytes({
           sourceBytes: bytes,
@@ -938,30 +893,9 @@ export default defineEventHandler(async (event) => {
       // Ensure directory exists up-front (covers util also ensures, but this keeps intent explicit)
       await mkdir(outputDirAbs, { recursive: true });
 
-      // Fetch bytes through our server proxy (avoids CORS + follows redirects)
-      // IMPORTANT: server-side $fetch with a relative URL can be treated as an upstream fetch.
-      // Use an absolute URL based on the current request host/proto.
-      const proxiedRelative = `/api/books/metadata/cover?url=${encodeURIComponent(coverUrl)}`;
-      const proxiedAbs = makeAbsoluteUrl(event, proxiedRelative);
+      logger.debug({ bookId, outputDirRelPosix }, 'metadata-import: cover: fetching bytes');
 
-      logger.debug(
-        { bookId, proxiedAbs, outputDirRelPosix },
-        'metadata-import: cover: fetching bytes',
-      );
-
-      // Fetch as *binary*, not Blob. Some $fetch implementations will return a Blob if
-      // you don't force the response type.
-      const ab = await $fetch<ArrayBuffer>(proxiedAbs, {
-        method: 'GET',
-        headers: {
-          // Marks this request as originating from the server so the cover proxy
-          // can bypass session auth (it will still enforce URL protocol + image type).
-          'x-delb-internal': '1',
-        },
-        responseType: 'arrayBuffer',
-      });
-
-      const bytes = Buffer.from(ab);
+      const { bytes } = await fetchExternalImageBuffer(coverUrl);
 
       logger.debug(
         { bookId, byteLength: bytes.length },

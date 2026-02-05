@@ -113,6 +113,16 @@ On logout:
 | Avoid FOUC            | Apply theme on SSR using hydrated store |
 | Source of truth       | DB via `/api/settings`                  |
 
+## Cover Access Security (Related)
+
+Cover delivery is intentionally not configurable from user/global settings.
+
+- Canonical endpoint: `GET /api/books/:id/cover?variant=thumb|source`
+- Access model: authenticated session + collection membership visibility
+- Caching: private revalidation (`ETag`, `Cache-Control: private, max-age=0, must-revalidate`)
+
+For metadata "cover from URL" flows, Delb also enforces server-side URL/network/payload safeguards before returning bytes to the browser.
+
 ---
 
 ## Notes

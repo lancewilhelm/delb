@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { buildBookCoverUrl } from '~/utils/covers';
+
 definePageMeta({
   auth: {
     only: 'user',
@@ -68,17 +70,12 @@ function deriveSeriesNameFromBooks(list: Book[], id: string) {
   return 'Series';
 }
 
-function coverThumbUrl(
-  coverImagePath: string,
-  updatedAt?: string | number | Date,
-) {
-  // Stored as a relative `library/...` path (typically `.../thumb.webp`)
-  // API expects: /api/media/covers/<path under library>
-  const base = `/api/media/covers/${coverImagePath.replace(/^library\//, '')}`;
+function coverThumbUrl(bookId: string, updatedAt?: string | number | Date) {
+  const base = buildBookCoverUrl({ bookId, variant: 'thumb' });
   if (!updatedAt) return base;
   const ts = new Date(updatedAt).getTime();
   if (Number.isNaN(ts)) return base;
-  return `${base}?v=${encodeURIComponent(String(ts))}`;
+  return `${base}&v=${encodeURIComponent(String(ts))}`;
 }
 
 function sanitizeDescriptionHtml(input: string): string {
@@ -306,7 +303,7 @@ watch(
               {{ b.seriesIndex }}
             </div>
             <BookCover
-              :src="coverThumbUrl(b.coverImagePath ?? '', b.updatedAt ?? undefined)"
+              :src="coverThumbUrl(b.id, b.updatedAt ?? undefined)"
               :alt="b.title"
               :title="b.title"
               class="cursor-pointer w-25! sm:w-40!"

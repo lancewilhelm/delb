@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, unlink, writeFile } from 'node:fs/promises';
 
 import { and, eq, inArray } from 'drizzle-orm';
 import sharp from 'sharp';
@@ -29,7 +29,8 @@ import { auth } from '~/utils/auth';
  *
  * Notes:
  * - The UI should use `books.coverImagePath` for most places (thumbnail).
- * - The full-resolution source is available on request via `/api/media/covers/.../cover.<ext>`.
+ * - The full-resolution source is available on request via
+ *   `/api/books/:id/cover?variant=source`.
  *
  * Request: multipart/form-data with a single file field named `file`.
  *
@@ -46,7 +47,7 @@ import { auth } from '~/utils/auth';
  * - If the book has no files yet, covers are stored in the canonical directory derived from
  *   current metadata (author(s)+title+id slice), so metadata-only books can still have covers.
  * - Overwrite semantics for both files:
- *   - `cover.<ext>` is overwritten
+ *   - exactly one source file remains (`cover.<ext>`)
  *   - `thumb.webp` is overwritten
  */
 export default defineEventHandler(async (event) => {
@@ -248,6 +249,27 @@ export default defineEventHandler(async (event) => {
 
     const sourceAbs = path.join(bookDirAbs, `cover.${ext}`);
     const thumbAbs = path.join(bookDirAbs, 'thumb.webp');
+
+    // Ensure only one full-size source cover exists at a time.
+    // Remove legacy/alternate source variants before writing the new source.
+    const sourceNamePattern =
+      /^(cover|source)(\.(source))?\.(jpg|jpeg|png|webp|gif|avif|tif|tiff)$/i;
+    const targetSourceName = path.basename(sourceAbs).toLowerCase();
+    try {
+      const entries = await readdir(bookDirAbs, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        const name = entry.name;
+        if (!sourceNamePattern.test(name)) continue;
+        if (name.toLowerCase() === targetSourceName) continue;
+        await unlink(path.join(bookDirAbs, name));
+      }
+    } catch (cleanupError) {
+      logger.warn(
+        { id, cleanupError },
+        'POST /api/books/:id/cover: failed to fully clean prior source variants',
+      );
+    }
 
     // Thumbnail: 320px wide, webp for consistent lightweight UI rendering.
     const thumbWebp = await sharp(filePart.data)

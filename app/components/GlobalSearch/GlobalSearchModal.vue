@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { buildBookCoverUrl } from '~/utils/covers';
+
 type SearchKind = 'book' | 'author' | 'series' | 'publisher' | 'tag';
 
 type GlobalSearchResultItem = {
@@ -8,7 +10,6 @@ type GlobalSearchResultItem = {
   subtitle?: string | null;
   identifiers?: Array<{ type: string; value: string }>;
   icon?: string;
-  coverImagePath?: string | null;
   updatedAt?: string | number | Date;
 };
 
@@ -37,7 +38,6 @@ type SearchApiResponse = {
         subtitle?: string | null;
         identifiers?: Array<{ type: string; value: string }>;
         published?: string | null;
-        coverImagePath?: string | null;
         updatedAt?: string | number | Date;
       }>;
       authors: SearchApiBucketRow[];
@@ -165,17 +165,12 @@ function toNameTitle(row: SearchApiBucketRow) {
   return String(row.name ?? row.title ?? '').trim();
 }
 
-function coverThumbUrl(
-  coverImagePath: string,
-  updatedAt?: string | number | Date,
-) {
-  // Stored as a relative `library/...` path (typically `.../thumb.webp`)
-  // API expects: /api/media/covers/<path under library>
-  const base = `/api/media/covers/${coverImagePath.replace(/^library\//, '')}`;
+function coverThumbUrl(bookId: string, updatedAt?: string | number | Date) {
+  const base = buildBookCoverUrl({ bookId, variant: 'thumb' });
   if (!updatedAt) return base;
   const ts = new Date(updatedAt).getTime();
   if (Number.isNaN(ts)) return base;
-  return `${base}?v=${encodeURIComponent(String(ts))}`;
+  return `${base}&v=${encodeURIComponent(String(ts))}`;
 }
 
 function formatIsbnIdentifier(ident: { type: string; value: string }): string {
@@ -233,7 +228,6 @@ async function runSearch(q: string) {
 
           return parts.length ? parts.join(' • ') : null;
         })(),
-        coverImagePath: b.coverImagePath ?? null,
         updatedAt: b.updatedAt ?? undefined,
         icon: 'lucide:book',
       })) ?? [];
@@ -472,7 +466,7 @@ onBeforeUnmount(() => {
                   class="w-auto! aspect-2/3! shrink-0"
                   :src="
                     coverThumbUrl(
-                      item.coverImagePath || '',
+                      item.id,
                       item.updatedAt ?? undefined,
                     )
                   "

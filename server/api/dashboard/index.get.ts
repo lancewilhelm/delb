@@ -10,11 +10,14 @@ import {
 } from '~/utils/db/schema';
 import { auth } from '~/utils/auth';
 import { logger } from '~/utils/logger';
+import { buildBookCoverUrl } from '~~/server/utils/books/cover-url';
 
 type FetchBook = {
   id: string;
   title: string;
   coverImagePath?: string | null;
+  updatedAt?: string | number | Date;
+  coverThumbnailUrl?: string | null;
   progress?: number | null;
 };
 
@@ -118,6 +121,7 @@ export default defineEventHandler(async (event) => {
       id: books.id,
       title: books.title,
       coverImagePath: books.coverImagePath,
+      updatedAt: books.updatedAt,
       progress: userBookReadingPosition.progress,
     })
     .from(books)
@@ -149,6 +153,14 @@ export default defineEventHandler(async (event) => {
     id: r.id,
     title: r.title,
     coverImagePath: r.coverImagePath,
+    updatedAt: r.updatedAt ?? null,
+    coverThumbnailUrl: r.coverImagePath
+      ? buildBookCoverUrl({
+          bookId: r.id,
+          updatedAt: r.updatedAt ?? null,
+          variant: 'thumb',
+        })
+      : null,
     progress: r.progress ?? null,
   }));
 

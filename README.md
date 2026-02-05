@@ -60,6 +60,18 @@ See:
 - **Search & Filter** - Find books quickly with search and filtering
 - **SQLite Database** - Lightweight, file-based database with Drizzle ORM
 
+## Cover Delivery
+
+Delb serves covers through a membership-gated book endpoint:
+
+- `GET /api/books/:id/cover?variant=thumb|source&v=<optional>`
+- Requires an authenticated session and book visibility via collection membership
+- Uses private cache revalidation (`ETag` + `Cache-Control: private, max-age=0, must-revalidate`)
+
+`books.coverImagePath` is an internal storage pointer and is not intended to be used directly as a client-facing URL.
+
+For external "fetch cover by URL" flows, Delb proxies through server-side guards (URL scheme validation, private-network blocking, redirect/timeout limits, payload cap, and image content-type enforcement).
+
 ## Tech Stack
 
 - **Framework**: Nuxt 4 (Vue 3)

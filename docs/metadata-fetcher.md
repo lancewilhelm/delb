@@ -174,10 +174,30 @@ Books created via metadata import may exist before any format file is uploaded. 
 - Metadata endpoints are server-side to avoid CORS issues and to keep provider details off the client.
 - Google Books does not require an API key for basic usage.
 - Hardcover requires a bearer token.
+- External cover preview/import fetches are guarded:
+  - authenticated session required
+  - `http`/`https` URLs only
+  - private/loopback/link-local/multicast targets are blocked
+  - redirect limits are enforced
+  - request timeout is enforced
+  - max payload size is enforced
+  - non-image responses are rejected
 
 #### Hardcover token storage (server-side only)
 
 Delb stores the Hardcover token server-side and never returns it to clients. The client only receives a non-secret capability flag indicating whether Hardcover is available, which is used to enable/disable the Hardcover provider toggle in the metadata search modal.
+
+## Cover Delivery Contract
+
+Canonical cover reads are now served by book ID:
+
+- `GET /api/books/:id/cover?variant=thumb|source&v=<optional>`
+- default variant is `thumb`
+- requires authenticated session and membership visibility to the book
+- returns `ETag` and supports conditional requests (`If-None-Match` => `304`)
+- cache policy is `Cache-Control: private, max-age=0, must-revalidate`
+
+`books.coverImagePath` remains an internal storage pointer and should not be treated as a public URL.
 
 ## Future Enhancements
 

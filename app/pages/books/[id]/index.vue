@@ -951,13 +951,11 @@ const coverCacheKey = computed(() => {
 
 const coverThumbUrl = computed(() => {
   const b = book.value;
-  if (!b?.coverImagePath) return null;
+  if (!b?.id || !b?.coverImagePath) return null;
 
-  // Stored as a relative `library/...` path (typically `.../thumb.webp`)
-  // API expects: /api/media/covers/<path under library>
-  const base = `/api/media/covers/${b.coverImagePath.replace(/^library\//, '')}`;
+  const base = buildBookCoverUrl({ bookId: b.id, variant: 'thumb' });
   const key = coverCacheKey.value;
-  return key ? `${base}?v=${encodeURIComponent(key)}` : base;
+  return key ? `${base}&v=${encodeURIComponent(key)}` : base;
 });
 
 /**
@@ -970,8 +968,8 @@ const coverSourceUrl = computed(() => {
   const id = bookId.value;
   if (!id) return null;
   const key = coverCacheKey.value;
-  const base = `/api/books/${encodeURIComponent(id)}/cover-source`;
-  return key ? `${base}?v=${encodeURIComponent(key)}` : base;
+  const base = buildBookCoverUrl({ bookId: id, variant: 'source' });
+  return key ? `${base}&v=${encodeURIComponent(key)}` : base;
 });
 
 const coverViewerOpen = ref(false);

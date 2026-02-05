@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { buildBookCoverUrl } from '~/utils/covers';
 defineOptions({ name: 'BookThumbnail' });
 
 type BookThumb = {
@@ -66,31 +67,13 @@ function withCoverCacheKey(url: string): string {
 }
 
 const coverSrc = computed(() => {
-  const p = props.book.coverImagePath;
-  if (!p) return null;
-
-  // Cover storage model:
-  // - DB normally points to `.../thumb.webp` for list/grid usage
-  // - Older data (or some imports) may point to a source cover like `.../cover.jpg` or `.../cover.source.jpg`
-  // In those cases, prefer serving a sibling `thumb.webp` to keep list/grid views lightweight.
-  const normalized = p.replace(/\\/g, '/');
-
-  const base = normalized.replace(/^library\//, '');
-  const lastSlash = base.lastIndexOf('/');
-  const dir = lastSlash >= 0 ? base.slice(0, lastSlash) : '';
-  const thumbRel = (dir ? `${dir}/` : '') + 'thumb.webp';
-
-  const looksLikeSourceCover =
-    /\/cover\.(jpe?g|png|webp|gif|svg)$/i.test(normalized) ||
-    /\/cover\.source\.[^/]+$/i.test(normalized) ||
-    /\/source\.[^/]+$/i.test(normalized);
-
-  if (looksLikeSourceCover) {
-    return withCoverCacheKey(`/api/media/covers/${thumbRel}`);
-  }
-
-  // API expects: /api/media/covers/<path under library>
-  return withCoverCacheKey(`/api/media/covers/${base}`);
+  if (!props.book.id || !props.book.coverImagePath) return null;
+  return withCoverCacheKey(
+    buildBookCoverUrl({
+      bookId: props.book.id,
+      variant: 'thumb',
+    }),
+  );
 });
 
 type BookFile = {

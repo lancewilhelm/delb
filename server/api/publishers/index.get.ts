@@ -8,6 +8,7 @@ import {
 } from '~/utils/db/schema';
 import { logger } from '~/utils/logger';
 import { auth } from '~/utils/auth';
+import { buildBookCoverUrl } from '~~/server/utils/books/cover-url';
 
 /**
  * GET /api/publishers?collectionId=<optional>
@@ -58,14 +59,6 @@ export default defineEventHandler(async (event) => {
       setResponseStatus(event, 403);
       return { success: false, message: 'Forbidden' };
     }
-  }
-
-  function coverThumbUrl(coverImagePath: string, updatedAt?: unknown) {
-    const base = `/api/media/covers/${coverImagePath.replace(/^library\//, '')}`;
-    if (!updatedAt) return base;
-    const ts = new Date(updatedAt as string | number | Date).getTime();
-    if (Number.isNaN(ts)) return base;
-    return `${base}?v=${encodeURIComponent(String(ts))}`;
   }
 
   try {
@@ -176,7 +169,7 @@ export default defineEventHandler(async (event) => {
         coverImagePath,
         updatedAt,
         coverThumbnailUrl: coverImagePath
-          ? coverThumbUrl(coverImagePath, updatedAt)
+          ? buildBookCoverUrl({ bookId: bid, updatedAt, variant: 'thumb' })
           : null,
       });
       booksByPublisherId.set(pid, list);

@@ -300,22 +300,20 @@ const coverThumbUrl = computed(() => {
   if (coverResetPending.value) return null;
 
   const b = book.value;
-  if (!b?.coverImagePath) return null;
+  if (!b?.id || !b?.coverImagePath) return null;
 
-  // Stored as: library/<author>/<title>/thumb.webp (default)
-  // API expects: /api/media/covers/<path under library>
-  const base = `/api/media/covers/${b.coverImagePath.replace(/^library\//, '')}`;
+  const base = buildBookCoverUrl({ bookId: b.id, variant: 'thumb' });
   const key = coverCacheKey.value;
-  return key ? `${base}?v=${encodeURIComponent(key)}` : base;
+  return key ? `${base}&v=${encodeURIComponent(key)}` : base;
 });
 
 const coverSourceUrl = computed(() => {
-  const thumb = coverThumbUrl.value;
-  if (!thumb) return null;
+  const b = book.value;
+  if (!b?.id || !b?.coverImagePath) return null;
 
-  // `coverImagePath` points at `thumb.webp` by default. Asking for `kind=source`
-  // resolves to `cover.<ext>` if present.
-  return `${thumb}${thumb.includes('?') ? '&' : '?'}kind=source`;
+  const base = buildBookCoverUrl({ bookId: b.id, variant: 'source' });
+  const key = coverCacheKey.value;
+  return key ? `${base}&v=${encodeURIComponent(key)}` : base;
 });
 
 // Cover upload UI

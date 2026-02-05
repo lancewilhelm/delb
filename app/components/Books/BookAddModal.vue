@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { buildBookCoverUrl } from '~/utils/covers';
+
 defineOptions({ name: 'BookAddModal' });
 
 const uiStore = useUiStore();
@@ -377,16 +379,14 @@ function defaultSelectedDuplicate(details: unknown): string {
 }
 
 function coverThumbUrl(
-  coverImagePath: string | null | undefined,
+  bookId: string,
   updatedAt?: string | number | Date,
 ): string {
-  const p = (coverImagePath ?? '').toString().trim();
-  if (!p) return '';
-  const base = `/api/media/covers/${p.replace(/^library\//, '')}`;
+  const base = buildBookCoverUrl({ bookId, variant: 'thumb' });
   if (!updatedAt) return base;
   const ts = new Date(updatedAt).getTime();
   if (Number.isNaN(ts)) return base;
-  return `${base}?v=${encodeURIComponent(String(ts))}`;
+  return `${base}&v=${encodeURIComponent(String(ts))}`;
 }
 
 function isGoogleLikeMetadataItem(input: unknown): input is {
@@ -1214,7 +1214,7 @@ function startManualEntry() {
                   v-if="c.book.coverImagePath"
                   :src="
                     coverThumbUrl(
-                      c.book.coverImagePath,
+                      c.book.id,
                       c.book.updatedAt ?? undefined,
                     )
                   "

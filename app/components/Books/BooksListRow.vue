@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { buildBookCoverUrl } from '~/utils/covers';
 defineOptions({ name: 'BooksListRow' });
 
 type Book = {
@@ -131,26 +132,13 @@ function withCoverCacheKey(url: string): string {
 }
 
 const coverSrc = computed(() => {
-  const p = props.book.coverImagePath;
-  if (!p) return null;
-
-  const normalized = p.replace(/\\/g, '/');
-
-  const base = normalized.replace(/^library\//, '');
-  const lastSlash = base.lastIndexOf('/');
-  const dir = lastSlash >= 0 ? base.slice(0, lastSlash) : '';
-  const thumbRel = (dir ? `${dir}/` : '') + 'thumb.webp';
-
-  const looksLikeSourceCover =
-    /\/cover\.(jpe?g|png|webp|gif|svg)$/i.test(normalized) ||
-    /\/cover\.source\.[^/]+$/i.test(normalized) ||
-    /\/source\.[^/]+$/i.test(normalized);
-
-  if (looksLikeSourceCover) {
-    return withCoverCacheKey(`/api/media/covers/${thumbRel}`);
-  }
-
-  return withCoverCacheKey(`/api/media/covers/${base}`);
+  if (!props.book.id || !props.book.coverImagePath) return null;
+  return withCoverCacheKey(
+    buildBookCoverUrl({
+      bookId: props.book.id,
+      variant: 'thumb',
+    }),
+  );
 });
 
 type BookFile = {

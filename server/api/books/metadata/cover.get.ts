@@ -1,5 +1,6 @@
-import { logger } from '~/utils/logger';
 import { auth } from '~/utils/auth';
+import { logger } from '~/utils/logger';
+import { fetchExternalImageBuffer } from '~~/server/utils/books/external-image';
 
 /**
  * GET /api/books/metadata/cover?url=<encoded>
@@ -7,29 +8,17 @@ import { auth } from '~/utils/auth';
  * Proxies an external cover image through the server to avoid browser CORS issues.
  *
  * Security:
+ * - Requires authenticated session
  * - Allows only http/https URLs
- * - Requires authenticated session for browser/client calls
- * - Allows trusted internal server calls (no session) when a Nitro internal header is present
- *
- * Notes:
- * - This endpoint streams bytes back to the client with the upstream content-type.
- * - It intentionally does NOT cache.
+ * - Enforces strict outbound network guards (blocks private/loopback/link-local/multicast)
+ * - Limits redirects/timeout/max payload size
  */
 export default defineEventHandler(async (event) => {
   logger.debug('GET /api/books/metadata/cover');
 
-  // Allow server-to-server internal calls (e.g. metadata import flows) without a user session.
-  // This header is added only by our own backend code; browsers won't set it.
-  const internalHeader = event.node.req.headers['x-delb-internal'];
-  const isInternal =
-    internalHeader === '1' ||
-    (Array.isArray(internalHeader) && internalHeader[0] === '1');
-
-  if (!isInternal) {
-    const session = await auth.api.getSession({ headers: event.headers });
-    if (!session) {
-      throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
-    }
+  const session = await auth.api.getSession({ headers: event.headers });
+  if (!session) {
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
   }
 
   const q = getQuery(event);
@@ -39,57 +28,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Missing "url"' });
   }
 
-  let url: URL;
-  try {
-    url = new URL(urlRaw);
-  } catch {
-    throw createError({ statusCode: 400, statusMessage: 'Invalid url' });
-  }
+  const fetched = await fetchExternalImageBuffer(urlRaw.trim());
 
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Invalid url protocol',
-    });
-  }
+  setHeader(event, 'Content-Type', fetched.contentType);
+  setHeader(event, 'Cache-Control', 'private, no-store');
+  setResponseHeader(event, 'Content-Length', fetched.bytes.length);
 
-  // Keep headers minimal; some providers vary response based on UA/accept.
-  // We also follow redirects (Google Books cover URLs commonly redirect http->https).
-  const upstream = await fetch(url.toString(), {
-    redirect: 'follow',
-    headers: {
-      Accept: 'image/*,*/*;q=0.8',
-      'User-Agent': 'delb/metadata-cover-proxy',
-    },
-  });
-
-  if (!upstream.ok) {
-    const text = await upstream.text().catch(() => '');
-    throw createError({
-      statusCode: 502,
-      statusMessage:
-        text?.trim() ||
-        `Upstream cover fetch failed (${upstream.status} ${upstream.statusText})`,
-    });
-  }
-
-  const contentType =
-    upstream.headers.get('content-type') || 'application/octet-stream';
-  if (!contentType.toLowerCase().startsWith('image/')) {
-    throw createError({
-      statusCode: 502,
-      statusMessage: 'Upstream did not return an image',
-    });
-  }
-
-  // Read as arrayBuffer and return Buffer so Nitro sends binary correctly.
-  const ab = await upstream.arrayBuffer();
-  const buf = Buffer.from(ab);
-
-  setHeader(event, 'Content-Type', contentType);
-  setHeader(event, 'Cache-Control', 'no-store');
-  // Best-effort: return length if known
-  setResponseHeader(event, 'Content-Length', buf.length);
-
-  return buf;
+  return fetched.bytes;
 });
