@@ -108,7 +108,7 @@ export default defineEventHandler(async (event) => {
 
   // Check whether the member exists first (so we can respond deterministically)
   const existing = await cloudDb
-    .select({ userId: collectionMembers.userId })
+    .select({ userId: collectionMembers.userId, role: collectionMembers.role })
     .from(collectionMembers)
     .where(
       and(
@@ -125,6 +125,14 @@ export default defineEventHandler(async (event) => {
         removed: false,
       },
     };
+  }
+
+  if (existing[0].role === 'owner') {
+    throw createError({
+      statusCode: 400,
+      statusMessage:
+        'You cannot remove the owner. Transfer ownership or delete the collection instead.',
+    });
   }
 
   await cloudDb

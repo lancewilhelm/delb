@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX `collection_members_collection_id_user_id_unique` ON `collection_members` (`collection_id`,`user_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `collection_members_owner_per_collection_unique` ON `collection_members` (`collection_id`) WHERE "collection_members"."role" = 'owner';

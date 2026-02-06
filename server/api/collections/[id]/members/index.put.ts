@@ -10,7 +10,7 @@ import { collectionMembers, collections, users } from '~/utils/db/schema';
  *
  * Body:
  * - email: string (required)
- * - role: "owner" | "editor" | "viewer" (required)
+ * - role: "editor" | "viewer" (required)
  *
  * Permissions:
  * - must be a member with role: "owner" | "editor"
@@ -53,7 +53,7 @@ export default defineEventHandler(async (event) => {
   const email = emailRaw.trim().toLowerCase();
 
   const roleRaw = typeof body?.role === 'string' ? body.role : '';
-  const role = roleRaw as 'owner' | 'editor' | 'viewer';
+  const role = roleRaw as 'editor' | 'viewer';
 
   if (!email) {
     throw createError({
@@ -62,10 +62,11 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  if (role !== 'owner' && role !== 'editor' && role !== 'viewer') {
+  if (role !== 'editor' && role !== 'viewer') {
     throw createError({
       statusCode: 400,
-      statusMessage: 'role must be one of: owner, editor, viewer',
+      statusMessage:
+        'role must be one of: editor, viewer. Use transfer ownership to assign owner.',
     });
   }
 

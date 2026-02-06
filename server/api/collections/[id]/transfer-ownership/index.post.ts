@@ -125,58 +125,76 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Ensure target is a member (insert if missing)
-  const existingTargetRows = await cloudDb
-    .select({ userId: collectionMembers.userId, role: collectionMembers.role })
-    .from(collectionMembers)
-    .where(
-      and(
-        eq(collectionMembers.collectionId, id),
-        eq(collectionMembers.userId, targetUserId),
-      ),
-    )
-    .limit(1);
+  const ownerUserId = await cloudDb.transaction(async (tx) => {
+    // Ensure target is a member (insert if missing)
+    const existingTargetRows = await tx
+      .select({
+        userId: collectionMembers.userId,
+        role: collectionMembers.role,
+      })
+      .from(collectionMembers)
+      .where(
+        and(
+          eq(collectionMembers.collectionId, id),
+          eq(collectionMembers.userId, targetUserId),
+        ),
+      )
+      .limit(1);
 
-  const now = new Date();
+    const now = new Date();
 
-  if (!existingTargetRows[0]?.userId) {
-    await cloudDb.insert(collectionMembers).values({
-      collectionId: id,
-      userId: targetUserId,
-      role: 'viewer', // temporary until we promote to owner below
-      createdAt: now,
-    });
-  }
+    if (!existingTargetRows[0]?.userId) {
+      await tx.insert(collectionMembers).values({
+        collectionId: id,
+        userId: targetUserId,
+        role: 'viewer', // temporary until we promote to owner below
+        createdAt: now,
+      });
+    }
 
-  // Enforce single-owner invariant:
-  // 1) demote *any* current owners to editor
-  // 2) promote the target to owner
-  //
-  // This keeps the result deterministic even if legacy data somehow has >1 owner.
-  await cloudDb
-    .update(collectionMembers)
-    .set({ role: 'editor' })
-    .where(
-      and(
-        eq(collectionMembers.collectionId, id),
-        eq(collectionMembers.role, 'owner'),
-      ),
-    );
+    // Enforce single-owner invariant:
+    // 1) demote *any* current owners to editor
+    // 2) promote the target to owner
+    //
+    // This keeps the result deterministic even if legacy data somehow has >1 owner.
+    await tx
+      .update(collectionMembers)
+      .set({ role: 'editor' })
+      .where(
+        and(
+          eq(collectionMembers.collectionId, id),
+          eq(collectionMembers.role, 'owner'),
+        ),
+      );
 
-  await cloudDb
-    .update(collectionMembers)
-    .set({ role: 'owner' })
-    .where(
-      and(
-        eq(collectionMembers.collectionId, id),
-        eq(collectionMembers.userId, targetUserId),
-      ),
-    );
+    await tx
+      .update(collectionMembers)
+      .set({ role: 'owner' })
+      .where(
+        and(
+          eq(collectionMembers.collectionId, id),
+          eq(collectionMembers.userId, targetUserId),
+        ),
+      );
+
+    await tx
+      .update(collections)
+      .set({ ownerUserId: targetUserId, updatedAt: now })
+      .where(eq(collections.id, id));
+
+    const updatedCollectionRows = await tx
+      .select({ ownerUserId: collections.ownerUserId })
+      .from(collections)
+      .where(eq(collections.id, id))
+      .limit(1);
+
+    return updatedCollectionRows[0]?.ownerUserId ?? targetUserId;
+  });
 
   return {
     success: true,
     data: {
-      ownerUserId: targetUserId,
+      ownerUserId,
     },
   };
 });

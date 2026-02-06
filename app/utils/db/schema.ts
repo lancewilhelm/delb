@@ -7,7 +7,7 @@ import {
   index,
 } from 'drizzle-orm/sqlite-core';
 
-import type { InferInsertModel, InferSelectModel } from 'drizzle-orm';
+import { sql, type InferInsertModel, type InferSelectModel } from 'drizzle-orm';
 
 /**
  * Canonical, built-in per-user book statuses (v1).
@@ -135,18 +135,33 @@ export const collections = sqliteTable(
   }),
 );
 
-export const collectionMembers = sqliteTable('collection_members', {
-  collectionId: text('collection_id')
-    .notNull()
-    .references(() => collections.id, { onDelete: 'cascade' }),
-  userId: text('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  role: text('role').notNull(), // "owner" | "editor" | "viewer"
-  createdAt: integer('created_at', { mode: 'timestamp' })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
+export const collectionMembers = sqliteTable(
+  'collection_members',
+  {
+    collectionId: text('collection_id')
+      .notNull()
+      .references(() => collections.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: text('role').notNull(), // "owner" | "editor" | "viewer"
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    // One membership row per (collection, user).
+    collectionMemberUnique: uniqueIndex(
+      'collection_members_collection_id_user_id_unique',
+    ).on(t.collectionId, t.userId),
+    // Defense-in-depth: at most one owner membership per collection.
+    collectionSingleOwnerUnique: uniqueIndex(
+      'collection_members_owner_per_collection_unique',
+    )
+      .on(t.collectionId)
+      .where(sql`${t.role} = 'owner'`),
+  }),
+);
 
 export const publishers = sqliteTable('publishers', {
   id: text('id').primaryKey(),

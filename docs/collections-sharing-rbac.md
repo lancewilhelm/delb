@@ -116,6 +116,8 @@ High-level rules:
 
 - Personal collections cannot be shared.
 - Only `owner` and `editor` can add/update members.
+- Add/update member role is limited to `editor` or `viewer`.
+- `owner` is not assignable through member upsert; ownership changes only through transfer ownership.
 - You cannot change your own role through the “add/update member” action.
 
 ---

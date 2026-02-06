@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 
 export type CollectionRole = 'owner' | 'editor' | 'viewer';
+export type MutableCollectionRole = Exclude<CollectionRole, 'owner'>;
 
 export type Collection = {
   id: string;
@@ -217,7 +218,7 @@ export const useCollectionsStore = defineStore(
     async function upsertCollectionMember(opts: {
       collectionId: string;
       email: string;
-      role: CollectionRole;
+      role: MutableCollectionRole;
     }) {
       const email = (opts.email ?? '').trim().toLowerCase();
       if (!email) throw new Error('Email is required');
@@ -402,7 +403,7 @@ export const useCollectionsStore = defineStore(
 
     /**
      * Convenience for UI logic: can the current user manage sharing/members?
-     * v1: owner and editor can add/remove members (but not remove self-owner; see API)
+     * v1: owner and editor can add/remove members (owner role changes are transfer-only).
      */
     function canManageMembers(collection: Pick<Collection, 'role'>) {
       return collection.role === 'owner' || collection.role === 'editor';

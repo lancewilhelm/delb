@@ -2,7 +2,7 @@
 import type {
   Collection,
   CollectionMember,
-  CollectionRole,
+  MutableCollectionRole,
 } from '~/stores/collections';
 
 defineOptions({ name: 'EditCollectionModal' });
@@ -38,7 +38,7 @@ const membersErrorMessage = ref<string | null>(null);
 const members = ref<MemberRow[]>([]);
 
 const addUserEmail = ref('');
-const addRole = ref<CollectionRole>('viewer');
+const addRole = ref<MutableCollectionRole>('viewer');
 const memberSaving = ref(false);
 
 // Leave collection (self-remove) confirmation
@@ -658,7 +658,6 @@ function close() {
             >
               <option value="viewer">viewer</option>
               <option value="editor">editor</option>
-              <option value="owner">owner</option>
             </select>
 
             <button
