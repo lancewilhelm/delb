@@ -123,6 +123,14 @@ Cover delivery is intentionally not configurable from user/global settings.
 
 For metadata "cover from URL" flows, Delb also enforces server-side URL/network/payload safeguards before returning bytes to the browser.
 
+## Initial Owner Assignment
+
+Delb ensures only one first user is promoted to system `owner` under concurrent registrations.
+
+- First-user owner promotion is handled server-side with an atomic claim.
+- Registration does not use a bootstrap token flow.
+- Outside first-user promotion, registration behavior follows global settings (`allowRegistration`).
+
 ---
 
 ## Notes

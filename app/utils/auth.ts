@@ -4,10 +4,11 @@ import { APIError } from 'better-auth/api';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import * as schema from './db/schema';
-import { count, and, eq } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 import { ac, user, admin, owner } from './permissions';
 import type { GlobalSettings } from '~/stores/globalSettings';
 import { logger } from '~/utils/logger';
+import { claimBootstrapOwner } from '~~/server/utils/security/bootstrap';
 
 async function ensurePersonalCollectionForUser(userId: string) {
   const existing = await cloudDb
@@ -120,12 +121,6 @@ export const auth = betterAuth({
     user: {
       create: {
         before: async (user) => {
-          // Determine if this is the first user
-          const userCount = await cloudDb
-            .select({ count: count() })
-            .from(schema.users);
-          const isFirstUser = !userCount[0] || userCount[0].count === 0;
-
           // Determine whether creation is coming from admin endpoints (avoid circular auth reference)
           let isAdminCreator = false;
           try {
@@ -139,12 +134,20 @@ export const auth = betterAuth({
             // no-op: assume not admin if request context cannot be determined
           }
 
+          const userInput = user as Record<string, unknown>;
+          const sanitizedUser = { ...userInput };
+
+          const userCountRows = await cloudDb
+            .select({ count: count() })
+            .from(schema.users);
+          const isFirstRegistration = (userCountRows[0]?.count ?? 0) === 0;
+
           // Fetch global settings for registration checks
           const response = await cloudDb.select().from(schema.globalSettings);
           const settings = response[0]?.settings as GlobalSettings;
 
-          // Only enforce registration toggle for non-admin creators and non-first user
-          if (!isAdminCreator && !isFirstUser) {
+          // Enforce registration toggle for non-admin creators and non-first registrations.
+          if (!isAdminCreator && !isFirstRegistration) {
             const allowRegistration =
               settings === undefined || settings.allowRegistration;
 
@@ -156,14 +159,12 @@ export const auth = betterAuth({
           }
 
           // Determine final role:
-          // - first user is always 'owner'
+          // - first user is promoted atomically in `after`
           // - admin-created users honor requested role
           // - self-registrations are always 'user'
-          let finalRole: 'owner' | 'admin' | 'user';
+          let finalRole: 'admin' | 'user';
 
-          if (isFirstUser) {
-            finalRole = 'owner';
-          } else if (isAdminCreator) {
+          if (isAdminCreator) {
             const maybeRole = (user as { role?: unknown }).role;
             const requestedRole =
               typeof maybeRole === 'string' &&
@@ -177,7 +178,7 @@ export const auth = betterAuth({
 
           return {
             data: {
-              ...user,
+              ...sanitizedUser,
               role: finalRole,
             },
           };
@@ -185,6 +186,16 @@ export const auth = betterAuth({
         after: async (createdUser) => {
           // Normal sign-up path: eagerly create Personal collection.
           await ensurePersonalCollectionForUser(createdUser.id);
+
+          // Concurrency-safe owner bootstrap claim:
+          // first successful claimant becomes owner and marks completion atomically.
+          const promoted = await claimBootstrapOwner(createdUser.id);
+          if (promoted) {
+            logger.info(
+              { userId: createdUser.id },
+              'Initial system owner bootstrap completed',
+            );
+          }
         },
       },
     },

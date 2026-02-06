@@ -62,15 +62,16 @@ async function handleSubmit() {
     showError('Passwords do not match.');
     return;
   }
-
   const { signUp, fetchSession } = useAuth();
   isSubmitting.value = true;
   try {
-    const { error } = await signUp.email({
+    const payload = {
       email: email.value,
       password: password.value,
       name: name.value.trim(),
-    });
+    };
+
+    const { error } = await signUp.email(payload as never);
 
     if (error) {
       logger.error({ error }, 'Error signing up');

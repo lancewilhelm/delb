@@ -108,10 +108,11 @@ The application will be available at `http://localhost:3000`.
 
 ### First-Time Setup
 
-1. On first run, create an owner account through the registration page
-2. The first user registered becomes the owner with full admin privileges
-3. Additional users can be invited or registered with appropriate roles
-4. Admins/owners can edit a book at `/books/{id}/edit` (an **Edit** button appears on the book page for admins), including:
+1. On first run, create the initial account through the registration page.
+2. Delb promotes exactly one first user to system `owner` using a race-safe server-side claim.
+3. After that, registration follows global `allowRegistration` settings and new self-registrations are normal `user` accounts.
+4. Additional users can be invited or created by admins with appropriate roles.
+5. Admins/owners can edit a book at `/books/{id}/edit` (an **Edit** button appears on the book page for admins), including:
    - Metadata fields (title, description, published, language, series/publisher IDs)
    - Authors (single field; can be comma-separated for multiple authors)
    - Cover image upload (stored as `cover.webp` alongside the book file)
