@@ -1,6 +1,8 @@
 <script setup lang="ts">
 defineOptions({ name: 'BookEditor' });
 
+import BookDescriptionEditor from '~/components/Books/BookDescriptionEditor.vue';
+
 const props = withDefaults(
   defineProps<{
     mode?: 'edit' | 'create';
@@ -2004,10 +2006,9 @@ watch(
                   @click="form.description = (book.description ?? '').trim()"
                 />
               </div>
-              <textarea
+              <BookDescriptionEditor
                 v-model="form.description"
-                class="w-full min-h-32 px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
-                placeholder="Description (HTML/text allowed; rendering happens on the book page)"
+                placeholder="Description"
               />
             </div>
 

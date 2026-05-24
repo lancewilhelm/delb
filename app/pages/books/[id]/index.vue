@@ -1360,21 +1360,415 @@ const { copy } = useClipboard();
 
       <div
         v-else-if="book"
-        class="grid sm:grid-cols-[min-content_1fr] sm:grid-rows-2 gap-x-6 gap-y-1! items-start max-w-300 self-center"
+        class="grid sm:grid-cols-[min-content_1fr] gap-x-6 gap-y-4 items-start max-w-300 self-center"
       >
-        <!-- Keep a consistent aspect ratio; cover itself is max 320px wide -->
-        <BookCover
-          :src="coverThumbUrl"
-          :alt="`Cover for ${book.title}`"
-          :title="book.title"
-          class="cursor-pointer w-50! sm:w-80! justify-self-center"
-          @click="openCoverViewer"
-        />
+        <div class="flex flex-col items-center gap-4">
+          <!-- Keep a consistent aspect ratio; cover itself is max 320px wide -->
+          <BookCover
+            :src="coverThumbUrl"
+            :alt="`Cover for ${book.title}`"
+            :title="book.title"
+            class="cursor-pointer w-50! sm:w-80! h-auto! aspect-2/3 self-start justify-self-center"
+            @click="openCoverViewer"
+          />
+
+          <!-- Actions & Collections -->
+          <div class="flex flex-col items-center w-full">
+            <!-- Actions -->
+            <div class="flex flex-wrap gap-1 pt-2 items-center justify-center">
+              <NuxtLink
+                v-if="hasEpub"
+                v-tooltip="'Read book'"
+                class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
+                :to="`/books/${book.id}/read`"
+              >
+                <icon name="lucide:book-open" class="text-xl" />
+              </NuxtLink>
+
+              <div v-if="book.files && book.files.length > 0" class="relative">
+                <button
+                  ref="downloadAnchorRef"
+                  v-tooltip="'Download book'"
+                  class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center"
+                  type="button"
+                  :disabled="downloading"
+                  :aria-expanded="downloadDropdownOpen"
+                  aria-haspopup="menu"
+                  @click="onDownloadClick"
+                >
+                  <icon
+                    :name="
+                      downloading ? 'lucide:loader-circle' : 'lucide:book-down'
+                    "
+                    class="text-xl"
+                    :class="[downloading ? 'animate-spin' : '']"
+                  />
+                  <icon
+                    v-if="book.files.length > 1"
+                    name="lucide:chevron-down"
+                    class="text-base opacity-70"
+                    :class="downloadDropdownOpen ? 'rotate-180' : ''"
+                  />
+                </button>
+
+                <div
+                  v-if="downloadDropdownOpen && downloadChoices.length > 1"
+                  ref="downloadPanelRef"
+                  class="absolute right-0 mt-1 w-44 bg-(--bg-color) border border-(--sub-color) rounded-md shadow-lg z-150 overflow-hidden"
+                  role="menu"
+                >
+                  <div class="px-3 py-2 border-b border-(--sub-color)">
+                    <div class="text-xs opacity-70">Download as</div>
+                  </div>
+
+                  <div>
+                    <button
+                      v-for="opt in downloadChoices"
+                      :key="opt.file.id"
+                      class="w-full px-3 py-2 text-left justify-start! gap-3 transition rounded-none! flex items-center hover:bg-(--sub-color)/15 text-(--main-color) opacity-80 hover:opacity-100"
+                      role="menuitem"
+                      type="button"
+                      :disabled="downloading"
+                      @click="downloadBookFile(opt.file)"
+                    >
+                      <span class="truncate text-sm">{{ opt.label }}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <NuxtLink
+                v-if="canEditBook"
+                v-tooltip="'Edit book details'"
+                class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
+                :to="`/books/${book.id}/edit`"
+              >
+                <icon name="lucide:pencil" class="text-xl" />
+              </NuxtLink>
+
+              <button
+                v-if="canEditBook"
+                v-tooltip="'Delete book'"
+                class="px-3 py-2 rounded-md border border-(--error-color) text-(--error-color) hover:bg-(--error-color)/90! text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
+                type="button"
+                :disabled="deleting"
+                @click="showDeleteConfirm = true"
+              >
+                <icon name="lucide:trash-2" class="text-xl" />
+              </button>
+            </div>
+
+            <!-- Status + Collections -->
+            <div class="grid gap-3 mt-4 w-full">
+              <!-- Status -->
+              <div class="grid grid-cols-[min-content_1fr] gap-4 items-center">
+                <div class="font-semibold">Status</div>
+
+                <div class="flex flex-wrap items-center justify-end gap-2">
+                  <select
+                    v-model="selectedStatusValue"
+                    class="min-w-44 px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                    :disabled="statusSaving"
+                    aria-label="Your status"
+                    @change="() => saveStatus(book?.userStatus ?? null)"
+                  >
+                    <option
+                      v-for="opt in STATUS_OPTIONS"
+                      :key="String(opt.value ?? '')"
+                      :value="opt.value ?? ''"
+                    >
+                      {{ opt.label }}
+                    </option>
+                  </select>
+
+                  <div class="text-xs opacity-70 whitespace-nowrap">
+                    <span v-if="statusSaving">Saving...</span>
+                    <span v-else-if="statusErrorMessage">{{
+                      statusErrorMessage
+                    }}</span>
+                  </div>
+
+                  <div
+                    v-if="book?.userStatus != null && !statusSaving"
+                    type="button"
+                    class="text-xs underline cursor-pointer opacity-70 hover:opacity-100"
+                    @click="
+                      () => {
+                        selectedStatusValue = '';
+                        saveStatus(null);
+                      }
+                    "
+                  >
+                    Clear
+                  </div>
+                </div>
+              </div>
+
+              <!-- Status dates + TBR rank -->
+              <div
+                v-if="
+                  showStartedAt ||
+                  showFinishedAt ||
+                  showDnfAt ||
+                  book?.userStatus === 'to_be_read'
+                "
+                class="grid grid-cols-[min-content_1fr] gap-4 items-start"
+              >
+                <div class="font-semibold">Dates</div>
+
+                <div class="flex flex-col items-end gap-2">
+                  <div v-if="showStartedAt" class="flex items-center gap-2">
+                    <div
+                      class="text-xs uppercase tracking-wide opacity-60 w-20 text-right"
+                    >
+                      Started
+                    </div>
+                    <input
+                      v-model="startedAtInput"
+                      class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                      type="date"
+                      :disabled="statusMetaSaving"
+                      @change="
+                        () =>
+                          saveStatusDates({
+                            startedAt: startedAtInput || null,
+                          })
+                      "
+                    />
+                  </div>
+
+                  <div v-if="showFinishedAt" class="flex items-center gap-2">
+                    <div
+                      class="text-xs uppercase tracking-wide opacity-60 w-20 text-right"
+                    >
+                      Finished
+                    </div>
+                    <input
+                      v-model="finishedAtInput"
+                      class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                      type="date"
+                      :disabled="statusMetaSaving"
+                      @change="
+                        () =>
+                          saveStatusDates({
+                            finishedAt: finishedAtInput || null,
+                          })
+                      "
+                    />
+                  </div>
+
+                  <div v-if="showDnfAt" class="flex items-center gap-2">
+                    <div
+                      class="text-xs uppercase tracking-wide opacity-60 w-20 text-right"
+                    >
+                      DNF
+                    </div>
+                    <input
+                      v-model="dnfAtInput"
+                      class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                      type="date"
+                      :disabled="statusMetaSaving"
+                      @change="
+                        () =>
+                          saveStatusDates({
+                            dnfAt: dnfAtInput || null,
+                          })
+                      "
+                    />
+                  </div>
+
+                  <div
+                    v-if="book?.userStatus === 'to_be_read'"
+                    class="flex items-center gap-2"
+                  >
+                    <div
+                      class="text-xs uppercase tracking-wide opacity-60 w-20 text-right"
+                    >
+                      Rank
+                    </div>
+                    <input
+                      v-model="tbrRankInput"
+                      class="w-28 px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm text-right"
+                      type="number"
+                      min="1"
+                      step="1"
+                      placeholder="Order"
+                      :disabled="statusMetaSaving"
+                      @change="() => saveTbrRank(tbrRankInput)"
+                    />
+                  </div>
+
+                  <div class="text-xs opacity-70 text-right">
+                    <span v-if="statusMetaSaving">Saving...</span>
+                    <span
+                      v-else-if="statusMetaErrorMessage"
+                      class="text-(--error-color)"
+                    >
+                      {{ statusMetaErrorMessage }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Progress sync -->
+              <div class="grid grid-cols-[min-content_1fr] gap-4 items-center">
+                <div class="font-semibold">Progress sync</div>
+
+                <div class="flex items-center justify-end gap-3">
+                  <label class="flex items-center gap-2 text-sm">
+                    <input
+                      v-model="progressSyncEnabledValue"
+                      type="checkbox"
+                      class="accent-(--main-color)"
+                      :disabled="progressSyncSaving"
+                      @change="() => saveProgressSync(progressSyncEnabledValue)"
+                    />
+                    <span>Sync reader &amp; logs</span>
+                  </label>
+
+                  <div class="text-xs opacity-70">
+                    <span v-if="progressSyncSaving">Saving...</span>
+                    <span
+                      v-else-if="progressSyncErrorMessage"
+                      class="text-(--error-color)"
+                    >
+                      {{ progressSyncErrorMessage }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Progress logging -->
+              <div class="grid grid-cols-[min-content_1fr] gap-4 items-start">
+                <div class="font-semibold">Progress</div>
+
+                <div class="flex flex-col items-end gap-2">
+                  <div class="flex flex-wrap items-center justify-end gap-2">
+                    <select
+                      v-model="progressMode"
+                      class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                      :disabled="progressLogSaving"
+                    >
+                      <option value="percent">Percent</option>
+                      <option value="page" :disabled="!book?.pages">Page</option>
+                    </select>
+
+                    <input
+                      v-if="progressMode === 'percent'"
+                      v-model="progressPercentInput"
+                      class="w-28 px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm text-right"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      placeholder="0-100"
+                      :disabled="progressLogSaving"
+                    />
+
+                    <div v-else class="flex items-center gap-2">
+                      <input
+                        v-model="progressPageInput"
+                        class="w-24 px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm text-right"
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="Page"
+                        :disabled="progressLogSaving || !book?.pages"
+                      />
+                      <span v-if="book?.pages" class="text-xs opacity-70">
+                        / {{ book.pages }}
+                      </span>
+                    </div>
+
+                    <input
+                      v-model="progressDateInput"
+                      class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                      type="date"
+                      :disabled="progressLogSaving"
+                    />
+
+                    <button
+                      class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
+                      type="button"
+                      :disabled="
+                        progressLogSaving ||
+                        (progressMode === 'page' && !book?.pages)
+                      "
+                      @click="createProgressLog"
+                    >
+                      {{ progressLogSaving ? 'Saving…' : 'Log progress' }}
+                    </button>
+                  </div>
+
+                  <div class="text-xs opacity-70 text-right">
+                    <span
+                      v-if="progressMode === 'page' && !book?.pages"
+                      class="opacity-70"
+                    >
+                      Add page count to enable page-based logging.
+                    </span>
+                    <span
+                      v-else-if="progressLogErrorMessage"
+                      class="text-(--error-color)"
+                    >
+                      {{ progressLogErrorMessage }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Collections -->
+              <div class="grid grid-cols-[min-content_1fr] gap-4 items-center">
+                <div class="flex gap-2 items-center">
+                  <div class="font-semibold">Collections</div>
+                  <icon
+                    v-if="canEditCollectionsForBook"
+                    name="lucide:pencil"
+                    class="text-md cursor-pointer opacity-50 hover:opacity-80"
+                    @click="openCollectionsManager"
+                  />
+                </div>
+
+                <div
+                  v-if="collectionsLoading"
+                  class="text-sm opacity-70 text-right"
+                >
+                  Loading…
+                </div>
+
+                <div
+                  v-else-if="collectionsErrorMessage"
+                  class="text-sm text-(--error-color) text-right"
+                >
+                  {{ collectionsErrorMessage }}
+                </div>
+
+                <div
+                  v-else
+                  class="flex flex-wrap gap-2 items-center justify-end"
+                >
+                  <span
+                    v-for="c in bookCollections"
+                    :key="c.id"
+                    class="border border-(--sub-color) px-2 py-1 rounded-md text-xs"
+                  >
+                    {{ c.name }}
+                  </span>
+
+                  <span
+                    v-if="!bookCollections.length"
+                    class="text-sm opacity-70"
+                  >
+                    No collections.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <!-- Book Details -->
-        <div
-          class="min-w-0 flex flex-col gap-4 sm:row-start-1 sm:col-start-2 sm:row-span-2"
-        >
+        <div class="min-w-0 flex flex-col gap-4">
           <!-- Series -->
           <div class="min-w-0 space-y-1">
             <div
@@ -1412,7 +1806,7 @@ const { copy } = useClipboard();
             <!-- Description -->
             <div
               v-if="book.description"
-              class="min-w-0 font-light prose prose-sm max-w-none text-(--text-color) opacity-90"
+              class="min-w-0 book-description prose prose-sm max-w-none text-(--text-color)"
             >
               <div class="relative">
                 <div
@@ -1422,9 +1816,11 @@ const { copy } = useClipboard();
                 >
                   <ClientOnly>
                     <!-- eslint-disable-next-line vue/no-v-html -->
-                    <div v-html="safeDescriptionHtml" />
+                    <div class="book-description-content" v-html="safeDescriptionHtml" />
                     <template #fallback>
-                      <span>{{ book.description }}</span>
+                      <span class="book-description-content">{{
+                        book.description
+                      }}</span>
                     </template>
                   </ClientOnly>
                 </div>
@@ -1733,393 +2129,6 @@ const { copy } = useClipboard();
           </ModalWindow>
         </div>
 
-        <!-- Actions & Collections -->
-        <div class="flex flex-col items-center row-start-2 col-start-1">
-          <!-- Actions -->
-          <div class="flex flex-wrap gap-1 pt-2 items-center justify-center">
-            <NuxtLink
-              v-if="hasEpub"
-              v-tooltip="'Read book'"
-              class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
-              :to="`/books/${book.id}/read`"
-            >
-              <icon name="lucide:book-open" class="text-xl" />
-            </NuxtLink>
-
-            <div v-if="book.files && book.files.length > 0" class="relative">
-              <button
-                ref="downloadAnchorRef"
-                v-tooltip="'Download book'"
-                class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center"
-                type="button"
-                :disabled="downloading"
-                :aria-expanded="downloadDropdownOpen"
-                aria-haspopup="menu"
-                @click="onDownloadClick"
-              >
-                <icon
-                  :name="
-                    downloading ? 'lucide:loader-circle' : 'lucide:book-down'
-                  "
-                  class="text-xl"
-                  :class="[downloading ? 'animate-spin' : '']"
-                />
-                <icon
-                  v-if="book.files.length > 1"
-                  name="lucide:chevron-down"
-                  class="text-base opacity-70"
-                  :class="downloadDropdownOpen ? 'rotate-180' : ''"
-                />
-              </button>
-
-              <div
-                v-if="downloadDropdownOpen && downloadChoices.length > 1"
-                ref="downloadPanelRef"
-                class="absolute right-0 mt-1 w-44 bg-(--bg-color) border border-(--sub-color) rounded-md shadow-lg z-150 overflow-hidden"
-                role="menu"
-              >
-                <div class="px-3 py-2 border-b border-(--sub-color)">
-                  <div class="text-xs opacity-70">Download as</div>
-                </div>
-
-                <div>
-                  <button
-                    v-for="opt in downloadChoices"
-                    :key="opt.file.id"
-                    class="w-full px-3 py-2 text-left justify-start! gap-3 transition rounded-none! flex items-center hover:bg-(--sub-color)/15 text-(--main-color) opacity-80 hover:opacity-100"
-                    role="menuitem"
-                    type="button"
-                    :disabled="downloading"
-                    @click="downloadBookFile(opt.file)"
-                  >
-                    <span class="truncate text-sm">{{ opt.label }}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <NuxtLink
-              v-if="canEditBook"
-              v-tooltip="'Edit book details'"
-              class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
-              :to="`/books/${book.id}/edit`"
-            >
-              <icon name="lucide:pencil" class="text-xl" />
-            </NuxtLink>
-
-            <button
-              v-if="canEditBook"
-              v-tooltip="'Delete book'"
-              class="px-3 py-2 rounded-md border border-(--error-color) text-(--error-color) hover:bg-(--error-color)/90! text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
-              type="button"
-              :disabled="deleting"
-              @click="showDeleteConfirm = true"
-            >
-              <icon name="lucide:trash-2" class="text-xl" />
-            </button>
-          </div>
-
-          <!-- Status + Collections -->
-          <div class="grid gap-3 mt-4 w-full">
-            <!-- Status -->
-            <div class="grid grid-cols-[min-content_1fr] gap-4 items-center">
-              <div class="font-semibold">Status</div>
-
-              <div class="flex flex-wrap items-center justify-end gap-2">
-                <select
-                  v-model="selectedStatusValue"
-                  class="min-w-44 px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
-                  :disabled="statusSaving"
-                  aria-label="Your status"
-                  @change="() => saveStatus(book?.userStatus ?? null)"
-                >
-                  <option
-                    v-for="opt in STATUS_OPTIONS"
-                    :key="String(opt.value ?? '')"
-                    :value="opt.value ?? ''"
-                  >
-                    {{ opt.label }}
-                  </option>
-                </select>
-
-                <div class="text-xs opacity-70 whitespace-nowrap">
-                  <span v-if="statusSaving">Saving...</span>
-                  <span v-else-if="statusErrorMessage">{{
-                    statusErrorMessage
-                  }}</span>
-                </div>
-
-                <div
-                  v-if="book?.userStatus != null && !statusSaving"
-                  type="button"
-                  class="text-xs underline cursor-pointer opacity-70 hover:opacity-100"
-                  @click="
-                    () => {
-                      selectedStatusValue = '';
-                      saveStatus(null);
-                    }
-                  "
-                >
-                  Clear
-                </div>
-              </div>
-            </div>
-
-            <!-- Status dates + TBR rank -->
-            <div
-              v-if="
-                showStartedAt ||
-                showFinishedAt ||
-                showDnfAt ||
-                book?.userStatus === 'to_be_read'
-              "
-              class="grid grid-cols-[min-content_1fr] gap-4 items-start"
-            >
-              <div class="font-semibold">Dates</div>
-
-              <div class="flex flex-col items-end gap-2">
-                <div v-if="showStartedAt" class="flex items-center gap-2">
-                  <div
-                    class="text-xs uppercase tracking-wide opacity-60 w-20 text-right"
-                  >
-                    Started
-                  </div>
-                  <input
-                    v-model="startedAtInput"
-                    class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
-                    type="date"
-                    :disabled="statusMetaSaving"
-                    @change="
-                      () =>
-                        saveStatusDates({
-                          startedAt: startedAtInput || null,
-                        })
-                    "
-                  />
-                </div>
-
-                <div v-if="showFinishedAt" class="flex items-center gap-2">
-                  <div
-                    class="text-xs uppercase tracking-wide opacity-60 w-20 text-right"
-                  >
-                    Finished
-                  </div>
-                  <input
-                    v-model="finishedAtInput"
-                    class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
-                    type="date"
-                    :disabled="statusMetaSaving"
-                    @change="
-                      () =>
-                        saveStatusDates({
-                          finishedAt: finishedAtInput || null,
-                        })
-                    "
-                  />
-                </div>
-
-                <div v-if="showDnfAt" class="flex items-center gap-2">
-                  <div
-                    class="text-xs uppercase tracking-wide opacity-60 w-20 text-right"
-                  >
-                    DNF
-                  </div>
-                  <input
-                    v-model="dnfAtInput"
-                    class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
-                    type="date"
-                    :disabled="statusMetaSaving"
-                    @change="
-                      () =>
-                        saveStatusDates({
-                          dnfAt: dnfAtInput || null,
-                        })
-                    "
-                  />
-                </div>
-
-                <div
-                  v-if="book?.userStatus === 'to_be_read'"
-                  class="flex items-center gap-2"
-                >
-                  <div
-                    class="text-xs uppercase tracking-wide opacity-60 w-20 text-right"
-                  >
-                    Rank
-                  </div>
-                  <input
-                    v-model="tbrRankInput"
-                    class="w-28 px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm text-right"
-                    type="number"
-                    min="1"
-                    step="1"
-                    placeholder="Order"
-                    :disabled="statusMetaSaving"
-                    @change="() => saveTbrRank(tbrRankInput)"
-                  />
-                </div>
-
-                <div class="text-xs opacity-70 text-right">
-                  <span v-if="statusMetaSaving">Saving...</span>
-                  <span
-                    v-else-if="statusMetaErrorMessage"
-                    class="text-(--error-color)"
-                  >
-                    {{ statusMetaErrorMessage }}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Progress sync -->
-            <div class="grid grid-cols-[min-content_1fr] gap-4 items-center">
-              <div class="font-semibold">Progress sync</div>
-
-              <div class="flex items-center justify-end gap-3">
-                <label class="flex items-center gap-2 text-sm">
-                  <input
-                    v-model="progressSyncEnabledValue"
-                    type="checkbox"
-                    class="accent-(--main-color)"
-                    :disabled="progressSyncSaving"
-                    @change="() => saveProgressSync(progressSyncEnabledValue)"
-                  />
-                  <span>Sync reader & logs</span>
-                </label>
-
-                <div class="text-xs opacity-70">
-                  <span v-if="progressSyncSaving">Saving...</span>
-                  <span
-                    v-else-if="progressSyncErrorMessage"
-                    class="text-(--error-color)"
-                  >
-                    {{ progressSyncErrorMessage }}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Progress logging -->
-            <div class="grid grid-cols-[min-content_1fr] gap-4 items-start">
-              <div class="font-semibold">Progress</div>
-
-              <div class="flex flex-col items-end gap-2">
-                <div class="flex flex-wrap items-center justify-end gap-2">
-                  <select
-                    v-model="progressMode"
-                    class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
-                    :disabled="progressLogSaving"
-                  >
-                    <option value="percent">Percent</option>
-                    <option value="page" :disabled="!book?.pages">Page</option>
-                  </select>
-
-                  <input
-                    v-if="progressMode === 'percent'"
-                    v-model="progressPercentInput"
-                    class="w-28 px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm text-right"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    placeholder="0-100"
-                    :disabled="progressLogSaving"
-                  />
-
-                  <div v-else class="flex items-center gap-2">
-                    <input
-                      v-model="progressPageInput"
-                      class="w-24 px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm text-right"
-                      type="number"
-                      min="0"
-                      step="1"
-                      placeholder="Page"
-                      :disabled="progressLogSaving || !book?.pages"
-                    />
-                    <span v-if="book?.pages" class="text-xs opacity-70">
-                      / {{ book.pages }}
-                    </span>
-                  </div>
-
-                  <input
-                    v-model="progressDateInput"
-                    class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
-                    type="date"
-                    :disabled="progressLogSaving"
-                  />
-
-                  <button
-                    class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
-                    type="button"
-                    :disabled="
-                      progressLogSaving ||
-                      (progressMode === 'page' && !book?.pages)
-                    "
-                    @click="createProgressLog"
-                  >
-                    {{ progressLogSaving ? 'Saving…' : 'Log progress' }}
-                  </button>
-                </div>
-
-                <div class="text-xs opacity-70 text-right">
-                  <span
-                    v-if="progressMode === 'page' && !book?.pages"
-                    class="opacity-70"
-                  >
-                    Add page count to enable page-based logging.
-                  </span>
-                  <span
-                    v-else-if="progressLogErrorMessage"
-                    class="text-(--error-color)"
-                  >
-                    {{ progressLogErrorMessage }}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Collections -->
-            <div class="grid grid-cols-[min-content_1fr] gap-4 items-center">
-              <div class="flex gap-2 items-center">
-                <div class="font-semibold">Collections</div>
-                <icon
-                  v-if="canEditCollectionsForBook"
-                  name="lucide:pencil"
-                  class="text-md cursor-pointer opacity-50 hover:opacity-80"
-                  @click="openCollectionsManager"
-                />
-              </div>
-
-              <div
-                v-if="collectionsLoading"
-                class="text-sm opacity-70 text-right"
-              >
-                Loading…
-              </div>
-
-              <div
-                v-else-if="collectionsErrorMessage"
-                class="text-sm text-(--error-color) text-right"
-              >
-                {{ collectionsErrorMessage }}
-              </div>
-
-              <div v-else class="flex flex-wrap gap-2 items-center justify-end">
-                <span
-                  v-for="c in bookCollections"
-                  :key="c.id"
-                  class="border border-(--sub-color) px-2 py-1 rounded-md text-xs"
-                >
-                  {{ c.name }}
-                </span>
-
-                <span v-if="!bookCollections.length" class="text-sm opacity-70">
-                  No collections.
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       <div v-else class="text-sm opacity-80">No book loaded.</div>
@@ -2260,3 +2269,82 @@ const { copy } = useClipboard();
     </div>
   </div>
 </template>
+
+<style scoped>
+.book-description {
+  line-height: 1.55;
+}
+
+.book-description :deep(.book-description-content),
+.book-description :deep(.book-description-content p),
+.book-description :deep(.book-description-content li),
+.book-description :deep(.book-description-content blockquote) {
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+.book-description :deep(.book-description-content p),
+.book-description :deep(.book-description-content ul),
+.book-description :deep(.book-description-content ol),
+.book-description :deep(.book-description-content blockquote) {
+  margin: 0.75rem 0;
+}
+
+.book-description :deep(.book-description-content > :first-child) {
+  margin-top: 0;
+}
+
+.book-description :deep(.book-description-content > :last-child) {
+  margin-bottom: 0;
+}
+
+.book-description :deep(.book-description-content h2) {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 1rem 0 0.5rem;
+}
+
+.book-description :deep(.book-description-content h3) {
+  font-size: 1.12rem;
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 0.9rem 0 0.5rem;
+}
+
+.book-description :deep(.book-description-content ul),
+.book-description :deep(.book-description-content ol) {
+  padding-left: 1.5rem;
+}
+
+.book-description :deep(.book-description-content ul) {
+  list-style: disc;
+}
+
+.book-description :deep(.book-description-content ol) {
+  list-style: decimal;
+}
+
+.book-description :deep(.book-description-content blockquote) {
+  border-left: 3px solid color-mix(in srgb, var(--main-color) 40%, var(--sub-color));
+  opacity: 0.85;
+  padding-left: 0.9rem;
+}
+
+.book-description :deep(.book-description-content strong),
+.book-description :deep(.book-description-content b) {
+  color: color-mix(in srgb, var(--text-color) 92%, black);
+  font-weight: 800;
+  font-variation-settings: 'wght' 800;
+}
+
+.book-description :deep(.book-description-content em),
+.book-description :deep(.book-description-content i) {
+  font-style: italic;
+}
+
+.book-description :deep(.book-description-content a) {
+  color: var(--main-color);
+  text-decoration: underline;
+}
+</style>
