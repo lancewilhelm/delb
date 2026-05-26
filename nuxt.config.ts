@@ -62,6 +62,10 @@ export default defineNuxtConfig({
     },
   },
   fonts: {
+    defaults: {
+      weights: [400, 500, 600, 700],
+      styles: ['normal', 'italic'],
+    },
     families: [
       { name: 'Fira Code', provider: 'google', global: true },
       { name: 'Geist', provider: 'google', global: true },
@@ -69,7 +73,7 @@ export default defineNuxtConfig({
       { name: 'Inter', provider: 'google', global: true },
       { name: 'Montserrat', provider: 'google', global: true },
       { name: 'Nunito', provider: 'google', global: true },
-      { name: 'Poppins', provider: 'google', weight: 'bold', global: true },
+      { name: 'Poppins', provider: 'google', global: true },
       { name: 'Roboto Mono', provider: 'google', global: true },
       { name: 'PT Serif', provider: 'google', global: true },
       { name: 'Noto Serif', provider: 'google', global: true },
