@@ -27,7 +27,7 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
     <!-- Left: app/home -->
     <div class="flex items-center gap-3 sm:gap-4 px-2 app-header-left">
       <div
-        class="text-(--main-color) cursor-pointer header-icon font-bold text-2xl logo"
+        class="text-(--main-color) cursor-pointer header-icon font-medium text-2xl logo"
         @click="
           () => {
             if (route.path === '/') {
