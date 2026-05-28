@@ -2138,26 +2138,24 @@ const { copy } = useClipboard();
       <!-- Full Res Cover Modal -->
       <div
         v-if="coverViewerOpen"
-        class="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+        class="fixed inset-0 z-5000 bg-black/70 flex items-center justify-center"
         @click.self="closeCoverViewer"
       >
-        <div class="relative max-w-[95vw] max-h-[95vh]">
-          <button
-            type="button"
-            class="absolute -top-3 -right-3 bg-(--bg-color) border border-(--sub-color) rounded-full w-9 h-9 flex items-center justify-center hover:bg-(--sub-color)/10"
-            @click="closeCoverViewer"
-          >
-            <icon name="lucide:x" class="scale-135" />
-          </button>
+        <button
+          type="button"
+          class="fixed top-3 right-3 bg-(--bg-color) border border-(--sub-color) rounded-full w-9 h-9 flex items-center justify-center hover:bg-(--sub-color)/10"
+          @click="closeCoverViewer"
+        >
+          <icon name="lucide:x" class="scale-135" />
+        </button>
 
-          <img
-            v-if="coverViewerSrc"
-            :src="coverViewerSrc"
-            :alt="`Cover for ${book?.title ?? 'book'}`"
-            class="block max-w-[95vw] max-h-[95vh] object-contain rounded-md"
-            @error="onCoverViewerError"
-          />
-        </div>
+        <img
+          v-if="coverViewerSrc"
+          :src="coverViewerSrc"
+          :alt="`Cover for ${book?.title ?? 'book'}`"
+          class="block max-w-screen max-h-screen object-contain rounded-md"
+          @error="onCoverViewerError"
+        />
       </div>
 
       <!-- Manage collections modal -->
