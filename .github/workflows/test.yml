@@ -1,0 +1,40 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.27.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:epub
+      - run: pnpm test:cover-transaction
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm build
+      - name: Generate EPUBCheck fixtures
+        run: pnpm --filter @delb/epub fixtures:epubcheck -- "$RUNNER_TEMP/epub-fixtures"
+      - name: Install EPUBCheck 5.4.0
+        run: |
+          curl -fsSL https://github.com/w3c/epubcheck/releases/download/v5.4.0/epubcheck-5.4.0.zip -o "$RUNNER_TEMP/epubcheck.zip"
+          unzip -q "$RUNNER_TEMP/epubcheck.zip" -d "$RUNNER_TEMP"
+      - name: Validate generated EPUB 2 and EPUB 3 files
+        run: |
+          java -jar "$RUNNER_TEMP/epubcheck-5.4.0/epubcheck.jar" "$RUNNER_TEMP/epub-fixtures/cover-epub2.epub"
+          java -jar "$RUNNER_TEMP/epubcheck-5.4.0/epubcheck.jar" "$RUNNER_TEMP/epub-fixtures/cover-epub3.epub"
+      - name: Build production container
+        run: docker build -t delb:ci .

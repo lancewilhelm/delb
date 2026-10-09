@@ -84,6 +84,9 @@ export default defineNuxtConfig({
     storage: 'localStorage',
   },
   nitro: {
+    externals: {
+      inline: ['@delb/epub'],
+    },
     experimental: {
       asyncContext: true,
     },

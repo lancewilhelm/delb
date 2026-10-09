@@ -9,6 +9,7 @@ RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 # Dependencies stage (build)
 FROM base AS deps
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY packages/epub/package.json ./packages/epub/package.json
 RUN pnpm install --frozen-lockfile
 
 # -------------------------------
@@ -16,6 +17,7 @@ RUN pnpm install --frozen-lockfile
 FROM base AS prod-deps
 ENV NODE_ENV=production
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY packages/epub/package.json ./packages/epub/package.json
 RUN pnpm install --frozen-lockfile --prod
 
 # -------------------------------

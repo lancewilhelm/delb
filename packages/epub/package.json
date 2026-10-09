@@ -1,0 +1,48 @@
+{
+  "name": "@delb/epub",
+  "version": "0.1.0",
+  "description": "Standards-aware EPUB inspection and cover editing for JavaScript and TypeScript.",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lancewilhelm/delb.git",
+    "directory": "packages/epub"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "fixtures:epubcheck": "pnpm build && node test/generate-epubcheck-fixtures.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm build && node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "^0.8.15",
+    "fflate": "^0.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.19",
+    "typescript": "^5.9.3"
+  }
+}

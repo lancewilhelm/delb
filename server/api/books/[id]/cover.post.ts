@@ -1,12 +1,18 @@
 import path from 'node:path';
-import { mkdir, readdir, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, unlink } from 'node:fs/promises';
 
+import { EpubError, inspectCover, setCover } from '@delb/epub';
 import { and, eq, inArray } from 'drizzle-orm';
 import sharp from 'sharp';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { resolveDataPath } from '~~/server/utils/books/fs';
 import { getCanonicalBookPaths } from '~~/server/utils/books/storage/paths';
+import {
+  commitCoverUpdate,
+  recoverPendingCoverUpdates,
+  type CoverUpdateFile,
+} from '~~/server/utils/books/cover-update-transaction';
 import {
   authors,
   bookAuthors,
@@ -62,7 +68,8 @@ export default defineEventHandler(async (event) => {
   }
 
   const userId = session.user.id;
-  const canEditAny = session.user.role === 'admin' || session.user.role === 'owner';
+  const canEditAny =
+    session.user.role === 'admin' || session.user.role === 'owner';
 
   const id = getRouterParam(event, 'id');
   if (!id) {
@@ -119,7 +126,9 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 404, statusMessage: 'Book not found' });
     }
 
-    const canEditOwn = Boolean(book.createdByUserId && book.createdByUserId === userId);
+    const canEditOwn = Boolean(
+      book.createdByUserId && book.createdByUserId === userId,
+    );
     if (!canEditAny && !canEditOwn) {
       throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
     }
@@ -153,7 +162,8 @@ export default defineEventHandler(async (event) => {
 
     if (files.length) {
       const preferred =
-        files.find((f) => (f.format || '').toLowerCase() === 'epub') ?? files[0];
+        files.find((f) => (f.format || '').toLowerCase() === 'epub') ??
+        files[0];
 
       if (!preferred?.relativePath) {
         throw createError({
@@ -163,7 +173,10 @@ export default defineEventHandler(async (event) => {
       }
 
       // relativePath is stored like: "library/<author(s)>/<title (id8)>/<file>"
-      const relFromLibrary = preferred.relativePath.replace(/^library[\\/]/, '');
+      const relFromLibrary = preferred.relativePath.replace(
+        /^library[\\/]/,
+        '',
+      );
       const bookFileAbs = path.resolve(libraryBaseAbs, relFromLibrary);
       ensureUnderLibraryOrThrow(bookFileAbs, {
         relativePath: preferred.relativePath,
@@ -225,14 +238,38 @@ export default defineEventHandler(async (event) => {
     }
 
     await mkdir(bookDirAbs, { recursive: true });
+    await recoverPendingCoverUpdates({
+      operationParent: bookDirAbs,
+      allowedRoot: libraryBaseAbs,
+      currentCoverImagePath: book.coverImagePath,
+    });
+
+    if (filePart.data.length > 25 * 1024 * 1024) {
+      throw createError({
+        statusCode: 413,
+        statusMessage: 'Cover image exceeds the 25 MiB upload limit',
+      });
+    }
 
     // Detect the uploaded image format so we can persist the true original as `cover.<ext>`.
-    const meta = await sharp(filePart.data).rotate().metadata();
+    let meta: sharp.Metadata;
+    try {
+      meta = await sharp(filePart.data).rotate().metadata();
+    } catch {
+      throw createError({
+        statusCode: 415,
+        statusMessage: 'Unsupported or invalid cover image',
+      });
+    }
     const fmt = (meta.format || '').toString().toLowerCase();
+    if (meta.width && meta.height && meta.width * meta.height > 100_000_000) {
+      throw createError({
+        statusCode: 413,
+        statusMessage: 'Cover image exceeds the 100 megapixel limit',
+      });
+    }
 
-    // Map sharp's format names to common file extensions.
-    // If we can't confidently detect, fall back to jpg (still preserves original pixels, but re-encodes).
-    const ext =
+    const ext: string | null =
       fmt === 'jpeg' || fmt === 'jpg'
         ? 'jpg'
         : fmt === 'png'
@@ -245,24 +282,99 @@ export default defineEventHandler(async (event) => {
                 ? 'avif'
                 : fmt === 'tiff'
                   ? 'tiff'
-                  : 'jpg';
+                  : null;
+    if (!ext) {
+      throw createError({
+        statusCode: 415,
+        statusMessage: 'Unsupported cover image format',
+      });
+    }
 
     const sourceAbs = path.join(bookDirAbs, `cover.${ext}`);
     const thumbAbs = path.join(bookDirAbs, 'thumb.webp');
-
-    // Ensure only one full-size source cover exists at a time.
-    // Remove legacy/alternate source variants before writing the new source.
     const sourceNamePattern =
       /^(cover|source)(\.(source))?\.(jpg|jpeg|png|webp|gif|avif|tif|tiff)$/i;
     const targetSourceName = path.basename(sourceAbs).toLowerCase();
+
+    const [thumbWebp, embeddedJpeg] = await Promise.all([
+      sharp(filePart.data)
+        .rotate()
+        .resize({ width: 320, withoutEnlargement: true })
+        .webp({ quality: 80 })
+        .toBuffer(),
+      sharp(filePart.data).rotate().jpeg({ quality: 95 }).toBuffer(),
+    ]);
+
+    // DB should point to the thumbnail by default (most views use this).
+    const thumbRelPosix = path.posix.join(
+      'library',
+      ...path.relative(libraryBaseAbs, thumbAbs).split(path.sep),
+    );
+
+    const updates: CoverUpdateFile[] = [
+      { targetPath: sourceAbs, data: filePart.data },
+      { targetPath: thumbAbs, data: thumbWebp },
+    ];
+    const epubWarnings: string[] = [];
+    const epubFiles = files.filter(
+      (file) => (file.format ?? '').toLowerCase() === 'epub',
+    );
+    for (const epubFile of epubFiles) {
+      const relFromLibrary = epubFile.relativePath.replace(/^library[\\/]/, '');
+      const epubAbs = path.resolve(libraryBaseAbs, relFromLibrary);
+      ensureUnderLibraryOrThrow(epubAbs, {
+        relativePath: epubFile.relativePath,
+        from: 'book_files_epub',
+      });
+      const result = await setCover(await readFile(epubAbs), {
+        data: embeddedJpeg,
+        mediaType: 'image/jpeg',
+      });
+      const verified = await inspectCover(result.data);
+      if (!verified || verified.mediaType !== 'image/jpeg') {
+        throw new EpubError(
+          'INVALID_EPUB',
+          `Rewritten EPUB did not contain the expected JPEG cover: ${epubFile.relativePath}`,
+        );
+      }
+      epubWarnings.push(
+        ...result.warnings.map(
+          (warning) => `${epubFile.relativePath}: ${warning}`,
+        ),
+      );
+      updates.push({ targetPath: epubAbs, data: result.data });
+    }
+
+    await commitCoverUpdate({
+      operationParent: bookDirAbs,
+      allowedRoot: libraryBaseAbs,
+      previousCoverImagePath: book.coverImagePath,
+      expectedCoverImagePath: thumbRelPosix,
+      files: updates,
+      commitDatabase: async () => {
+        await cloudDb.transaction(async (tx) => {
+          await tx
+            .update(books)
+            .set({ coverImagePath: thumbRelPosix, updatedAt: new Date() })
+            .where(eq(books.id, id));
+        });
+      },
+      rollbackDatabase: async () => {
+        await cloudDb
+          .update(books)
+          .set({ coverImagePath: book.coverImagePath, updatedAt: new Date() })
+          .where(eq(books.id, id));
+      },
+    });
+
+    // Old source variants are no longer referenced. This cleanup is deliberately
+    // after the transactional swap so it cannot compromise rollback.
     try {
       const entries = await readdir(bookDirAbs, { withFileTypes: true });
       for (const entry of entries) {
-        if (!entry.isFile()) continue;
-        const name = entry.name;
-        if (!sourceNamePattern.test(name)) continue;
-        if (name.toLowerCase() === targetSourceName) continue;
-        await unlink(path.join(bookDirAbs, name));
+        if (!entry.isFile() || !sourceNamePattern.test(entry.name)) continue;
+        if (entry.name.toLowerCase() === targetSourceName) continue;
+        await unlink(path.join(bookDirAbs, entry.name));
       }
     } catch (cleanupError) {
       logger.warn(
@@ -271,46 +383,13 @@ export default defineEventHandler(async (event) => {
       );
     }
 
-    // Thumbnail: 320px wide, webp for consistent lightweight UI rendering.
-    const thumbWebp = await sharp(filePart.data)
-      .rotate() // respect EXIF orientation
-      .resize({
-        width: 320,
-        withoutEnlargement: true,
-      })
-      .webp({ quality: 80 })
-      .toBuffer();
-
-    if (ext === 'jpg') {
-      // If we had to fall back (unknown format), store a high-quality JPEG as the "source".
-      // This is the best we can do without a trustworthy original container format.
-      const sourceJpeg = await sharp(filePart.data)
-        .rotate()
-        .jpeg({ quality: 95 })
-        .toBuffer();
-      await writeFile(sourceAbs, sourceJpeg);
-    } else {
-      // Store exact uploaded bytes as source.
-      await writeFile(sourceAbs, filePart.data);
-    }
-
-    await writeFile(thumbAbs, thumbWebp);
-
-    // DB should point to the thumbnail by default (most views use this).
-    const thumbRelPosix = path.posix.join(
-      'library',
-      ...path.relative(libraryBaseAbs, thumbAbs).split(path.sep),
-    );
-
-    await cloudDb
-      .update(books)
-      .set({ coverImagePath: thumbRelPosix, updatedAt: new Date() })
-      .where(eq(books.id, id));
-
     return {
       success: true,
       data: {
         coverImagePath: thumbRelPosix,
+        embeddedEpubs: epubFiles.length,
+        totalEpubs: epubFiles.length,
+        warnings: epubWarnings,
       },
     };
   } catch (error: unknown) {
@@ -322,6 +401,18 @@ export default defineEventHandler(async (event) => {
       (error as { statusCode?: unknown }).statusCode
     ) {
       throw error;
+    }
+
+    if (error instanceof EpubError) {
+      logger.warn(
+        { err: error, id, code: error.code },
+        'POST /api/books/:id/cover: EPUB cover update rejected',
+      );
+      throw createError({
+        statusCode: 422,
+        statusMessage: `EPUB cover update failed: ${error.message}`,
+        data: { code: error.code },
+      });
     }
 
     logger.error(error, 'POST /api/books/:id/cover: failed to upload cover');

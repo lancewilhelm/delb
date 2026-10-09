@@ -501,10 +501,27 @@ async function uploadPendingCoverIfAny() {
       throw new Error('Cover upload failed.');
     }
 
+    const payload = (await res.json().catch(() => null)) as {
+      data?: {
+        embeddedEpubs?: number;
+        totalEpubs?: number;
+        warnings?: string[];
+      };
+    } | null;
+    const embeddedEpubs = payload?.data?.embeddedEpubs ?? 0;
+    const totalEpubs = payload?.data?.totalEpubs ?? embeddedEpubs;
+
     clearSelectedCover();
 
     // Reload the book so `coverImagePath` refreshes
     await loadBook();
+    setSuccess(
+      embeddedEpubs > 0
+        ? totalEpubs === 1
+          ? 'Cover saved and embedded in the EPUB.'
+          : `Cover saved and embedded in all ${totalEpubs} EPUBs.`
+        : 'Cover saved. This book has no EPUB file to update.',
+    );
   } finally {
     coverUploading.value = false;
   }
@@ -1114,7 +1131,10 @@ function normalizePagesOrNull(input: string): number | null {
 }
 
 function commitPendingChips() {
-  const committedAuthors = chipCommitOnEnter(authorChips.value, authorInput.value);
+  const committedAuthors = chipCommitOnEnter(
+    authorChips.value,
+    authorInput.value,
+  );
   if (committedAuthors.committed) {
     authorChips.value = committedAuthors.chips;
     authorInput.value = committedAuthors.input;
@@ -1832,9 +1852,8 @@ watch(
           </div>
 
           <div class="text-xs opacity-60 pt-2 text-center">
-            Covers are stored as
-            <span class="font-mono">cover.webp</span>
-            next to the book file.
+            The original and thumbnail are stored next to the book. New covers
+            are also embedded in every EPUB file.
           </div>
         </div>
 
@@ -1892,10 +1911,10 @@ watch(
                       .map((c) => c.name)
                       .join(', ')
                       .trim() !==
-                    (book.authors ?? [])
-                      .map((a) => a.name)
-                      .join(', ')
-                      .trim()
+                      (book.authors ?? [])
+                        .map((a) => a.name)
+                        .join(', ')
+                        .trim()
                       ? 'text-(--error-color)'
                       : ''
                   "
