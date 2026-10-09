@@ -1,9 +1,8 @@
 ARG NODE_VERSION=20
-ARG PNPM_VERSION=10.27.0
 
 FROM node:${NODE_VERSION}-slim AS base
 WORKDIR /app
-RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+RUN corepack enable
 
 # -------------------------------
 # Dependencies stage (build)
