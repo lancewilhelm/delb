@@ -10,6 +10,7 @@ import { resolveDataPath } from '~~/server/utils/books/fs';
 import { getCanonicalBookPaths } from '~~/server/utils/books/storage/paths';
 import {
   commitCoverUpdate,
+  CoverUpdateStorageError,
   recoverPendingCoverUpdates,
   type CoverUpdateFile,
 } from '~~/server/utils/books/cover-update-transaction';
@@ -238,11 +239,15 @@ export default defineEventHandler(async (event) => {
     }
 
     await mkdir(bookDirAbs, { recursive: true });
-    await recoverPendingCoverUpdates({
+    const storageFallbackPaths = new Set<string>();
+    const recoveryResult = await recoverPendingCoverUpdates({
       operationParent: bookDirAbs,
       allowedRoot: libraryBaseAbs,
       currentCoverImagePath: book.coverImagePath,
     });
+    for (const fallbackPath of recoveryResult.backupFallbackPaths) {
+      storageFallbackPaths.add(fallbackPath);
+    }
 
     if (filePart.data.length > 25 * 1024 * 1024) {
       throw createError({
@@ -345,7 +350,7 @@ export default defineEventHandler(async (event) => {
       updates.push({ targetPath: epubAbs, data: result.data });
     }
 
-    await commitCoverUpdate({
+    const commitResult = await commitCoverUpdate({
       operationParent: bookDirAbs,
       allowedRoot: libraryBaseAbs,
       previousCoverImagePath: book.coverImagePath,
@@ -366,6 +371,20 @@ export default defineEventHandler(async (event) => {
           .where(eq(books.id, id));
       },
     });
+    for (const fallbackPath of commitResult.backupFallbackPaths) {
+      storageFallbackPaths.add(fallbackPath);
+    }
+    if (storageFallbackPaths.size > 0) {
+      logger.warn(
+        {
+          id,
+          files: [...storageFallbackPaths].map((fallbackPath) =>
+            path.relative(libraryBaseAbs, fallbackPath),
+          ),
+        },
+        'POST /api/books/:id/cover: used verified-copy fallback for library storage',
+      );
+    }
 
     // Old source variants are no longer referenced. This cleanup is deliberately
     // after the transactional swap so it cannot compromise rollback.
@@ -389,6 +408,7 @@ export default defineEventHandler(async (event) => {
         coverImagePath: thumbRelPosix,
         embeddedEpubs: epubFiles.length,
         totalEpubs: epubFiles.length,
+        storageFallbacks: storageFallbackPaths.size,
         warnings: epubWarnings,
       },
     };
@@ -401,6 +421,19 @@ export default defineEventHandler(async (event) => {
       (error as { statusCode?: unknown }).statusCode
     ) {
       throw error;
+    }
+
+    if (error instanceof CoverUpdateStorageError) {
+      logger.error(
+        { err: error, id, code: error.code },
+        'POST /api/books/:id/cover: library storage could not safely replace an existing file',
+      );
+      throw createError({
+        statusCode: 507,
+        statusMessage:
+          'Library storage could not safely replace an existing cover file',
+        data: { code: error.code },
+      });
     }
 
     if (error instanceof EpubError) {

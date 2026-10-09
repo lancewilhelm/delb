@@ -19,7 +19,7 @@ test('commits all staged cover files after the database update', async () => {
   await writeFile(second, 'old-two');
   let databaseValue: string | null = null;
 
-  await commitCoverUpdate({
+  const result = await commitCoverUpdate({
     operationParent: bookDir,
     allowedRoot: root,
     previousCoverImagePath: null,
@@ -39,6 +39,38 @@ test('commits all staged cover files after the database update', async () => {
   assert.equal(await readFile(first, 'utf8'), 'new-one');
   assert.equal(await readFile(second, 'utf8'), 'new-two');
   assert.equal(databaseValue, 'library/book/thumb.webp');
+  assert.deepEqual(result.backupFallbackPaths, []);
+});
+
+test('uses a verified copy when a union filesystem rejects the backup rename', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'delb-cover-'));
+  const bookDir = path.join(root, 'book');
+  await mkdir(bookDir);
+  const target = path.join(bookDir, 'thumb.webp');
+  await writeFile(target, 'old-thumbnail');
+
+  const result = await commitCoverUpdate({
+    operationParent: bookDir,
+    allowedRoot: root,
+    previousCoverImagePath: 'library/book/thumb.webp',
+    expectedCoverImagePath: 'library/book/thumb.webp',
+    files: [
+      { targetPath: target, data: new TextEncoder().encode('new-thumbnail') },
+    ],
+    commitDatabase: async () => undefined,
+    rollbackDatabase: async () => undefined,
+    renameExistingToBackup: async () => {
+      const error = new Error(
+        'Unknown system error -117',
+      ) as NodeJS.ErrnoException;
+      error.errno = -117;
+      error.code = 'Unknown system error -117';
+      throw error;
+    },
+  });
+
+  assert.equal(await readFile(target, 'utf8'), 'new-thumbnail');
+  assert.deepEqual(result.backupFallbackPaths, [target]);
 });
 
 test('leaves original files unchanged when the database update fails', async () => {
@@ -100,6 +132,52 @@ test('restores every original when a later file swap fails', async () => {
   assert.equal(await readFile(first, 'utf8'), 'old-one');
   assert.equal(await readFile(blockedParent, 'utf8'), 'blocks mkdir');
   assert.equal(databaseValue, null);
+});
+
+test('restores an original copied for backup when a later swap fails', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'delb-cover-'));
+  const bookDir = path.join(root, 'book');
+  await mkdir(bookDir);
+  const first = path.join(bookDir, 'thumb.webp');
+  const blockedParent = path.join(bookDir, 'not-a-directory');
+  const second = path.join(blockedParent, 'book.epub');
+  await writeFile(first, 'old-thumbnail');
+  await writeFile(blockedParent, 'blocks mkdir');
+  let databaseValue: string | null = null;
+
+  await assert.rejects(
+    commitCoverUpdate({
+      operationParent: bookDir,
+      allowedRoot: root,
+      previousCoverImagePath: 'library/book/old-thumb.webp',
+      expectedCoverImagePath: 'library/book/thumb.webp',
+      files: [
+        {
+          targetPath: first,
+          data: new TextEncoder().encode('new-thumbnail'),
+        },
+        { targetPath: second, data: new TextEncoder().encode('new-epub') },
+      ],
+      commitDatabase: async () => {
+        databaseValue = 'library/book/thumb.webp';
+      },
+      rollbackDatabase: async () => {
+        databaseValue = 'library/book/old-thumb.webp';
+      },
+      renameExistingToBackup: async () => {
+        const error = new Error(
+          'Unknown system error -117',
+        ) as NodeJS.ErrnoException;
+        error.errno = -117;
+        error.code = 'Unknown system error -117';
+        throw error;
+      },
+    }),
+  );
+
+  assert.equal(await readFile(first, 'utf8'), 'old-thumbnail');
+  assert.equal(await readFile(blockedParent, 'utf8'), 'blocks mkdir');
+  assert.equal(databaseValue, 'library/book/old-thumb.webp');
 });
 
 test('rolls a partially swapped committed operation forward during recovery', async () => {

@@ -36,6 +36,17 @@ If your host uses a different owner (e.g. Unraid’s `nobody:users`), either:
 Calibre can be mounted read-only at `/app/calibre`. Delb writes all managed files
 to `/app/library`.
 
+### Unraid user shares
+
+Unraid user shares (`fuse.shfs`) can place files that appear in the same folder
+on different backing disks or pools. When that makes a direct backup rename fail,
+Delb copies the existing file to its transaction backup, flushes it to storage,
+verifies its size and SHA-256 digest, and only then replaces the original. The
+same journal and rollback behavior remain in effect.
+
+Configuring the share split level so each author/book directory stays together
+can reduce cross-disk I/O, but is not required for cover uploads to be safe.
+
 ## Migrations
 
 Delb uses Drizzle SQL migrations from `.drizzle/migrations`. The container runs migrations on startup via `.drizzle/migrate.ts` (compiled to `.drizzle/migrate.mjs` during the Docker build).

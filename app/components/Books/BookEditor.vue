@@ -505,22 +505,32 @@ async function uploadPendingCoverIfAny() {
       data?: {
         embeddedEpubs?: number;
         totalEpubs?: number;
+        storageFallbacks?: number;
         warnings?: string[];
       };
     } | null;
     const embeddedEpubs = payload?.data?.embeddedEpubs ?? 0;
     const totalEpubs = payload?.data?.totalEpubs ?? embeddedEpubs;
+    const storageFallbacks = payload?.data?.storageFallbacks ?? 0;
 
     clearSelectedCover();
 
     // Reload the book so `coverImagePath` refreshes
     await loadBook();
-    setSuccess(
+    const successMessage =
       embeddedEpubs > 0
         ? totalEpubs === 1
           ? 'Cover saved and embedded in the EPUB.'
           : `Cover saved and embedded in all ${totalEpubs} EPUBs.`
-        : 'Cover saved. This book has no EPUB file to update.',
+        : 'Cover saved. This book has no EPUB file to update.';
+    setSuccess(
+      storageFallbacks > 0
+        ? `${successMessage} Delb safely handled ${
+            storageFallbacks === 1
+              ? 'an existing file'
+              : `${storageFallbacks} existing files`
+          } on the library storage.`
+        : successMessage,
     );
   } finally {
     coverUploading.value = false;
