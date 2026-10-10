@@ -30,6 +30,107 @@ const collectionsStore = useCollectionsStore();
 const saving = ref(false);
 const errorMessage = ref<string | null>(null);
 const name = ref('');
+const editingName = ref(false);
+const nameInput = ref<HTMLInputElement | null>(null);
+const actionsOpen = ref(false);
+const confirmation = ref<'delete' | 'leave' | 'transfer' | null>(null);
+const confirmationInput = ref<HTMLInputElement | HTMLButtonElement | null>(
+  null,
+);
+const renameButton = ref<HTMLButtonElement | null>(null);
+const actionsButton = ref<HTMLButtonElement | null>(null);
+const statusMessage = ref('');
+const dialog = ref<HTMLElement | null>(null);
+let previousFocus: HTMLElement | null = null;
+
+watch(
+  () => props.open,
+  async (open) => {
+    if (open) {
+      previousFocus = document.activeElement as HTMLElement | null;
+      await nextTick();
+      dialog.value?.focus();
+    } else {
+      previousFocus?.focus();
+    }
+  },
+);
+
+function trapFocus(event: KeyboardEvent) {
+  if (event.key !== 'Tab') return;
+  const controls = Array.from(
+    dialog.value?.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]',
+    ) ?? [],
+  );
+  const first = controls[0];
+  const last = controls[controls.length - 1];
+  if (!first || !last) {
+    event.preventDefault();
+    dialog.value?.focus();
+  } else if (
+    event.shiftKey &&
+    (document.activeElement === first ||
+      document.activeElement === dialog.value)
+  ) {
+    event.preventDefault();
+    last.focus();
+  } else if (
+    !event.shiftKey &&
+    (document.activeElement === last || document.activeElement === dialog.value)
+  ) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+const busy = computed(
+  () =>
+    saving.value ||
+    deleting.value ||
+    memberSaving.value ||
+    leaving.value ||
+    transferring.value,
+);
+
+async function editName() {
+  if (busy.value) return;
+  name.value = props.collection?.name ?? '';
+  errorMessage.value = null;
+  statusMessage.value = '';
+  editingName.value = true;
+  await nextTick();
+  nameInput.value?.focus();
+  nameInput.value?.select();
+}
+
+async function cancelName() {
+  if (busy.value) return;
+  editingName.value = false;
+  name.value = props.collection?.name ?? '';
+  errorMessage.value = null;
+  await nextTick();
+  renameButton.value?.focus();
+}
+
+async function showConfirmation(action: 'delete' | 'leave' | 'transfer') {
+  if (busy.value) return;
+  confirmation.value = action;
+  deleteConfirmText.value = '';
+  transferEmail.value = '';
+  deleteErrorMessage.value = null;
+  transferErrorMessage.value = null;
+  leaveErrorMessage.value = null;
+  await nextTick();
+  confirmationInput.value?.focus();
+}
+
+async function cancelConfirmation() {
+  if (busy.value) return;
+  confirmation.value = null;
+  await nextTick();
+  actionsButton.value?.focus();
+}
 
 // Members / Sharing state (minimal v1)
 type MemberRow = CollectionMember & { email?: string | null };
@@ -42,13 +143,11 @@ const addRole = ref<MutableCollectionRole>('viewer');
 const memberSaving = ref(false);
 
 // Leave collection (self-remove) confirmation
-const leaveConfirmOpen = ref(false);
 const leaving = ref(false);
 const leaveErrorMessage = ref<string | null>(null);
 
 // Transfer ownership confirmation
 const transferEmail = ref('');
-const transferConfirmOpen = ref(false);
 const transferring = ref(false);
 const transferErrorMessage = ref<string | null>(null);
 
@@ -115,12 +214,14 @@ watch(
     memberSaving.value = false;
 
     // reset leave/transfer/delete UI state
-    leaveConfirmOpen.value = false;
+    confirmation.value = null;
+    editingName.value = false;
+    actionsOpen.value = false;
+    statusMessage.value = '';
     leaving.value = false;
     leaveErrorMessage.value = null;
 
     transferEmail.value = '';
-    transferConfirmOpen.value = false;
     transferring.value = false;
     transferErrorMessage.value = null;
 
@@ -154,20 +255,8 @@ watch(
   },
 );
 
-const title = computed(() => {
-  if (props.collection?.isPersonal) return 'Edit Personal collection';
-  return 'Edit collection';
-});
-
-const subtitle = computed(() => {
-  if (props.collection?.isPersonal) {
-    return 'This is your default collection. All uploads go here by default.';
-  }
-  return 'Update your collection name, members, and settings.';
-});
-
 async function save() {
-  if (saving.value) return;
+  if (busy.value) return;
 
   const c = props.collection;
   if (!c) return;
@@ -193,7 +282,11 @@ async function save() {
     await collectionsStore.fetchCollections();
 
     emit('saved', { id: c.id, name: trimmed });
-    emit('close');
+    name.value = trimmed;
+    editingName.value = false;
+    statusMessage.value = 'Collection name saved.';
+    await nextTick();
+    renameButton.value?.focus();
   } catch (err: unknown) {
     const e = err as FetchErrorLike;
     errorMessage.value =
@@ -207,7 +300,7 @@ async function save() {
 }
 
 async function addOrUpdateMember() {
-  if (memberSaving.value) return;
+  if (busy.value) return;
 
   const c = props.collection;
   if (!c) return;
@@ -252,6 +345,7 @@ async function addOrUpdateMember() {
 
     addUserEmail.value = '';
     addRole.value = 'viewer';
+    statusMessage.value = 'Member access saved.';
   } catch (err: unknown) {
     const e = err as FetchErrorLike;
     membersErrorMessage.value =
@@ -265,7 +359,7 @@ async function addOrUpdateMember() {
 }
 
 async function removeMember(userId: string) {
-  if (memberSaving.value) return;
+  if (busy.value) return;
 
   const c = props.collection;
   if (!c) return;
@@ -304,7 +398,7 @@ async function removeMember(userId: string) {
 
   if (isSelfRow) {
     leaveErrorMessage.value = null;
-    leaveConfirmOpen.value = true;
+    await showConfirmation('leave');
     return;
   }
 
@@ -318,6 +412,7 @@ async function removeMember(userId: string) {
     });
 
     members.value = members.value.filter((m) => m.userId !== userId);
+    statusMessage.value = 'Member removed.';
   } catch (err: unknown) {
     const e = err as FetchErrorLike;
     membersErrorMessage.value =
@@ -331,7 +426,7 @@ async function removeMember(userId: string) {
 }
 
 async function deleteThisCollection() {
-  if (deleting.value) return;
+  if (busy.value) return;
 
   const c = props.collection;
   if (!c) return;
@@ -377,7 +472,7 @@ async function deleteThisCollection() {
 }
 
 async function confirmLeave() {
-  if (leaving.value) return;
+  if (busy.value) return;
 
   const c = props.collection;
   if (!c) return;
@@ -408,7 +503,7 @@ async function confirmLeave() {
 }
 
 async function confirmTransferOwnership() {
-  if (transferring.value) return;
+  if (busy.value) return;
 
   const c = props.collection;
   if (!c) return;
@@ -440,8 +535,11 @@ async function confirmTransferOwnership() {
       c.id,
     )) as MemberRow[];
 
-    transferConfirmOpen.value = false;
+    confirmation.value = null;
     transferEmail.value = '';
+    statusMessage.value = 'Ownership transferred. You are now an editor.';
+    await nextTick();
+    actionsButton.value?.focus();
   } catch (err: unknown) {
     const e = err as FetchErrorLike;
     transferErrorMessage.value =
@@ -455,320 +553,404 @@ async function confirmTransferOwnership() {
 }
 
 function close() {
-  if (
-    saving.value ||
-    deleting.value ||
-    memberSaving.value ||
-    leaving.value ||
-    transferring.value
-  )
+  if (busy.value) return;
+  if (confirmation.value) {
+    void cancelConfirmation();
     return;
+  }
+  if (editingName.value) {
+    void cancelName();
+    return;
+  }
   emit('close');
 }
 </script>
 
 <template>
   <ModalWindow :open="open" @close="close">
-    <div class="flex flex-col gap-4 w-110 max-w-[90vw]">
+    <div
+      ref="dialog"
+      tabindex="-1"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="collection-settings-title"
+      class="flex flex-col gap-3 sm:w-95 max-w-[85vw] max-h-[80dvh] overflow-y-auto"
+      @keydown="trapFocus"
+    >
       <div class="flex items-start justify-between gap-4">
-        <div>
-          <div class="text-lg font-semibold">{{ title }}</div>
-          <div class="text-sm opacity-80">
-            {{ subtitle }}
-          </div>
+        <div id="collection-settings-title" class="text-lg font-semibold">
+          {{
+            confirmation === 'delete'
+              ? 'Delete collection'
+              : confirmation === 'leave'
+                ? 'Leave collection'
+                : confirmation === 'transfer'
+                  ? 'Transfer ownership'
+                  : 'Collection settings'
+          }}
         </div>
-
-        <Icon
-          v-tooltip="'Close'"
-          name="lucide:x"
-          class="scale-150 cursor-pointer opacity-80 hover:opacity-100"
+        <button
+          type="button"
+          aria-label="Close collection settings"
+          class="shrink-0 opacity-80 hover:opacity-100"
+          :disabled="busy"
           @click="close"
-        />
+        >
+          <Icon name="lucide:x" class="text-xl" />
+        </button>
       </div>
 
-      <div v-if="collection?.isPersonal" class="text-xs opacity-70">
-        <div class="flex items-center gap-2">
-          <span
-            class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-(--sub-color) opacity-70"
+      <template v-if="confirmation">
+        <template v-if="confirmation === 'delete'">
+          <p class="text-sm">
+            Deleting <strong>{{ collection?.name }}</strong> removes the
+            collection for all members. Books are not deleted; only the
+            collection and its links are removed.
+          </p>
+          <div class="space-y-2">
+            <label for="collection-delete-name" class="block text-sm"
+              >Type <strong>{{ collection?.name }}</strong> to confirm
+              deletion.</label
+            >
+            <input
+              id="collection-delete-name"
+              ref="confirmationInput"
+              v-model="deleteConfirmText"
+              type="text"
+              autocomplete="off"
+              class="w-full px-3 py-2 border rounded-md bg-(--bg-color)"
+              :disabled="busy"
+            />
+            <p
+              v-if="deleteErrorMessage"
+              role="alert"
+              class="text-sm text-(--error-color)"
+            >
+              {{ deleteErrorMessage }}
+            </p>
+          </div>
+        </template>
+        <template v-else-if="confirmation === 'transfer'">
+          <p class="text-sm">
+            The new owner will become the sole owner of
+            <strong>{{ collection?.name }}</strong
+            >, and you will become an editor. Only the new owner can transfer
+            ownership back to you.
+          </p>
+          <div class="space-y-2">
+            <label for="collection-transfer-email" class="block text-sm"
+              >New owner email</label
+            >
+            <input
+              id="collection-transfer-email"
+              ref="confirmationInput"
+              v-model="transferEmail"
+              type="email"
+              class="w-full px-3 py-2 border rounded-md bg-(--bg-color)"
+              :disabled="busy"
+            />
+            <p
+              v-if="transferErrorMessage"
+              role="alert"
+              class="text-sm text-(--error-color)"
+            >
+              {{ transferErrorMessage }}
+            </p>
+          </div>
+        </template>
+        <template v-else>
+          <p class="text-sm">
+            Leaving <strong>{{ collection?.name }}</strong> removes your access.
+            An owner or editor can add you again later.
+          </p>
+          <p
+            v-if="leaveErrorMessage"
+            role="alert"
+            class="text-sm text-(--error-color)"
           >
-            Personal
-          </span>
-          <span>Non-deletable and not shareable.</span>
-        </div>
-      </div>
-
-      <!-- Rename -->
-      <div class="space-y-2">
-        <div class="text-sm font-semibold">Name</div>
-
-        <input
-          v-model="name"
-          type="text"
-          placeholder="Collection name…"
-          class="w-full px-3 py-2 border rounded-md bg-(--bg-color)"
-          :disabled="saving || !canEdit"
-          @keyup.enter="save"
-        />
-
-        <p v-if="!canEdit" class="text-sm text-(--error-color)">
-          You do not have permission to edit this collection.
-        </p>
-
-        <p v-else-if="errorMessage" class="text-sm text-(--error-color)">
-          {{ errorMessage }}
-        </p>
-
-        <div class="flex gap-2 justify-end">
+            {{ leaveErrorMessage }}
+          </p>
+        </template>
+        <div class="flex justify-end gap-2">
           <button
-            v-tooltip="'Cancel'"
+            v-if="confirmation === 'leave'"
+            ref="confirmationInput"
+            type="button"
             class="px-3 py-2"
-            :disabled="saving"
-            @click="close"
+            :disabled="busy"
+            @click="cancelConfirmation"
           >
             Cancel
           </button>
-
           <button
-            v-tooltip="'Save changes'"
-            class="px-3 py-2 bg-(--main-color) text-(--bg-color)"
-            :disabled="saving || !canEdit || !name.trim()"
-            @click="save"
+            v-else
+            type="button"
+            class="px-3 py-2"
+            :disabled="busy"
+            @click="cancelConfirmation"
           >
-            {{ saving ? 'Saving…' : 'Save' }}
+            Cancel
+          </button>
+          <button
+            v-if="confirmation === 'delete'"
+            type="button"
+            class="px-3 py-2 rounded-md bg-(--error-color) text-(--text-color)"
+            :disabled="
+              busy ||
+              !collection ||
+              deleteConfirmText.trim() !== collection.name.trim()
+            "
+            @click="deleteThisCollection"
+          >
+            {{ deleting ? 'Deleting…' : 'Delete collection' }}
+          </button>
+          <button
+            v-else-if="confirmation === 'transfer'"
+            type="button"
+            class="px-3 py-2 rounded-md bg-(--error-color) text-(--text-color)"
+            :disabled="busy || !transferEmail.trim()"
+            @click="confirmTransferOwnership"
+          >
+            {{ transferring ? 'Transferring…' : 'Transfer ownership' }}
+          </button>
+          <button
+            v-else
+            type="button"
+            class="px-3 py-2 rounded-md bg-(--error-color) text-(--text-color)"
+            :disabled="busy"
+            @click="confirmLeave"
+          >
+            {{ leaving ? 'Leaving…' : 'Leave collection' }}
           </button>
         </div>
-      </div>
+      </template>
 
-      <!-- Sharing / Members -->
-      <div v-if="collection && !collection.isPersonal" class="space-y-2">
-        <div class="flex items-center justify-between gap-3">
-          <div class="text-sm font-semibold">Sharing</div>
-          <div v-if="!canManageMembers" class="text-xs opacity-70">
-            Owners and editors can manage members.
-          </div>
-        </div>
-
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <button
-            class="px-3 py-2 border rounded-md"
-            :disabled="!canLeave || leaving || memberSaving || deleting"
-            @click="leaveConfirmOpen = true"
-          >
-            Leave collection
-          </button>
-
-          <button
-            v-if="canTransferOwnership"
-            class="px-3 py-2 border rounded-md"
-            :disabled="transferring || memberSaving || deleting"
-            @click="transferConfirmOpen = true"
-          >
-            Transfer ownership
-          </button>
-        </div>
-
-        <!-- Leave confirmation -->
-        <div v-if="leaveConfirmOpen" class="border rounded-md p-3 space-y-2">
-          <div class="text-sm font-semibold">Leave collection</div>
-          <div class="text-sm opacity-80">
-            This will remove your access to this collection. This can be
-            re-granted later by an owner/editor.
-          </div>
-
-          <p v-if="leaveErrorMessage" class="text-sm text-(--error-color)">
-            {{ leaveErrorMessage }}
-          </p>
-
-          <div class="flex justify-end gap-2">
-            <button
-              class="px-3 py-2"
-              :disabled="leaving"
-              @click="leaveConfirmOpen = false"
+      <template v-else>
+        <section class="space-y-2" aria-label="Collection name">
+          <form v-if="editingName" class="space-y-2" @submit.prevent="save">
+            <label for="collection-name" class="block text-sm font-semibold"
+              >Collection name</label
             >
-              Cancel
-            </button>
-            <button
-              class="px-3 py-2 bg-(--error-color) text-(--text-color)"
-              :disabled="leaving"
-              @click="confirmLeave"
-            >
-              {{ leaving ? 'Leaving…' : 'Leave' }}
-            </button>
-          </div>
-        </div>
-
-        <!-- Transfer ownership confirmation -->
-        <div v-if="transferConfirmOpen" class="border rounded-md p-3 space-y-2">
-          <div class="text-sm font-semibold">Transfer ownership</div>
-          <div class="text-sm opacity-80">
-            Transferring ownership is irreversible from your perspective. The
-            new owner will become the sole owner, and you will become an editor.
-          </div>
-
-          <input
-            v-model="transferEmail"
-            type="email"
-            placeholder="New owner email…"
-            class="w-full px-3 py-2 border rounded-md bg-(--bg-color)"
-            :disabled="transferring"
-          />
-
-          <p v-if="transferErrorMessage" class="text-sm text-(--error-color)">
-            {{ transferErrorMessage }}
-          </p>
-
-          <div class="flex justify-end gap-2">
-            <button
-              class="px-3 py-2"
-              :disabled="transferring"
-              @click="transferConfirmOpen = false"
-            >
-              Cancel
-            </button>
-            <button
-              class="px-3 py-2 bg-(--error-color) text-(--text-color)"
-              :disabled="transferring || !transferEmail.trim()"
-              @click="confirmTransferOwnership"
-            >
-              {{ transferring ? 'Transferring…' : 'Transfer ownership' }}
-            </button>
-          </div>
-        </div>
-
-        <div
-          v-if="canManageMembers"
-          class="flex flex-col gap-2 border rounded-md p-3 bg-(--bg-color)"
-        >
-          <div class="text-xs opacity-70">Add a member by email</div>
-
-          <div class="flex flex-wrap items-center gap-2">
             <input
-              v-model="addUserEmail"
-              type="email"
-              placeholder="Email…"
-              class="flex-1 min-w-55 px-3 py-2 border rounded-md bg-(--bg-color)"
-              :disabled="membersLoading || memberSaving || deleting"
-              @keyup.enter="addOrUpdateMember"
+              id="collection-name"
+              ref="nameInput"
+              v-model="name"
+              type="text"
+              class="w-full px-3 py-2 border rounded-md bg-(--bg-color)"
+              :disabled="busy"
             />
-
-            <select
-              v-model="addRole"
-              class="px-3 py-2 border rounded-md bg-(--bg-color)"
-              :disabled="membersLoading || memberSaving || deleting"
+            <p
+              v-if="errorMessage"
+              role="alert"
+              class="text-sm text-(--error-color)"
             >
-              <option value="viewer">viewer</option>
-              <option value="editor">editor</option>
-            </select>
-
-            <button
-              class="px-3 py-2 bg-(--main-color) text-(--bg-color)"
-              :disabled="
-                membersLoading ||
-                memberSaving ||
-                deleting ||
-                !addUserEmail.trim()
-              "
-              @click="addOrUpdateMember"
-            >
-              {{ memberSaving ? 'Saving…' : 'Add / Update' }}
-            </button>
-          </div>
-
-          <p v-if="membersErrorMessage" class="text-sm text-(--error-color)">
-            {{ membersErrorMessage }}
-          </p>
-
-          <div v-if="membersLoading" class="text-sm opacity-70">
-            Loading members…
-          </div>
-
-          <div v-else-if="!members.length" class="text-sm opacity-70">
-            No members yet.
-          </div>
-
-          <div v-else class="space-y-2">
-            <div
-              v-for="m in members"
-              :key="m.userId"
-              class="flex items-center justify-between gap-3 border rounded-md px-3 py-2"
-            >
-              <div class="min-w-0">
-                <div class="text-sm font-mono truncate">
-                  {{ m.email || m.userId }}
-                </div>
-                <div class="text-xs opacity-70">role: {{ m.role }}</div>
-              </div>
-
+              {{ errorMessage }}
+            </p>
+            <div class="flex justify-end gap-2">
               <button
-                class="px-3 py-1.5 border rounded-md"
-                :class="m.role === 'owner' ? 'hidden!' : ''"
-                :disabled="memberSaving || deleting || m.role === 'owner'"
-                @click="removeMember(m.userId)"
+                type="button"
+                class="px-3 py-2"
+                :disabled="busy"
+                @click="cancelName"
               >
-                Remove
+                Cancel
+              </button>
+              <button
+                type="submit"
+                class="px-3 py-2 rounded-md bg-(--main-color) text-(--bg-color)"
+                :disabled="
+                  busy || !name.trim() || name.trim() === collection?.name
+                "
+              >
+                {{ saving ? 'Saving…' : 'Save name' }}
               </button>
             </div>
-
-            <div class="text-xs opacity-70">
-              Note: you cannot remove the owner. Delete the collection or
-              transfer ownership.
+          </form>
+          <div v-else class="flex items-center gap-2">
+            <div class="text-lg font-semibold break-words min-w-0">
+              {{ collection?.name }}
             </div>
-          </div>
-        </div>
-
-        <div v-else class="text-sm opacity-70">
-          You can view this collection, but cannot manage members.
-        </div>
-      </div>
-
-      <!-- Delete -->
-      <div
-        v-if="canDelete && collection && !collection.isPersonal"
-        class="space-y-2"
-      >
-        <div class="text-sm font-semibold text-(--error-color)">
-          Delete collection
-        </div>
-
-        <div class="text-xs opacity-70">
-          Deleting a collection removes it for all members. Books are not
-          deleted; only the collection and its links are removed.
-        </div>
-
-        <div class="border border-(--error-color)/50 rounded-md p-3 space-y-2">
-          <div class="text-sm">
-            Type the collection name to confirm deletion:
-            <span class="font-semibold">{{ collection.name }}</span>
-          </div>
-
-          <input
-            v-model="deleteConfirmText"
-            type="text"
-            class="w-full px-3 py-2 border rounded-md bg-(--bg-color)"
-            :disabled="deleting || saving || memberSaving"
-            placeholder="Collection name…"
-          />
-
-          <p v-if="deleteErrorMessage" class="text-sm text-(--error-color)">
-            {{ deleteErrorMessage }}
-          </p>
-
-          <div class="flex justify-end">
             <button
-              class="px-3 py-2 bg-(--error-color) text-(--text-color)"
-              :disabled="
-                deleting ||
-                saving ||
-                memberSaving ||
-                deleteConfirmText.trim() !== collection.name.trim()
-              "
-              @click="deleteThisCollection"
+              v-if="canEdit"
+              ref="renameButton"
+              v-tooltip="'Rename collection'"
+              type="button"
+              aria-label="Rename collection"
+              class="p-2 shrink-0 opacity-80 hover:opacity-100"
+              :disabled="busy"
+              @click="editName"
             >
-              {{ deleting ? 'Deleting…' : 'Delete collection' }}
+              <Icon name="lucide:pencil" />
             </button>
           </div>
+          <p v-if="collection?.isPersonal" class="text-sm opacity-70">
+            Your personal collection receives uploads by default. It cannot be
+            shared or deleted.
+          </p>
+        </section>
+
+        <section
+          v-if="collection && !collection.isPersonal"
+          class="space-y-2 border-t border-(--sub-color) pt-3"
+          aria-labelledby="collection-sharing-title"
+        >
+          <div>
+            <div id="collection-sharing-title" class="text-sm font-semibold">
+              Sharing
+            </div>
+            <p class="text-xs opacity-70">
+              Changes to member access are saved immediately.
+            </p>
+          </div>
+          <template v-if="canManageMembers">
+            <form class="space-y-2" @submit.prevent="addOrUpdateMember">
+              <label for="collection-member-email" class="block text-sm"
+                >Add or update a member by email</label
+              >
+              <input
+                id="collection-member-email"
+                v-model="addUserEmail"
+                type="email"
+                placeholder="Email address"
+                class="w-full px-3 py-2 border rounded-md bg-(--bg-color)"
+                :disabled="busy || membersLoading || editingName"
+              />
+              <div class="flex items-center gap-2">
+                <label for="collection-member-role" class="text-sm"
+                  >Access</label
+                >
+                <select
+                  id="collection-member-role"
+                  v-model="addRole"
+                  class="px-3 py-2 border rounded-md bg-(--bg-color)"
+                  :disabled="busy || membersLoading || editingName"
+                >
+                  <option value="viewer">Viewer</option>
+                  <option value="editor">Editor</option>
+                </select>
+                <button
+                  type="submit"
+                  class="ml-auto px-3 py-2 rounded-md bg-(--main-color) text-(--bg-color)"
+                  :disabled="
+                    busy ||
+                    membersLoading ||
+                    editingName ||
+                    !addUserEmail.trim()
+                  "
+                >
+                  {{ memberSaving ? 'Saving…' : 'Save access' }}
+                </button>
+              </div>
+            </form>
+            <p
+              v-if="membersErrorMessage"
+              role="alert"
+              class="text-sm text-(--error-color)"
+            >
+              {{ membersErrorMessage }}
+            </p>
+            <p v-if="membersLoading" class="text-sm opacity-70">
+              Loading members…
+            </p>
+            <p
+              v-else-if="!members.length && !membersErrorMessage"
+              class="text-sm opacity-70"
+            >
+              No members yet.
+            </p>
+            <ul v-else class="space-y-2">
+              <li
+                v-for="m in members"
+                :key="m.userId"
+                class="flex items-center justify-between gap-3 border rounded-md px-3 py-2"
+              >
+                <div class="min-w-0">
+                  <div class="text-sm break-all">{{ m.email || m.userId }}</div>
+                  <div class="text-xs opacity-70 capitalize">{{ m.role }}</div>
+                </div>
+                <button
+                  v-if="m.role !== 'owner'"
+                  type="button"
+                  class="px-3 py-1.5 shrink-0 border rounded-md"
+                  :aria-label="`Remove ${m.email || m.userId}`"
+                  :disabled="busy || editingName"
+                  @click="removeMember(m.userId)"
+                >
+                  Remove
+                </button>
+              </li>
+            </ul>
+          </template>
+          <p v-else class="text-sm opacity-70">
+            You have viewer access. Owners and editors can manage members.
+          </p>
+        </section>
+
+        <section
+          v-if="canDelete || canTransferOwnership || canLeave"
+          class="border-t border-(--sub-color) pt-3 space-y-2"
+        >
+          <button
+            ref="actionsButton"
+            type="button"
+            class="flex items-center justify-between w-full py-1 text-sm font-semibold"
+            :aria-expanded="actionsOpen"
+            aria-controls="collection-actions"
+            :disabled="busy || editingName"
+            @click="actionsOpen = !actionsOpen"
+          >
+            Collection actions<Icon
+              :name="actionsOpen ? 'lucide:chevron-up' : 'lucide:chevron-down'"
+            />
+          </button>
+          <div
+            v-if="actionsOpen"
+            id="collection-actions"
+            class="flex flex-col items-start gap-1"
+          >
+            <button
+              v-if="canTransferOwnership"
+              type="button"
+              class="px-2 py-2 text-sm"
+              :disabled="busy"
+              @click="showConfirmation('transfer')"
+            >
+              Transfer ownership
+            </button>
+            <button
+              v-if="canLeave"
+              type="button"
+              class="px-2 py-2 text-sm"
+              :disabled="busy"
+              @click="showConfirmation('leave')"
+            >
+              Leave collection
+            </button>
+            <button
+              v-if="canDelete"
+              type="button"
+              class="flex items-center gap-2 px-2 py-2 text-sm text-(--error-color)"
+              :disabled="busy"
+              @click="showConfirmation('delete')"
+            >
+              <Icon name="lucide:trash-2" />Delete collection
+            </button>
+          </div>
+        </section>
+        <p role="status" aria-live="polite" class="text-sm opacity-80">
+          {{ statusMessage }}
+        </p>
+        <div class="flex justify-end">
+          <button
+            type="button"
+            class="px-3 py-2 border rounded-md"
+            :disabled="busy || editingName"
+            @click="close"
+          >
+            Done
+          </button>
         </div>
-      </div>
+      </template>
     </div>
   </ModalWindow>
 </template>

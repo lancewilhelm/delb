@@ -106,8 +106,6 @@ function openEditModal(collectionId: string) {
   const c = collectionsStore.collections.find((x) => x.id === collectionId);
   if (!c) return;
 
-  if (!collectionsStore.canEditCollection(c)) return;
-
   editingCollectionId.value = collectionId;
   editModalOpen.value = true;
 }
@@ -267,8 +265,8 @@ onBeforeUnmount(() => {
 
           <div class="flex items-center gap-2 shrink-0">
             <button
-              v-if="collectionsStore.canEditCollection(c)"
-              v-tooltip="'Edit collection'"
+              v-tooltip="'Collection settings'"
+              aria-label="Collection settings"
               class="p-1 opacity-80 hover:opacity-100"
               type="button"
               @click.stop="
@@ -278,7 +276,7 @@ onBeforeUnmount(() => {
                 }
               "
             >
-              <Icon name="lucide:pencil" class="text-(--main-color)" />
+              <Icon name="lucide:settings" class="text-(--main-color)" />
             </button>
 
             <span class="text-[11px] opacity-60 shrink-0">{{ c.role }}</span>
