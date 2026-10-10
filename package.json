@@ -10,6 +10,7 @@
     "preview": "nuxt preview",
     "prepare:nuxt": "nuxt prepare",
     "typecheck": "pnpm --filter @delb/epub typecheck && nuxt typecheck",
+    "test:theme": "node --import tsx --test app/utils/customTheme.test.ts app/stores/userSettings.customTheme.test.ts",
     "test:epub": "pnpm --filter @delb/epub test",
     "test:cover-transaction": "node --import tsx --test server/utils/books/cover-update-transaction.test.ts",
     "lint": "eslint . --ext .vue,.js,.ts,.jsx,.tsx",

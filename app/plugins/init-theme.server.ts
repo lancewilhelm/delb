@@ -1,3 +1,5 @@
+import { customThemeCss } from '~/utils/customTheme';
+
 export default defineNuxtPlugin(() => {
   if (import.meta.client) return;
   const route = useRoute();
@@ -11,12 +13,26 @@ export default defineNuxtPlugin(() => {
       : 'guage';
 
   useHead({
-    link: [
-      {
-        id: 'currentTheme',
-        rel: 'stylesheet',
-        href: `/css/themes/${theme}.css`,
-      },
-    ],
+    style:
+      theme === 'custom'
+        ? [
+            {
+              id: 'currentTheme',
+              textContent: customThemeCss(
+                userSettings.activeSettings.customTheme,
+              ),
+            },
+          ]
+        : [],
+    link:
+      theme === 'custom'
+        ? []
+        : [
+            {
+              id: 'currentTheme',
+              rel: 'stylesheet',
+              href: `/css/themes/${theme}.css`,
+            },
+          ],
   });
 });

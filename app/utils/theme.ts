@@ -1,62 +1,64 @@
-/**
- * Loads the CSS file for the specified theme.
- * @param themeName - The name of the theme to load.
- */
-export function loadTheme(themeName?: string): Promise<void> {
-  if (!themeName) {
-    return new Promise((resolve) => {
-      const existing = document.querySelector<HTMLLinkElement>('#currentTheme');
-      if (existing) {
-        existing.remove();
-      }
-      resolve();
-    });
-  }
+import { customThemeCss, type CustomTheme } from './customTheme';
 
-  const existingTheme = document.querySelector<HTMLLinkElement>('#currentTheme');
-  const requestedHref = `/css/themes/${themeName}.css`;
-  const existingHref = existingTheme?.getAttribute('href') || existingTheme?.href;
-  if (existingHref && existingHref.endsWith(requestedHref)) {
+let cancelPending: (() => void) | undefined;
+
+/** Apply a preset stylesheet or the saved custom palette. */
+export function loadTheme(
+  themeName?: string,
+  palette?: CustomTheme,
+): Promise<void> {
+  cancelPending?.();
+  cancelPending = undefined;
+  const existing = document.querySelector<HTMLElement>('#currentTheme');
+
+  if (!themeName) {
+    existing?.remove();
+    return Promise.resolve();
+  }
+  if (themeName === 'custom') {
+    const style =
+      existing?.tagName === 'STYLE'
+        ? existing
+        : document.createElement('style');
+    style.id = 'currentTheme';
+    style.textContent = customThemeCss(palette);
+    if (style !== existing) {
+      existing?.remove();
+      document.head.appendChild(style);
+    }
     return Promise.resolve();
   }
 
+  const href = `/css/themes/${themeName}.css`;
+  if (existing?.getAttribute('href')?.endsWith(href)) return Promise.resolve();
+
   return new Promise((resolve, reject) => {
-    document.body.classList.add('theme-transitioning');
-    const existing = document.querySelector<HTMLLinkElement>('#currentTheme');
-    const oldTheme = existing || null;
-
-    // Remove any previous pending theme switch
-    const prevNext = document.querySelector('#nextTheme');
-    if (prevNext) prevNext.remove();
-
     const next = document.createElement('link');
     next.id = 'nextTheme';
     next.rel = 'stylesheet';
-    next.type = 'text/css';
-    next.href = `/css/themes/${themeName}.css`;
-
-    next.onload = () => {
-      if (oldTheme) oldTheme.remove();
-      next.id = 'currentTheme';
+    next.href = href;
+    let cancelled = false;
+    const cancel = () => {
+      cancelled = true;
+      next.onload = null;
+      next.onerror = null;
+      next.remove();
       resolve();
     };
-
-    next.onerror = (err) => {
-      console.error('Failed to load theme:', themeName, err);
-      next.remove();
-      reject(err);
+    cancelPending = cancel;
+    next.onload = () => {
+      if (cancelled) return;
+      existing?.remove();
+      next.id = 'currentTheme';
+      if (cancelPending === cancel) cancelPending = undefined;
+      resolve();
     };
-
-    // Insert after current theme to maintain stylesheet order
-    if (oldTheme && oldTheme.parentNode) {
-      oldTheme.parentNode.insertBefore(next, oldTheme.nextSibling);
-    } else {
-      document.head.appendChild(next);
-    }
-
-    // Remove the transition class after a delay
-    setTimeout(() => {
-      document.body.classList.remove('theme-transitioning');
-    }, 1000);
+    next.onerror = (error) => {
+      if (cancelled) return;
+      next.remove();
+      if (cancelPending === cancel) cancelPending = undefined;
+      reject(error);
+    };
+    document.head.appendChild(next);
   });
 }

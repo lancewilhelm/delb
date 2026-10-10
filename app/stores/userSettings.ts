@@ -1,3 +1,5 @@
+import { normalizeCustomTheme, type CustomTheme } from '~/utils/customTheme';
+
 export type MetadataProviderKey = 'googleBooks' | 'hardcover';
 
 export type BookDeleteMode = 'db_only' | 'everything';
@@ -23,6 +25,7 @@ export type ReaderTheme = 'system' | 'light' | 'gray' | 'shadow' | 'app';
 
 export interface BaseUserSettings {
   theme?: string;
+  customTheme?: CustomTheme;
   fontFamily: FontFamily;
   favoriteThemes: string[];
   themeSorting: {
@@ -234,6 +237,9 @@ function normalizeReaderTheme(theme: unknown): ReaderTheme {
 function normalizeReaderSettings(settings: BaseUserSettings): BaseUserSettings {
   return {
     ...settings,
+    ...(settings.customTheme !== undefined || settings.theme === 'custom'
+      ? { customTheme: normalizeCustomTheme(settings.customTheme) }
+      : {}),
     reader: {
       ...settings.reader,
       theme: normalizeReaderTheme(settings.reader?.theme),

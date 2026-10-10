@@ -430,6 +430,9 @@ function handleSortChange(target: string) {
           />
         </div>
       </SettingsUISubGroup>
+      <SettingsUISubGroup title="Custom Theme" icon="lucide:paintbrush">
+        <SettingsAppearanceCustomTheme />
+      </SettingsUISubGroup>
     </SettingsUIGroup>
   </div>
 </template>

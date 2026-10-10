@@ -300,6 +300,7 @@ export function useCommandPalette() {
     selectedOption.value = undefined;
     query.value = '';
     highlightedIndex.value = 0;
+    previewTheme();
   }
 
   function selectOption(option?: Option) {
@@ -333,14 +334,22 @@ export function useCommandPalette() {
   function previewTheme(theme?: string) {
     if (!theme) {
       hoveredTheme.value = null;
-      loadTheme(userSettingsStore.activeSettings.theme);
+      loadTheme(
+        userSettingsStore.activeSettings.theme,
+        userSettingsStore.activeSettings.customTheme,
+      );
     } else {
       hoveredTheme.value = theme;
-      loadTheme(theme);
+      loadTheme(theme, userSettingsStore.activeSettings.customTheme);
     }
   }
   const debouncedPreviewTheme = debounce((theme?: string) => {
-    previewTheme(theme);
+    if (
+      uiStore.commandPaletteVisible &&
+      ['theme', 'favorite themes'].includes(selectedOption.value?.label ?? '')
+    ) {
+      previewTheme(theme);
+    }
   }, 300);
 
   function handleInputKeydown(event: KeyboardEvent) {
@@ -383,7 +392,7 @@ export function useCommandPalette() {
         selectedOption.value = undefined;
         query.value = '';
         highlightedIndex.value = 0;
-        previewTheme(userSettingsStore.activeSettings.theme);
+        previewTheme();
       }
     } else {
       // This branch is for Option selection
@@ -466,12 +475,25 @@ export function useCommandPalette() {
     },
   );
 
+  watch(
+    () => uiStore.commandPaletteVisible,
+    (open) => {
+      if (!open) previewTheme();
+    },
+  );
+
   watch(highlightedIndex, () => nextTick(scrollToHighlighted));
 
   watch(
     () => selectedOption.value?.label,
     (label) => {
       if (label === 'theme') scrollToCurrentThemeIfOpen();
+      if (
+        label !== 'theme' &&
+        label !== 'favorite themes' &&
+        hoveredTheme.value
+      )
+        previewTheme();
     },
   );
 

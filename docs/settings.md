@@ -138,3 +138,25 @@ Delb ensures only one first user is promoted to system `owner` under concurrent 
 - Mobile settings are stored as full copies when enabled.
 - This simplifies mobile handling and keeps edits straightforward.
 - Overrides/diffs are no longer used for mobile settings.
+
+## Custom Theme
+
+Appearance → Themes → Custom Theme provides one saved palette per settings
+profile. The six editable colors are background, text, main, secondary, alternate
+background, and error. On first opening, the editor captures the active preset's
+computed colors. The Custom chip activates that palette; editing it while a preset
+is selected leaves the preset active. The picker supports touch/pointer dragging,
+keyboard arrows, hue/saturation/brightness sliders, and opaque hex input.
+
+`BaseUserSettings.customTheme` stores the six colors as normalized six-digit hex
+values, and `theme: 'custom'` selects it. Missing or invalid stored colors fall back
+to Delb's default light palette. Separate mobile settings keep their own palette.
+Changes update local settings immediately and use the existing 400 ms debounced
+server sync; no additional endpoint or database migration is required.
+
+For Custom, SSR emits a validated `#currentTheme` style instead of a stylesheet
+link. The client watches both selection and palette changes to update that style
+live. Preset selection replaces it after the stylesheet loads. Theme loading
+cancels earlier pending requests so they cannot overwrite a later selection.
+Command-palette preset previews restore the saved Custom palette when dismissed.
+Caret and legacy error variants derive from Main and Error respectively.
