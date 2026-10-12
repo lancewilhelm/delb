@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { sanitizeDescriptionHtml } from '~/utils/descriptionHtml';
 definePageMeta({
   auth: {
     only: 'user',
@@ -830,110 +831,7 @@ async function onRatingClick(e: MouseEvent, starIndex: number) {
   await setRating(next);
 }
 
-function sanitizeDescriptionHtml(input: string): string {
-  // Minimal, conservative sanitizer:
-  // - remove <script> / <style> / iframes
-  // - strip inline event handlers (onclick, onload, etc)
-  // - disallow javascript: URLs / data: URLs
-  // - allow a limited set of tags, unwrap others (keep text)
-  //
-  // If parsing fails, fall back to empty string.
-  if (typeof window === 'undefined') {
-    // During SSR we avoid DOM parsing (and also avoid rendering raw HTML server-side).
-    return '';
-  }
 
-  try {
-    const doc = document.implementation.createHTMLDocument('');
-    const container = doc.createElement('div');
-    container.innerHTML = input ?? '';
-
-    // Remove dangerous elements entirely
-    for (const el of Array.from(
-      container.querySelectorAll('script,style,iframe,object,embed'),
-    )) {
-      el.remove();
-    }
-
-    // Allowed tags (basic book-description formatting)
-    const allowedTags = new Set([
-      'DIV',
-      'P',
-      'BR',
-      'EM',
-      'I',
-      'STRONG',
-      'B',
-      'UL',
-      'OL',
-      'LI',
-      'BLOCKQUOTE',
-      'A',
-      'SPAN',
-      'H1',
-      'H2',
-      'H3',
-      'H4',
-      'H5',
-      'H6',
-      'HR',
-    ]);
-
-    const walk = (node: Node) => {
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        const el = node as HTMLElement;
-
-        // Remove event handlers + risky attributes
-        for (const attr of Array.from(el.attributes)) {
-          const name = attr.name.toLowerCase();
-          const value = attr.value;
-
-          if (name.startsWith('on')) {
-            el.removeAttribute(attr.name);
-            continue;
-          }
-
-          if (name === 'href' || name === 'src') {
-            const v = String(value || '')
-              .trim()
-              .toLowerCase();
-            if (v.startsWith('javascript:') || v.startsWith('data:')) {
-              el.removeAttribute(attr.name);
-              continue;
-            }
-          }
-
-          // Keep only a small set of harmless attributes
-          if (name !== 'href' && name !== 'title' && name !== 'style') {
-            el.removeAttribute(attr.name);
-          }
-        }
-
-        // If tag not allowed, unwrap it (replace element with its children)
-        if (!allowedTags.has(el.tagName)) {
-          const parent = el.parentNode;
-          if (parent) {
-            while (el.firstChild) {
-              parent.insertBefore(el.firstChild, el);
-            }
-            parent.removeChild(el);
-            return;
-          }
-        }
-      }
-
-      for (const child of Array.from(node.childNodes)) {
-        walk(child);
-      }
-    };
-
-    walk(container);
-
-    return container.innerHTML;
-  } catch {
-    return '';
-  }
-}
 
 const safeDescriptionHtml = computed(() => {
   const desc = book.value?.description;

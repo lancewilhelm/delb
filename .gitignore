@@ -42,3 +42,15 @@ calibre/
 
 # Agents for llm coding
 AGENTS.md
+
+# Disposable security/performance review fixtures and generated output
+.review-home/
+review/baseline/
+review/demo/*.db*
+review/demo/.synthetic-review
+review/demo/ordinary.epub
+review/demo/*.min.js
+review/demo/description-*.js
+review/*-results.txt
+review/check-results.json
+/public/__review

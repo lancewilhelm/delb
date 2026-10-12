@@ -282,33 +282,6 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    // Backfill normalized publishedAt once per process start (best-effort).
-    // This keeps sorting correct for older rows that only have `published` populated.
-    // NOTE: This is intentionally lightweight; if you want a proper migration/backfill,
-    // move this into a dedicated admin task or migration step.
-    try {
-      await cloudDb.run(sql`
-        UPDATE books
-        SET published_at =
-          CASE
-            WHEN published_at IS NOT NULL THEN published_at
-            WHEN published IS NULL OR TRIM(published) = '' THEN NULL
-            -- YYYY-MM-DD
-            WHEN published GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]' THEN strftime('%s', published) * 1000
-            -- YYYY-MM
-            WHEN published GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]' THEN strftime('%s', published || '-01') * 1000
-            -- YYYY
-            WHEN published GLOB '[0-9][0-9][0-9][0-9]' THEN strftime('%s', published || '-01-01') * 1000
-            ELSE NULL
-          END
-        WHERE published_at IS NULL
-          AND published IS NOT NULL
-          AND TRIM(published) <> '';
-      `);
-    } catch (e) {
-      logger.debug(e, 'GET /api/books: publishedAt backfill skipped/failed');
-    }
-
     // Find collections the user is a member of
     const memberships = await cloudDb
       .select({ collectionId: collectionMembers.collectionId })

@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import {
   resolveBookCoverFile,
   shouldReturnNotModified,
@@ -40,5 +41,5 @@ export default defineEventHandler(async (event) => {
     return null;
   }
 
-  return resolved.bytes;
+  return await readFile(resolved.absPath);
 });
