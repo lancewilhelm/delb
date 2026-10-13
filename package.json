@@ -26,7 +26,8 @@
     "release:major": "standard-version --release-as major",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
-    "test:review": "node --import tsx --test review/regressions.test.mjs review/maintenance.test.ts review/isolation.test.mjs"
+    "test:review": "node --import tsx --test review/regressions.test.mjs review/maintenance.test.ts review/isolation.test.mjs",
+    "test:reader-fullscreen": "node --import tsx --test app/utils/readerFullscreen.test.ts"
   },
   "dependencies": {
     "@delb/epub": "workspace:*",
