@@ -100,23 +100,27 @@ async function readBodyWithLimit(
   const chunks: Buffer[] = [];
   let total = 0;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (!value) continue;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
 
-    total += value.byteLength;
-    if (total > maxBytes) {
-      throw createError({
-        statusCode: 413,
-        statusMessage: 'External image is too large',
-      });
+      total += value.byteLength;
+      if (total > maxBytes) {
+        throw createError({
+          statusCode: 413,
+          statusMessage: 'External image is too large',
+        });
+      }
+
+      chunks.push(Buffer.from(value));
     }
 
-    chunks.push(Buffer.from(value));
+    return Buffer.concat(chunks);
+  } finally {
+    reader.releaseLock();
   }
-
-  return Buffer.concat(chunks);
 }
 
 export async function fetchExternalImageBuffer(inputUrl: string): Promise<{
@@ -131,7 +135,10 @@ export async function fetchExternalImageBuffer(inputUrl: string): Promise<{
   }
 
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw createError({ statusCode: 400, statusMessage: 'Invalid url protocol' });
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Invalid url protocol',
+    });
   }
 
   const maxRedirects = DEFAULT_MAX_REDIRECTS;
@@ -145,58 +152,98 @@ export async function fetchExternalImageBuffer(inputUrl: string): Promise<{
     const ctrl = new AbortController();
     const timeout = setTimeout(() => ctrl.abort(), timeoutMs);
 
-    let resp: Response;
     try {
-      resp = await fetch(current.toString(), {
-        method: 'GET',
-        redirect: 'manual',
-        signal: ctrl.signal,
-        headers: {
-          Accept: 'image/*,*/*;q=0.8',
-          'User-Agent': 'delb/external-image-fetcher',
-        },
-      });
-    } catch {
-      throw createError({ statusCode: 502, statusMessage: 'Failed to fetch external image' });
+      let resp: Response;
+      try {
+        resp = await fetch(current.toString(), {
+          method: 'GET',
+          redirect: 'manual',
+          signal: ctrl.signal,
+          headers: {
+            Accept: 'image/*,*/*;q=0.8',
+            'User-Agent': 'delb/external-image-fetcher',
+          },
+        });
+      } catch {
+        throw createError({
+          statusCode: 502,
+          statusMessage: 'Failed to fetch external image',
+        });
+      }
+
+      const redirectStatus = [301, 302, 303, 307, 308];
+      if (redirectStatus.includes(resp.status)) {
+        if (i === maxRedirects) {
+          throw createError({
+            statusCode: 502,
+            statusMessage: 'Failed to fetch external image',
+          });
+        }
+
+        const location = resp.headers.get('location');
+        if (!location) {
+          throw createError({
+            statusCode: 502,
+            statusMessage: 'Failed to fetch external image',
+          });
+        }
+
+        current = parseLocation(current, location);
+        if (current.protocol !== 'http:' && current.protocol !== 'https:') {
+          throw createError({
+            statusCode: 400,
+            statusMessage: 'Invalid url protocol',
+          });
+        }
+        await resp.body?.cancel();
+        continue;
+      }
+
+      if (!resp.ok) {
+        throw createError({
+          statusCode: 502,
+          statusMessage: 'Failed to fetch external image',
+        });
+      }
+
+      const contentType =
+        resp.headers.get('content-type') || 'application/octet-stream';
+      if (!contentType.toLowerCase().startsWith('image/')) {
+        throw createError({
+          statusCode: 502,
+          statusMessage: 'Failed to fetch external image',
+        });
+      }
+
+      const contentLength = Number(resp.headers.get('content-length') || 0);
+      if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+        throw createError({
+          statusCode: 413,
+          statusMessage: 'External image is too large',
+        });
+      }
+
+      let bytes: Buffer;
+      try {
+        bytes = await readBodyWithLimit(resp.body, maxBytes);
+      } catch (error) {
+        if (ctrl.signal.aborted) {
+          throw createError({
+            statusCode: 502,
+            statusMessage: 'External image request timed out',
+          });
+        }
+        throw error;
+      }
+      return { bytes, contentType };
     } finally {
       clearTimeout(timeout);
+      ctrl.abort();
     }
-
-    const redirectStatus = [301, 302, 303, 307, 308];
-    if (redirectStatus.includes(resp.status)) {
-      if (i === maxRedirects) {
-        throw createError({ statusCode: 502, statusMessage: 'Failed to fetch external image' });
-      }
-
-      const location = resp.headers.get('location');
-      if (!location) {
-        throw createError({ statusCode: 502, statusMessage: 'Failed to fetch external image' });
-      }
-
-      current = parseLocation(current, location);
-      if (current.protocol !== 'http:' && current.protocol !== 'https:') {
-        throw createError({ statusCode: 400, statusMessage: 'Invalid url protocol' });
-      }
-      continue;
-    }
-
-    if (!resp.ok) {
-      throw createError({ statusCode: 502, statusMessage: 'Failed to fetch external image' });
-    }
-
-    const contentType = resp.headers.get('content-type') || 'application/octet-stream';
-    if (!contentType.toLowerCase().startsWith('image/')) {
-      throw createError({ statusCode: 502, statusMessage: 'Failed to fetch external image' });
-    }
-
-    const contentLength = Number(resp.headers.get('content-length') || 0);
-    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
-      throw createError({ statusCode: 413, statusMessage: 'External image is too large' });
-    }
-
-    const bytes = await readBodyWithLimit(resp.body, maxBytes);
-    return { bytes, contentType };
   }
 
-  throw createError({ statusCode: 502, statusMessage: 'Failed to fetch external image' });
+  throw createError({
+    statusCode: 502,
+    statusMessage: 'Failed to fetch external image',
+  });
 }

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { readFile, stat } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 
 import { and, eq, inArray } from 'drizzle-orm';
@@ -145,7 +145,6 @@ export async function resolveBookCoverFile(opts: {
   absPath: string;
   contentType: string;
   etag: string;
-  bytes: Buffer;
 }> {
   const { coverImagePath } = await getVisibleCoverContext(opts.event, opts.bookId);
 
@@ -193,13 +192,10 @@ export async function resolveBookCoverFile(opts: {
     mtimeMs: s.mtimeMs,
   });
 
-  const bytes = await readFile(chosenAbs);
-
   return {
     absPath: chosenAbs,
     contentType: contentTypeFromExt(ext),
     etag,
-    bytes,
   };
 }
 

@@ -1,0 +1,36 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Delb isolated EPUB compatibility test</title>
+<style>body{font:16px system-ui;margin:20px}#reader{height:480px;border:1px solid #888;margin-top:12px}button,select{margin:6px;padding:8px}#results{white-space:pre-wrap}</style>
+<h1>Delb EPUB compatibility test</h1>
+<p>Synthetic two-chapter book; installed epubjs. No accounts, personal books, or external requests.</p>
+<label>Mode <select id="mode"><option value="pages">Pages</option><option value="scroll">Scroll</option></select></label>
+<label><input id="scripts" type="checkbox">Allow book scripts (baseline option)</label>
+<button id="load">Load ordinary book</button><button id="next">Next</button><button id="chapter">Chapter 2</button><button id="theme">Apply dark theme</button>
+<div id="results" role="status">Ready. Test both modes with scripts unchecked, then compare baseline with scripts checked.</div><div id="reader"></div>
+<script src="jszip.min.js"></script><script src="epub.min.js"></script>
+<script>
+let book, rendition, relocationCount=0;
+const results=document.querySelector('#results');
+const report=(text)=>{results.textContent += '\n'+text;};
+document.querySelector('#load').onclick=async()=>{
+  try {
+    rendition?.destroy(); book?.destroy(); document.querySelector('#reader').replaceChildren();
+    const mode=document.querySelector('#mode').value;
+    const allowScriptedContent=document.querySelector('#scripts').checked;
+    results.textContent=`Loading ${mode}; allowScriptedContent=${allowScriptedContent}`;
+    book=ePub(await (await fetch('ordinary.epub')).arrayBuffer());
+    await book.ready;
+    rendition=book.renderTo('reader', mode==='pages'
+      ? {manager:'continuous',flow:'paginated',width:'100%',height:'100%',minSpreadWidth:1100,allowScriptedContent}
+      : {manager:'continuous',flow:'scrolled',width:'100%',height:'100%',spread:'none',minSpreadWidth:900,allowScriptedContent});
+    rendition.hooks.content.register(contents=>report(`Content hook: ${contents.document.body.textContent.includes('Ordinary synthetic reading paragraph') ? 'PASS text present' : 'FAIL missing text'}`));
+    rendition.on('relocated', loc=>report(`Relocation ${++relocationCount}: ${loc.start?.href ?? 'unknown'}`));
+    await rendition.display();
+    report(`PASS display resolved; TOC entries=${book.navigation.toc.length}`);
+    await book.locations.generate(500);
+    report(`PASS location generation; count=${book.locations.length()}`);
+  } catch(error){report('FAIL '+error.message);}
+};
+document.querySelector('#next').onclick=async()=>{try{await rendition.next();report('PASS next resolved');}catch(error){report('FAIL '+error.message);}};
+document.querySelector('#chapter').onclick=async()=>{try{await rendition.display('chapter2.xhtml');report('PASS chapter 2 display resolved');}catch(error){report('FAIL '+error.message);}};
+document.querySelector('#theme').onclick=()=>{rendition.themes.register('review-dark',{body:{color:'#eee',background:'#222'}});rendition.themes.select('review-dark');rendition.themes.fontSize('120%');report('Theme API applied; inspect text color/font and navigation visually');};
+</script></html>

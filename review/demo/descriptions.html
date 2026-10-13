@@ -1,0 +1,27 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Delb description sanitizer regression</title>
+<style>body{font:16px system-ui;margin:24px}pre{white-space:pre-wrap}</style>
+<h1>Native-browser sanitizer comparison</h1>
+<p>Detached HTML parsing only. Test payloads are inspected as strings, never rendered into the page or clicked.</p>
+<pre id="results" role="status">Running…</pre>
+<script type="module">
+import {sanitizeDescriptionHtml as baseline} from './description-baseline.js';
+import {sanitizeDescriptionHtml as patched} from './description-patched.js';
+const tests=[
+ ['nested event handler','<section><p onclick="benignMarker">text</p></section>',value=>!value.includes('onclick')],
+ ['nested unsafe link','<section><a href="javascript:benignMarker">link</a></section>',value=>!value.includes('href')],
+ ['obfuscated scheme','<a href="java&#9;script:benignMarker">link</a>',value=>!value.includes('href')],
+ ['formatting retained','<p>Text <strong>bold</strong></p>',value=>value.includes('<strong>bold</strong>')],
+ ['safe links retained','<a href="https://example.com">link</a>',value=>value.includes('href="https://example.com"')],
+ ['relative links retained','<a href="#chapter">link</a>',value=>value.includes('href="#chapter"')],
+ ['inline style removed','<p style="position:fixed">text</p>',value=>!value.includes('style=')],
+ ['SVG removed','<svg><a href="javascript:benignMarker">link</a></svg>',value=>!value.includes('<svg')&&!value.includes('javascript:')],
+];
+const lines=[];
+for(const [name,fn] of [['baseline',baseline],['patched',patched]]){
+ let passes=0;
+ lines.push(name.toUpperCase());
+ for(const [label,input,check] of tests){const result=fn(input);const ok=check(result);if(ok)passes++;lines.push(`${ok?'PASS':'FAIL'} ${label}`);}
+ lines.push(`${passes}/${tests.length} passed`);
+}
+document.querySelector('#results').textContent=lines.join('\n');
+</script></html>

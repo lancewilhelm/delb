@@ -25,7 +25,8 @@
     "release:patch": "standard-version --release-as patch",
     "release:major": "standard-version --release-as major",
     "format": "prettier --check .",
-    "format:fix": "prettier --write ."
+    "format:fix": "prettier --write .",
+    "test:review": "node --import tsx --test review/regressions.test.mjs review/maintenance.test.ts review/isolation.test.mjs"
   },
   "dependencies": {
     "@delb/epub": "workspace:*",
