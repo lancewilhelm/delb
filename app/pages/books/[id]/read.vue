@@ -880,11 +880,12 @@ const onRenditionClick = () => {
   showFullscreenTemporarily();
 };
 
-function toggleFullscreen() {
+async function toggleFullscreen() {
   isSettingsOpen.value = false;
   isTocOpen.value = false;
   isFullscreen.value = !isFullscreen.value;
-  renditionRef.value?.start();
+  // The rendition is already started. Restarting it duplicates manager listeners.
+  await refreshRenditionLayout();
 }
 
 watch([readerFontSize, readerLineHeight, readerTheme], () => {
