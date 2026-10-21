@@ -2,7 +2,11 @@ import { readArchive } from './archive.js';
 import { invalidEpub } from './errors.js';
 import { archiveDirname, resolveHref } from './path.js';
 import type { CoverInspection, EpubReadOptions } from './types.js';
-import { childElement, elements, parseXml } from './xml.js';
+import { childElement, elements, parseXml, OPF_NS, XHTML_NS } from './xml.js';
+
+const EPUB_MIMETYPE = 'application/epub+zip';
+const canonicalMimetype = new TextEncoder().encode(EPUB_MIMETYPE);
+const CONTAINER_NS = 'urn:oasis:names:tc:opendocument:xmlns:container';
 
 export interface ManifestItem {
   element: Element;
@@ -24,17 +28,19 @@ export interface EpubDocument {
   metadataElement: Element;
   manifestElement: Element;
   spineElement: Element;
+  mimetypeRepaired: boolean;
 }
 
 export function readEpub(
   input: Uint8Array,
   options?: EpubReadOptions,
+  repairMimetype = false,
 ): EpubDocument {
   const files = readArchive(input, options?.limits);
   const mimetype = files.get('mimetype');
   if (
-    !mimetype ||
-    new TextDecoder().decode(mimetype) !== 'application/epub+zip'
+    (!mimetype || new TextDecoder().decode(mimetype) !== EPUB_MIMETYPE) &&
+    !(repairMimetype && isRepairableMimetype(mimetype))
   ) {
     throw invalidEpub('EPUB mimetype is missing or invalid');
   }
@@ -80,7 +86,7 @@ export function readEpub(
     throw invalidEpub(
       `Unsupported EPUB package version: ${rawVersion || '<missing>'}`,
     );
-  return {
+  const epub: EpubDocument = {
     files,
     containerDocument,
     opfDocument,
@@ -91,7 +97,121 @@ export function readEpub(
     metadataElement,
     manifestElement,
     spineElement,
+    mimetypeRepaired: false,
   };
+  if (
+    repairMimetype &&
+    (!mimetype ||
+      mimetype.length !== canonicalMimetype.length ||
+      !canonicalMimetype.every((byte, index) => byte === mimetype[index]))
+  ) {
+    validateMimetypeRepair(epub, rootfile);
+    if (isPathEncrypted(epub, 'mimetype'))
+      throw invalidEpub('Encrypted EPUB mimetype cannot be normalized');
+    // Only the in-memory archive changes. The caller still validates the cover
+    // protections and commits the complete rewritten EPUB atomically.
+    files.set('mimetype', canonicalMimetype.slice());
+    epub.mimetypeRepaired = true;
+  }
+  return epub;
+}
+
+function isRepairableMimetype(bytes: Uint8Array | undefined): boolean {
+  if (!bytes) return true;
+  if (bytes.length > 128) return false;
+  try {
+    const text = new TextDecoder('utf-8', {
+      fatal: true,
+      ignoreBOM: true,
+    }).decode(bytes);
+    return /^\uFEFF?[\t\r\n ]*(?:application\/epub\+zip)?[\t\r\n ]*$/.test(
+      text,
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Identify an EPUB independently of its broken marker, not merely a readable ZIP. */
+function validateMimetypeRepair(epub: EpubDocument, rootfile?: Element): void {
+  const container = epub.containerDocument.documentElement;
+  const rootfiles = childElement(container, 'rootfiles');
+  if (
+    container.localName !== 'container' ||
+    container.namespaceURI !== CONTAINER_NS ||
+    container.getAttribute('version') !== '1.0' ||
+    rootfiles?.namespaceURI !== CONTAINER_NS ||
+    rootfile?.parentNode !== rootfiles ||
+    rootfile.namespaceURI !== CONTAINER_NS ||
+    rootfile.getAttribute('media-type') !== 'application/oebps-package+xml' ||
+    epub.packageElement.namespaceURI !== OPF_NS ||
+    !['2.0', '3.0'].includes(
+      epub.packageElement.getAttribute('version') ?? '',
+    ) ||
+    [epub.metadataElement, epub.manifestElement, epub.spineElement].some(
+      (element) => element.namespaceURI !== OPF_NS,
+    )
+  )
+    throw invalidEpub(
+      'Cannot normalize mimetype without a valid EPUB container and package',
+    );
+
+  const dcNamespace = 'http://purl.org/dc/elements/1.1/';
+  const uniqueId = epub.packageElement.getAttribute('unique-identifier');
+  for (const name of ['identifier', 'title', 'language']) {
+    if (
+      !elements(epub.metadataElement, name).some(
+        (element) =>
+          element.namespaceURI === dcNamespace &&
+          (element.textContent ?? '').trim() &&
+          (name !== 'identifier' ||
+            (uniqueId && element.getAttribute('id') === uniqueId)),
+      )
+    )
+      throw invalidEpub(
+        'Cannot normalize mimetype without EPUB identifier, title, and language metadata',
+      );
+  }
+
+  const manifest = manifestItems(epub);
+  const ids = new Set<string>();
+  for (const item of manifest) {
+    if (
+      item.element.namespaceURI !== OPF_NS ||
+      !item.id ||
+      ids.has(item.id) ||
+      !item.href ||
+      !item.element.getAttribute('media-type') ||
+      !epub.files.has(item.path)
+    )
+      throw invalidEpub(
+        'Cannot normalize mimetype with an invalid manifest or missing local resource',
+      );
+    ids.add(item.id);
+  }
+  const spine = spinePaths(epub);
+  if (!spine.length)
+    throw invalidEpub('Cannot normalize mimetype without EPUB reading content');
+  for (const { itemref, item } of spine) {
+    if (itemref.namespaceURI !== OPF_NS || !item)
+      throw invalidEpub('Cannot normalize mimetype with an invalid EPUB spine');
+    const document = parseXml(epub.files.get(item.path)!, item.path);
+    const root = document.documentElement;
+    if (!(
+      (item.mediaType === 'application/xhtml+xml' &&
+        root.localName === 'html' &&
+        root.namespaceURI === XHTML_NS) ||
+      (item.mediaType === 'image/svg+xml' &&
+        root.localName === 'svg' &&
+        root.namespaceURI === 'http://www.w3.org/2000/svg') ||
+      (item.mediaType === 'application/x-dtbook+xml' &&
+        root.localName === 'dtbook' &&
+        root.namespaceURI === 'http://www.daisy.org/z3986/2005/dtbook/')
+    ))
+      throw invalidEpub(
+        'Cannot normalize mimetype without recognized EPUB reading documents',
+      );
+  }
 }
 
 export function manifestItems(epub: EpubDocument): ManifestItem[] {

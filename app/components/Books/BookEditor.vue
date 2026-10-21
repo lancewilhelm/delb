@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import BookDescriptionEditor from '~/components/Books/BookDescriptionEditor.vue';
+import { readResponseError } from '~/utils/responseError';
 
 defineOptions({ name: 'BookEditor' });
 
@@ -470,9 +471,12 @@ async function uploadPendingCoverIfAny() {
       );
 
       if (!clearRes.ok) {
-        const text = await clearRes.text().catch(() => '');
-        setError(text || `Failed to reset cover (${clearRes.status}).`);
-        throw new Error('Cover reset failed.');
+        throw new Error(
+          await readResponseError(
+            clearRes,
+            `Failed to reset cover (${clearRes.status}).`,
+          ),
+        );
       }
 
       coverResetPending.value = false;
@@ -496,9 +500,9 @@ async function uploadPendingCoverIfAny() {
     );
 
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      setError(text || `Failed to upload cover (${res.status}).`);
-      throw new Error('Cover upload failed.');
+      throw new Error(
+        await readResponseError(res, `Failed to upload cover (${res.status}).`),
+      );
     }
 
     const payload = (await res.json().catch(() => null)) as {

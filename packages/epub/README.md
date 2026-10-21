@@ -33,11 +33,29 @@ cover inspection, and non-fatal preservation warnings. Inputs are never
 mutated. `keepAspectRatio` defaults to `true`; image resizing and transcoding
 remain the caller's responsibility.
 
+`repairMimetype` defaults to `false`. Cover mutation callers can opt in to
+normalizing a missing or empty `mimetype` entry, or the expected value with a
+UTF-8 BOM or surrounding ASCII whitespace. Other declared MIME types and
+malformed bytes are rejected. Repair requires an OCF container with the expected
+namespace, version, and package declaration. It also requires package metadata,
+unique manifest IDs, existing local manifest resources, and recognized XML
+reading documents referenced by the spine. This conservative check is not a full
+EPUB conformance validator. Packages with remote manifest resources are not
+eligible for this repair.
+
+Repair returns `mimetypeRepaired: true` and a warning. Inspection keeps its existing
+validation behavior. Signature, cover-encryption, path, and archive-limit guards
+still apply. Repair changes only the returned bytes, and file adapters retain
+their explicit atomic output requirement. The Delb cover-upload endpoint opts in
+to repair and commits the repaired EPUB together with the new cover files.
+
 Archive limits default to 10,000 entries, 1 GiB total uncompressed data, and
 256 MiB per entry. They can be lowered or raised through the `limits` option.
-All archive paths are validated before extraction. Output follows OCF ZIP
-requirements by writing `mimetype` first, uncompressed, with exact
-`application/epub+zip` contents and no ZIP extras.
+All archive paths are validated before extraction. For canonical marker input or
+successful guarded repair, output follows OCF ZIP requirements by writing
+`mimetype` first, uncompressed, with exact `application/epub+zip` contents and no
+ZIP extras. The legacy reader accepts a UTF-8 BOM through text decoding; enable
+`repairMimetype` to normalize that variant too.
 
 This package deliberately focuses on EPUB structure. It does not attempt
 Calibre-style rendering or conversion between unrelated ebook formats.
