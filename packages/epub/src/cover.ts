@@ -57,7 +57,7 @@ async function mutateCover(
   options: CoverMutationOptions,
 ): Promise<CoverMutationResult> {
   validateCoverInput(cover);
-  const epub = readEpub(input, options);
+  const epub = readEpub(input, options, options.repairMimetype);
   if (epub.files.has('META-INF/signatures.xml')) {
     throw new EpubError(
       'SIGNED_EPUB',
@@ -78,6 +78,10 @@ async function mutateCover(
   }
 
   const warnings: string[] = [];
+  if (epub.mimetypeRepaired)
+    warnings.push(
+      'Normalized the missing or noncanonical EPUB mimetype entry.',
+    );
   const extension = cover.mediaType === 'image/png' ? 'png' : 'jpg';
   const canReuseExistingPath =
     existing &&
@@ -151,6 +155,7 @@ async function mutateCover(
     action: existing ? (repaired ? 'repaired' : 'replaced') : 'inserted',
     cover: outputCover,
     warnings,
+    mimetypeRepaired: epub.mimetypeRepaired,
   };
 }
 

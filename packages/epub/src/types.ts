@@ -17,6 +17,8 @@ export interface EpubReadOptions {
 
 export interface CoverMutationOptions extends EpubReadOptions {
   keepAspectRatio?: boolean;
+  /** Repair a missing, empty, or BOM/whitespace-padded EPUB mimetype after structural validation. */
+  repairMimetype?: boolean;
 }
 
 export interface CoverInspection {
@@ -34,6 +36,7 @@ export interface CoverMutationResult {
   action: 'inserted' | 'replaced' | 'repaired';
   cover: CoverInspection;
   warnings: string[];
+  mimetypeRepaired?: boolean;
 }
 
 export type EpubErrorCode =

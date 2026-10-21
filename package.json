@@ -27,7 +27,8 @@
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
     "test:review": "node --import tsx --test review/regressions.test.mjs review/maintenance.test.ts review/isolation.test.mjs",
-    "test:reader-fullscreen": "node --import tsx --test app/utils/readerFullscreen.test.ts"
+    "test:reader-fullscreen": "node --import tsx --test app/utils/readerFullscreen.test.ts",
+    "test:cover-upload": "pnpm --filter @delb/epub build && node --import tsx --test server/utils/books/cover-upload.test.ts app/utils/coverUpload.test.ts"
   },
   "dependencies": {
     "@delb/epub": "workspace:*",

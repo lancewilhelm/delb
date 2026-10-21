@@ -96,6 +96,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Missing cover file' });
   }
 
+  let epubContext: { epubFileId: string; relativePath: string } | undefined;
   try {
     // Enforce visibility: user must be a member of at least one collection that contains this book.
     const memberships = await cloudDb
@@ -321,20 +322,45 @@ export default defineEventHandler(async (event) => {
       { targetPath: thumbAbs, data: thumbWebp },
     ];
     const epubWarnings: string[] = [];
+    const normalizedEpubFileIds: string[] = [];
     const epubFiles = files.filter(
       (file) => (file.format ?? '').toLowerCase() === 'epub',
     );
     for (const epubFile of epubFiles) {
+      epubContext = {
+        epubFileId: epubFile.id,
+        relativePath: epubFile.relativePath,
+      };
       const relFromLibrary = epubFile.relativePath.replace(/^library[\\/]/, '');
       const epubAbs = path.resolve(libraryBaseAbs, relFromLibrary);
       ensureUnderLibraryOrThrow(epubAbs, {
         relativePath: epubFile.relativePath,
         from: 'book_files_epub',
       });
-      const result = await setCover(await readFile(epubAbs), {
-        data: embeddedJpeg,
-        mediaType: 'image/jpeg',
-      });
+      let epubBytes: Buffer;
+      try {
+        epubBytes = await readFile(epubAbs);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') throw error;
+        logger.warn(
+          { id, ...epubContext, code: 'EPUB_FILE_MISSING' },
+          'POST /api/books/:id/cover: associated EPUB file is missing',
+        );
+        throw createError({
+          statusCode: 409,
+          statusMessage:
+            'An associated EPUB file is missing. Restore the file or correct its library entry, then retry the cover upload.',
+          data: {
+            code: 'EPUB_FILE_MISSING',
+            relativePath: epubFile.relativePath,
+          },
+        });
+      }
+      const result = await setCover(
+        epubBytes,
+        { data: embeddedJpeg, mediaType: 'image/jpeg' },
+        { repairMimetype: true },
+      );
       const verified = await inspectCover(result.data);
       if (!verified || verified.mediaType !== 'image/jpeg') {
         throw new EpubError(
@@ -348,7 +374,9 @@ export default defineEventHandler(async (event) => {
         ),
       );
       updates.push({ targetPath: epubAbs, data: result.data });
+      if (result.mimetypeRepaired) normalizedEpubFileIds.push(epubFile.id);
     }
+    epubContext = undefined;
 
     const commitResult = await commitCoverUpdate({
       operationParent: bookDirAbs,
@@ -373,6 +401,16 @@ export default defineEventHandler(async (event) => {
     });
     for (const fallbackPath of commitResult.backupFallbackPaths) {
       storageFallbackPaths.add(fallbackPath);
+    }
+    if (normalizedEpubFileIds.length) {
+      logger.info(
+        {
+          id,
+          code: 'EPUB_MIMETYPE_NORMALIZED',
+          epubFileIds: normalizedEpubFileIds,
+        },
+        'POST /api/books/:id/cover: normalized EPUB mimetype entries during committed cover update',
+      );
     }
     if (storageFallbackPaths.size > 0) {
       logger.warn(
@@ -438,7 +476,7 @@ export default defineEventHandler(async (event) => {
 
     if (error instanceof EpubError) {
       logger.warn(
-        { err: error, id, code: error.code },
+        { err: error, id, ...epubContext, code: error.code },
         'POST /api/books/:id/cover: EPUB cover update rejected',
       );
       throw createError({
