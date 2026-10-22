@@ -54,10 +54,10 @@ const props = withDefaults(
      * Server-side sort mode.
      * Defaults should be enforced by the server (date added desc).
      */
-    sort?: 'dateAdded' | 'alphabetical' | 'publishedDate';
+    sort?: 'dateAdded' | 'alphabetical' | 'publishedDate' | 'pages';
     /**
      * Server-side sort direction.
-     * Defaults should be enforced by the server (desc for dateAdded/publishedDate, asc for alphabetical).
+     * Defaults should be enforced by the server (desc for dateAdded/publishedDate, asc for alphabetical/pages).
      */
     sortDir?: 'asc' | 'desc';
     /**

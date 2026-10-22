@@ -1,13 +1,10 @@
 import { defineStore } from 'pinia';
 
 export type LibraryView =
-  | 'books'
-  | 'authors'
-  | 'series'
-  | 'publishers'
-  | 'tags';
+  'books' | 'authors' | 'series' | 'publishers' | 'tags';
 
-export type BooksSortKey = 'dateAdded' | 'alphabetical' | 'publishedDate';
+export type BooksSortKey =
+  'dateAdded' | 'alphabetical' | 'publishedDate' | 'pages';
 export type SortDirection = 'asc' | 'desc';
 export type BooksViewMode = 'grid' | 'list';
 
@@ -54,7 +51,8 @@ export const useUiStore = defineStore(
       // - dateAdded => newest first
       // - publishedDate => newest first
       // - alphabetical => A-Z
-      if (key === 'alphabetical') {
+      // - pages => shortest first (unknown counts always last)
+      if (key === 'alphabetical' || key === 'pages') {
         booksSortDirection.value = 'asc';
       } else if (key === 'publishedDate') {
         booksSortDirection.value = 'desc';
