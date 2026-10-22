@@ -2,7 +2,11 @@ ARG NODE_VERSION=20
 
 FROM node:${NODE_VERSION}-slim AS base
 WORKDIR /app
-RUN corepack enable
+# Install the pinned native pnpm once for all build stages. Corepack skips
+# pnpm's install scripts and otherwise downloads its binary on first use.
+COPY package.json ./
+RUN npm install --global "$(node -p "require('./package.json').packageManager.split('+')[0]")" \
+  && pnpm --version
 
 # -------------------------------
 # Dependencies stage (build)
