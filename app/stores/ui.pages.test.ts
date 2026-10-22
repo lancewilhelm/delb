@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { transformSync } from 'esbuild';
-import { createApp, ref } from 'vue';
 import { createPinia, defineStore } from 'pinia';
 import { createPersistedState } from 'pinia-plugin-persistedstate';
+
+// Use Pinia's Vue peer under pnpm's isolated dependency layout.
+const { createApp, ref } = createRequire(import.meta.resolve('pinia'))('vue');
 
 function createStore(storage: Pick<Storage, 'getItem' | 'setItem'>) {
   const code = transformSync(
