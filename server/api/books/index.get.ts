@@ -27,7 +27,9 @@ import {
 import { logger } from '~/utils/logger';
 import { auth } from '~/utils/auth';
 
-type SortKey = 'dateAdded' | 'alphabetical' | 'publishedDate';
+import { pageSort } from '../../utils/books/page-sort';
+
+type SortKey = 'dateAdded' | 'alphabetical' | 'publishedDate' | 'pages';
 type SortDir = 'asc' | 'desc';
 
 type UserBookStatusValue = (typeof USER_BOOK_STATUSES)[number];
@@ -38,6 +40,7 @@ type Cursor = {
    * - dateAdded: createdAt + id
    * - alphabetical: sortTitle + id
    * - publishedDate: published + id
+   * - pages: non-negative integer or empty string (unknown) + id
    */
   v: string;
   id: string;
@@ -56,6 +59,7 @@ function normalizeSortKey(raw: unknown): SortKey {
   const v = (raw ?? '').toString().trim();
   if (v === 'alphabetical') return 'alphabetical';
   if (v === 'publishedDate') return 'publishedDate';
+  if (v === 'pages') return 'pages';
   return 'dateAdded';
 }
 
@@ -65,7 +69,7 @@ function normalizeSortDir(raw: unknown, sort: SortKey): SortDir {
   if (v === 'desc') return 'desc';
 
   // Default directions
-  if (sort === 'alphabetical') return 'asc';
+  if (sort === 'alphabetical' || sort === 'pages') return 'asc';
   return 'desc';
 }
 
@@ -161,7 +165,7 @@ export default defineEventHandler(async (event) => {
   // - omit collectionId to fetch books from all collections the user is a member of
   // - limit=<n> max page size (default 48)
   // - cursor=<opaque> pagination cursor (sort-dependent) for infinite scroll
-  // - sort=<dateAdded|alphabetical|publishedDate> (default dateAdded)
+  // - sort=<dateAdded|alphabetical|publishedDate|pages> (default dateAdded)
   // - sortDir=<asc|desc> (default per sort; dateAdded desc)
   // - addedStart=<YYYY-MM-DD> optional (inclusive)
   // - addedEnd=<YYYY-MM-DD> optional (inclusive)
@@ -324,6 +328,7 @@ export default defineEventHandler(async (event) => {
     // Build cursor conditions + orderBy based on sort mode.
     // NOTE: For title/published sorts we still filter the visible book set via collection_books,
     // but sorting uses the books table fields.
+    const pagesSort = pageSort(books.pages, books.id, sortDir, cursor);
     const orderPrimary: SQLWrapper =
       sort === 'dateAdded'
         ? books.createdAt
@@ -337,54 +342,56 @@ export default defineEventHandler(async (event) => {
     // - Use lexicographic compare for sortTitle/published (both are TEXT)
     // - Use date compare for createdAt (timestamp)
     const cursorWhere =
-      cursor && sort === 'dateAdded'
-        ? sortDir === 'asc'
-          ? or(
-              gt(books.createdAt, new Date(cursor.v)),
-              and(
-                eq(books.createdAt, new Date(cursor.v)),
-                gt(books.id, cursor.id),
-              ),
-            )
-          : or(
-              lt(books.createdAt, new Date(cursor.v)),
-              and(
-                eq(books.createdAt, new Date(cursor.v)),
-                lt(books.id, cursor.id),
-              ),
-            )
-        : cursor && sort === 'alphabetical'
+      sort === 'pages'
+        ? pagesSort.where
+        : cursor && sort === 'dateAdded'
           ? sortDir === 'asc'
             ? or(
-                gt(books.sortTitle, cursor.v),
-                and(eq(books.sortTitle, cursor.v), gt(books.id, cursor.id)),
+                gt(books.createdAt, new Date(cursor.v)),
+                and(
+                  eq(books.createdAt, new Date(cursor.v)),
+                  gt(books.id, cursor.id),
+                ),
               )
             : or(
-                lt(books.sortTitle, cursor.v),
-                and(eq(books.sortTitle, cursor.v), lt(books.id, cursor.id)),
+                lt(books.createdAt, new Date(cursor.v)),
+                and(
+                  eq(books.createdAt, new Date(cursor.v)),
+                  lt(books.id, cursor.id),
+                ),
               )
-          : cursor && sort === 'publishedDate'
-            ? (() => {
-                const cursorMs = Number.parseInt(cursor.v, 10);
-                const v = Number.isFinite(cursorMs) ? cursorMs : 0;
+          : cursor && sort === 'alphabetical'
+            ? sortDir === 'asc'
+              ? or(
+                  gt(books.sortTitle, cursor.v),
+                  and(eq(books.sortTitle, cursor.v), gt(books.id, cursor.id)),
+                )
+              : or(
+                  lt(books.sortTitle, cursor.v),
+                  and(eq(books.sortTitle, cursor.v), lt(books.id, cursor.id)),
+                )
+            : cursor && sort === 'publishedDate'
+              ? (() => {
+                  const cursorMs = Number.parseInt(cursor.v, 10);
+                  const v = Number.isFinite(cursorMs) ? cursorMs : 0;
 
-                return sortDir === 'asc'
-                  ? or(
-                      gt(sql`COALESCE(${books.publishedAt}, 0)`, v),
-                      and(
-                        eq(sql`COALESCE(${books.publishedAt}, 0)`, v),
-                        gt(books.id, cursor.id),
-                      ),
-                    )
-                  : or(
-                      lt(sql`COALESCE(${books.publishedAt}, 0)`, v),
-                      and(
-                        eq(sql`COALESCE(${books.publishedAt}, 0)`, v),
-                        lt(books.id, cursor.id),
-                      ),
-                    );
-              })()
-            : undefined;
+                  return sortDir === 'asc'
+                    ? or(
+                        gt(sql`COALESCE(${books.publishedAt}, 0)`, v),
+                        and(
+                          eq(sql`COALESCE(${books.publishedAt}, 0)`, v),
+                          gt(books.id, cursor.id),
+                        ),
+                      )
+                    : or(
+                        lt(sql`COALESCE(${books.publishedAt}, 0)`, v),
+                        and(
+                          eq(sql`COALESCE(${books.publishedAt}, 0)`, v),
+                          lt(books.id, cursor.id),
+                        ),
+                      );
+                })()
+              : undefined;
 
     // Page query: fetch visible books via the collection link table.
     // Sort is selectable, with deterministic tie-break by id.
@@ -449,9 +456,13 @@ export default defineEventHandler(async (event) => {
       // Group by book id provides a deterministic unique set in SQLite.
       .groupBy(books.id)
       .orderBy(
-        orderPrimaryDesc ? desc(orderPrimary) : asc(orderPrimary),
-        // Deterministic tie-break; keep direction aligned so paging is stable
-        orderPrimaryDesc ? desc(books.id) : asc(books.id),
+        ...(sort === 'pages'
+          ? pagesSort.orderBy
+          : [
+              orderPrimaryDesc ? desc(orderPrimary) : asc(orderPrimary),
+              // Deterministic tie-break; keep direction aligned so paging is stable
+              orderPrimaryDesc ? desc(books.id) : asc(books.id),
+            ]),
       )
       .limit(limit + 1);
 
@@ -634,29 +645,31 @@ export default defineEventHandler(async (event) => {
       hasMore && last?.id
         ? encodeCursor({
             v:
-              sort === 'dateAdded'
-                ? new Date(last.createdAt).toISOString()
-                : sort === 'alphabetical'
-                  ? (last.sortTitle ?? '')
-                  : String(
-                      Number.isFinite(
-                        Number(
-                          last.publishedAt instanceof Date
-                            ? last.publishedAt.getTime()
-                            : typeof last.publishedAt === 'number'
-                              ? last.publishedAt
-                              : 0,
-                        ),
-                      )
-                        ? Number(
+              sort === 'pages'
+                ? pagesSort.cursorValue(last.pages)
+                : sort === 'dateAdded'
+                  ? new Date(last.createdAt).toISOString()
+                  : sort === 'alphabetical'
+                    ? (last.sortTitle ?? '')
+                    : String(
+                        Number.isFinite(
+                          Number(
                             last.publishedAt instanceof Date
                               ? last.publishedAt.getTime()
                               : typeof last.publishedAt === 'number'
                                 ? last.publishedAt
                                 : 0,
-                          )
-                        : 0,
-                    ),
+                          ),
+                        )
+                          ? Number(
+                              last.publishedAt instanceof Date
+                                ? last.publishedAt.getTime()
+                                : typeof last.publishedAt === 'number'
+                                  ? last.publishedAt
+                                  : 0,
+                            )
+                          : 0,
+                      ),
             id: last.id,
           })
         : null;

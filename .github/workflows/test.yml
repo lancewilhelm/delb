@@ -22,6 +22,7 @@ jobs:
       - run: pnpm test:epub
       - run: pnpm test:cover-transaction
       - run: pnpm test:cover-upload
+      - run: pnpm test:page-sort
       - run: pnpm test:review
       - run: pnpm test:reader-fullscreen
       - run: pnpm typecheck

@@ -37,7 +37,7 @@ async function loadSource(relative) {
           'const { readFile, stat } = globalThis.reviewFs;',
         )
         .replace('10_000', '30'),
-      resolveDir: sourceRoot,
+      resolveDir: path.dirname(path.join(sourceRoot, relative)),
       sourcefile: relative,
       loader: 'ts',
     },
