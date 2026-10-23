@@ -559,7 +559,7 @@ const booksSortOptions: BooksSortOption[] = [
   { id: 'dateAdded', label: 'Date added' },
   { id: 'alphabetical', label: 'Alphabetical' },
   { id: 'publishedDate', label: 'Published date' },
-  { id: 'pages', label: 'Number of pages' },
+  { id: 'pages', label: 'Pages' },
 ];
 
 const sortOpen = ref(false);
@@ -1392,12 +1392,6 @@ onMounted(async () => {
                       />
                     </button>
                   </div>
-                  <p
-                    v-if="uiStore.booksSortKey === 'pages'"
-                    class="px-3 py-2 text-xs opacity-70 border-t border-(--sub-color)"
-                  >
-                    Unknown page counts appear last in either direction.
-                  </p>
                 </div>
               </div>
             </div>
