@@ -27,6 +27,16 @@ test('position writes reject older same-session updates and preserve legacy and 
     clientSequence: 2,
   };
   assert.equal((await savePosition(db, base)).accepted, true);
+  const withoutProgress = await savePosition(db, {
+    ...base,
+    location: 'newer',
+    progress: null,
+    clientSequence: 3,
+  });
+  assert.deepEqual(withoutProgress.position, {
+    location: 'newer',
+    progress: 20,
+  });
   const stale = await savePosition(db, {
     ...base,
     location: 'old',
@@ -35,7 +45,7 @@ test('position writes reject older same-session updates and preserve legacy and 
   });
   assert.deepEqual(stale, {
     accepted: false,
-    position: { location: 'new', progress: 20 },
+    position: { location: 'newer', progress: 20 },
   });
   const results = await Promise.all(
     Array.from({ length: 20 }, (_, i) =>

@@ -20,7 +20,7 @@ export async function savePosition(db: LibSQLDatabase, position: Position) {
       target: [table.userId, table.bookId],
       set: {
         location: sql`excluded.location`,
-        progress: sql`excluded.progress`,
+        progress: sql`coalesce(excluded.progress, ${table.progress})`,
         clientSessionId: sql`excluded.client_session_id`,
         clientSequence: sql`excluded.client_sequence`,
         updatedAt: sql`excluded.updated_at`,
