@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, writeFile } from 'node:fs/promises';
 
 import { and, eq } from 'drizzle-orm';
 
@@ -23,8 +23,12 @@ import { resolveDataPath, toSafePathSegment } from '~~/server/utils/books/fs';
 import { makeAuthorSortKey, makeTitleSortKey } from '~~/server/utils/sort/keys';
 import { buildBookStorageRelativePath } from '~~/server/utils/books/storage/paths';
 import { normalizePublishedAt } from '~~/server/utils/books/published';
+import { withBookStorageLock } from '~~/server/utils/books/storage/book-lock';
 import { findPossibleDuplicates } from '~~/server/utils/books/duplicates';
-import { deleteBook } from '~~/server/utils/books/delete-book';
+import {
+  readBoundedUpload,
+  UploadTooLargeError,
+} from '~~/server/utils/books/storage/bounded-upload';
 
 type SupportedBookFormat = 'epub' | 'pdf' | 'mobi' | 'azw3';
 const SUPPORTED_BOOK_FORMATS: ReadonlyArray<SupportedBookFormat> = [
@@ -180,8 +184,10 @@ async function assertCanUploadToCollections(opts: {
 /**
  * Find or create an author by name (lean v1: unique by exact name).
  */
-async function findOrCreateAuthorByName(name: string) {
-  const existing = await cloudDb
+type DbLike = Pick<typeof cloudDb, 'select' | 'insert'>;
+
+async function findOrCreateAuthorByName(db: DbLike, name: string) {
+  const existing = await db
     .select()
     .from(authors)
     .where(eq(authors.name, name))
@@ -192,7 +198,7 @@ async function findOrCreateAuthorByName(name: string) {
   const id = crypto.randomUUID();
   const now = new Date();
 
-  await cloudDb.insert(authors).values({
+  await db.insert(authors).values({
     id,
     name,
     sortName: makeAuthorSortKey(name),
@@ -209,7 +215,7 @@ async function findOrCreateAuthorByName(name: string) {
  * @param input
  * @returns object containing the book's metadata and stored file path
  */
-async function processOneBookUpload(
+async function processOneBookUploadUnlocked(
   filePart: MultipartFilePart,
   input: {
     userId: string;
@@ -235,6 +241,7 @@ async function processOneBookUpload(
   const authorName = meta.author || 'Unknown Author';
   const title = meta.title || 'Untitled';
 
+  let existingCoverImagePath: string | null = null;
   if (input.replaceBookId) {
     if (!input.allowDuplicate) {
       throw createError({
@@ -243,16 +250,42 @@ async function processOneBookUpload(
       });
     }
 
-    await deleteBook({
-      bookId: input.replaceBookId,
-      mode: 'everything',
-      actor: { id: input.userId, role: input.userRole },
-      logCtx: 'POST /api/books/upload: replace',
-    });
+    const existing = await cloudDb
+      .select()
+      .from(books)
+      .where(eq(books.id, input.replaceBookId))
+      .limit(1);
+    const book = existing[0];
+    if (
+      !book ||
+      (input.userRole !== 'admin' &&
+        input.userRole !== 'owner' &&
+        book.createdByUserId !== input.userId)
+    ) {
+      throw createError({ statusCode: 404, statusMessage: 'Book not found' });
+    }
+    existingCoverImagePath = book.coverImagePath;
+    const visible = await cloudDb
+      .select({ bookId: collectionBooks.bookId })
+      .from(collectionBooks)
+      .innerJoin(
+        collectionMembers,
+        eq(collectionMembers.collectionId, collectionBooks.collectionId),
+      )
+      .where(
+        and(
+          eq(collectionBooks.bookId, input.replaceBookId),
+          eq(collectionMembers.userId, input.userId),
+        ),
+      )
+      .limit(1);
+    if (!visible.length)
+      throw createError({ statusCode: 404, statusMessage: 'Book not found' });
   }
 
   if (!input.allowDuplicate) {
     const candidates = await findPossibleDuplicates({
+      userId: input.userId,
       title,
       author: authorName,
       identifiers: meta.identifiers ?? [],
@@ -279,12 +312,12 @@ async function processOneBookUpload(
 
   const safeTitle = toSafePathSegment(title, 'Untitled');
 
-  const id = crypto.randomUUID();
+  const id = input.replaceBookId ?? crypto.randomUUID();
   const relativePath = buildBookStorageRelativePath({
     authorNames: [authorName],
     title,
     bookId: id,
-    filename: `${safeTitle}.${format}`,
+    filename: `${safeTitle}-${crypto.randomUUID()}.${format}`,
     baseDir: 'library',
   });
 
@@ -293,7 +326,16 @@ async function processOneBookUpload(
 
   // Ensure directories exist then write file
   await mkdir(bookDirAbsolute, { recursive: true });
-  await writeFile(absolutePath, filePart.data);
+  await writeFile(absolutePath, filePart.data, { flag: 'wx' });
+  const handle = await open(absolutePath, 'r');
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  if (!(await readFile(absolutePath)).equals(filePart.data)) {
+    throw new Error('Uploaded file failed verification');
+  }
 
   // Best-effort cover extraction (EPUB only for now)
   //
@@ -303,8 +345,8 @@ async function processOneBookUpload(
   // - Persist `books.coverImagePath` as the thumbnail path (`thumb.webp`)
   //
   // The full-res source is served only on-demand by requesting its path.
-  let coverImagePath: string | null = null;
-  if (format === 'epub') {
+  let coverImagePath: string | null = existingCoverImagePath;
+  if (format === 'epub' && !input.replaceBookId) {
     try {
       const thumbRelativePath = buildBookStorageRelativePath({
         authorNames: [authorName],
@@ -348,60 +390,70 @@ async function processOneBookUpload(
   const published = (meta.published || null) as string | null;
   const publishedAt = published ? normalizePublishedAt(published) : null;
 
-  await cloudDb.insert(books).values({
-    id,
-    title,
-    sortTitle: makeTitleSortKey(title),
-    description: (meta.description || null) as string | null,
-    published,
-    publishedAt,
-    language: (meta.language || null) as string | null,
-    coverImagePath,
-    createdByUserId: input.userId,
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  // Attach author (lean v1: one author)
-  const author = await findOrCreateAuthorByName(authorName);
-  await cloudDb.insert(bookAuthors).values({
-    bookId: id,
-    authorId: author.id,
-    position: 1,
-  });
-
-  // Attach uploaded file
-  await cloudDb.insert(bookFiles).values({
-    id: crypto.randomUUID(),
-    bookId: id,
-    format,
-    relativePath,
-    createdAt: now,
-  });
-
-  if (meta.identifiers?.length) {
-    for (const ident of meta.identifiers) {
-      const type = (ident.type ?? '').toString().trim().toLowerCase();
-      const value = (ident.value ?? '').toString().trim();
-      if (!type || !value) continue;
-
-      await cloudDb.insert(bookIdentifiers).values({
-        bookId: id,
-        type,
-        value,
+  await cloudDb.transaction(async (tx) => {
+    if (input.replaceBookId) {
+      await tx
+        .update(books)
+        .set({
+          title,
+          sortTitle: makeTitleSortKey(title),
+          description: meta.description || null,
+          published,
+          publishedAt,
+          language: meta.language || null,
+          updatedAt: now,
+        })
+        .where(eq(books.id, id));
+      await tx.delete(bookAuthors).where(eq(bookAuthors.bookId, id));
+      await tx.delete(bookIdentifiers).where(eq(bookIdentifiers.bookId, id));
+      await tx.delete(bookFiles).where(eq(bookFiles.bookId, id));
+    } else {
+      await tx.insert(books).values({
+        id,
+        title,
+        sortTitle: makeTitleSortKey(title),
+        description: meta.description || null,
+        published,
+        publishedAt,
+        language: meta.language || null,
+        coverImagePath,
+        createdByUserId: input.userId,
+        createdAt: now,
+        updatedAt: now,
       });
     }
-  }
-
-  // Add to collections
-  for (const collectionId of input.collectionIds) {
-    await cloudDb.insert(collectionBooks).values({
-      collectionId,
+    const author = await findOrCreateAuthorByName(
+      tx as unknown as DbLike,
+      authorName,
+    );
+    await tx
+      .insert(bookAuthors)
+      .values({ bookId: id, authorId: author.id, position: 1 });
+    await tx.insert(bookFiles).values({
+      id: crypto.randomUUID(),
       bookId: id,
-      addedByUserId: input.userId,
-      addedAt: now,
+      format,
+      relativePath,
+      createdAt: now,
     });
-  }
+    for (const ident of meta.identifiers ?? []) {
+      const type = (ident.type ?? '').trim().toLowerCase();
+      const value = (ident.value ?? '').trim();
+      if (type && value)
+        await tx.insert(bookIdentifiers).values({ bookId: id, type, value });
+    }
+    for (const collectionId of new Set(input.collectionIds)) {
+      await tx
+        .insert(collectionBooks)
+        .values({
+          collectionId,
+          bookId: id,
+          addedByUserId: input.userId,
+          addedAt: now,
+        })
+        .onConflictDoNothing();
+    }
+  });
 
   return {
     id,
@@ -412,6 +464,19 @@ async function processOneBookUpload(
     coverImagePath,
     createdAt: now,
   };
+}
+
+async function processOneBookUpload(
+  filePart: MultipartFilePart,
+  input: Parameters<typeof processOneBookUploadUnlocked>[1],
+) {
+  if (!input.replaceBookId)
+    return await processOneBookUploadUnlocked(filePart, input);
+  return await withBookStorageLock(
+    path.resolve(process.cwd(), 'library'),
+    input.replaceBookId,
+    async () => await processOneBookUploadUnlocked(filePart, input),
+  );
 }
 
 export default defineEventHandler(async (event) => {
@@ -428,7 +493,27 @@ export default defineEventHandler(async (event) => {
 
   const userId = session.user.id;
 
-  // Parse multipart form
+  // Bound streamed bodies before the multipart parser buffers them.
+  const maxUploadBytes = 100 * 1024 * 1024;
+  const declaredLength = Number(event.node.req.headers['content-length']);
+  if (Number.isFinite(declaredLength) && declaredLength > maxUploadBytes) {
+    throw createError({
+      statusCode: 413,
+      statusMessage: 'Upload exceeds the 100 MiB limit',
+    });
+  }
+  try {
+    const rawBody = await readBoundedUpload(event.node.req, maxUploadBytes);
+    (event.node.req as typeof event.node.req & { rawBody?: Buffer }).rawBody =
+      rawBody;
+  } catch (error) {
+    if (error instanceof UploadTooLargeError)
+      throw createError({
+        statusCode: 413,
+        statusMessage: 'Upload exceeds the 100 MiB limit',
+      });
+    throw error;
+  }
   const form = await readMultipartFormData(event);
   if (!form?.length) {
     throw createError({ statusCode: 400, statusMessage: 'Missing form data' });
@@ -556,8 +641,7 @@ export default defineEventHandler(async (event) => {
         code:
           e && typeof e === 'object' && 'data' in e
             ? ((e as { data?: { code?: unknown } })?.data?.code as
-                | string
-                | undefined)
+                string | undefined)
             : undefined,
         details:
           e && typeof e === 'object' && 'data' in e
