@@ -1,12 +1,19 @@
 import path from 'node:path';
-import { mkdir, rm, stat, readdir, rmdir } from 'node:fs/promises';
+import { stat, readdir, rmdir } from 'node:fs/promises';
 
 import { eq } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { authors, bookAuthors, bookFiles, books } from '~/utils/db/schema';
+import {
+  authors,
+  bookAuthors,
+  bookFiles,
+  books,
+  storageOperations,
+} from '~/utils/db/schema';
 import { logger } from '~/utils/logger';
-import { copyVerifiedExclusive } from '~~/server/utils/books/storage/verified-copy';
+import { moveStoredFiles } from '~~/server/utils/books/storage/move-operation';
+import { moveDecision } from '~~/server/utils/books/storage/move-recovery';
 import {
   BOOK_STORAGE_DEFAULTS,
   buildBookStorageRelativePath,
@@ -175,25 +182,20 @@ export async function moveBookStorageToCanonical(opts: {
     };
   }
 
-  // Create destination directory on disk.
   const { libraryBaseAbs } = resolveUnderLibraryOrThrow(
     `${BOOK_STORAGE_DEFAULTS.baseDir}/dummy`,
   );
-  const targetDirAbs = path.resolve(
-    libraryBaseAbs,
-    posixToOsPath(targetDirPosix.replace(/^library\//, '')),
-  );
-  await mkdir(targetDirAbs, { recursive: true });
-
-  let updatedFileCount = 0;
-  const movedNames = new Set<string>();
-
-  // Move each known book file into the new directory.
-  for (const f of files) {
-    const rel = f.relativePath;
-    if (!rel) continue;
-    const format = (f.format ?? '').toString().trim().toLowerCase();
-    const desiredRelPosix = format
+  const targetDirAbs = resolveUnderLibraryOrThrow(targetDirPosix).abs;
+  const currentDirAbs = resolveUnderLibraryOrThrow(currentDirPosix).abs;
+  const entries: Array<{ source: string; destination: string }> = [];
+  const updates: Array<{ id: string; relativePath: string }> = [];
+  const knownSources = new Set<string>();
+  for (const file of files) {
+    if (!file.relativePath) continue;
+    const source = resolveUnderLibraryOrThrow(file.relativePath).abs;
+    knownSources.add(source);
+    const format = (file.format ?? '').trim().toLowerCase();
+    const relativePath = format
       ? buildBookStorageRelativePath({
           authorNames: ordered,
           title: book.title ?? '',
@@ -201,130 +203,85 @@ export async function moveBookStorageToCanonical(opts: {
           filename: `${book.title ?? 'Untitled'}.${format}`,
           baseDir: 'library',
         })
-      : rel;
-
-    if (normalizePosix(rel) === normalizePosix(desiredRelPosix)) {
-      movedNames.add(path.basename(rel));
-      continue;
-    }
-
-    const src = resolveUnderLibraryOrThrow(rel).abs;
-    const destAbs = resolveUnderLibraryOrThrow(desiredRelPosix).abs;
-
-    // If source is missing, skip (do not fail the whole move).
-    const srcExists = await fileExists(src);
-    if (!srcExists) {
+      : file.relativePath;
+    const destination = resolveUnderLibraryOrThrow(relativePath).abs;
+    if (source === destination) continue;
+    if (!(await fileExists(source))) {
       logger.warn(
-        { bookId, relativePath: rel },
-        'moveBookStorageToCanonical: source file missing on disk; skipping move',
+        { bookId, relativePath: file.relativePath },
+        'Canonical move source is missing',
       );
-      continue;
+      throw new Error(`Canonical move source is missing: ${file.relativePath}`);
     }
-
-    // Exclusive creation preserves both copies on collisions or failed DB updates.
-    await copyVerifiedExclusive(src, destAbs);
-    movedNames.add(path.basename(destAbs));
-
-    await cloudDb
-      .update(bookFiles)
-      .set({ relativePath: desiredRelPosix })
-      .where(eq(bookFiles.id, f.id));
-
-    await rm(src);
-    updatedFileCount += 1;
+    entries.push({ source, destination });
+    updates.push({ id: file.id, relativePath });
   }
-
-  // Move cover if present.
-  let movedCover = false;
+  let coverPath: string | null = null;
   if (book.coverImagePath) {
-    const coverStored = book.coverImagePath;
-    const srcCoverAbs = resolveUnderLibraryOrThrow(coverStored).abs;
-
-    if (await fileExists(srcCoverAbs)) {
-      const coverFileName = path.basename(srcCoverAbs);
-      const destCoverAbs = path.join(targetDirAbs, coverFileName);
-
-      const coverNeedsMove =
-        path.resolve(srcCoverAbs) !== path.resolve(destCoverAbs);
-      if (coverNeedsMove) {
-        await copyVerifiedExclusive(srcCoverAbs, destCoverAbs);
-        movedCover = true;
-      }
-
-      movedNames.add(coverFileName);
-
-      const destCoverRelPosix = [
+    const source = resolveUnderLibraryOrThrow(book.coverImagePath).abs;
+    knownSources.add(source);
+    const destination = path.join(targetDirAbs, path.basename(source));
+    if (source !== destination) {
+      if (!(await fileExists(source)))
+        throw new Error(`Canonical cover is missing: ${book.coverImagePath}`);
+      entries.push({ source, destination });
+      coverPath = [
         BOOK_STORAGE_DEFAULTS.baseDir,
-        ...path.relative(libraryBaseAbs, destCoverAbs).split(path.sep),
+        ...path.relative(libraryBaseAbs, destination).split(path.sep),
       ].join('/');
-
-      await cloudDb
-        .update(books)
-        .set({ coverImagePath: destCoverRelPosix, updatedAt: new Date() })
-        .where(eq(books.id, bookId));
-      if (coverNeedsMove) await rm(srcCoverAbs);
-    } else {
-      // Missing cover file is fine.
     }
   }
-
-  // Move any remaining files in the old directory (covers, metadata.opf, etc.).
-  // This helps keep the library clean when titles/authors change.
-  let currentDirAbs: string | null = null;
+  let sidecars: import('node:fs').Dirent[];
   try {
-    currentDirAbs = resolveUnderLibraryOrThrow(currentDirPosix).abs;
-    const entries = await readdir(currentDirAbs, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const name = entry.name;
-      if (movedNames.has(name)) continue;
-
-      const src = path.join(currentDirAbs, name);
-      const dest = path.join(targetDirAbs, name);
-
-      if (!entry.isFile()) {
-        throw new Error(`Cannot safely move sidecar: ${src}`);
-      }
-      await copyVerifiedExclusive(src, dest);
-      await rm(src);
-    }
+    sidecars = await readdir(currentDirAbs, { withFileTypes: true });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    sidecars = [];
   }
-
-  // Best-effort cleanup: remove the old directory after moving.
-  if (
-    currentDirAbs &&
-    path.resolve(currentDirAbs) !== path.resolve(targetDirAbs)
-  ) {
-    try {
-      await rmdir(currentDirAbs);
-    } catch {
-      // ignore
-    }
-
-    // Clean up empty parent directories (including the old author dir).
-    try {
-      const { libraryBaseAbs } = resolveUnderLibraryOrThrow(
-        `${BOOK_STORAGE_DEFAULTS.baseDir}/dummy`,
-      );
-      await cleanupEmptyParents(path.dirname(currentDirAbs), libraryBaseAbs);
-    } catch {
-      // ignore
-    }
+  for (const entry of sidecars) {
+    const source = path.join(currentDirAbs, entry.name);
+    if (knownSources.has(source)) continue;
+    if (!entry.isFile())
+      throw new Error(`Cannot safely move sidecar: ${source}`);
+    entries.push({ source, destination: path.join(targetDirAbs, entry.name) });
   }
-
-  // Defensive sweep: remove any empty directories under library/ (ignoring OS junk).
-  // This handles cases where the old directory was already empty or moved earlier.
-  await cleanupEmptyLibraryDirs();
-
+  if (!entries.length) return { moved: false, reason: 'no-files' };
+  await moveStoredFiles({
+    root: libraryBaseAbs,
+    bookId,
+    entries,
+    decision: moveDecision,
+    commit: async (id) => {
+      await cloudDb.transaction(async (tx) => {
+        await tx
+          .insert(storageOperations)
+          .values({ id, bookId, kind: 'move', createdAt: new Date() });
+        for (const update of updates)
+          await tx
+            .update(bookFiles)
+            .set({ relativePath: update.relativePath })
+            .where(eq(bookFiles.id, update.id));
+        if (coverPath)
+          await tx
+            .update(books)
+            .set({ coverImagePath: coverPath, updatedAt: new Date() })
+            .where(eq(books.id, bookId));
+      });
+    },
+  });
+  try {
+    await rmdir(currentDirAbs);
+  } catch {
+    /* Directory still contains user data. */
+  }
+  await cleanupEmptyParents(path.dirname(currentDirAbs), libraryBaseAbs);
   return {
     moved: true,
     reason: 'moved',
     fromDir: currentDirPosix,
     toDir: targetDirPosix,
-    updatedFileCount,
-    movedCover,
+    updatedFileCount: updates.length,
+    movedCover: Boolean(coverPath),
   };
 }
 
