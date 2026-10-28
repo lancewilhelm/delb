@@ -13,7 +13,7 @@ useHead({
 
 // Scope (collection) lives in the header collection switcher dropdown.
 const collectionsStore = useCollectionsStore();
-const router = useRouter();
+const { isAdmin } = useAuth();
 
 type FetchErrorLike = {
   data?: { message?: string };
@@ -38,6 +38,26 @@ type TagsListResponse = {
 };
 
 const errorMessage = ref<string | null>(null);
+const actionRefs = new Map<string, { openMenu: () => void }>();
+function setActionRef(id: string, el: unknown) {
+  if (
+    el &&
+    typeof el === 'object' &&
+    'openMenu' in el &&
+    typeof el.openMenu === 'function'
+  )
+    actionRefs.set(id, {
+      openMenu: () => {
+        if (typeof el.openMenu === 'function') el.openMenu();
+      },
+    });
+  else actionRefs.delete(id);
+}
+function onTagContextMenu(event: MouseEvent, id: string) {
+  if (!isAdmin.value) return;
+  event.preventDefault();
+  actionRefs.get(id)?.openMenu();
+}
 
 // ------------------------------
 // Tags view
@@ -165,10 +185,15 @@ onMounted(async () => {
               <div
                 v-for="t in filteredTags"
                 :key="t.id"
-                class="flex items-center justify-between gap-3 border border-(--sub-color) hover:border-(--main-color) hover:bg-(--sub-color)/10 rounded-md px-3 py-2 overflow-hidden h-32 cursor-pointer shadow-sm hover:shadow-md"
-                @click="router.push(`/tags/${t.id}`)"
+                class="relative flex items-center justify-between gap-3 border border-(--sub-color) hover:border-(--main-color) hover:bg-(--sub-color)/10 rounded-md px-3 py-2 overflow-hidden h-32 cursor-pointer shadow-sm hover:shadow-md"
+                @contextmenu="onTagContextMenu($event, t.id)"
               >
-                <div class="min-w-0 z-101">
+                <NuxtLink
+                  :to="`/tags/${encodeURIComponent(t.id)}`"
+                  class="absolute inset-0 z-100"
+                  :aria-label="`View ${t.name}`"
+                />
+                <div class="min-w-0 z-101 pointer-events-none">
                   <div class="text-wrap">
                     {{ t.name }}
                   </div>
@@ -177,6 +202,12 @@ onMounted(async () => {
                   </div>
                 </div>
 
+                <TagsActions
+                  :ref="(el) => setActionRef(t.id, el)"
+                  class="z-102 ml-auto"
+                  :tag="t"
+                  @changed="refreshTags()"
+                />
                 <div
                   v-if="
                     (t.books ?? []).some(

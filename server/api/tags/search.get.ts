@@ -1,5 +1,5 @@
 import { visibleEntity } from '~~/server/utils/books/visibility';
-import { and, like } from 'drizzle-orm';
+import { and, sql } from 'drizzle-orm';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { tags } from '~/utils/db/schema';
 import { logger } from '~/utils/logger';
@@ -13,7 +13,7 @@ import { auth } from '~/utils/auth';
  * Lean behavior:
  * - Requires admin/owner.
  * - Returns up to `limit` results (default 8, max 20).
- * - Pragmatic "fuzzy-ish" search using SQL LIKE across:
+ * - Literal, case-insensitive matching across:
  *   - prefix match
  *   - contains match
  *
@@ -56,22 +56,15 @@ export default defineEventHandler(async (event) => {
     ? Math.max(1, Math.min(20, Math.floor(requestedLimit)))
     : 8;
 
-  // Defensive: escape LIKE wildcards. We intentionally do NOT treat user input as a pattern.
-  // SQLite LIKE supports % and _ as wildcards; backslash escaping works in many setups,
-  // but to stay simple we just replace them with escaped versions. Drizzle will parameterize it.
-  const escapeLike = (s: string) =>
-    s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
-
-  const needle = escapeLike(raw);
-  const prefix = `${needle}%`;
-  const contains = `%${needle}%`;
-
   try {
     const prefixRows = await cloudDb
       .select({ id: tags.id, name: tags.name })
       .from(tags)
       .where(
-        and(like(tags.name, prefix), visibleEntity('tag', session.user.id)),
+        and(
+          sql`instr(lower(${tags.name}), lower(${raw})) = 1`,
+          visibleEntity('tag', session.user.id),
+        ),
       )
       .limit(take);
 
@@ -79,7 +72,10 @@ export default defineEventHandler(async (event) => {
       .select({ id: tags.id, name: tags.name })
       .from(tags)
       .where(
-        and(like(tags.name, contains), visibleEntity('tag', session.user.id)),
+        and(
+          sql`instr(lower(${tags.name}), lower(${raw})) > 0`,
+          visibleEntity('tag', session.user.id),
+        ),
       )
       .limit(Math.max(take * 5, 25));
 

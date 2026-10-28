@@ -83,3 +83,15 @@ The candidate backfill intentionally has no default database and refuses remote 
 ```sh
 DATABASE_URL=file:./review/demo/synthetic.db node --import tsx scripts/backfill-published-at.ts
 ```
+
+## Tag feature checks
+
+`pnpm test` covers all four book sort keys in both directions across SQLite page boundaries. It also checks tag merge overlap, hidden book links, transaction rollback, repeated deletion, and concurrent merge requests. `pnpm test:integration` runs the tag API suite against a fresh production server and disposable database, alongside the existing API regressions.
+
+The tag API checks confirm that only system admins and owners can delete or merge tags. They verify library-wide changes, including books outside the selected collection, while preserving every book. They also cover malformed requests, inaccessible tags, and literal destination searches containing `%`, `_`, or `\`.
+
+For browser verification, use a fresh dedicated checkout and the synthetic setup described above. Build the app, then start `node review/start-demo.mjs --production`. In a separate terminal, run `node review/tag-features-api.mjs` once to create the synthetic accounts and books. Start Chrome with an isolated profile and `--remote-debugging-port=9232`, then run `node review/tag-features-browser.mjs` from the checkout root. The browser script signs in using synthetic session cookies and never uses your normal browser profile. Keep the server running between the API and browser checks because restarting it changes the test authentication secret.
+
+The browser checks exercise grid and list sorting, direction changes, right-click and explicit action menus, keyboard action selection, confirmation cancellation and focus, merge destination selection, delete and merge navigation, mobile sort and action-menu layout, ordinary-user controls, and delayed header responses during navigation. The browser fixture tags are reset before each run. Results, screenshots, and synthetic credentials remain in `.audit/`; do not commit that directory. Exclude `.audit/**` when running lint in a checkout containing browser profiles.
+
+Deleting a tag removes its links from every book. Merging moves those links to an existing destination tag and deletes the source tag in one transaction. Both actions require confirmation. A later metadata edit or import can recreate the old tag name.

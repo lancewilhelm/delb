@@ -21,6 +21,8 @@ const tagId = computed(() => decodeURIComponent(tagParam.value));
 
 const errorMessage = ref<string | null>(null);
 const tagName = ref<string>('Tag');
+const loadedTag = ref<{ id: string; name: string } | null>(null);
+let headerGeneration = 0;
 const bookCount = ref<number>(0);
 
 // Used to force-recreate the BooksInfiniteGrid (scope changes, navigation, etc.)
@@ -51,13 +53,18 @@ const endpoint = computed(() => {
 });
 
 async function refreshHeaderName() {
-  if (!tagId.value) return;
+  const generation = ++headerGeneration;
+  const requestedTagId = tagId.value;
+  const requestedEndpoint = endpoint.value;
+  loadedTag.value = null;
+  if (!requestedTagId) return;
 
   // Ensure collections are loaded so scoped queries work
   if (!collectionsStore.collections.length) {
     await collectionsStore.fetchCollections();
   }
 
+  if (generation !== headerGeneration) return;
   try {
     const query: Record<string, string | number> = { limit: 1 };
     if (activeCollectionId.value) query.collectionId = activeCollectionId.value;
@@ -67,15 +74,18 @@ async function refreshHeaderName() {
       data?: {
         tag?: { id: string; name: string } | null;
       };
-    }>(endpoint.value, {
+    }>(requestedEndpoint, {
       method: 'GET',
       query,
     });
 
-    if (res?.data?.tag?.name) {
+    if (generation !== headerGeneration || requestedTagId !== tagId.value)
+      return;
+    if (res?.data?.tag?.id === requestedTagId) {
+      loadedTag.value = res.data.tag;
       tagName.value = res.data.tag.name;
-    } else if (tagId.value.startsWith('name:')) {
-      const raw = tagId.value.slice('name:'.length);
+    } else if (requestedTagId.startsWith('name:')) {
+      const raw = requestedTagId.slice('name:'.length);
       tagName.value = raw || 'Tag';
     } else {
       tagName.value = 'Tag';
@@ -83,6 +93,7 @@ async function refreshHeaderName() {
 
     useHead({ title: `${tagName.value} · Tag` });
   } catch (err) {
+    if (generation !== headerGeneration) return;
     const e = err as FetchErrorLike;
     errorMessage.value =
       e?.data?.message ||
@@ -92,12 +103,17 @@ async function refreshHeaderName() {
   }
 }
 
+function onTagChanged(targetId?: string) {
+  void navigateTo(targetId ? `/tags/${encodeURIComponent(targetId)}` : '/tags');
+}
+
 function handleGridError(message: string) {
   errorMessage.value = message;
 }
 
 watch(tagId, async () => {
   errorMessage.value = null;
+  loadedTag.value = null;
   bookCount.value = 0;
   gridKey.value++;
   await refreshHeaderName();
@@ -146,6 +162,11 @@ onMounted(async () => {
             {{ tagName }}
           </div>
 
+          <TagsActions
+            v-if="loadedTag?.id === tagId"
+            :tag="loadedTag"
+            @changed="onTagChanged"
+          />
           <div class="text-sm sm:text-md opacity-70 italic text-(--sub-color)">
             {{ bookCount }} book{{ bookCount === 1 ? '' : 's' }}
           </div>

@@ -30,7 +30,11 @@ await new Promise((resolve, reject) => {
 });
 await new Promise((resolve) => probe.close(resolve));
 
-for (const suite of ['bootstrap-regression.mjs', 'server-regression.mjs']) {
+for (const suite of [
+  'review/audits/2026-10-27/bootstrap-regression.mjs',
+  'review/audits/2026-10-27/server-regression.mjs',
+  'review/tag-features-api.mjs',
+]) {
   const directory = await mkdtemp(path.join(tmpdir(), 'delb-api-regression-'));
   let server;
   let serverOutput = '';
@@ -44,7 +48,7 @@ for (const suite of ['bootstrap-regression.mjs', 'server-regression.mjs']) {
       'review/start-demo.mjs',
       'review/deny-outbound.cjs',
       'review/http-smoke.mjs',
-      `review/audits/2026-10-27/${suite}`,
+      suite,
     ]) {
       const destination = path.join(directory, file);
       await mkdir(path.dirname(destination), { recursive: true });
@@ -99,8 +103,8 @@ for (const suite of ['bootstrap-regression.mjs', 'server-regression.mjs']) {
       throw Error(
         'Disposable production server did not become ready.\n' + serverOutput,
       );
-    await run([`review/audits/2026-10-27/${suite}`], directory);
-    if (suite === 'server-regression.mjs')
+    await run([suite], directory);
+    if (suite.endsWith('/server-regression.mjs'))
       await run(['review/http-smoke.mjs'], directory);
   } finally {
     if (server && server.exitCode === null) {
