@@ -1,5 +1,4 @@
 import path from 'node:path';
-import { createReadStream } from 'node:fs';
 import { mkdir, stat } from 'node:fs/promises';
 
 import { eq } from 'drizzle-orm';
@@ -15,7 +14,7 @@ import {
 } from '~/utils/db/schema';
 import { logger } from '~/utils/logger';
 import { copyVerifiedExclusive } from '~~/server/utils/books/storage/verified-copy';
-import { readBoundedUpload } from '~~/server/utils/books/storage/bounded-upload';
+import { readBoundedFile } from '~~/server/utils/books/storage/bounded-file';
 
 import { parseEpubMetadataFromBuffer } from '~~/server/utils/books/epub';
 import { extractAndStoreEpubCover } from '~~/server/utils/books/epub-cover';
@@ -137,10 +136,7 @@ export async function ingestDropboxFile(opts: {
   const format = ensureSupportedBookFormat(opts.originalFilename);
   if ((await stat(opts.fileAbs)).size > 100 * 1024 * 1024)
     throw new Error('Dropbox file exceeds the 100 MiB limit');
-  const buffer = await readBoundedUpload(
-    createReadStream(opts.fileAbs),
-    100 * 1024 * 1024,
-  );
+  const buffer = await readBoundedFile(opts.fileAbs, 100 * 1024 * 1024);
 
   const meta = await parseBookMetadataFromBuffer({
     buffer,

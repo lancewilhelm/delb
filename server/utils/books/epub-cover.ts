@@ -1,11 +1,10 @@
 import path from 'node:path';
 import os from 'node:os';
-import { createReadStream } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 
 import { EPub } from 'epub2';
 import { validateArchiveLimits } from '@delb/epub';
-import { readBoundedUpload } from './storage/bounded-upload';
+import { readBoundedFile } from './storage/bounded-file';
 import sharp from 'sharp';
 
 /**
@@ -382,10 +381,7 @@ async function extractAndStoreEpubCoverFromValidatedFile(opts: {
 export async function extractAndStoreEpubCover(
   opts: Parameters<typeof extractAndStoreEpubCoverFromValidatedFile>[0],
 ): Promise<ExtractedCover | null> {
-  const bytes = await readBoundedUpload(
-    createReadStream(opts.epubFilePath),
-    100 * 1024 * 1024,
-  );
+  const bytes = await readBoundedFile(opts.epubFilePath, 100 * 1024 * 1024);
   validateArchiveLimits(bytes, {
     maxEntryUncompressedBytes: 32 * 1024 * 1024,
     maxTotalUncompressedBytes: 256 * 1024 * 1024,
