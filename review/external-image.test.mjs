@@ -205,3 +205,24 @@ test('actual HTTP socket receives the validated address', async () => {
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test('external image deadline includes stalled DNS', async () => {
+  const originalLookup = dns.lookup;
+  const originalGet = http.get;
+  let requests = 0;
+  dns.lookup = () => new Promise(() => {});
+  http.get = () => {
+    requests++;
+    throw new Error('unexpected request');
+  };
+  try {
+    await assert.rejects(
+      fetchExternalImageBuffer('http://covers.example/cover'),
+      /timed out/,
+    );
+    assert.equal(requests, 0);
+  } finally {
+    dns.lookup = originalLookup;
+    http.get = originalGet;
+  }
+});
