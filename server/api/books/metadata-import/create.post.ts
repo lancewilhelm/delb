@@ -344,31 +344,67 @@ async function addBookToCollectionsMissing(opts: {
   if (!uniqueCollectionIds.length)
     return { addedCollectionIds: [] as string[] };
 
-  const existing = await cloudDb
-    .select({ collectionId: collectionBooks.collectionId })
-    .from(collectionBooks)
-    .where(
-      and(
-        eq(collectionBooks.bookId, opts.bookId),
-        inArray(collectionBooks.collectionId, uniqueCollectionIds),
-      ),
-    );
+  return cloudDb.transaction(async (tx) => {
+    const visible = await tx
+      .select({ id: collectionBooks.bookId })
+      .from(collectionBooks)
+      .innerJoin(
+        collectionMembers,
+        eq(collectionMembers.collectionId, collectionBooks.collectionId),
+      )
+      .where(
+        and(
+          eq(collectionBooks.bookId, opts.bookId),
+          eq(collectionMembers.userId, opts.userId),
+        ),
+      )
+      .limit(1);
+    if (!visible.length)
+      throw createError({ statusCode: 404, statusMessage: 'Book not found' });
+    const memberships = await tx
+      .select({
+        id: collectionMembers.collectionId,
+        role: collectionMembers.role,
+      })
+      .from(collectionMembers)
+      .where(
+        and(
+          eq(collectionMembers.userId, opts.userId),
+          inArray(collectionMembers.collectionId, uniqueCollectionIds),
+        ),
+      );
+    if (
+      memberships.filter((m) => m.role === 'owner' || m.role === 'editor')
+        .length !== uniqueCollectionIds.length
+    ) {
+      throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
+    }
+    const existing = await tx
+      .select({ collectionId: collectionBooks.collectionId })
+      .from(collectionBooks)
+      .where(
+        and(
+          eq(collectionBooks.bookId, opts.bookId),
+          inArray(collectionBooks.collectionId, uniqueCollectionIds),
+        ),
+      );
 
-  const already = new Set(existing.map((r) => r.collectionId));
-  const missing = uniqueCollectionIds.filter((id) => !already.has(id));
-  if (!missing.length) return { addedCollectionIds: [] as string[] };
+    const already = new Set(existing.map((r) => r.collectionId));
+    const missing = uniqueCollectionIds.filter((id) => !already.has(id));
+    if (!missing.length) return { addedCollectionIds: [] as string[] };
 
-  const now = new Date();
-  for (const collectionId of missing) {
-    await cloudDb.insert(collectionBooks).values({
-      collectionId,
-      bookId: opts.bookId,
-      addedByUserId: opts.userId,
-      addedAt: now,
-    });
-  }
+    const now = new Date();
+    for (const collectionId of missing) {
+      await tx.insert(collectionBooks).values({
+        collectionId,
+        bookId: opts.bookId,
+        addedByUserId: opts.userId,
+        addedAt: now,
+      });
+    }
 
-  return { addedCollectionIds: missing };
+    return { addedCollectionIds: missing };
+  });
 }
 
 export default defineEventHandler(async (event) => {
@@ -489,6 +525,7 @@ export default defineEventHandler(async (event) => {
 
   const now = new Date();
   const candidates = await findPossibleDuplicates({
+    userId,
     title,
     author: authorsToAttach.join(', '),
     identifiers: industryIdentifiers,
@@ -893,7 +930,10 @@ export default defineEventHandler(async (event) => {
       // Ensure directory exists up-front (covers util also ensures, but this keeps intent explicit)
       await mkdir(outputDirAbs, { recursive: true });
 
-      logger.debug({ bookId, outputDirRelPosix }, 'metadata-import: cover: fetching bytes');
+      logger.debug(
+        { bookId, outputDirRelPosix },
+        'metadata-import: cover: fetching bytes',
+      );
 
       const { bytes } = await fetchExternalImageBuffer(coverUrl);
 

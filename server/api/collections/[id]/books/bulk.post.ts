@@ -158,223 +158,242 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // Load target collection to enforce guardrails (e.g. "All" is not addressable here; personal non-removable).
-  const targetCollectionRow = await cloudDb
-    .select({
-      id: collections.id,
-      isPersonal: collections.isPersonal,
-    })
-    .from(collections)
-    .where(eq(collections.id, collectionId))
-    .limit(1);
-
-  const targetCollection = targetCollectionRow[0];
-  if (!targetCollection) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: 'Collection not found',
-    });
-  }
-
-  // Must be owner/editor of the *scope collection* to apply bulk operations from this view.
-  const scopeMembership = await cloudDb
-    .select({
-      role: collectionMembers.role,
-    })
-    .from(collectionMembers)
-    .where(
-      and(
-        eq(collectionMembers.collectionId, collectionId),
-        eq(collectionMembers.userId, userId),
-      ),
-    )
-    .limit(1);
-
-  const scopeRole = scopeMembership[0]?.role as Role | undefined;
-  const canEditScope = scopeRole === 'owner' || scopeRole === 'editor';
-  if (!canEditScope) {
-    throw createError({
-      statusCode: 403,
-      statusMessage: 'Forbidden',
-    });
-  }
-
-  // Resolve the effective book IDs.
-  let effectiveBookIds: string[] = [];
-
-  if (allInCollection) {
-    const rows = await cloudDb
-      .select({ bookId: collectionBooks.bookId })
-      .from(collectionBooks)
-      .where(eq(collectionBooks.collectionId, collectionId));
-
-    const excluded = new Set(excludedBookIds);
-    effectiveBookIds = rows
-      .map((r) => r.bookId)
-      .filter((id) => id && !excluded.has(id));
-
-    // If the user excluded everything, no-op.
-    if (!effectiveBookIds.length) {
-      return {
-        success: true,
-        data: {
-          scope: { collectionId, allInCollection },
-          booksResolved: 0,
-          added: [],
-          removed: [],
-          forbidden: [],
-          ignoredPersonalRemovals: [],
-        },
-      };
-    }
-  } else {
-    effectiveBookIds = bookIds;
-  }
-
-  // RBAC gate for target collections (edit rights required for add/remove).
-  const targetCollectionIds = Array.from(
-    new Set([...addToCollectionIds, ...removeFromCollectionIds]),
-  );
-
-  const memberships = await cloudDb
-    .select({
-      collectionId: collectionMembers.collectionId,
-      role: collectionMembers.role,
-    })
-    .from(collectionMembers)
-    .where(
-      and(
-        eq(collectionMembers.userId, userId),
-        inArray(collectionMembers.collectionId, targetCollectionIds),
-      ),
-    );
-
-  const roleByCollectionId = new Map(
-    memberships.map((m) => [m.collectionId, m.role as Role] as const),
-  );
-
-  const canEditTarget = (id: string) => {
-    const r = roleByCollectionId.get(id);
-    return r === 'owner' || r === 'editor';
-  };
-
-  const forbidden: string[] = [];
-  const eligibleAdd: string[] = [];
-  const eligibleRemove: string[] = [];
-
-  for (const id of addToCollectionIds) {
-    if (!canEditTarget(id)) forbidden.push(id);
-    else eligibleAdd.push(id);
-  }
-
-  for (const id of removeFromCollectionIds) {
-    if (!canEditTarget(id)) forbidden.push(id);
-    else eligibleRemove.push(id);
-  }
-
-  const uniqueForbidden = Array.from(new Set(forbidden));
-
-  // Personal guardrail on removals (non-removable).
-  const ignoredPersonalRemovals: string[] = [];
-  let finalRemoveIds = eligibleRemove;
-
-  if (eligibleRemove.length) {
-    const personalRows = await cloudDb
+  return cloudDb.transaction(async (tx) => {
+    // Load target collection to enforce guardrails (e.g. "All" is not addressable here; personal non-removable).
+    const targetCollectionRow = await tx
       .select({
         id: collections.id,
         isPersonal: collections.isPersonal,
       })
       .from(collections)
-      .where(inArray(collections.id, eligibleRemove));
+      .where(eq(collections.id, collectionId))
+      .limit(1);
 
-    const personalSet = new Set(
-      personalRows.filter((r) => r.isPersonal).map((r) => r.id),
+    const targetCollection = targetCollectionRow[0];
+    if (!targetCollection) {
+      throw createError({
+        statusCode: 404,
+        statusMessage: 'Collection not found',
+      });
+    }
+
+    // Must be owner/editor of the *scope collection* to apply bulk operations from this view.
+    const scopeMembership = await tx
+      .select({
+        role: collectionMembers.role,
+      })
+      .from(collectionMembers)
+      .where(
+        and(
+          eq(collectionMembers.collectionId, collectionId),
+          eq(collectionMembers.userId, userId),
+        ),
+      )
+      .limit(1);
+
+    const scopeRole = scopeMembership[0]?.role as Role | undefined;
+    const canEditScope = scopeRole === 'owner' || scopeRole === 'editor';
+    if (!canEditScope) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: 'Forbidden',
+      });
+    }
+
+    // Resolve the effective book IDs.
+    let effectiveBookIds: string[] = [];
+
+    if (allInCollection) {
+      const rows = await tx
+        .select({ bookId: collectionBooks.bookId })
+        .from(collectionBooks)
+        .where(eq(collectionBooks.collectionId, collectionId));
+
+      const excluded = new Set(excludedBookIds);
+      effectiveBookIds = rows
+        .map((r) => r.bookId)
+        .filter((id) => id && !excluded.has(id));
+
+      // If the user excluded everything, no-op.
+      if (!effectiveBookIds.length) {
+        return {
+          success: true,
+          data: {
+            scope: { collectionId, allInCollection },
+            booksResolved: 0,
+            added: [],
+            removed: [],
+            forbidden: [],
+            ignoredPersonalRemovals: [],
+          },
+        };
+      }
+    } else {
+      effectiveBookIds = bookIds;
+    }
+
+    const visible = await tx
+      .selectDistinct({ bookId: collectionBooks.bookId })
+      .from(collectionBooks)
+      .innerJoin(
+        collectionMembers,
+        eq(collectionMembers.collectionId, collectionBooks.collectionId),
+      )
+      .where(
+        and(
+          eq(collectionMembers.userId, userId),
+          inArray(collectionBooks.bookId, effectiveBookIds),
+        ),
+      );
+    if (visible.length !== effectiveBookIds.length) {
+      throw createError({ statusCode: 404, statusMessage: 'Book not found' });
+    }
+
+    // RBAC gate for target collections (edit rights required for add/remove).
+    const targetCollectionIds = Array.from(
+      new Set([...addToCollectionIds, ...removeFromCollectionIds]),
     );
 
-    if (personalSet.size) {
-      ignoredPersonalRemovals.push(
-        ...eligibleRemove.filter((id) => personalSet.has(id)),
+    const memberships = await tx
+      .select({
+        collectionId: collectionMembers.collectionId,
+        role: collectionMembers.role,
+      })
+      .from(collectionMembers)
+      .where(
+        and(
+          eq(collectionMembers.userId, userId),
+          inArray(collectionMembers.collectionId, targetCollectionIds),
+        ),
       );
-      finalRemoveIds = eligibleRemove.filter((id) => !personalSet.has(id));
+
+    const roleByCollectionId = new Map(
+      memberships.map((m) => [m.collectionId, m.role as Role] as const),
+    );
+
+    const canEditTarget = (id: string) => {
+      const r = roleByCollectionId.get(id);
+      return r === 'owner' || r === 'editor';
+    };
+
+    const forbidden: string[] = [];
+    const eligibleAdd: string[] = [];
+    const eligibleRemove: string[] = [];
+
+    for (const id of addToCollectionIds) {
+      if (!canEditTarget(id)) forbidden.push(id);
+      else eligibleAdd.push(id);
     }
-  }
 
-  const now = new Date();
-
-  const added: Array<{ collectionId: string; bookId: string }> = [];
-  const removed: Array<{ collectionId: string; bookId: string }> = [];
-
-  // Apply additions (idempotent per pair).
-  for (const targetId of eligibleAdd) {
-    for (const bookId of effectiveBookIds) {
-      const existing = await cloudDb
-        .select({ bookId: collectionBooks.bookId })
-        .from(collectionBooks)
-        .where(
-          and(
-            eq(collectionBooks.collectionId, targetId),
-            eq(collectionBooks.bookId, bookId),
-          ),
-        )
-        .limit(1);
-
-      if (existing[0]) continue;
-
-      await cloudDb.insert(collectionBooks).values({
-        collectionId: targetId,
-        bookId,
-        addedByUserId: userId,
-        addedAt: now,
-      });
-
-      added.push({ collectionId: targetId, bookId });
+    for (const id of removeFromCollectionIds) {
+      if (!canEditTarget(id)) forbidden.push(id);
+      else eligibleRemove.push(id);
     }
-  }
 
-  // Apply removals (idempotent per pair).
-  for (const targetId of finalRemoveIds) {
-    for (const bookId of effectiveBookIds) {
-      await cloudDb
-        .delete(collectionBooks)
-        .where(
-          and(
-            eq(collectionBooks.collectionId, targetId),
-            eq(collectionBooks.bookId, bookId),
-          ),
+    const uniqueForbidden = Array.from(new Set(forbidden));
+
+    // Personal guardrail on removals (non-removable).
+    const ignoredPersonalRemovals: string[] = [];
+    let finalRemoveIds = eligibleRemove;
+
+    if (eligibleRemove.length) {
+      const personalRows = await tx
+        .select({
+          id: collections.id,
+          isPersonal: collections.isPersonal,
+        })
+        .from(collections)
+        .where(inArray(collections.id, eligibleRemove));
+
+      const personalSet = new Set(
+        personalRows.filter((r) => r.isPersonal).map((r) => r.id),
+      );
+
+      if (personalSet.size) {
+        ignoredPersonalRemovals.push(
+          ...eligibleRemove.filter((id) => personalSet.has(id)),
         );
-
-      // Confirm absent, similar to single-book endpoint (best-effort).
-      const stillThere = await cloudDb
-        .select({ bookId: collectionBooks.bookId })
-        .from(collectionBooks)
-        .where(
-          and(
-            eq(collectionBooks.collectionId, targetId),
-            eq(collectionBooks.bookId, bookId),
-          ),
-        )
-        .limit(1);
-
-      if (!stillThere[0]) {
-        removed.push({ collectionId: targetId, bookId });
-      } else {
-        logger.warn(
-          { bookId, collectionId: targetId },
-          'bulk: expected row to be deleted but it still exists',
-        );
+        finalRemoveIds = eligibleRemove.filter((id) => !personalSet.has(id));
       }
     }
-  }
 
-  return {
-    success: true,
-    data: {
-      scope: { collectionId, allInCollection },
-      booksResolved: effectiveBookIds.length,
-      added,
-      removed,
-      forbidden: uniqueForbidden,
-      ignoredPersonalRemovals: Array.from(new Set(ignoredPersonalRemovals)),
-    },
-  };
+    const now = new Date();
+
+    const added: Array<{ collectionId: string; bookId: string }> = [];
+    const removed: Array<{ collectionId: string; bookId: string }> = [];
+
+    // Apply additions (idempotent per pair).
+    for (const targetId of eligibleAdd) {
+      for (const bookId of effectiveBookIds) {
+        const existing = await tx
+          .select({ bookId: collectionBooks.bookId })
+          .from(collectionBooks)
+          .where(
+            and(
+              eq(collectionBooks.collectionId, targetId),
+              eq(collectionBooks.bookId, bookId),
+            ),
+          )
+          .limit(1);
+
+        if (existing[0]) continue;
+
+        await tx.insert(collectionBooks).values({
+          collectionId: targetId,
+          bookId,
+          addedByUserId: userId,
+          addedAt: now,
+        });
+
+        added.push({ collectionId: targetId, bookId });
+      }
+    }
+
+    // Apply removals (idempotent per pair).
+    for (const targetId of finalRemoveIds) {
+      for (const bookId of effectiveBookIds) {
+        await tx
+          .delete(collectionBooks)
+          .where(
+            and(
+              eq(collectionBooks.collectionId, targetId),
+              eq(collectionBooks.bookId, bookId),
+            ),
+          );
+
+        // Confirm absent, similar to single-book endpoint (best-effort).
+        const stillThere = await tx
+          .select({ bookId: collectionBooks.bookId })
+          .from(collectionBooks)
+          .where(
+            and(
+              eq(collectionBooks.collectionId, targetId),
+              eq(collectionBooks.bookId, bookId),
+            ),
+          )
+          .limit(1);
+
+        if (!stillThere[0]) {
+          removed.push({ collectionId: targetId, bookId });
+        } else {
+          logger.warn(
+            { bookId, collectionId: targetId },
+            'bulk: expected row to be deleted but it still exists',
+          );
+        }
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        scope: { collectionId, allInCollection },
+        booksResolved: effectiveBookIds.length,
+        added,
+        removed,
+        forbidden: uniqueForbidden,
+        ignoredPersonalRemovals: Array.from(new Set(ignoredPersonalRemovals)),
+      },
+    };
+  });
 });

@@ -1,20 +1,22 @@
-import { count, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { users } from '~/utils/db/schema';
+import { systemState, users } from '~/utils/db/schema';
 
 export async function claimBootstrapOwner(userId: string): Promise<boolean> {
   return cloudDb.transaction(async (tx) => {
-    const ownerCountRows = await tx
-      .select({ count: count() })
-      .from(users)
-      .where(eq(users.role, 'owner'));
-
-    const ownerCount = ownerCountRows[0]?.count ?? 0;
-    if (ownerCount > 0) return false;
-
-    await tx.update(users).set({ role: 'owner' }).where(eq(users.id, userId));
-
+    const claimed = await tx
+      .insert(systemState)
+      .values({ key: 'owner-bootstrap', value: 'complete' })
+      .onConflictDoNothing()
+      .returning({ key: systemState.key });
+    if (!claimed.length) return false;
+    const updated = await tx
+      .update(users)
+      .set({ role: 'owner' })
+      .where(eq(users.id, userId))
+      .returning({ id: users.id });
+    if (!updated.length) throw new Error('Bootstrap user not found');
     return true;
   });
 }

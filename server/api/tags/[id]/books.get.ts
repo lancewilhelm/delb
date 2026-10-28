@@ -1,3 +1,4 @@
+import { visibleEntity } from '~~/server/utils/books/visibility';
 import { and, desc, eq, inArray, lt, or } from 'drizzle-orm';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
@@ -101,7 +102,7 @@ export default defineEventHandler(async (event) => {
     const tagRow = await cloudDb
       .select({ id: tags.id, name: tags.name })
       .from(tags)
-      .where(eq(tags.id, tagId))
+      .where(and(eq(tags.id, tagId), visibleEntity('tag', userId)))
       .limit(1);
 
     const tag = tagRow[0] ?? null;

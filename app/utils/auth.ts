@@ -119,6 +119,15 @@ export const auth = betterAuth({
       },
     },
     user: {
+      delete: {
+        before: async (user) => {
+          if (user.role === 'owner') {
+            throw new APIError('FORBIDDEN', {
+              message: 'The system owner cannot be removed.',
+            });
+          }
+        },
+      },
       create: {
         before: async (user) => {
           // Determine whether creation is coming from admin endpoints (avoid circular auth reference)
