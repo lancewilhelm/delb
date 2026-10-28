@@ -65,6 +65,11 @@ test('settings pull keeps local edits while adopting unchanged remote fields', a
     .replace(/^import .*;\n/gm, '')
     .replace(/\bexport\s+/g, '');
   let resolve;
+  const remoteUpdatedAt = '2099-01-01T00:00:00.000Z';
+  let stored = {
+    settings: { fontFamily: 'Nunito', fontSize: 23 },
+    updatedAt: remoteUpdatedAt,
+  };
   const c = {
     defineStore: (id, setup) => setup,
     ref: (v) => ({ value: v }),
@@ -80,7 +85,18 @@ test('settings pull keeps local edits while adopting unchanged remote fields', a
         ? new Promise((r) => {
             resolve = r;
           })
-        : Promise.resolve({}),
+        : (() => {
+            const accepted =
+              new Date(opts.body.updatedAt).getTime() >
+              new Date(stored.updatedAt).getTime();
+            if (accepted) {
+              stored = {
+                settings: JSON.parse(JSON.stringify(opts.body.settings)),
+                updatedAt: opts.body.updatedAt,
+              };
+            }
+            return Promise.resolve({ success: true, accepted });
+          })(),
     useDebounceFn: () => () => {},
     normalizeCustomTheme: (x) => x,
     console,
@@ -97,7 +113,7 @@ test('settings pull keeps local edits while adopting unchanged remote fields', a
     data: {
       userSettings: {
         settings: { fontFamily: 'Nunito', fontSize: 23 },
-        updatedAt: '2020-01-01',
+        updatedAt: remoteUpdatedAt,
       },
     },
   });
@@ -105,6 +121,14 @@ test('settings pull keeps local edits while adopting unchanged remote fields', a
   assert.equal(c.store.settings.value.fontFamily, 'Inter');
   assert.equal(c.store.settings.value.fontSize, 23);
   assert.equal(c.store.synced.value, false);
+  assert.ok(
+    c.store.updatedAt.value.getTime() > new Date(remoteUpdatedAt).getTime(),
+  );
+  await c.store.updateSettings({ fontFamily: 'Roboto' });
+  await c.store.flushPush();
+  assert.equal(stored.settings.fontFamily, 'Roboto');
+  assert.equal(stored.settings.fontSize, 23);
+  assert.equal(c.store.synced.value, true);
 });
 
 test('reader flushes its latest pending position before leaving', async () => {
@@ -118,6 +142,7 @@ test('reader flushes its latest pending position before leaving', async () => {
   const c = {
     saveTimeout: null,
     pendingPosition: null,
+    clientSequence: 0,
     lastSavedLocation: null,
     saveQueue: Promise.resolve(),
     readerActive: true,

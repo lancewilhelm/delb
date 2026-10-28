@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, lt, sql } from 'drizzle-orm';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { userSettings } from '~/utils/db/schema';
 import { auth } from '~/utils/auth';
@@ -32,7 +32,6 @@ export default defineEventHandler(async (event) => {
 
   const body = await readBody<UserSettingsPutBody>(event);
 
-  // Keep it intentionally flexible/light for a starter template.
   // The client owns the settings shape; we store a JSON blob.
   if (!body || body.settings === undefined) {
     setResponseStatus(event, 400);
@@ -42,8 +41,7 @@ export default defineEventHandler(async (event) => {
   const updatedAt = coerceDate(body.updatedAt ?? new Date());
 
   try {
-    // Upsert the settings row for this user.
-    await cloudDb
+    const written = await cloudDb
       .insert(userSettings)
       .values({
         userId: session.user.id,
@@ -60,11 +58,23 @@ export default defineEventHandler(async (event) => {
         // This prevents older clients/tabs from overwriting newer settings.
         where: and(
           eq(userSettings.userId, session.user.id),
-          sql`${userSettings.updatedAt} <= ${updatedAt}`,
+          lt(userSettings.updatedAt, updatedAt),
         ),
-      });
+      })
+      .returning();
 
-    return { success: true };
+    if (written.length)
+      return { success: true, accepted: true, data: written[0] };
+    const current = await cloudDb
+      .select()
+      .from(userSettings)
+      .where(eq(userSettings.userId, session.user.id))
+      .limit(1);
+    const stored = current[0];
+    const matches =
+      stored?.updatedAt.getTime() === updatedAt.getTime() &&
+      JSON.stringify(stored.settings) === JSON.stringify(body.settings);
+    return { success: true, accepted: matches, data: stored ?? null };
   } catch (error) {
     logger.error(error, 'PUT /api/settings/user: Error updating user settings');
     setResponseStatus(event, 500);

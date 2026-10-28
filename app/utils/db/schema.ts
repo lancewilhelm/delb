@@ -575,7 +575,7 @@ export const bookNotes = sqliteTable('book_notes', {
 export const userSettings = sqliteTable('user_settings', {
   userId: text('user_id').primaryKey().unique(),
   settings: text('settings', { mode: 'json' }).notNull().default('{}'),
-  updatedAt: integer('updated_at', { mode: 'timestamp' })
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
     .notNull()
     .$defaultFn(() => new Date()),
 });

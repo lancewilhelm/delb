@@ -439,3 +439,29 @@ try {
   authDb.close();
 }
 console.log('Synthetic HTTP regression checks passed');
+
+const settingsRevision = Date.now();
+const savedSettings = await request('/api/settings/user', b.cookie, 'PUT', {
+  settings: { fontFamily: 'Inter' },
+  updatedAt: settingsRevision + 2,
+});
+assert.equal(savedSettings.status, 200);
+assert.equal(savedSettings.data.accepted, true);
+const rejectedSettings = await request('/api/settings/user', b.cookie, 'PUT', {
+  settings: { fontFamily: 'Nunito' },
+  updatedAt: settingsRevision + 1,
+});
+assert.equal(rejectedSettings.data.accepted, false);
+assert.equal(rejectedSettings.data.data.settings.fontFamily, 'Inter');
+assert.equal(
+  new Date(rejectedSettings.data.data.updatedAt).getTime(),
+  settingsRevision + 2,
+);
+const repeatedSettings = await request('/api/settings/user', b.cookie, 'PUT', {
+  settings: { fontFamily: 'Inter' },
+  updatedAt: settingsRevision + 2,
+});
+assert.equal(repeatedSettings.data.accepted, true);
+console.log(
+  'PASS production settings retain millisecond order and acknowledge writes',
+);
