@@ -38,9 +38,22 @@ export async function recoverBookCovers(): Promise<void> {
       if (!entry.isDirectory()) continue;
       const child = path.join(dir, entry.name);
       if (entry.name.startsWith('.cover-update-')) {
-        const journal: unknown = JSON.parse(
-          await readFile(path.join(child, 'journal.json'), 'utf8'),
-        );
+        let journal: unknown;
+        try {
+          journal = JSON.parse(
+            await readFile(path.join(child, 'journal.json'), 'utf8'),
+          );
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+            try {
+              await readdir(child);
+            } catch (check) {
+              if ((check as NodeJS.ErrnoException).code === 'ENOENT') continue;
+              throw check;
+            }
+          }
+          throw error;
+        }
         if (!journal || typeof journal !== 'object' || !('version' in journal))
           throw new Error(`Invalid cover journal: ${child}`);
         let bookId: string;

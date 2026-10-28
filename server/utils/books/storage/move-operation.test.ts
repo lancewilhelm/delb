@@ -75,7 +75,7 @@ test('move preserves collisions and recovers committed copies after interruption
   }
 });
 
-test('uncommitted copies and originals are retained for inspection', async () => {
+test('matching uncommitted copies are rolled back', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'delb-move-failed-'));
   const source = path.join(root, 'source');
   const destination = path.join(root, 'destination');
@@ -97,16 +97,13 @@ test('uncommitted copies and originals are retained for inspection', async () =>
       }),
       /database failed/,
     );
-    await assert.rejects(
-      recoverStoredMoves({
-        root,
-        decision,
-        withLock: async (_id, work) => await work(),
-      }),
-      /requires inspection/,
-    );
+    await recoverStoredMoves({
+      root,
+      decision,
+      withLock: async (_id, work) => await work(),
+    });
     assert.equal(await readFile(source, 'utf8'), 'original');
-    assert.equal(await readFile(destination, 'utf8'), 'original');
+    await assert.rejects(readFile(destination), { code: 'ENOENT' });
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -205,6 +202,43 @@ test('recovery refuses to discard a committed journal when destination is missin
     );
     assert.equal(await readFile(source, 'utf8'), 'original');
     assert.equal(committed, true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('recovery retains changed uncommitted destinations', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'delb-move-changed-'));
+  const source = path.join(root, 'source');
+  const destination = path.join(root, 'destination');
+  const decision = {
+    isCommitted: async () => false,
+    remove: async () => undefined,
+  };
+  try {
+    await writeFile(source, 'original');
+    await assert.rejects(
+      moveStoredFiles({
+        root,
+        bookId: 'book',
+        entries: [{ source, destination }],
+        decision,
+        commit: async () => {
+          throw new Error('interrupted');
+        },
+      }),
+    );
+    await writeFile(destination, 'changed');
+    await assert.rejects(
+      recoverStoredMoves({
+        root,
+        decision,
+        withLock: async (_id, work) => await work(),
+      }),
+      /requires inspection/,
+    );
+    assert.equal(await readFile(source, 'utf8'), 'original');
+    assert.equal(await readFile(destination, 'utf8'), 'changed');
   } finally {
     await rm(root, { recursive: true, force: true });
   }

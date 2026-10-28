@@ -144,15 +144,20 @@ export async function commitCoverUpdate(opts: {
     opts.operationParent,
     `.cover-update-${operationId}`,
   );
-  await mkdir(operationDir, { recursive: false });
+  const preparingDir = path.join(
+    opts.operationParent,
+    `.delb-preparing-cover-${operationId}`,
+  );
+  await mkdir(preparingDir, { recursive: false });
   const entries: JournalEntry[] = [];
+  let published = false;
   try {
     for (const [index, file] of opts.files.entries()) {
       assertInside(opts.allowedRoot, file.targetPath);
       const stagedName = `new-${index}`;
       const backupName = `old-${index}`;
       const hadOriginal = await exists(file.targetPath);
-      const stagedPath = path.join(operationDir, stagedName);
+      const stagedPath = path.join(preparingDir, stagedName);
       await writeFile(stagedPath, file.data, { flag: 'wx' });
       const stagedHandle = await open(stagedPath, 'r');
       try {
@@ -176,7 +181,9 @@ export async function commitCoverUpdate(opts: {
       expectedCoverImagePath: opts.expectedCoverImagePath,
       entries,
     };
-    await writeJournal(operationDir, journal);
+    await writeJournal(preparingDir, journal);
+    await rename(preparingDir, operationDir);
+    published = true;
     await opts.commitDatabase(operationId);
     journal.phase = 'database-committed';
     await writeJournal(operationDir, journal);
@@ -189,6 +196,11 @@ export async function commitCoverUpdate(opts: {
     if (opts.decision) await opts.decision.remove(operationId);
     return { backupFallbackPaths };
   } catch (error) {
+    if (!published) {
+      await rm(preparingDir, { recursive: true, force: true });
+      await opts.rollbackDatabase();
+      throw error;
+    }
     if (opts.decision && (await opts.decision.isCommitted(operationId))) {
       throw error;
     }
@@ -252,6 +264,19 @@ async function rollForward(
         renameExistingToBackup,
       );
       if (usedFallback) backupFallbackPaths.push(entry.targetPath);
+    } else if (
+      entry.hadOriginal &&
+      (await exists(backup)) &&
+      (await exists(entry.targetPath))
+    ) {
+      if (
+        (await stat(backup)).size !== (await stat(entry.targetPath)).size ||
+        (await sha256(backup)) !== (await sha256(entry.targetPath))
+      )
+        throw new Error(
+          `Cover target unexpectedly exists: ${entry.targetPath}`,
+        );
+      await unlink(entry.targetPath);
     } else if (await exists(entry.targetPath)) {
       throw new Error(`Cover target unexpectedly exists: ${entry.targetPath}`);
     }

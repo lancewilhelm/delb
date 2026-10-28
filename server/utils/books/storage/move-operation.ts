@@ -4,6 +4,7 @@ import {
   open,
   readFile,
   readdir,
+  rename,
   rm,
   stat,
   unlink,
@@ -79,9 +80,14 @@ async function finish(
       await unlink(source);
     }
   } else {
-    for (const { destination } of journal.entries) {
-      if (await exists(destination))
+    for (const { source, destination } of journal.entries) {
+      if (!(await exists(destination))) continue;
+      if (
+        !(await exists(source)) ||
+        !(await sameFileContents(source, destination))
+      )
         throw new Error(`Uncommitted move requires inspection: ${dir}`);
+      await unlink(destination);
     }
   }
   await rm(dir, { recursive: true });
@@ -106,8 +112,9 @@ export async function moveStoredFiles(opts: {
       throw new Error(`Move destination already exists: ${entry.destination}`);
   }
   const dir = path.join(opts.root, `.delb-move-${journal.id}`);
-  await mkdir(dir);
-  const journalFile = path.join(dir, 'journal.json');
+  const preparing = path.join(opts.root, `.delb-preparing-move-${journal.id}`);
+  await mkdir(preparing);
+  const journalFile = path.join(preparing, 'journal.json');
   await writeFile(journalFile, JSON.stringify(journal), { flag: 'wx' });
   const handle = await open(journalFile, 'r');
   try {
@@ -115,6 +122,7 @@ export async function moveStoredFiles(opts: {
   } finally {
     await handle.close();
   }
+  await rename(preparing, dir);
   for (const entry of journal.entries) {
     await mkdir(path.dirname(entry.destination), { recursive: true });
     await copyVerifiedExclusive(entry.source, entry.destination);
@@ -136,15 +144,35 @@ export async function recoverStoredMoves(opts: {
   }
   for (const name of names.filter((item) => item.startsWith('.delb-move-'))) {
     const dir = path.join(opts.root, name);
-    const journal = JSON.parse(
-      await readFile(path.join(dir, 'journal.json'), 'utf8'),
-    ) as MoveJournal;
+    let journal: MoveJournal;
+    try {
+      journal = JSON.parse(
+        await readFile(path.join(dir, 'journal.json'), 'utf8'),
+      ) as MoveJournal;
+    } catch (error) {
+      if (
+        (error as NodeJS.ErrnoException).code === 'ENOENT' &&
+        !(await existsDirectory(dir))
+      )
+        continue;
+      throw error;
+    }
     validate(opts.root, journal);
     if (name !== `.delb-move-${journal.id}`)
       throw new Error('Invalid move journal identity');
-    await opts.withLock(
-      journal.bookId,
-      async () => await finish(opts.root, dir, journal, opts.decision),
-    );
+    await opts.withLock(journal.bookId, async () => {
+      if (await exists(dir))
+        await finish(opts.root, dir, journal, opts.decision);
+    });
+  }
+}
+
+async function existsDirectory(dir: string): Promise<boolean> {
+  try {
+    await stat(dir);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
   }
 }

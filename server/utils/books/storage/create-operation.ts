@@ -104,8 +104,12 @@ export async function beginStoredCreate(opts: {
   await mkdir(path.dirname(journal.directory), { recursive: true });
   await mkdir(journal.directory);
   const dir = path.join(opts.root, `.delb-create-${journal.id}`);
-  await mkdir(dir);
-  const file = path.join(dir, 'journal.json');
+  const preparing = path.join(
+    opts.root,
+    `.delb-preparing-create-${journal.id}`,
+  );
+  await mkdir(preparing);
+  const file = path.join(preparing, 'journal.json');
   await writeFile(file, JSON.stringify(journal), { flag: 'wx' });
   const handle = await open(file, 'r');
   try {
@@ -113,9 +117,13 @@ export async function beginStoredCreate(opts: {
   } finally {
     await handle.close();
   }
+  await rename(preparing, dir);
   return {
     id: journal.id,
-    finish: async () => await finish(opts.root, dir, journal, opts.decision),
+    finish: async () => {
+      if (await exists(dir))
+        await finish(opts.root, dir, journal, opts.decision);
+    },
   };
 }
 export async function recoverStoredCreates(opts: {
@@ -132,15 +140,35 @@ export async function recoverStoredCreates(opts: {
   }
   for (const name of names.filter((item) => item.startsWith('.delb-create-'))) {
     const dir = path.join(opts.root, name);
-    const journal = JSON.parse(
-      await readFile(path.join(dir, 'journal.json'), 'utf8'),
-    ) as Journal;
+    let journal: Journal;
+    try {
+      journal = JSON.parse(
+        await readFile(path.join(dir, 'journal.json'), 'utf8'),
+      ) as Journal;
+    } catch (error) {
+      if (
+        (error as NodeJS.ErrnoException).code === 'ENOENT' &&
+        !(await existsDirectory(dir))
+      )
+        continue;
+      throw error;
+    }
     validate(opts.root, journal);
     if (name !== `.delb-create-${journal.id}`)
       throw new Error('Invalid creation journal identity');
-    await opts.withLock(
-      journal.bookId,
-      async () => await finish(opts.root, dir, journal, opts.decision),
-    );
+    await opts.withLock(journal.bookId, async () => {
+      if (await exists(dir))
+        await finish(opts.root, dir, journal, opts.decision);
+    });
+  }
+}
+
+async function existsDirectory(dir: string): Promise<boolean> {
+  try {
+    await stat(dir);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
   }
 }

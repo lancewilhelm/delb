@@ -367,3 +367,41 @@ test('recovery retains an unexpected cover target and its unique backup', async 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('committed recovery completes an interrupted verified backup copy', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'delb-cover-copy-crash-'));
+  const dir = path.join(root, '.cover-update-interrupted-copy');
+  const target = path.join(root, 'book.epub');
+  await mkdir(dir);
+  await writeFile(target, 'original');
+  await writeFile(path.join(dir, 'old-0'), 'original');
+  await writeFile(path.join(dir, 'new-0'), 'replacement');
+  await writeFile(
+    path.join(dir, 'journal.json'),
+    JSON.stringify({
+      version: 1,
+      phase: 'database-committed',
+      previousCoverImagePath: null,
+      expectedCoverImagePath: 'thumb',
+      entries: [
+        {
+          targetPath: target,
+          stagedName: 'new-0',
+          backupName: 'old-0',
+          hadOriginal: true,
+        },
+      ],
+    }),
+  );
+  try {
+    await recoverPendingCoverUpdates({
+      operationParent: root,
+      allowedRoot: root,
+      currentCoverImagePath: 'thumb',
+    });
+    assert.equal(await readFile(target, 'utf8'), 'replacement');
+  } finally {
+    const { rm } = await import('node:fs/promises');
+    await rm(root, { recursive: true, force: true });
+  }
+});

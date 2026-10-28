@@ -5,6 +5,7 @@ import {
   open,
   readFile,
   readdir,
+  rename,
   rm,
   stat,
   unlink,
@@ -93,16 +94,25 @@ export async function deleteStoredFiles(opts: {
   };
   validate(opts.root, journal);
   const dir = path.join(opts.root, `.delb-delete-${journal.id}`);
-  await mkdir(dir);
-  await writeFile(path.join(dir, 'journal.json'), JSON.stringify(journal), {
-    flag: 'wx',
-  });
-  const journalHandle = await open(path.join(dir, 'journal.json'), 'r');
+  const preparing = path.join(
+    opts.root,
+    `.delb-preparing-delete-${journal.id}`,
+  );
+  await mkdir(preparing);
+  await writeFile(
+    path.join(preparing, 'journal.json'),
+    JSON.stringify(journal),
+    {
+      flag: 'wx',
+    },
+  );
+  const journalHandle = await open(path.join(preparing, 'journal.json'), 'r');
   try {
     await journalHandle.sync();
   } finally {
     await journalHandle.close();
   }
+  await rename(preparing, dir);
   for (const [index, source] of journal.sources.entries()) {
     await copyVerifiedExclusive(source, path.join(dir, String(index)));
   }
@@ -123,15 +133,40 @@ export async function recoverStoredDeletes(opts: {
   }
   for (const name of names.filter((item) => item.startsWith('.delb-delete-'))) {
     const dir = path.join(opts.root, name);
-    const journal = JSON.parse(
-      await readFile(path.join(dir, 'journal.json'), 'utf8'),
-    ) as DeleteJournal;
+    let journal: DeleteJournal;
+    try {
+      journal = JSON.parse(
+        await readFile(path.join(dir, 'journal.json'), 'utf8'),
+      ) as DeleteJournal;
+    } catch (error) {
+      if (
+        (error as NodeJS.ErrnoException).code === 'ENOENT' &&
+        !(await existsDirectory(dir))
+      )
+        continue;
+      throw error;
+    }
     validate(opts.root, journal);
     if (name !== `.delb-delete-${journal.id}`)
       throw new Error('Invalid delete journal identity');
-    await opts.withLock(
-      journal.bookId,
-      async () => await finish(opts.root, dir, journal, opts.decision),
-    );
+    await opts.withLock(journal.bookId, async () => {
+      try {
+        await stat(dir);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+        throw error;
+      }
+      await finish(opts.root, dir, journal, opts.decision);
+    });
+  }
+}
+
+async function existsDirectory(dir: string): Promise<boolean> {
+  try {
+    await stat(dir);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
   }
 }
