@@ -32,6 +32,8 @@ export default defineEventHandler(async (event) => {
 
   setHeader(event, 'Content-Type', fetched.contentType);
   setHeader(event, 'Cache-Control', 'private, no-store');
+  setHeader(event, 'X-Content-Type-Options', 'nosniff');
+  setHeader(event, 'Content-Security-Policy', "default-src 'none'; sandbox");
   setResponseHeader(event, 'Content-Length', fetched.bytes.length);
 
   return fetched.bytes;

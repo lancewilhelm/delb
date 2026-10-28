@@ -1,249 +1,180 @@
 import dns from 'node:dns/promises';
+import http from 'node:http';
+import https from 'node:https';
 import net from 'node:net';
+import ipaddr from 'ipaddr.js';
+import sharp from 'sharp';
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;
 const DEFAULT_MAX_REDIRECTS = 3;
+const MAX_PIXELS = 40_000_000;
 
-function isIPv4Private(ip: string): boolean {
-  const parts = ip.split('.').map((p) => Number.parseInt(p, 10));
-  if (
-    parts.length !== 4 ||
-    parts.some((n) => !Number.isFinite(n) || n < 0 || n > 255)
-  ) {
-    return false;
-  }
-
-  const a = parts[0]!;
-  const b = parts[1]!;
-  if (a === 10) return true;
-  if (a === 127) return true;
-  if (a === 0) return true;
-  if (a === 169 && b === 254) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 192 && b === 168) return true;
-  if (a >= 224) return true; // multicast + reserved
-  return false;
+function failure(
+  statusCode = 502,
+  statusMessage = 'Failed to fetch external image',
+) {
+  return createError({ statusCode, statusMessage });
 }
 
-function isIPv6Blocked(ip: string): boolean {
-  const normalized = ip.toLowerCase();
-  if (normalized === '::1') return true; // loopback
-  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true; // unique local
-  if (normalized.startsWith('fe80')) return true; // link local
-  if (normalized.startsWith('ff')) return true; // multicast
-  return false;
+function isPublicAddress(address: string): boolean {
+  if (!ipaddr.isValid(address)) return false;
+  const ip = ipaddr.parse(address);
+  if (ip.range() !== 'unicast') return false;
+  if (ip.kind() === 'ipv4') {
+    const ipv4 = ipaddr.IPv4.parse(address);
+    return (
+      !ipv4.match(ipaddr.IPv4.parse('192.0.0.0'), 24) &&
+      !ipv4.match(ipaddr.IPv4.parse('192.88.99.0'), 24)
+    );
+  }
+  const ipv6 = ipaddr.IPv6.parse(address);
+  return (
+    ipv6.match(ipaddr.IPv6.parse('2000::'), 3) &&
+    !ipv6.match(ipaddr.IPv6.parse('2001::'), 23) &&
+    !ipv6.match(ipaddr.IPv6.parse('2002::'), 16)
+  );
 }
 
-function isBlockedHost(hostname: string): boolean {
-  const host = hostname.trim().toLowerCase();
-  if (!host) return true;
-  if (host === 'localhost' || host.endsWith('.localhost')) return true;
-  if (host.endsWith('.local')) return true;
-  return false;
-}
-
-async function assertPublicHost(url: URL): Promise<void> {
-  const host = url.hostname;
-
-  if (isBlockedHost(host)) {
-    throw createError({ statusCode: 400, statusMessage: 'Invalid image URL host' });
-  }
-
-  const ipVersion = net.isIP(host);
-  if (ipVersion === 4 && isIPv4Private(host)) {
-    throw createError({ statusCode: 400, statusMessage: 'Invalid image URL host' });
-  }
-  if (ipVersion === 6 && isIPv6Blocked(host)) {
-    throw createError({ statusCode: 400, statusMessage: 'Invalid image URL host' });
-  }
-
-  if (ipVersion === 0) {
-    const lookups = await dns.lookup(host, { all: true, verbatim: true });
-
-    if (!lookups.length) {
-      throw createError({ statusCode: 400, statusMessage: 'Invalid image URL host' });
-    }
-
-    for (const entry of lookups) {
-      const ip = entry.address;
-      if (!ip) {
-        throw createError({ statusCode: 400, statusMessage: 'Invalid image URL host' });
-      }
-
-      const v = net.isIP(ip);
-      if (v === 4 && isIPv4Private(ip)) {
-        throw createError({ statusCode: 400, statusMessage: 'Invalid image URL host' });
-      }
-      if (v === 6 && isIPv6Blocked(ip)) {
-        throw createError({ statusCode: 400, statusMessage: 'Invalid image URL host' });
-      }
-    }
-  }
-}
-
-function parseLocation(current: URL, location: string): URL {
-  try {
-    return new URL(location, current);
-  } catch {
-    throw createError({ statusCode: 502, statusMessage: 'Failed to fetch external image' });
-  }
-}
-
-async function readBodyWithLimit(
-  body: ReadableStream<Uint8Array> | null,
-  maxBytes: number,
-): Promise<Buffer> {
-  if (!body) return Buffer.alloc(0);
-
-  const reader = body.getReader();
-  const chunks: Buffer[] = [];
-  let total = 0;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (!value) continue;
-
-      total += value.byteLength;
-      if (total > maxBytes) {
-        throw createError({
-          statusCode: 413,
-          statusMessage: 'External image is too large',
-        });
-      }
-
-      chunks.push(Buffer.from(value));
-    }
-
-    return Buffer.concat(chunks);
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-export async function fetchExternalImageBuffer(inputUrl: string): Promise<{
-  bytes: Buffer;
-  contentType: string;
-}> {
+function parseUrl(input: string, base?: URL): URL {
   let url: URL;
   try {
-    url = new URL(inputUrl);
+    url = new URL(input, base);
   } catch {
-    throw createError({ statusCode: 400, statusMessage: 'Invalid url' });
+    throw failure(400, 'Invalid url');
   }
-
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Invalid url protocol',
-    });
+    throw failure(400, 'Invalid url protocol');
   }
+  if (url.username || url.password)
+    throw failure(400, 'Invalid image URL host');
+  return url;
+}
 
-  const maxRedirects = DEFAULT_MAX_REDIRECTS;
-  const maxBytes = DEFAULT_MAX_BYTES;
-  const timeoutMs = DEFAULT_TIMEOUT_MS;
+async function resolvePublicAddress(
+  url: URL,
+): Promise<{ address: string; family: 4 | 6 }> {
+  const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (
+    !hostname ||
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    hostname.endsWith('.local')
+  ) {
+    throw failure(400, 'Invalid image URL host');
+  }
+  const family = net.isIP(hostname);
+  const addresses = family
+    ? [{ address: hostname, family }]
+    : await dns.lookup(hostname, { all: true, verbatim: true });
+  if (
+    !addresses.length ||
+    addresses.some(({ address }) => !isPublicAddress(address))
+  ) {
+    throw failure(400, 'Invalid image URL host');
+  }
+  const selected = addresses[0]!;
+  if (selected.family !== 4 && selected.family !== 6)
+    throw failure(400, 'Invalid image URL host');
+  return { address: selected.address, family: selected.family };
+}
 
-  let current = url;
-  for (let i = 0; i <= maxRedirects; i++) {
-    await assertPublicHost(current);
+async function requestImage(
+  url: URL,
+  address: { address: string; family: 4 | 6 },
+  signal: AbortSignal,
+): Promise<http.IncomingMessage> {
+  return new Promise((resolve, reject) => {
+    const request = (url.protocol === 'https:' ? https : http).get(
+      url,
+      {
+        signal,
+        agent: false,
+        family: address.family,
+        lookup: (_hostname, _options, callback) =>
+          callback(null, address.address, address.family),
+        headers: {
+          Accept: 'image/jpeg,image/png,image/webp',
+          'User-Agent': 'delb/external-image-fetcher',
+        },
+      },
+      resolve,
+    );
+    request.on('error', reject);
+  });
+}
 
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), timeoutMs);
-
+async function fetchImage(
+  inputUrl: string,
+  signal: AbortSignal,
+): Promise<{ bytes: Buffer; contentType: string }> {
+  let current = parseUrl(inputUrl);
+  for (let i = 0; i <= DEFAULT_MAX_REDIRECTS; i++) {
+    const address = await resolvePublicAddress(current);
+    signal.throwIfAborted();
+    const response = await requestImage(current, address, signal);
     try {
-      let resp: Response;
-      try {
-        resp = await fetch(current.toString(), {
-          method: 'GET',
-          redirect: 'manual',
-          signal: ctrl.signal,
-          headers: {
-            Accept: 'image/*,*/*;q=0.8',
-            'User-Agent': 'delb/external-image-fetcher',
-          },
-        });
-      } catch {
-        throw createError({
-          statusCode: 502,
-          statusMessage: 'Failed to fetch external image',
-        });
-      }
-
-      const redirectStatus = [301, 302, 303, 307, 308];
-      if (redirectStatus.includes(resp.status)) {
-        if (i === maxRedirects) {
-          throw createError({
-            statusCode: 502,
-            statusMessage: 'Failed to fetch external image',
-          });
-        }
-
-        const location = resp.headers.get('location');
-        if (!location) {
-          throw createError({
-            statusCode: 502,
-            statusMessage: 'Failed to fetch external image',
-          });
-        }
-
-        current = parseLocation(current, location);
-        if (current.protocol !== 'http:' && current.protocol !== 'https:') {
-          throw createError({
-            statusCode: 400,
-            statusMessage: 'Invalid url protocol',
-          });
-        }
-        await resp.body?.cancel();
+      const status = response.statusCode ?? 0;
+      if ([301, 302, 303, 307, 308].includes(status)) {
+        if (i === DEFAULT_MAX_REDIRECTS || !response.headers.location)
+          throw failure();
+        current = parseUrl(response.headers.location, current);
         continue;
       }
-
-      if (!resp.ok) {
-        throw createError({
-          statusCode: 502,
-          statusMessage: 'Failed to fetch external image',
-        });
+      if (status < 200 || status >= 300) throw failure();
+      const length = Number(response.headers['content-length'] || 0);
+      if (Number.isFinite(length) && length > DEFAULT_MAX_BYTES)
+        throw failure(413, 'External image is too large');
+      const chunks: Buffer[] = [];
+      let total = 0;
+      for await (const chunk of response) {
+        const bytes = Buffer.from(chunk);
+        total += bytes.length;
+        if (total > DEFAULT_MAX_BYTES)
+          throw failure(413, 'External image is too large');
+        chunks.push(bytes);
       }
-
-      const contentType =
-        resp.headers.get('content-type') || 'application/octet-stream';
-      if (!contentType.toLowerCase().startsWith('image/')) {
-        throw createError({
-          statusCode: 502,
-          statusMessage: 'Failed to fetch external image',
-        });
-      }
-
-      const contentLength = Number(resp.headers.get('content-length') || 0);
-      if (Number.isFinite(contentLength) && contentLength > maxBytes) {
-        throw createError({
-          statusCode: 413,
-          statusMessage: 'External image is too large',
-        });
-      }
-
-      let bytes: Buffer;
-      try {
-        bytes = await readBodyWithLimit(resp.body, maxBytes);
-      } catch (error) {
-        if (ctrl.signal.aborted) {
-          throw createError({
-            statusCode: 502,
-            statusMessage: 'External image request timed out',
-          });
-        }
-        throw error;
-      }
-      return { bytes, contentType };
+      const input = Buffer.concat(chunks);
+      const image = sharp(input, {
+        limitInputPixels: MAX_PIXELS,
+        failOn: 'warning',
+      });
+      const metadata = await image.metadata();
+      if (!['jpeg', 'png', 'webp'].includes(metadata.format ?? ''))
+        throw failure();
+      const bytes = await image.png().toBuffer();
+      return { bytes, contentType: 'image/png' };
     } finally {
-      clearTimeout(timeout);
-      ctrl.abort();
+      response.destroy();
     }
   }
+  throw failure();
+}
 
-  throw createError({
-    statusCode: 502,
-    statusMessage: 'Failed to fetch external image',
+export async function fetchExternalImageBuffer(
+  inputUrl: string,
+): Promise<{ bytes: Buffer; contentType: string }> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(failure(502, 'External image request timed out'));
+    }, DEFAULT_TIMEOUT_MS);
   });
+  try {
+    return await Promise.race([
+      fetchImage(inputUrl, controller.signal),
+      deadline,
+    ]);
+  } catch (error) {
+    if (controller.signal.aborted)
+      throw failure(502, 'External image request timed out');
+    if (error && typeof error === 'object' && 'statusCode' in error)
+      throw error;
+    throw failure();
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
+  }
 }
