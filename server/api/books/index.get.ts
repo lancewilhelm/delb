@@ -1,15 +1,4 @@
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  gt,
-  inArray,
-  lt,
-  or,
-  sql,
-  type SQLWrapper,
-} from 'drizzle-orm';
+import { and, eq, inArray, or, sql } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
@@ -27,24 +16,15 @@ import {
 import { logger } from '~/utils/logger';
 import { auth } from '~/utils/auth';
 
-import { pageSort } from '../../utils/books/page-sort';
-
-type SortKey = 'dateAdded' | 'alphabetical' | 'publishedDate' | 'pages';
-type SortDir = 'asc' | 'desc';
+import {
+  bookSort,
+  decodeCursor,
+  nextBookCursor,
+  normalizeSortDir,
+  normalizeSortKey,
+} from '../../utils/books/book-sort';
 
 type UserBookStatusValue = (typeof USER_BOOK_STATUSES)[number];
-
-type Cursor = {
-  /**
-   * Cursor payload depends on sort key:
-   * - dateAdded: createdAt + id
-   * - alphabetical: sortTitle + id
-   * - publishedDate: published + id
-   * - pages: non-negative integer or empty string (unknown) + id
-   */
-  v: string;
-  id: string;
-};
 
 function clampInt(
   input: unknown,
@@ -53,43 +33,6 @@ function clampInt(
   const n = Number.parseInt((input ?? '').toString(), 10);
   if (!Number.isFinite(n)) return opts.fallback;
   return Math.max(opts.min, Math.min(opts.max, n));
-}
-
-function normalizeSortKey(raw: unknown): SortKey {
-  const v = (raw ?? '').toString().trim();
-  if (v === 'alphabetical') return 'alphabetical';
-  if (v === 'publishedDate') return 'publishedDate';
-  if (v === 'pages') return 'pages';
-  return 'dateAdded';
-}
-
-function normalizeSortDir(raw: unknown, sort: SortKey): SortDir {
-  const v = (raw ?? '').toString().trim().toLowerCase();
-  if (v === 'asc') return 'asc';
-  if (v === 'desc') return 'desc';
-
-  // Default directions
-  if (sort === 'alphabetical' || sort === 'pages') return 'asc';
-  return 'desc';
-}
-
-function encodeCursor(c: Cursor): string {
-  return Buffer.from(JSON.stringify(c), 'utf8').toString('base64url');
-}
-
-function decodeCursor(raw: unknown): Cursor | null {
-  if (typeof raw !== 'string' || !raw.trim()) return null;
-  try {
-    const json = Buffer.from(raw, 'base64url').toString('utf8');
-    const parsed = JSON.parse(json) as Partial<Cursor>;
-    const v = (parsed.v ?? '').toString();
-    const id = (parsed.id ?? '').toString().trim();
-    if (!id) return null;
-    // v may be "" (e.g. missing published), but must exist to keep cursor shape stable
-    return { v, id };
-  } catch {
-    return null;
-  }
 }
 
 function normalizeStatusFilter(raw: unknown): {
@@ -328,72 +271,7 @@ export default defineEventHandler(async (event) => {
     // Build cursor conditions + orderBy based on sort mode.
     // NOTE: For title/published sorts we still filter the visible book set via collection_books,
     // but sorting uses the books table fields.
-    const pagesSort = pageSort(books.pages, books.id, sortDir, cursor);
-    const orderPrimary: SQLWrapper =
-      sort === 'dateAdded'
-        ? books.createdAt
-        : sort === 'alphabetical'
-          ? books.sortTitle
-          : sql`COALESCE(${books.publishedAt}, 0)`;
-
-    const orderPrimaryDesc = sortDir === 'desc';
-
-    // Cursor predicate:
-    // - Use lexicographic compare for sortTitle/published (both are TEXT)
-    // - Use date compare for createdAt (timestamp)
-    const cursorWhere =
-      sort === 'pages'
-        ? pagesSort.where
-        : cursor && sort === 'dateAdded'
-          ? sortDir === 'asc'
-            ? or(
-                gt(books.createdAt, new Date(cursor.v)),
-                and(
-                  eq(books.createdAt, new Date(cursor.v)),
-                  gt(books.id, cursor.id),
-                ),
-              )
-            : or(
-                lt(books.createdAt, new Date(cursor.v)),
-                and(
-                  eq(books.createdAt, new Date(cursor.v)),
-                  lt(books.id, cursor.id),
-                ),
-              )
-          : cursor && sort === 'alphabetical'
-            ? sortDir === 'asc'
-              ? or(
-                  gt(books.sortTitle, cursor.v),
-                  and(eq(books.sortTitle, cursor.v), gt(books.id, cursor.id)),
-                )
-              : or(
-                  lt(books.sortTitle, cursor.v),
-                  and(eq(books.sortTitle, cursor.v), lt(books.id, cursor.id)),
-                )
-            : cursor && sort === 'publishedDate'
-              ? (() => {
-                  const cursorMs = Number.parseInt(cursor.v, 10);
-                  const v = Number.isFinite(cursorMs)
-                    ? Math.floor(cursorMs / 1000)
-                    : 0;
-
-                  return sortDir === 'asc'
-                    ? or(
-                        gt(sql`COALESCE(${books.publishedAt}, 0)`, v),
-                        and(
-                          eq(sql`COALESCE(${books.publishedAt}, 0)`, v),
-                          gt(books.id, cursor.id),
-                        ),
-                      )
-                    : or(
-                        lt(sql`COALESCE(${books.publishedAt}, 0)`, v),
-                        and(
-                          eq(sql`COALESCE(${books.publishedAt}, 0)`, v),
-                          lt(books.id, cursor.id),
-                        ),
-                      );
-                })()
-              : undefined;
+    const ordering = bookSort(sort, sortDir, cursor);
 
     // Page query: fetch visible books via the collection link table.
     // Sort is selectable, with deterministic tie-break by id.
@@ -404,7 +282,7 @@ export default defineEventHandler(async (event) => {
 
     const commonWhere = and(
       inArray(collectionBooks.collectionId, targetCollectionIds),
-      cursorWhere,
+      ordering.where,
       // Inclusive range (numeric compare against unix-second bounds)
       // We coerce createdAt to INTEGER to handle cases where it may be stored as TEXT.
       addedStartSec !== null
@@ -457,15 +335,7 @@ export default defineEventHandler(async (event) => {
       // Avoid duplicates if a book is in multiple target collections.
       // Group by book id provides a deterministic unique set in SQLite.
       .groupBy(books.id)
-      .orderBy(
-        ...(sort === 'pages'
-          ? pagesSort.orderBy
-          : [
-              orderPrimaryDesc ? desc(orderPrimary) : asc(orderPrimary),
-              // Deterministic tie-break; keep direction aligned so paging is stable
-              orderPrimaryDesc ? desc(books.id) : asc(books.id),
-            ]),
-      )
+      .orderBy(...ordering.orderBy)
       .limit(limit + 1);
 
     if (debug) {
@@ -643,38 +513,7 @@ export default defineEventHandler(async (event) => {
 
     const last = page[page.length - 1];
 
-    const nextCursor =
-      hasMore && last?.id
-        ? encodeCursor({
-            v:
-              sort === 'pages'
-                ? pagesSort.cursorValue(last.pages)
-                : sort === 'dateAdded'
-                  ? new Date(last.createdAt).toISOString()
-                  : sort === 'alphabetical'
-                    ? (last.sortTitle ?? '')
-                    : String(
-                        Number.isFinite(
-                          Number(
-                            last.publishedAt instanceof Date
-                              ? last.publishedAt.getTime()
-                              : typeof last.publishedAt === 'number'
-                                ? last.publishedAt
-                                : 0,
-                          ),
-                        )
-                          ? Number(
-                              last.publishedAt instanceof Date
-                                ? last.publishedAt.getTime()
-                                : typeof last.publishedAt === 'number'
-                                  ? last.publishedAt
-                                  : 0,
-                            )
-                          : 0,
-                      ),
-            id: last.id,
-          })
-        : null;
+    const nextCursor = nextBookCursor(sort, hasMore, last);
 
     return {
       success: true,
