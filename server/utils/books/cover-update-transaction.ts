@@ -73,8 +73,10 @@ export async function recoverPendingCoverUpdates(opts: {
   let entries: string[];
   try {
     entries = await readdir(opts.operationParent);
-  } catch {
-    return { backupFallbackPaths };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT')
+      return { backupFallbackPaths };
+    throw error;
   }
   for (const name of entries.filter((entry) =>
     entry.startsWith('.cover-update-'),
@@ -88,11 +90,14 @@ export async function recoverPendingCoverUpdates(opts: {
       validateJournal(journal, opts.allowedRoot, operationDir);
       if (journal.version === 2 && journal.bookId !== opts.bookId) continue;
     } catch (error) {
-      throw new Error(`Cannot recover cover journal ${operationDir}`, { cause: error });
+      throw new Error(`Cannot recover cover journal ${operationDir}`, {
+        cause: error,
+      });
     }
     let committed: boolean;
     if (journal.version === 2) {
-      if (!opts.decision || !journal.operationId) continue;
+      if (!opts.decision || !journal.operationId)
+        throw new Error(`Missing cover decision for ${operationDir}`);
       committed = await opts.decision.isCommitted(journal.operationId);
     } else if (journal.phase === 'database-committed') {
       committed = true;
@@ -102,7 +107,7 @@ export async function recoverPendingCoverUpdates(opts: {
     ) {
       committed = false;
     } else {
-      continue;
+      throw new Error(`Ambiguous cover journal ${operationDir}`);
     }
     if (committed) {
       backupFallbackPaths.push(
@@ -281,9 +286,6 @@ async function moveExistingToBackup(
     } catch (fallbackError) {
       // The source is still present unless unlink succeeded. Never delete the
       // backup if it may now be the only recoverable copy.
-      if (await exists(source)) {
-        await unlink(backup).catch(() => undefined);
-      }
       throw new CoverUpdateStorageError(
         source,
         new AggregateError(
@@ -375,7 +377,8 @@ async function exists(filePath: string): Promise<boolean> {
   try {
     await access(filePath);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
   }
 }
