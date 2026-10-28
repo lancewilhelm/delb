@@ -40,3 +40,36 @@ test('rejects concurrent owners and recovers a dead same-host owner', async () =
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('a separate live process owns the lock until it dies', async () => {
+  const { spawn } = await import('node:child_process');
+  const { once } = await import('node:events');
+  const { pathToFileURL } = await import('node:url');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'delb-lock-process-'));
+  const moduleUrl = pathToFileURL(
+    path.resolve('server/utils/books/storage/book-lock.ts'),
+  ).href;
+  const script = `import { withBookStorageLock } from ${JSON.stringify(moduleUrl)}; await withBookStorageLock(${JSON.stringify(root)}, 'book', async () => { process.stdout.write('locked'); process.stdin.resume(); await new Promise(() => {}); });`;
+  const child = spawn(
+    process.execPath,
+    ['--import', 'tsx', '--input-type=module', '-e', script],
+    { stdio: ['pipe', 'pipe', 'pipe'] },
+  );
+  try {
+    const [data] = await once(child.stdout, 'data');
+    assert.equal(String(data), 'locked');
+    await assert.rejects(
+      withBookStorageLock(root, 'book', async () => undefined),
+    );
+    child.kill('SIGKILL');
+    await once(child, 'exit');
+    assert.equal(
+      await withBookStorageLock(root, 'book', async () => 'recovered'),
+      'recovered',
+    );
+  } finally {
+    if (child.exitCode === null && child.signalCode === null)
+      child.kill('SIGKILL');
+    await rm(root, { recursive: true, force: true });
+  }
+});
