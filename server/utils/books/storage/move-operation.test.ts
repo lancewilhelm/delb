@@ -248,6 +248,8 @@ for (const copy of ['ori', 'different bytes'])
       assert.equal(warnings[0]?.journalDir, path.join(root, journal));
       assert.equal(warnings[0]?.marker, path.join(root, failed));
       assert.deepEqual(warnings[0]?.entries, [{ source, destination }]);
+      await rm(source);
+      await rm(destination);
       assert.deepEqual(
         await recoverStoredMoves({
           root,
@@ -256,7 +258,110 @@ for (const copy of ['ori', 'different bytes'])
         }),
         warnings,
       );
+      assert.equal(
+        await readFile(path.join(root, journal, 'retained-source-0'), 'utf8'),
+        'original',
+      );
+      assert.equal(
+        await readFile(
+          path.join(root, journal, 'retained-destination-0'),
+          'utf8',
+        ),
+        copy,
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+test('legacy markers acquire retained copies before later mutations', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'delb-move-legacy-'));
+  const source = path.join(root, 'source');
+  const destination = path.join(root, 'destination');
+  const decision = {
+    isCommitted: async () => false,
+    remove: async () => undefined,
+  };
+  const recover = () =>
+    recoverStoredMoves({
+      root,
+      decision,
+      withLock: async (_id, work) => await work(),
+    });
+  try {
+    await writeFile(source, 'original');
+    await assert.rejects(
+      moveStoredFiles({
+        root,
+        bookId: 'book',
+        entries: [{ source, destination }],
+        decision,
+        commit: async () => {
+          throw new Error('interrupted');
+        },
+      }),
+    );
+    await writeFile(destination, 'conflict');
+    const [warning] = await recover();
+    assert.ok(warning);
+    await rm(path.join(warning.journalDir, 'retained-source-0'));
+    await rm(path.join(warning.journalDir, 'retained-destination-0'));
+    await writeFile(warning.marker, '');
+    await recover();
+    await rm(source);
+    await rm(destination);
+    assert.equal((await recover()).length, 1);
+    assert.equal(
+      await readFile(
+        path.join(warning.journalDir, 'retained-source-0'),
+        'utf8',
+      ),
+      'original',
+    );
+    assert.equal(
+      await readFile(
+        path.join(warning.journalDir, 'retained-destination-0'),
+        'utf8',
+      ),
+      'conflict',
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('unmarked uncommitted moves still reject missing originals', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'delb-move-no-original-'));
+  const source = path.join(root, 'source');
+  const destination = path.join(root, 'destination');
+  const decision = {
+    isCommitted: async () => false,
+    remove: async () => undefined,
+  };
+  try {
+    await writeFile(source, 'original');
+    await assert.rejects(
+      moveStoredFiles({
+        root,
+        bookId: 'book',
+        entries: [{ source, destination }],
+        decision,
+        commit: async () => {
+          throw new Error('interrupted');
+        },
+      }),
+    );
+    await rm(source);
+    await assert.rejects(
+      recoverStoredMoves({
+        root,
+        decision,
+        withLock: async (_id, work) => await work(),
+      }),
+      /Uncommitted move source is missing/,
+    );
+    assert.equal(await readFile(destination, 'utf8'), 'original');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

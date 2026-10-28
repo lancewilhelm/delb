@@ -75,16 +75,38 @@ async function finish(
   validate(root, journal);
   const marker = path.join(root, `.delb-failed-move-${journal.id}`);
   const committed = await decision.isCommitted(journal.id);
+  if (await exists(marker)) {
+    if (committed)
+      throw new Error(`Committed move has a failed recovery marker: ${marker}`);
+    const contents = await readFile(marker, 'utf8');
+    if (contents.startsWith('retained-v1:')) {
+      const destinations = contents.slice('retained-v1:'.length);
+      if (
+        !/^[01]*$/.test(destinations) ||
+        destinations.length !== journal.entries.length
+      )
+        throw new Error(`Invalid move recovery marker: ${marker}`);
+      for (let index = 0; index < journal.entries.length; index++) {
+        if (!(await exists(path.join(dir, `retained-source-${index}`))))
+          throw new Error(`Retained move source is missing: ${dir}`);
+        if (
+          destinations[index] === '1' &&
+          !(await exists(path.join(dir, `retained-destination-${index}`)))
+        )
+          throw new Error(`Retained move destination is missing: ${dir}`);
+      }
+      return { journalDir: dir, marker, entries: journal.entries };
+    }
+    if (contents !== '')
+      throw new Error(`Invalid move recovery marker: ${marker}`);
+    await retainConflict(dir, marker, journal);
+    return { journalDir: dir, marker, entries: journal.entries };
+  }
   if (!committed) {
     for (const { source } of journal.entries) {
       if (!(await exists(source)))
         throw new Error(`Uncommitted move source is missing: ${source}`);
     }
-  }
-  if (await exists(marker)) {
-    if (committed)
-      throw new Error(`Committed move has a failed recovery marker: ${marker}`);
-    return { journalDir: dir, marker, entries: journal.entries };
   }
   if (committed) {
     for (const { source, destination } of journal.entries) {
@@ -101,12 +123,7 @@ async function finish(
     for (const { source, destination } of journal.entries) {
       if (!(await exists(destination))) continue;
       if (!(await sameFileContents(source, destination))) {
-        const handle = await open(marker, 'wx');
-        try {
-          await handle.sync();
-        } finally {
-          await handle.close();
-        }
+        await retainConflict(dir, marker, journal);
         return { journalDir: dir, marker, entries: journal.entries };
       }
       await unlink(destination);
@@ -114,6 +131,53 @@ async function finish(
   }
   await rm(dir, { recursive: true });
   await decision.remove(journal.id);
+}
+async function retainConflict(
+  dir: string,
+  marker: string,
+  journal: MoveJournal,
+): Promise<void> {
+  let destinations = '';
+  for (const [index, entry] of journal.entries.entries()) {
+    for (const [kind, source] of [
+      ['source', entry.source],
+      ['destination', entry.destination],
+    ] as const) {
+      const present = await exists(source);
+      if (kind === 'destination') destinations += present ? '1' : '0';
+      if (!present) {
+        if (kind === 'source')
+          throw new Error(`Uncommitted move source is missing: ${source}`);
+        continue;
+      }
+      const retained = path.join(dir, `retained-${kind}-${index}`);
+      if (await exists(retained)) {
+        if (!(await sameFileContents(source, retained)))
+          throw new Error(`Retained move copy changed: ${retained}`);
+        continue;
+      }
+      const temporary = path.join(dir, `copy-${randomUUID()}`);
+      try {
+        await copyVerifiedExclusive(source, temporary);
+        await rename(temporary, retained);
+      } finally {
+        await rm(temporary, { force: true });
+      }
+    }
+  }
+  const temporary = path.join(dir, `marker-${randomUUID()}`);
+  try {
+    const handle = await open(temporary, 'wx');
+    try {
+      await handle.writeFile(`retained-v1:${destinations}`);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await rename(temporary, marker);
+  } finally {
+    await rm(temporary, { force: true });
+  }
 }
 export async function moveStoredFiles(opts: {
   root: string;
