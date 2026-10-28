@@ -1,86 +1,60 @@
-import { randomUUID } from 'node:crypto';
-import { hostname } from 'node:os';
-import { createClient, type Client } from '@libsql/client';
+import { createHash } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { createClient, LibsqlError, type Transaction } from '@libsql/client';
 
-type Owner = { host: string; pid: number; token: string };
-const client = createClient({
-  url: process.env.DATABASE_URL || 'file:./data/delb.db',
-});
+// Keep ownership alive even when the pending work promise is otherwise unreachable.
+const activeTransactions = new Set<Transaction>();
 
-function parseOwner(value: string): Owner {
-  const owner: unknown = JSON.parse(value);
-  if (
-    !owner ||
-    typeof owner !== 'object' ||
-    !('host' in owner) ||
-    typeof owner.host !== 'string' ||
-    !('pid' in owner) ||
-    typeof owner.pid !== 'number' ||
-    !Number.isSafeInteger(owner.pid) ||
-    owner.pid <= 0 ||
-    !('token' in owner) ||
-    typeof owner.token !== 'string'
-  )
-    throw new Error('Ambiguous book storage lock');
-  return { host: owner.host, pid: owner.pid, token: owner.token };
-}
-function isDead(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return false;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'ESRCH';
-  }
-}
 export class BookStorageLockBusyError extends Error {}
 
 export async function withBookStorageLock<T>(
-  _root: string,
+  root: string,
   bookId: string,
   work: () => Promise<T>,
-  db: Client = client,
 ): Promise<T> {
-  const key = `storage-lock:${bookId}`;
-  const owner: Owner = {
-    host: hostname(),
-    pid: process.pid,
-    token: randomUUID(),
-  };
-  const value = JSON.stringify(owner);
-  const deadline = Date.now() + 30000;
-  for (;;) {
-    const inserted = await db.execute({
-      sql: 'INSERT INTO system_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING',
-      args: [key, value],
-    });
-    if (inserted.rowsAffected === 1) break;
-    const found = await db.execute({
-      sql: 'SELECT value FROM system_state WHERE key = ?',
-      args: [key],
-    });
-    if (!found.rows.length) continue;
-    const previous = String(found.rows[0]!.value);
-    const current = parseOwner(previous);
-    if (current.host !== owner.host)
-      throw new Error('Book storage lock belongs to another host');
-    if (isDead(current.pid)) {
-      const claimed = await db.execute({
-        sql: 'UPDATE system_state SET value = ? WHERE key = ? AND value = ?',
-        args: [value, key, previous],
-      });
-      if (claimed.rowsAffected === 1) break;
-      continue;
-    }
-    if (Date.now() >= deadline)
-      throw new BookStorageLockBusyError('Book storage lock is busy');
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
+  const directory = path.join(root, '.delb-locks');
+  await mkdir(directory, { recursive: true });
+  const name = createHash('sha256').update(bookId).digest('hex');
+  const db = createClient({
+    url: pathToFileURL(path.join(directory, `${name}.db`)).href,
+  });
   try {
-    return await work();
+    await db.execute('PRAGMA busy_timeout=0');
+    const deadline = Date.now() + 30000;
+    for (;;) {
+      let transaction;
+      try {
+        transaction = await db.transaction('write');
+      } catch (error) {
+        if (!(error instanceof LibsqlError) || error.code !== 'SQLITE_BUSY')
+          throw error;
+        if (Date.now() >= deadline)
+          throw new BookStorageLockBusyError('Book storage lock is busy');
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        continue;
+      }
+      activeTransactions.add(transaction);
+      try {
+        let result: T;
+        try {
+          result = await work();
+        } catch (error) {
+          try {
+            await transaction.rollback();
+          } catch {
+            // Preserve the original work error if rollback also fails.
+          }
+          throw error;
+        }
+        await transaction.rollback();
+        return result;
+      } finally {
+        activeTransactions.delete(transaction);
+      }
+    }
   } finally {
-    await db.execute({
-      sql: 'DELETE FROM system_state WHERE key = ? AND value = ?',
-      args: [key, value],
-    });
+    db.close();
   }
 }

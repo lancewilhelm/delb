@@ -1,94 +1,80 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { createClient } from '@libsql/client';
+import { pathToFileURL } from 'node:url';
+import { LibsqlError } from '@libsql/client';
 import { withBookStorageLock } from './book-lock';
 
-test('SQLite serializes owners across root aliases and reaps dead owners', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'delb-lock-'));
-  const db = createClient({ url: `file:${path.join(root, 'locks.db')}` });
-  const second = createClient({ url: `file:${path.join(root, 'locks.db')}` });
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test('same book waits across root aliases while another book proceeds', async () => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), 'delb-lock-'));
+  const root = path.join(parent, 'library');
+  await mkdir(root);
+  const alias = path.join(parent, 'alias');
+  await symlink(root, alias);
+  let release!: () => void;
+  let signalHeld!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const acquired = new Promise<void>((resolve) => {
+    signalHeld = resolve;
+  });
   try {
-    await db.execute(
-      'CREATE TABLE system_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
-    );
-    let release!: () => void;
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
+    const first = withBookStorageLock(root, 'book', async () => {
+      signalHeld();
+      await held;
     });
+    await acquired;
     let entered = false;
-    let signalHeld!: () => void;
-    const firstHeld = new Promise<void>((resolve) => {
-      signalHeld = resolve;
+    const next = withBookStorageLock(alias, 'book', async () => {
+      entered = true;
     });
-    const first = withBookStorageLock(
-      root,
-      'book',
-      async () => {
-        signalHeld();
-        await held;
-      },
-      db,
+    assert.equal(
+      await withBookStorageLock(root, 'other', async () => 'other'),
+      'other',
     );
-    await firstHeld;
-    const next = withBookStorageLock(
-      '/another-alias',
-      'book',
-      async () => {
-        entered = true;
-      },
-      second,
-    );
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    await delay(150);
     assert.equal(entered, false);
     release();
     await Promise.all([first, next]);
     assert.equal(entered, true);
-    await db.execute({
-      sql: 'INSERT INTO system_state VALUES (?, ?)',
-      args: [
-        'storage-lock:book',
-        JSON.stringify({ host: os.hostname(), pid: 2147483647, token: 'old' }),
-      ],
-    });
-    assert.equal(
-      await withBookStorageLock(root, 'book', async () => 'recovered', second),
-      'recovered',
-    );
-    await db.execute({
-      sql: 'INSERT INTO system_state VALUES (?, ?)',
-      args: [
-        'storage-lock:book',
-        JSON.stringify({ host: 'foreign', pid: 1, token: 'old' }),
-      ],
-    });
     await assert.rejects(
-      withBookStorageLock(root, 'book', async () => undefined, db),
-      /another host/,
+      withBookStorageLock(root, 'book', async () => {
+        throw new Error('work failed');
+      }),
+      /work failed/,
     );
+    assert.equal(
+      await withBookStorageLock(root, 'book', async () => 'released'),
+      'released',
+    );
+    let attempts = 0;
+    await assert.rejects(
+      withBookStorageLock(root, 'book', async () => {
+        attempts++;
+        throw new LibsqlError('work failed', 'SQLITE_BUSY');
+      }),
+      /work failed/,
+    );
+    assert.equal(attempts, 1);
   } finally {
-    db.close();
-    second.close();
-    await rm(root, { recursive: true, force: true });
+    release();
+    await rm(parent, { recursive: true, force: true });
   }
 });
 
-test('a second process waits for a live SQLite owner and reclaims its row after death', async () => {
-  const { spawn } = await import('node:child_process');
-  const { once } = await import('node:events');
-  const { pathToFileURL } = await import('node:url');
+test('a process waits for a live owner and acquires after it is killed', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'delb-lock-process-'));
-  const dbUrl = `file:${path.join(root, 'locks.db')}`;
-  const db = createClient({ url: dbUrl });
-  await db.execute(
-    'CREATE TABLE system_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
-  );
   const moduleUrl = pathToFileURL(
     path.resolve('server/utils/books/storage/book-lock.ts'),
   ).href;
-  const script = `import { createClient } from '@libsql/client'; import { withBookStorageLock } from ${JSON.stringify(moduleUrl)}; const db = createClient({url:${JSON.stringify(dbUrl)}}); await withBookStorageLock(${JSON.stringify(root)}, 'book', async () => { process.stdout.write('held'); process.stdin.resume(); await new Promise(() => {}); }, db);`;
+  const script = `import { withBookStorageLock } from ${JSON.stringify(moduleUrl)}; await withBookStorageLock(${JSON.stringify(root)}, 'book', async () => { process.stdout.write('held'); process.stdin.resume(); await new Promise(() => {}); });`;
   const child = spawn(
     process.execPath,
     ['--import', 'tsx', '--input-type=module', '-e', script],
@@ -98,28 +84,18 @@ test('a second process waits for a live SQLite owner and reclaims its row after 
     const [data] = await once(child.stdout, 'data');
     assert.equal(String(data), 'held');
     let entered = false;
-    const next = withBookStorageLock(
-      root,
-      'book',
-      async () => {
-        entered = true;
-      },
-      db,
-    );
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    const next = withBookStorageLock(root, 'book', async () => {
+      entered = true;
+    });
+    await delay(150);
     assert.equal(entered, false);
     child.kill('SIGKILL');
     await once(child, 'exit');
     await next;
     assert.equal(entered, true);
-    assert.equal(
-      (await db.execute('SELECT * FROM system_state')).rows.length,
-      0,
-    );
   } finally {
     if (child.exitCode === null && child.signalCode === null)
       child.kill('SIGKILL');
-    db.close();
     await rm(root, { recursive: true, force: true });
   }
 });

@@ -28,8 +28,14 @@ import {
   writeArchive,
 } from '../../../packages/epub/dist/archive.js';
 import * as transaction from './cover-update-transaction.ts';
+import { withBookStorageLock } from './storage/book-lock.ts';
 
-type TestEvent = { id: string; headers: Headers; image: Buffer };
+type TestEvent = {
+  id: string;
+  headers: Headers;
+  image: Buffer;
+  node: { req: undefined; res: undefined };
+};
 type UploadResponse = { data: { embeddedEpubs: number; warnings: string[] } };
 type HttpFailure = {
   statusCode: number;
@@ -94,6 +100,12 @@ test('cover uploads preserve files and database on every rejected EPUB or image'
     sharp,
     cloudDb,
     ...transaction,
+    withBookStorageLock: (
+      root: string,
+      id: string,
+      work: () => Promise<unknown>,
+    ) => withBookStorageLock(root, id, work),
+    cacheBoundedRequestBody: async () => undefined,
     ...schema,
     resolveDataPath: (p: string) => path.resolve(p),
     getCanonicalBookPaths: () => {
@@ -340,6 +352,7 @@ test('cover uploads preserve files and database on every rejected EPUB or image'
           response: await handler({
             id,
             headers: new Headers(),
+            node: { req: undefined, res: undefined },
             image:
               kind === 'invalid-image'
                 ? Buffer.from('not an image')
