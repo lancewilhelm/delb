@@ -152,9 +152,14 @@ export async function commitCoverUpdate(opts: {
       const stagedName = `new-${index}`;
       const backupName = `old-${index}`;
       const hadOriginal = await exists(file.targetPath);
-      await writeFile(path.join(operationDir, stagedName), file.data, {
-        flag: 'wx',
-      });
+      const stagedPath = path.join(operationDir, stagedName);
+      await writeFile(stagedPath, file.data, { flag: 'wx' });
+      const stagedHandle = await open(stagedPath, 'r');
+      try {
+        await stagedHandle.sync();
+      } finally {
+        await stagedHandle.close();
+      }
       entries.push({
         targetPath: file.targetPath,
         stagedName,
@@ -339,6 +344,12 @@ async function writeJournal(
 ): Promise<void> {
   const temporary = path.join(operationDir, 'journal.tmp');
   await writeFile(temporary, JSON.stringify(journal), { flag: 'w' });
+  const handle = await open(temporary, 'r');
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
   await rename(temporary, path.join(operationDir, 'journal.json'));
 }
 
