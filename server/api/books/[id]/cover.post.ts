@@ -3,7 +3,7 @@ import { mkdir, readFile, readdir, unlink } from 'node:fs/promises';
 
 import { EpubError, inspectCover, setCover } from '@delb/epub';
 import { and, eq, inArray } from 'drizzle-orm';
-import sharp from 'sharp';
+import sharp, { type Metadata } from 'sharp';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { resolveDataPath } from '~~/server/utils/books/fs';
@@ -97,6 +97,8 @@ export default defineEventHandler(async (event) => {
   if (!filePart?.data) {
     throw createError({ statusCode: 400, statusMessage: 'Missing cover file' });
   }
+
+  const coverData = filePart.data;
 
   return await withBookStorageLock(
     path.resolve(process.cwd(), 'library'),
@@ -305,7 +307,7 @@ export default defineEventHandler(async (event) => {
           storageFallbackPaths.add(fallbackPath);
         }
 
-        if (filePart.data.length > 25 * 1024 * 1024) {
+        if (coverData.length > 25 * 1024 * 1024) {
           throw createError({
             statusCode: 413,
             statusMessage: 'Cover image exceeds the 25 MiB upload limit',
@@ -313,9 +315,9 @@ export default defineEventHandler(async (event) => {
         }
 
         // Detect the uploaded image format so we can persist the true original as `cover.<ext>`.
-        let meta: sharp.Metadata;
+        let meta: Metadata;
         try {
-          meta = await sharp(filePart.data).rotate().metadata();
+          meta = await sharp(coverData).rotate().metadata();
         } catch {
           throw createError({
             statusCode: 415,
@@ -362,12 +364,12 @@ export default defineEventHandler(async (event) => {
         const targetSourceName = path.basename(sourceAbs).toLowerCase();
 
         const [thumbWebp, embeddedJpeg] = await Promise.all([
-          sharp(filePart.data)
+          sharp(coverData)
             .rotate()
             .resize({ width: 320, withoutEnlargement: true })
             .webp({ quality: 80 })
             .toBuffer(),
-          sharp(filePart.data).rotate().jpeg({ quality: 95 }).toBuffer(),
+          sharp(coverData).rotate().jpeg({ quality: 95 }).toBuffer(),
         ]);
 
         // DB should point to the thumbnail by default (most views use this).
@@ -377,7 +379,7 @@ export default defineEventHandler(async (event) => {
         );
 
         const updates: CoverUpdateFile[] = [
-          { targetPath: sourceAbs, data: filePart.data },
+          { targetPath: sourceAbs, data: coverData },
           { targetPath: thumbAbs, data: thumbWebp },
         ];
         const epubWarnings: string[] = [];
@@ -450,14 +452,12 @@ export default defineEventHandler(async (event) => {
           decision,
           commitDatabase: async (operationId) => {
             await cloudDb.transaction(async (tx) => {
-              await tx
-                .insert(storageOperations)
-                .values({
-                  id: operationId,
-                  bookId: id,
-                  kind: 'cover',
-                  createdAt: new Date(),
-                });
+              await tx.insert(storageOperations).values({
+                id: operationId,
+                bookId: id,
+                kind: 'cover',
+                createdAt: new Date(),
+              });
               await tx
                 .update(books)
                 .set({ coverImagePath: thumbRelPosix, updatedAt: new Date() })
