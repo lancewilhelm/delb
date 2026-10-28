@@ -147,7 +147,12 @@ function normalizeOptionalStringArray(
     .map((v) => (normalizeSpaces ? v.replace(/\s+/g, ' ').trim() : v.trim()))
     .filter((v) => v.length > 0);
 
-  return cleaned.length ? Array.from(new Set(cleaned)) : null;
+  const unique = new Map<string, string>();
+  for (const value of cleaned) {
+    const key = value.toLowerCase();
+    if (!unique.has(key)) unique.set(key, value);
+  }
+  return unique.size ? Array.from(unique.values()) : null;
 }
 
 function normalizeIdentifierType(value: string): string {

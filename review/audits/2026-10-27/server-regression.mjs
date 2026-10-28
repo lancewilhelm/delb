@@ -168,12 +168,14 @@ assert.ok(
 
 const edited = await request(`/api/books/${aBook}`, a.cookie, 'PUT', {
   title: 'Edited Audit Book',
-  authors: ['Repeated Writer', 'Repeated Writer'],
-  tags: ['Repeated Tag', 'Repeated Tag'],
+  authors: ['Repeated Writer', ' repeated writer '],
+  tags: ['Repeated Tag', ' repeated tag '],
 });
 assert.equal(edited.status, 200, JSON.stringify(edited.data));
 const editedBook = await request(`/api/books/${aBook}`, a.cookie);
 assert.equal(editedBook.data.data.book.title, 'Edited Audit Book');
+assert.equal(editedBook.data.data.authors.length, 1);
+assert.equal(editedBook.data.data.tags.length, 1);
 const imported = await request(
   '/api/books/metadata-import/create',
   b.cookie,
