@@ -387,6 +387,7 @@ assert.equal(
   ).status,
   403,
 );
+const adminUser = await signup('admin');
 const authDb = createClient({ url: 'file:./review/demo/synthetic.db' });
 try {
   const collectionOwners = await authDb.execute({
@@ -401,7 +402,7 @@ try {
   assert.equal(owner.rows.length, 1);
   await authDb.execute({
     sql: "UPDATE users SET role = 'admin' WHERE id = ?",
-    args: [a.id],
+    args: [adminUser.id],
   });
   for (const [path, body] of [
     ['/api/auth/admin/remove-user', { userId: owner.rows[0].id }],
@@ -414,7 +415,7 @@ try {
   ]) {
     const response = await request(
       path,
-      a.cookie,
+      adminUser.cookie,
       path === '/api/users/delete' ? 'DELETE' : 'POST',
       body,
     );
