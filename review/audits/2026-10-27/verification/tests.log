@@ -1,0 +1,1111 @@
+$ pnpm --filter @delb/epub build && node scripts/test.mjs
+$ tsc -p tsconfig.json
+TAP version 13
+# Subtest: page sort defaults, direction toggling and actual preference persistence
+ok 1 - page sort defaults, direction toggling and actual preference persistence
+  ---
+  duration_ms: 38.908166
+  type: 'test'
+  ...
+# Subtest: legacy settings remain uninitialized until a palette is saved
+ok 2 - legacy settings remain uninitialized until a palette is saved
+  ---
+  duration_ms: 33.245708
+  type: 'test'
+  ...
+# Subtest: custom edits persist independently in default and mobile profiles
+ok 3 - custom edits persist independently in default and mobile profiles
+  ---
+  duration_ms: 15.109083
+  type: 'test'
+  ...
+# Subtest: persisted timestamp strings survive edits and concurrent pulls
+ok 4 - persisted timestamp strings survive edits and concurrent pulls
+  ---
+  duration_ms: 43.47175
+  type: 'test'
+  ...
+# Subtest: reversed immediate pushes retain the latest edit and guard sync state
+ok 5 - reversed immediate pushes retain the latest edit and guard sync state
+  ---
+  duration_ms: 9.197208
+  type: 'test'
+  ...
+# Subtest: a rejected write remains unsynced
+ok 6 - a rejected write remains unsynced
+  ---
+  duration_ms: 3.710042
+  type: 'test'
+  ...
+# Subtest: SQLite preserves millisecond order and reports rejected writes
+ok 7 - SQLite preserves millisecond order and reports rejected writes
+  ---
+  duration_ms: 392.166083
+  type: 'test'
+  ...
+# Subtest: a delayed pull cannot overwrite an acknowledged local save
+ok 8 - a delayed pull cannot overwrite an acknowledged local save
+  ---
+  duration_ms: 10.33225
+  type: 'test'
+  ...
+# Subtest: editor preserves 422 detail: EPUB cover update failed: Signed EPUBs cannot be modified without invalidating their signatures
+ok 9 - editor preserves 422 detail: EPUB cover update failed: Signed EPUBs cannot be modified without invalidating their signatures
+  ---
+  duration_ms: 64.851875
+  type: 'test'
+  ...
+# Subtest: editor preserves 422 detail: EPUB cover update failed: The existing cover resource is encrypted: old.png
+ok 10 - editor preserves 422 detail: EPUB cover update failed: The existing cover resource is encrypted: old.png
+  ---
+  duration_ms: 40.26625
+  type: 'test'
+  ...
+# Subtest: editor preserves 422 detail: EPUB cover update failed: Invalid percent-encoding in EPUB href: 100%.css
+ok 11 - editor preserves 422 detail: EPUB cover update failed: Invalid percent-encoding in EPUB href: 100%.css
+  ---
+  duration_ms: 19.383709
+  type: 'test'
+  ...
+# Subtest: editor preserves 422 detail: EPUB cover update failed: EPUB mimetype is missing or invalid
+ok 12 - editor preserves 422 detail: EPUB cover update failed: EPUB mimetype is missing or invalid
+  ---
+  duration_ms: 19.328208
+  type: 'test'
+  ...
+# Subtest: editor preserves 409 detail: An associated EPUB file is missing. Restore the file or correct its library entry, then retry the cover upload.
+ok 13 - editor preserves 409 detail: An associated EPUB file is missing. Restore the file or correct its library entry, then retry the cover upload.
+  ---
+  duration_ms: 15.427333
+  type: 'test'
+  ...
+# Subtest: editor preserves 413 detail: Cover image exceeds the 25 MiB upload limit
+ok 14 - editor preserves 413 detail: Cover image exceeds the 25 MiB upload limit
+  ---
+  duration_ms: 10.878417
+  type: 'test'
+  ...
+# Subtest: editor preserves 415 detail: Unsupported or invalid cover image
+ok 15 - editor preserves 415 detail: Unsupported or invalid cover image
+  ---
+  duration_ms: 15.290208
+  type: 'test'
+  ...
+# Subtest: editor preserves 507 detail: Library storage could not safely replace an existing cover file
+ok 16 - editor preserves 507 detail: Library storage could not safely replace an existing cover file
+  ---
+  duration_ms: 8.702125
+  type: 'test'
+  ...
+# Subtest: cover reset failure retains its detailed message and pending edits
+ok 17 - cover reset failure retains its detailed message and pending edits
+  ---
+  duration_ms: 16.3745
+  type: 'test'
+  ...
+# Subtest: successful upload clears selection, reloads, and returns to book
+ok 18 - successful upload clears selection, reloads, and returns to book
+  ---
+  duration_ms: 6.219292
+  type: 'test'
+  ...
+# Subtest: API error parsing supports message, plain text and empty or unreadable bodies
+ok 19 - API error parsing supports message, plain text and empty or unreadable bodies
+  ---
+  duration_ms: 0.402792
+  type: 'test'
+  ...
+# Subtest: palette normalization accepts opaque hex and repairs missing or unsafe colors
+ok 20 - palette normalization accepts opaque hex and repairs missing or unsafe colors
+  ---
+  duration_ms: 0.740083
+  type: 'test'
+  ...
+# Subtest: CSS includes six roles and derived legacy colors using validated values
+ok 21 - CSS includes six roles and derived legacy colors using validated values
+  ---
+  duration_ms: 0.260958
+  type: 'test'
+  ...
+# Subtest: HSV conversion preserves primary, neutral, and arbitrary colors
+ok 22 - HSV conversion preserves primary, neutral, and arbitrary colors
+  ---
+  duration_ms: 0.204416
+  type: 'test'
+  ...
+# Subtest: theme switching cancels stale loads and cleans up custom styles
+ok 23 - theme switching cancels stale loads and cleans up custom styles
+  ---
+  duration_ms: 0.259208
+  type: 'test'
+  ...
+# Subtest: fullscreen entry and exit resize the existing rendition without starting it again
+ok 24 - fullscreen entry and exit resize the existing rendition without starting it again
+  ---
+  duration_ms: 58.12325
+  type: 'test'
+  ...
+# Subtest: fullscreen toggle waits for the deliberate layout refresh to finish
+ok 25 - fullscreen toggle waits for the deliberate layout refresh to finish
+  ---
+  duration_ms: 17.47875
+  type: 'test'
+  ...
+# Subtest: preflight rejects an entry over the configured absolute limit
+ok 26 - preflight rejects an entry over the configured absolute limit
+  ---
+  duration_ms: 11.076791
+  type: 'test'
+  ...
+# Subtest: preflight rejects aggregate expansion before decompression
+ok 27 - preflight rejects aggregate expansion before decompression
+  ---
+  duration_ms: 0.436125
+  type: 'test'
+  ...
+# Subtest: replaces an EPUB 3 cover and produces a conforming mimetype entry
+ok 28 - replaces an EPUB 3 cover and produces a conforming mimetype entry
+  ---
+  duration_ms: 23.182459
+  type: 'test'
+  ...
+# Subtest: inserts a missing EPUB 2 cover, title page, guide, and first spine item
+ok 29 - inserts a missing EPUB 2 cover, title page, guide, and first spine item
+  ---
+  duration_ms: 2.228917
+  type: 'test'
+  ...
+# Subtest: repairs a simple first-spine cover and preserves unrelated files
+ok 30 - repairs a simple first-spine cover and preserves unrelated files
+  ---
+  duration_ms: 4.029833
+  type: 'test'
+  ...
+# Subtest: replaces a direct-image first spine item with a valid title page
+ok 31 - replaces a direct-image first spine item with a valid title page
+  ---
+  duration_ms: 2.657375
+  type: 'test'
+  ...
+# Subtest: updates a root-level Calibre SVG cover page in place
+ok 32 - updates a root-level Calibre SVG cover page in place
+  ---
+  duration_ms: 1.395333
+  type: 'test'
+  ...
+# Subtest: inserts missing resources when the OPF is at the archive root
+ok 33 - inserts missing resources when the OPF is at the archive root
+  ---
+  duration_ms: 0.94275
+  type: 'test'
+  ...
+# Subtest: strict replacement rejects an EPUB without a detectable cover
+ok 34 - strict replacement rejects an EPUB without a detectable cover
+  ---
+  duration_ms: 0.564791
+  type: 'test'
+  ...
+# Subtest: rejects signed EPUBs and image bytes that do not match their media type
+ok 35 - rejects signed EPUBs and image bytes that do not match their media type
+  ---
+  duration_ms: 0.754583
+  type: 'test'
+  ...
+# Subtest: finds an encoded image path through an EPUB 2 guide wrapper
+ok 36 - finds an encoded image path through an EPUB 2 guide wrapper
+  ---
+  duration_ms: 0.748375
+  type: 'test'
+  ...
+# Subtest: preserves a complex existing title page and reports the inserted replacement page
+ok 37 - preserves a complex existing title page and reports the inserted replacement page
+  ---
+  duration_ms: 1.467416
+  type: 'test'
+  ...
+# Subtest: rejects an encrypted existing cover resource
+ok 38 - rejects an encrypted existing cover resource
+  ---
+  duration_ms: 4.426666
+  type: 'test'
+  ...
+# Subtest: uses the package-media-type rootfile when the container declares multiple renditions
+ok 39 - uses the package-media-type rootfile when the container declares multiple renditions
+  ---
+  duration_ms: 24.972667
+  type: 'test'
+  ...
+# Subtest: enforces archive entry limits before cover inspection
+ok 40 - enforces archive entry limits before cover inspection
+  ---
+  duration_ms: 0.709
+  type: 'test'
+  ...
+# Subtest: rejects malformed and traversal ZIP input with typed EPUB errors
+ok 41 - rejects malformed and traversal ZIP input with typed EPUB errors
+  ---
+  duration_ms: 1.656625
+  type: 'test'
+  ...
+# Subtest: honors both title-page aspect-ratio modes
+ok 42 - honors both title-page aspect-ratio modes
+  ---
+  duration_ms: 3.537917
+  type: 'test'
+  ...
+# Subtest: normalizes conflicting markers and selects unique resource IDs and paths
+ok 43 - normalizes conflicting markers and selects unique resource IDs and paths
+  ---
+  duration_ms: 2.355292
+  type: 'test'
+  ...
+# Subtest: Node file adapters inspect input and atomically write an explicit output
+ok 44 - Node file adapters inspect input and atomically write an explicit output
+  ---
+  duration_ms: 69.469209
+  type: 'test'
+  ...
+# Subtest: EPUB 2: opt-in normalization of missing preserves reading resources
+ok 45 - EPUB 2: opt-in normalization of missing preserves reading resources
+  ---
+  duration_ms: 41.715417
+  type: 'test'
+  ...
+# Subtest: EPUB 2: opt-in normalization of empty preserves reading resources
+ok 46 - EPUB 2: opt-in normalization of empty preserves reading resources
+  ---
+  duration_ms: 19.504666
+  type: 'test'
+  ...
+# Subtest: EPUB 2: opt-in normalization of trailing LF preserves reading resources
+ok 47 - EPUB 2: opt-in normalization of trailing LF preserves reading resources
+  ---
+  duration_ms: 2.411125
+  type: 'test'
+  ...
+# Subtest: EPUB 2: opt-in normalization of whitespace-only preserves reading resources
+ok 48 - EPUB 2: opt-in normalization of whitespace-only preserves reading resources
+  ---
+  duration_ms: 3.0795
+  type: 'test'
+  ...
+# Subtest: EPUB 2: opt-in normalization of CRLF and spaces preserves reading resources
+ok 49 - EPUB 2: opt-in normalization of CRLF and spaces preserves reading resources
+  ---
+  duration_ms: 1.784833
+  type: 'test'
+  ...
+# Subtest: EPUB 2: opt-in normalization of UTF-8 BOM preserves reading resources
+ok 50 - EPUB 2: opt-in normalization of UTF-8 BOM preserves reading resources
+  ---
+  duration_ms: 12.745875
+  type: 'test'
+  ...
+# Subtest: EPUB 2: opt-in normalization of BOM and newline preserves reading resources
+ok 51 - EPUB 2: opt-in normalization of BOM and newline preserves reading resources
+  ---
+  duration_ms: 1.71525
+  type: 'test'
+  ...
+# Subtest: EPUB 3: opt-in normalization of missing preserves reading resources
+ok 52 - EPUB 3: opt-in normalization of missing preserves reading resources
+  ---
+  duration_ms: 1.239417
+  type: 'test'
+  ...
+# Subtest: EPUB 3: opt-in normalization of empty preserves reading resources
+ok 53 - EPUB 3: opt-in normalization of empty preserves reading resources
+  ---
+  duration_ms: 1.37025
+  type: 'test'
+  ...
+# Subtest: EPUB 3: opt-in normalization of trailing LF preserves reading resources
+ok 54 - EPUB 3: opt-in normalization of trailing LF preserves reading resources
+  ---
+  duration_ms: 2.29925
+  type: 'test'
+  ...
+# Subtest: EPUB 3: opt-in normalization of whitespace-only preserves reading resources
+ok 55 - EPUB 3: opt-in normalization of whitespace-only preserves reading resources
+  ---
+  duration_ms: 1.003916
+  type: 'test'
+  ...
+# Subtest: EPUB 3: opt-in normalization of CRLF and spaces preserves reading resources
+ok 56 - EPUB 3: opt-in normalization of CRLF and spaces preserves reading resources
+  ---
+  duration_ms: 4.800542
+  type: 'test'
+  ...
+# Subtest: EPUB 3: opt-in normalization of UTF-8 BOM preserves reading resources
+ok 57 - EPUB 3: opt-in normalization of UTF-8 BOM preserves reading resources
+  ---
+  duration_ms: 1.002041
+  type: 'test'
+  ...
+# Subtest: EPUB 3: opt-in normalization of BOM and newline preserves reading resources
+ok 58 - EPUB 3: opt-in normalization of BOM and newline preserves reading resources
+  ---
+  duration_ms: 0.888209
+  type: 'test'
+  ...
+# Subtest: canonical input does not need repair or a repair warning
+ok 59 - canonical input does not need repair or a repair warning
+  ---
+  duration_ms: 0.710709
+  type: 'test'
+  ...
+# Subtest: does not overwrite another MIME type
+ok 60 - does not overwrite another MIME type
+  ---
+  duration_ms: 0.281167
+  type: 'test'
+  ...
+# Subtest: does not overwrite arbitrary text
+ok 61 - does not overwrite arbitrary text
+  ---
+  duration_ms: 0.166125
+  type: 'test'
+  ...
+# Subtest: does not overwrite uppercase value
+ok 62 - does not overwrite uppercase value
+  ---
+  duration_ms: 0.163125
+  type: 'test'
+  ...
+# Subtest: does not overwrite MIME parameters
+ok 63 - does not overwrite MIME parameters
+  ---
+  duration_ms: 0.19175
+  type: 'test'
+  ...
+# Subtest: does not overwrite NUL suffix
+ok 64 - does not overwrite NUL suffix
+  ---
+  duration_ms: 0.14925
+  type: 'test'
+  ...
+# Subtest: does not overwrite invalid UTF-8
+ok 65 - does not overwrite invalid UTF-8
+  ---
+  duration_ms: 0.172042
+  type: 'test'
+  ...
+# Subtest: does not overwrite UTF-16
+ok 66 - does not overwrite UTF-16
+  ---
+  duration_ms: 1.362541
+  type: 'test'
+  ...
+# Subtest: does not overwrite oversized whitespace
+ok 67 - does not overwrite oversized whitespace
+  ---
+  duration_ms: 0.886583
+  type: 'test'
+  ...
+# Subtest: repair rejects unrelated ZIP without changing input
+ok 68 - repair rejects unrelated ZIP without changing input
+  ---
+  duration_ms: 0.151084
+  type: 'test'
+  ...
+# Subtest: repair rejects missing container without changing input
+ok 69 - repair rejects missing container without changing input
+  ---
+  duration_ms: 0.165459
+  type: 'test'
+  ...
+# Subtest: repair rejects wrong container namespace without changing input
+ok 70 - repair rejects wrong container namespace without changing input
+  ---
+  duration_ms: 0.321416
+  type: 'test'
+  ...
+# Subtest: repair rejects wrong container version without changing input
+ok 71 - repair rejects wrong container version without changing input
+  ---
+  duration_ms: 2.904959
+  type: 'test'
+  ...
+# Subtest: repair rejects nested rootfile without changing input
+ok 72 - repair rejects nested rootfile without changing input
+  ---
+  duration_ms: 0.443334
+  type: 'test'
+  ...
+# Subtest: repair rejects wrong rootfile media type without changing input
+ok 73 - repair rejects wrong rootfile media type without changing input
+  ---
+  duration_ms: 0.28425
+  type: 'test'
+  ...
+# Subtest: repair rejects missing OPF without changing input
+ok 74 - repair rejects missing OPF without changing input
+  ---
+  duration_ms: 0.152792
+  type: 'test'
+  ...
+# Subtest: repair rejects wrong OPF namespace without changing input
+ok 75 - repair rejects wrong OPF namespace without changing input
+  ---
+  duration_ms: 0.215167
+  type: 'test'
+  ...
+# Subtest: repair rejects missing metadata without changing input
+ok 76 - repair rejects missing metadata without changing input
+  ---
+  duration_ms: 0.214917
+  type: 'test'
+  ...
+# Subtest: repair rejects duplicate manifest ID without changing input
+ok 77 - repair rejects duplicate manifest ID without changing input
+  ---
+  duration_ms: 0.211417
+  type: 'test'
+  ...
+# Subtest: repair rejects missing local resource without changing input
+ok 78 - repair rejects missing local resource without changing input
+  ---
+  duration_ms: 0.184208
+  type: 'test'
+  ...
+# Subtest: repair rejects empty spine without changing input
+ok 79 - repair rejects empty spine without changing input
+  ---
+  duration_ms: 0.261292
+  type: 'test'
+  ...
+# Subtest: repair rejects bad spine reference without changing input
+ok 80 - repair rejects bad spine reference without changing input
+  ---
+  duration_ms: 0.271042
+  type: 'test'
+  ...
+# Subtest: repair rejects non-XHTML reading content without changing input
+ok 81 - repair rejects non-XHTML reading content without changing input
+  ---
+  duration_ms: 1.007583
+  type: 'test'
+  ...
+# Subtest: repair rejects path traversal without changing input
+ok 82 - repair rejects path traversal without changing input
+  ---
+  duration_ms: 0.528625
+  type: 'test'
+  ...
+# Subtest: missing does not bypass signed
+ok 83 - missing does not bypass signed
+  ---
+  duration_ms: 0.42625
+  type: 'test'
+  ...
+# Subtest: missing does not bypass encrypted-cover
+ok 84 - missing does not bypass encrypted-cover
+  ---
+  duration_ms: 0.415958
+  type: 'test'
+  ...
+# Subtest: missing does not bypass encrypted-mimetype
+ok 85 - missing does not bypass encrypted-mimetype
+  ---
+  duration_ms: 0.337541
+  type: 'test'
+  ...
+# Subtest: empty does not bypass signed
+ok 86 - empty does not bypass signed
+  ---
+  duration_ms: 0.293208
+  type: 'test'
+  ...
+# Subtest: empty does not bypass encrypted-cover
+ok 87 - empty does not bypass encrypted-cover
+  ---
+  duration_ms: 1.131084
+  type: 'test'
+  ...
+# Subtest: empty does not bypass encrypted-mimetype
+ok 88 - empty does not bypass encrypted-mimetype
+  ---
+  duration_ms: 0.447792
+  type: 'test'
+  ...
+# Subtest: trailing LF does not bypass signed
+ok 89 - trailing LF does not bypass signed
+  ---
+  duration_ms: 0.381625
+  type: 'test'
+  ...
+# Subtest: trailing LF does not bypass encrypted-cover
+ok 90 - trailing LF does not bypass encrypted-cover
+  ---
+  duration_ms: 0.363292
+  type: 'test'
+  ...
+# Subtest: trailing LF does not bypass encrypted-mimetype
+ok 91 - trailing LF does not bypass encrypted-mimetype
+  ---
+  duration_ms: 0.379125
+  type: 'test'
+  ...
+# Subtest: whitespace-only does not bypass signed
+ok 92 - whitespace-only does not bypass signed
+  ---
+  duration_ms: 0.289
+  type: 'test'
+  ...
+# Subtest: whitespace-only does not bypass encrypted-cover
+ok 93 - whitespace-only does not bypass encrypted-cover
+  ---
+  duration_ms: 0.333958
+  type: 'test'
+  ...
+# Subtest: whitespace-only does not bypass encrypted-mimetype
+ok 94 - whitespace-only does not bypass encrypted-mimetype
+  ---
+  duration_ms: 0.31925
+  type: 'test'
+  ...
+# Subtest: CRLF and spaces does not bypass signed
+ok 95 - CRLF and spaces does not bypass signed
+  ---
+  duration_ms: 0.275542
+  type: 'test'
+  ...
+# Subtest: CRLF and spaces does not bypass encrypted-cover
+ok 96 - CRLF and spaces does not bypass encrypted-cover
+  ---
+  duration_ms: 0.327542
+  type: 'test'
+  ...
+# Subtest: CRLF and spaces does not bypass encrypted-mimetype
+ok 97 - CRLF and spaces does not bypass encrypted-mimetype
+  ---
+  duration_ms: 0.306458
+  type: 'test'
+  ...
+# Subtest: UTF-8 BOM does not bypass signed
+ok 98 - UTF-8 BOM does not bypass signed
+  ---
+  duration_ms: 0.267791
+  type: 'test'
+  ...
+# Subtest: UTF-8 BOM does not bypass encrypted-cover
+ok 99 - UTF-8 BOM does not bypass encrypted-cover
+  ---
+  duration_ms: 0.33425
+  type: 'test'
+  ...
+# Subtest: UTF-8 BOM does not bypass encrypted-mimetype
+ok 100 - UTF-8 BOM does not bypass encrypted-mimetype
+  ---
+  duration_ms: 0.296375
+  type: 'test'
+  ...
+# Subtest: BOM and newline does not bypass signed
+ok 101 - BOM and newline does not bypass signed
+  ---
+  duration_ms: 0.270333
+  type: 'test'
+  ...
+# Subtest: BOM and newline does not bypass encrypted-cover
+ok 102 - BOM and newline does not bypass encrypted-cover
+  ---
+  duration_ms: 0.853625
+  type: 'test'
+  ...
+# Subtest: BOM and newline does not bypass encrypted-mimetype
+ok 103 - BOM and newline does not bypass encrypted-mimetype
+  ---
+  duration_ms: 0.401542
+  type: 'test'
+  ...
+# Subtest: repair still enforces archive limits before decompression
+ok 104 - repair still enforces archive limits before decompression
+  ---
+  duration_ms: 0.1685
+  type: 'test'
+  ...
+# Subtest: Grid retains the latest scope when responses arrive out of order
+ok 105 - Grid retains the latest scope when responses arrive out of order
+  ---
+  duration_ms: 56.266916
+  type: 'test'
+  ...
+# Subtest: List retains the latest scope when responses arrive out of order
+ok 106 - List retains the latest scope when responses arrive out of order
+  ---
+  duration_ms: 8.33
+  type: 'test'
+  ...
+# Subtest: settings pull keeps local edits while adopting unchanged remote fields
+ok 107 - settings pull keeps local edits while adopting unchanged remote fields
+  ---
+  duration_ms: 40.0535
+  type: 'test'
+  ...
+# Subtest: reader flushes its latest pending position before leaving
+ok 108 - reader flushes its latest pending position before leaving
+  ---
+  duration_ms: 16.561292
+  type: 'test'
+  ...
+# Subtest: external image transport pins validated DNS, bounds responses and accepts only decoded raster images
+ok 109 - external image transport pins validated DNS, bounds responses and accepts only decoded raster images
+  ---
+  duration_ms: 10062.42125
+  type: 'test'
+  ...
+# Subtest: actual HTTP socket receives the validated address
+ok 110 - actual HTTP socket receives the validated address
+  ---
+  duration_ms: 11.293167
+  type: 'test'
+  ...
+# Subtest: external image deadline includes stalled DNS
+ok 111 - external image deadline includes stalled DNS
+  ---
+  duration_ms: 10002.694583
+  type: 'test'
+  ...
+# Subtest: demo refuses environment files without reading them
+ok 112 - demo refuses environment files without reading them
+  ---
+  duration_ms: 8.174375
+  type: 'test'
+  ...
+# Subtest: demo refuses nonempty book storage
+ok 113 - demo refuses nonempty book storage
+  ---
+  duration_ms: 19.414167
+  type: 'test'
+  ...
+# Subtest: setup refuses an existing disposable database
+ok 114 - setup refuses an existing disposable database
+  ---
+  duration_ms: 8.807208
+  type: 'test'
+  ...
+# Subtest: explicit backfill preserves publication sorting values using a disposable database
+ok 115 - explicit backfill preserves publication sorting values using a disposable database
+  ---
+  duration_ms: 25.649042
+  type: 'test'
+  ...
+# Subtest: external image transport pins validated DNS, bounds responses and accepts only decoded raster images
+ok 116 - external image transport pins validated DNS, bounds responses and accepts only decoded raster images
+  ---
+  duration_ms: 10057.568416
+  type: 'test'
+  ...
+# Subtest: actual HTTP socket receives the validated address
+ok 117 - actual HTTP socket receives the validated address
+  ---
+  duration_ms: 12.106084
+  type: 'test'
+  ...
+# Subtest: external image deadline includes stalled DNS
+ok 118 - external image deadline includes stalled DNS
+  ---
+  duration_ms: 10000.60475
+  type: 'test'
+  ...
+# Subtest: description sanitizer strips nested handlers and unsafe links, retaining basic formatting
+ok 119 - description sanitizer strips nested handlers and unsafe links, retaining basic formatting
+  ---
+  duration_ms: 10.90025
+  type: 'test'
+  ...
+# Subtest: book listing never runs a write backfill on its read path
+ok 120 - book listing never runs a write backfill on its read path
+  ---
+  duration_ms: 20.098208
+  type: 'test'
+  ...
+# Subtest: matching cover ETag returns 304 without reading bytes, while a normal request reads once
+ok 121 - matching cover ETag returns 304 without reading bytes, while a normal request reads once
+  ---
+  duration_ms: 18.801125
+  type: 'test'
+  ...
+# Subtest: commits all staged cover files after the database update
+ok 122 - commits all staged cover files after the database update
+  ---
+  duration_ms: 39.895416
+  type: 'test'
+  ...
+# Subtest: uses a verified copy when a union filesystem rejects the backup rename
+ok 123 - uses a verified copy when a union filesystem rejects the backup rename
+  ---
+  duration_ms: 34.982792
+  type: 'test'
+  ...
+# Subtest: leaves original files unchanged when the database update fails
+ok 124 - leaves original files unchanged when the database update fails
+  ---
+  duration_ms: 21.529333
+  type: 'test'
+  ...
+# Subtest: restores every original when a later file swap fails
+ok 125 - restores every original when a later file swap fails
+  ---
+  duration_ms: 19.422167
+  type: 'test'
+  ...
+# Subtest: restores an original copied for backup when a later swap fails
+ok 126 - restores an original copied for backup when a later swap fails
+  ---
+  duration_ms: 19.305416
+  type: 'test'
+  ...
+# Subtest: rolls a partially swapped committed operation forward during recovery
+ok 127 - rolls a partially swapped committed operation forward during recovery
+  ---
+  duration_ms: 8.947792
+  type: 'test'
+  ...
+# Subtest: same-path recovery uses the committed database marker after interruption
+ok 128 - same-path recovery uses the committed database marker after interruption
+  ---
+  duration_ms: 81.176209
+  type: 'test'
+  ...
+# Subtest: retains an ambiguous legacy journal and refuses further recovery
+ok 129 - retains an ambiguous legacy journal and refuses further recovery
+  ---
+  duration_ms: 3.650708
+  type: 'test'
+  ...
+# Subtest: recovery retains an unexpected cover target and its unique backup
+ok 130 - recovery retains an unexpected cover target and its unique backup
+  ---
+  duration_ms: 5.218459
+  type: 'test'
+  ...
+# Subtest: committed recovery completes an interrupted verified backup copy
+ok 131 - committed recovery completes an interrupted verified backup copy
+  ---
+  duration_ms: 5.796667
+  type: 'test'
+  ...
+# Subtest: cover uploads preserve files and database on every rejected EPUB or image
+    # Subtest: valid-epub3
+    ok 1 - valid-epub3
+      ---
+      duration_ms: 65.50525
+      type: 'test'
+      ...
+    # Subtest: valid-epub2
+    ok 2 - valid-epub2
+      ---
+      duration_ms: 46.659167
+      type: 'test'
+      ...
+    # Subtest: missing-cover
+    ok 3 - missing-cover
+      ---
+      duration_ms: 28.007042
+      type: 'test'
+      ...
+    # Subtest: font-obfuscation
+    ok 4 - font-obfuscation
+      ---
+      duration_ms: 29.888666
+      type: 'test'
+      ...
+    # Subtest: signed
+    ok 5 - signed
+      ---
+      duration_ms: 4.963875
+      type: 'test'
+      ...
+    # Subtest: encrypted-cover
+    ok 6 - encrypted-cover
+      ---
+      duration_ms: 4.3835
+      type: 'test'
+      ...
+    # Subtest: bad-percent
+    ok 7 - bad-percent
+      ---
+      duration_ms: 4.693167
+      type: 'test'
+      ...
+    # Subtest: missing-mimetype
+    ok 8 - missing-mimetype
+      ---
+      duration_ms: 30.562083
+      type: 'test'
+      ...
+    # Subtest: empty-mimetype
+    ok 9 - empty-mimetype
+      ---
+      duration_ms: 26.081167
+      type: 'test'
+      ...
+    # Subtest: padded-mimetype
+    ok 10 - padded-mimetype
+      ---
+      duration_ms: 31.386917
+      type: 'test'
+      ...
+    # Subtest: newline-mimetype
+    ok 11 - newline-mimetype
+      ---
+      duration_ms: 28.211041
+      type: 'test'
+      ...
+    # Subtest: bom-mimetype
+    ok 12 - bom-mimetype
+      ---
+      duration_ms: 27.906917
+      type: 'test'
+      ...
+    # Subtest: wrong-mimetype
+    ok 13 - wrong-mimetype
+      ---
+      duration_ms: 4.652417
+      type: 'test'
+      ...
+    # Subtest: repair-no-container
+    ok 14 - repair-no-container
+      ---
+      duration_ms: 4.617292
+      type: 'test'
+      ...
+    # Subtest: repair-signed
+    ok 15 - repair-signed
+      ---
+      duration_ms: 4.582125
+      type: 'test'
+      ...
+    # Subtest: repair-encrypted
+    ok 16 - repair-encrypted
+      ---
+      duration_ms: 4.455541
+      type: 'test'
+      ...
+    # Subtest: multi-repair-one-bad
+    ok 17 - multi-repair-one-bad
+      ---
+      duration_ms: 5.736375
+      type: 'test'
+      ...
+    # Subtest: multi-repair-one-missing
+    ok 18 - multi-repair-one-missing
+      ---
+      duration_ms: 4.7385
+      type: 'test'
+      ...
+    # Subtest: invalid-image
+    ok 19 - invalid-image
+      ---
+      duration_ms: 3.180333
+      type: 'test'
+      ...
+    # Subtest: oversized-image
+    ok 20 - oversized-image
+      ---
+      duration_ms: 4.631625
+      type: 'test'
+      ...
+    # Subtest: multi-one-bad
+    ok 21 - multi-one-bad
+      ---
+      duration_ms: 5.140375
+      type: 'test'
+      ...
+    # Subtest: missing-file
+    ok 22 - missing-file
+      ---
+      duration_ms: 3.795084
+      type: 'test'
+      ...
+    # Subtest: multi-one-missing
+    ok 23 - multi-one-missing
+      ---
+      duration_ms: 4.388917
+      type: 'test'
+      ...
+    1..23
+ok 132 - cover uploads preserve files and database on every rejected EPUB or image
+  ---
+  duration_ms: 453.482542
+  type: 'test'
+  ...
+# Subtest: committed claim is retained until its library copy verifies
+ok 133 - committed claim is retained until its library copy verifies
+  ---
+  duration_ms: 26.403584
+  type: 'test'
+  ...
+# Subtest: same-name failures at the same time retain both distinct inputs
+ok 134 - same-name failures at the same time retain both distinct inputs
+  ---
+  duration_ms: 46.013916
+  type: 'test'
+  ...
+# Subtest: pages visible entity counts and bounded previews with stable order
+ok 135 - pages visible entity counts and bounded previews with stable order
+  ---
+  duration_ms: 22.249
+  type: 'test'
+  ...
+# Subtest: metadata and cover extraction reject oversized archive entries before parsing
+ok 136 - metadata and cover extraction reject oversized archive entries before parsing
+  ---
+  duration_ms: 8.193209
+  type: 'test'
+  ...
+# Subtest: epub2 inflater rejects output larger than zero or underreported ZIP sizes
+ok 137 - epub2 inflater rejects output larger than zero or underreported ZIP sizes
+  ---
+  duration_ms: 7.261417
+  type: 'test'
+  ...
+# Subtest: numeric pages asc: stable cursors, unknowns last, filters and duplicate memberships
+ok 138 - numeric pages asc: stable cursors, unknowns last, filters and duplicate memberships
+  ---
+  duration_ms: 8.565708
+  type: 'test'
+  ...
+# Subtest: numeric pages desc: stable cursors, unknowns last, filters and duplicate memberships
+ok 139 - numeric pages desc: stable cursors, unknowns last, filters and duplicate memberships
+  ---
+  duration_ms: 3.891917
+  type: 'test'
+  ...
+# Subtest: position writes reject older same-session updates and preserve legacy and cross-session behavior
+ok 140 - position writes reject older same-session updates and preserve legacy and cross-session behavior
+  ---
+  duration_ms: 15.826625
+  type: 'test'
+  ...
+# Subtest: same book waits across root aliases while another book proceeds
+ok 141 - same book waits across root aliases while another book proceeds
+  ---
+  duration_ms: 232.620792
+  type: 'test'
+  ...
+# Subtest: a process waits for a live owner and acquires after it is killed
+ok 142 - a process waits for a live owner and acquires after it is killed
+  ---
+  duration_ms: 309.113958
+  type: 'test'
+  ...
+# Subtest: bounded file reading accepts a small file and rejects an oversized file
+ok 143 - bounded file reading accepts a small file and rejects an oversized file
+  ---
+  duration_ms: 8.179083
+  type: 'test'
+  ...
+# Subtest: limits a streamed request without retaining excess chunks
+ok 144 - limits a streamed request without retaining excess chunks
+  ---
+  duration_ms: 0.614084
+  type: 'test'
+  ...
+# Subtest: times out a stalled input instead of keeping a request open
+ok 145 - times out a stalled input instead of keeping a request open
+  ---
+  duration_ms: 10.9155
+  type: 'test'
+  ...
+# Subtest: HTTP rejection returns a status before an oversized or stalled request ends
+ok 146 - HTTP rejection returns a status before an oversized or stalled request ends
+  ---
+  duration_ms: 44.351
+  type: 'test'
+  ...
+# Subtest: rejects traversal and symlinks outside the Calibre library
+ok 147 - rejects traversal and symlinks outside the Calibre library
+  ---
+  duration_ms: 7.695041
+  type: 'test'
+  ...
+# Subtest: uncommitted upload bytes are preserved and committed upload stays visible after recovery
+ok 148 - uncommitted upload bytes are preserved and committed upload stays visible after recovery
+  ---
+  duration_ms: 25.782
+  type: 'test'
+  ...
+# Subtest: deletion retains original on rollback and completes after a committed interruption
+ok 149 - deletion retains original on rollback and completes after a committed interruption
+  ---
+  duration_ms: 36.424334
+  type: 'test'
+  ...
+# Subtest: recovery retains the backup when a committed source changed
+ok 150 - recovery retains the backup when a committed source changed
+  ---
+  duration_ms: 13.79825
+  type: 'test'
+  ...
+# Subtest: replacement decision and file row commit together before retiring old bytes
+ok 151 - replacement decision and file row commit together before retiring old bytes
+  ---
+  duration_ms: 17.043875
+  type: 'test'
+  ...
+# Subtest: move preserves collisions and recovers committed copies after interruption
+ok 152 - move preserves collisions and recovers committed copies after interruption
+  ---
+  duration_ms: 30.051583
+  type: 'test'
+  ...
+# Subtest: matching uncommitted copies are rolled back
+ok 153 - matching uncommitted copies are rolled back
+  ---
+  duration_ms: 15.73375
+  type: 'test'
+  ...
+# Subtest: a killed writer recovers its committed move on restart
+ok 154 - a killed writer recovers its committed move on restart
+  ---
+  duration_ms: 130.787083
+  type: 'test'
+  ...
+# Subtest: recovery refuses to discard a committed journal when destination is missing
+ok 155 - recovery refuses to discard a committed journal when destination is missing
+  ---
+  duration_ms: 9.774333
+  type: 'test'
+  ...
+# Subtest: recovery retains an uncommitted destination containing ori
+ok 156 - recovery retains an uncommitted destination containing ori
+  ---
+  duration_ms: 26.331458
+  type: 'test'
+  ...
+# Subtest: recovery retains an uncommitted destination containing different bytes
+ok 157 - recovery retains an uncommitted destination containing different bytes
+  ---
+  duration_ms: 28.652583
+  type: 'test'
+  ...
+# Subtest: legacy markers acquire retained copies before later mutations
+ok 158 - legacy markers acquire retained copies before later mutations
+  ---
+  duration_ms: 56.90575
+  type: 'test'
+  ...
+# Subtest: unmarked uncommitted moves still reject missing originals
+ok 159 - unmarked uncommitted moves still reject missing originals
+  ---
+  duration_ms: 17.758
+  type: 'test'
+  ...
+# Subtest: verified copy preserves the source and rejects an existing destination
+ok 160 - verified copy preserves the source and rejects an existing destination
+  ---
+  duration_ms: 27.81625
+  type: 'test'
+  ...
+1..160
+# tests 183
+# suites 0
+# pass 183
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 20445.96425

@@ -54,3 +54,5 @@ review/demo/description-*.js
 review/*-results.txt
 review/check-results.json
 /public/__review
+
+/review/demo/audit-script.epub

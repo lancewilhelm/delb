@@ -70,7 +70,7 @@ Delb serves covers through a membership-gated book endpoint:
 
 `books.coverImagePath` is an internal storage pointer and is not intended to be used directly as a client-facing URL.
 
-For external "fetch cover by URL" flows, Delb proxies through server-side guards (URL scheme validation, private-network blocking, redirect/timeout limits, payload cap, and image content-type enforcement).
+For external "fetch cover by URL" flows, Delb proxies through server-side guards (URL scheme validation, private-network blocking, redirect/timeout limits, payload cap, and decoded raster validation).
 
 ## Tech Stack
 
@@ -183,6 +183,8 @@ library/
 The database stores relative paths and metadata for each book. Delb manages the
 on-disk library layout and will move/rename folders when author/title metadata
 changes so the filesystem stays human-readable.
+
+See [storage recovery](docs/storage-recovery.md) for interrupted operations, filesystem requirements, upload limits and upgrade backups.
 
 Delb also supports **reference-only books** (no associated file in `library/`). This allows using Delb as a “physical library” catalog in addition to a file-backed ebook library.
 

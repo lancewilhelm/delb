@@ -1,0 +1,6 @@
+$ pnpm --filter @delb/epub typecheck && nuxt typecheck
+$ tsc -p tsconfig.json --noEmit
+ℹ Nuxt Icon server bundle mode is set to local
+✔ Nuxt Icon discovered local-installed 1 collections: lucide
+✔ Nuxt Icon loaded local collection local with 0 icons
+ℹ Nuxt Icon client bundle consist of 72 icons with 20.08KB(uncompressed) in size

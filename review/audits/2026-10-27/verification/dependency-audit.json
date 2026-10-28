@@ -1,0 +1,41 @@
+{
+  "advisories": {
+    "1243505": {
+      "findings": [
+        {
+          "version": "4.3.1",
+          "paths": [
+            ".>@vueuse/nuxt>nuxt>@nuxt/nitro-server>nitropack>@rollup/plugin-node-resolve>deepmerge",
+            ".>nuxt>@nuxt/nitro-server>nitropack>@rollup/plugin-node-resolve>deepmerge"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1243505,
+      "title": "deepmerge mergeObject() allows prototype poisoning of returned objects",
+      "module_name": "deepmerge",
+      "vulnerable_versions": ">=4.2.0 <=4.3.1",
+      "patched_versions": null,
+      "patched_versions_unpublished": true,
+      "severity": "low",
+      "cwe": "CWE-1321",
+      "github_advisory_id": "GHSA-gcqx-w48m-w2h4",
+      "url": "https://github.com/advisories/GHSA-gcqx-w48m-w2h4"
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 1,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0
+    },
+    "dependencies": 736,
+    "devDependencies": 350,
+    "optionalDependencies": 196,
+    "totalDependencies": 1254
+  }
+}

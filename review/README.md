@@ -1,5 +1,7 @@
 # Security and performance review fixtures
 
+This file records the earlier four-fix review. The subsequent full-repository audit and completed repair verification are in [the audit repair record](audits/2026-10-27/repair-verification.md). Statements below about unchanged reader settings, dependency counts, and publishing scope describe that earlier review.
+
 This branch proposes four bounded fixes from baseline `dd7a0fcbc4d1e0e51a6b98a36b10ef06b2ee0d1e`. The EPUB reader's scripting configuration is unchanged pending compatibility tests. These fixtures use synthetic data and are not a deployment configuration.
 
 ## Candidate changes
@@ -29,7 +31,7 @@ Nuxt preparation, workspace EPUB compilation, and real loopback API smoke tests 
 
 ## Cloud or local setup
 
-Use Node 20 or newer and the package-manager version pinned in `package.json`. Start with a **fresh dedicated checkout**, no environment files, and no real data/storage. Do not copy credentials, a database, or books from another installation. Dependency installation uses the repository's pinned lockfile and package scripts.
+Use Node 22.22.3 or a supported newer LTS and the package-manager version pinned in `package.json`. Start with a **fresh dedicated checkout**, no environment files, and no real data/storage. Do not copy credentials, a database, or books from another installation. Dependency installation uses the repository's pinned lockfile and package scripts.
 
 ```sh
 pnpm install --frozen-lockfile
