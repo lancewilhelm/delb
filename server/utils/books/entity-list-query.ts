@@ -32,6 +32,23 @@ const entities = {
 
 export type EntityKind = keyof typeof entities;
 
+function searchPattern(search: string): string {
+  const escape = (value: string) =>
+    value.replace(/[[\]*?]/g, (char) => `[${char === '[' ? '[' : char}]`);
+  const pattern = Array.from(search)
+    .map((char) => {
+      const forms = [
+        ...new Set([char, char.toLowerCase(), char.toUpperCase()]),
+      ];
+      return forms.length > 1 &&
+        forms.every((form) => Array.from(form).length === 1)
+        ? `[${forms.join('')}]`
+        : escape(char);
+    })
+    .join('');
+  return `*${pattern}*`;
+}
+
 export function entityListQuery({
   kind,
   userId,
@@ -61,7 +78,7 @@ export function entityListQuery({
         JOIN collection_members cm ON cm.collection_id = cb.collection_id
         WHERE cm.user_id = ${userId}
           AND (${collectionId ?? null} IS NULL OR cb.collection_id = ${collectionId ?? null})
-          AND instr(lower(e.name), lower(${search})) > 0
+          AND e.name GLOB ${searchPattern(search)}
       ), summaries AS (
         SELECT id, name, count(*) AS book_count FROM visible
         GROUP BY id, name ORDER BY name, id LIMIT ${limit + 1} OFFSET ${offset}

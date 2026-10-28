@@ -84,6 +84,14 @@ test('pages visible entity counts and bounded previews with stable order', async
         (await run({ previewLimit: 0, search: 'alpha' }))[0]?.bookId,
         null,
       );
+      await client.execute(
+        `UPDATE ${kind} SET name = 'Émilie[1]*?' WHERE id = 'a'`,
+      );
+      assert.deepEqual(
+        (await run({ search: 'émilie[1]*?' })).map((r) => r.id),
+        ['a'],
+      );
+      assert.deepEqual(await run({ search: 'émilie[2]*?' }), []);
     }
   } finally {
     client.close();
