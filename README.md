@@ -84,7 +84,7 @@ For external "fetch cover by URL" flows, Delb proxies through server-side guards
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 22.22.3 or a supported newer LTS release
 - pnpm (recommended package manager)
 
 ### Installation
@@ -95,10 +95,12 @@ git clone <repository-url>
 cd delb
 
 # Install dependencies
-pnpm install
+pnpm install --frozen-lockfile
+pnpm prepare:nuxt
+pnpm --filter @delb/epub build
 
 # Set up the database
-pnpm run db:push
+pnpm db:migrate
 
 # Start development server
 pnpm run dev
