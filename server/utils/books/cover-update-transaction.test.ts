@@ -287,3 +287,83 @@ test('same-path recovery uses the committed database marker after interruption',
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('retains an ambiguous legacy journal and refuses further recovery', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'delb-cover-ambiguous-'));
+  const operationDir = path.join(root, '.cover-update-ambiguous');
+  await mkdir(operationDir);
+  await writeFile(path.join(operationDir, 'old-0'), 'only backup');
+  await writeFile(
+    path.join(operationDir, 'journal.json'),
+    JSON.stringify({
+      version: 1,
+      phase: 'prepared',
+      previousCoverImagePath: 'same',
+      expectedCoverImagePath: 'same',
+      entries: [],
+    }),
+  );
+  const { rm } = await import('node:fs/promises');
+  try {
+    await assert.rejects(
+      recoverPendingCoverUpdates({
+        operationParent: root,
+        allowedRoot: root,
+        currentCoverImagePath: 'same',
+      }),
+      /Ambiguous/,
+    );
+    assert.equal(
+      await readFile(path.join(operationDir, 'old-0'), 'utf8'),
+      'only backup',
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('recovery retains an unexpected cover target and its unique backup', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'delb-cover-conflict-'));
+  const dir = path.join(root, '.cover-update-conflict');
+  const target = path.join(root, 'book.epub');
+  await mkdir(dir);
+  await writeFile(target, 'unexpected');
+  await writeFile(path.join(dir, 'new-0'), 'replacement');
+  await writeFile(path.join(dir, 'old-0'), 'original');
+  await writeFile(
+    path.join(dir, 'journal.json'),
+    JSON.stringify({
+      version: 1,
+      phase: 'database-committed',
+      previousCoverImagePath: null,
+      expectedCoverImagePath: 'thumb',
+      entries: [
+        {
+          targetPath: target,
+          stagedName: 'new-0',
+          backupName: 'old-0',
+          hadOriginal: true,
+        },
+      ],
+    }),
+  );
+  const { rm } = await import('node:fs/promises');
+  try {
+    await assert.rejects(
+      recoverPendingCoverUpdates({
+        operationParent: root,
+        allowedRoot: root,
+        currentCoverImagePath: 'thumb',
+      }),
+      /unexpectedly exists/,
+    );
+    assert.equal(await readFile(target, 'utf8'), 'unexpected');
+    assert.equal(await readFile(path.join(dir, 'old-0'), 'utf8'), 'original');
+    assert.equal(
+      await readFile(path.join(dir, 'new-0'), 'utf8'),
+      'replacement',
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

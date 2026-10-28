@@ -243,7 +243,7 @@ async function rollForward(
       );
       if (usedFallback) backupFallbackPaths.push(entry.targetPath);
     } else if (await exists(entry.targetPath)) {
-      await unlink(entry.targetPath);
+      throw new Error(`Cover target unexpectedly exists: ${entry.targetPath}`);
     }
     await rename(staged, entry.targetPath);
   }
