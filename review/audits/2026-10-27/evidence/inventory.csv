@@ -1,0 +1,453 @@
+path,lines,coverage
+.dockerignore,20,"Targeted source review; see finding references, not a full-file certification"
+.drizzle/.gitkeep,0,Inventory only; no claim of manual full-file review
+.drizzle/migrate.ts,4,Inventory only; no claim of manual full-file review
+.drizzle/migrations/0000_medical_naoko.sql,239,Inventory only; no claim of manual full-file review
+.drizzle/migrations/0001_outgoing_vivisector.sql,31,Inventory only; no claim of manual full-file review
+.drizzle/migrations/0002_boring_true_believers.sql,2,Inventory only; no claim of manual full-file review
+.drizzle/migrations/meta/0000_snapshot.json,1493,Inventory only; no claim of manual full-file review
+.drizzle/migrations/meta/0001_snapshot.json,1868,Inventory only; no claim of manual full-file review
+.drizzle/migrations/meta/0002_snapshot.json,1885,Inventory only; no claim of manual full-file review
+.drizzle/migrations/meta/_journal.json,27,Inventory only; no claim of manual full-file review
+.github/ISSUE_TEMPLATE/bug_report.md,32,Inventory only; no claim of manual full-file review
+.github/ISSUE_TEMPLATE/feature_request.md,20,Inventory only; no claim of manual full-file review
+.github/workflows/docker-image.yml,61,"Targeted source review; see finding references, not a full-file certification"
+.github/workflows/test.yml,42,"Targeted source review; see finding references, not a full-file certification"
+.gitignore,56,Inventory only; no claim of manual full-file review
+.prettierignore,3,Inventory only; no claim of manual full-file review
+.prettierrc,3,Inventory only; no claim of manual full-file review
+.versionrc.json,14,Inventory only; no claim of manual full-file review
+CHANGELOG.md,0,Inventory only; no claim of manual full-file review
+Dockerfile,77,"Targeted source review; see finding references, not a full-file certification"
+LICENSE,21,Inventory only; no claim of manual full-file review
+README.md,202,"Targeted source review; see finding references, not a full-file certification"
+app/app.vue,37,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/assets/css/main.css,344,Inventory only; no claim of manual full-file review
+app/assets/favicon.afdesign,binary,Inventory only; no claim of manual full-file review
+app/assets/json/themes.json,1171,Inventory only; no claim of manual full-file review
+app/components/AppHeader.vue,133,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/AuthFormError.vue,45,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/BookCover.vue,500,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/BookMetadataSearchModal.vue,1213,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+app/components/BookThumbnail.vue,393,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Books/BookAddModal.vue,1508,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Books/BookDescriptionEditor.vue,483,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Books/BookEditor.vue,2651,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Books/BooksInfiniteGrid.vue,745,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+app/components/Books/BooksInfiniteList.vue,638,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+app/components/Books/BooksListRow.vue,410,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Books/BooksViewToggle.vue,60,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Books/BulkActions/BookBulkActionsBar.vue,460,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/CollectionPickerDropdown.vue,380,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Collections/EditCollectionModal.vue,956,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/CommandPalette/CommandPalette.vue,196,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+app/components/CommandPalette/CommandPaletteThemeItem.vue,95,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/DelbLogo.vue,34,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/GlobalSearch/GlobalSearchModal.vue,495,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+app/components/HoverScrollText.vue,137,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/ModalWindow.vue,63,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/PageNavigation.vue,128,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Settings/SettingsAdmin.vue,76,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Settings/SettingsAdminDropbox.vue,333,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Settings/SettingsAdminLibrary.vue,627,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Settings/SettingsAdminMetadata.vue,174,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Settings/SettingsAdminUsers.vue,642,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Settings/SettingsAppearance.vue,448,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Settings/SettingsAppearanceCustomTheme.vue,346,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Settings/SettingsAppearanceFonts.vue,212,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Settings/SettingsCloud.vue,61,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Settings/SettingsGeneral.vue,235,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Settings/SettingsTabBarItem.vue,21,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Settings/UI/SettingsUIGroup.vue,35,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Settings/UI/SettingsUIInput.vue,107,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Settings/UI/SettingsUISelect.vue,109,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Settings/UI/SettingsUISlider.vue,166,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Settings/UI/SettingsUISubGroup.vue,36,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Settings/UI/SettingsUITheme.vue,79,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Settings/UI/SettingsUIToggle.vue,44,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/Sidebar.vue,241,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/ViewSelectorDropdown.vue,172,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/ui/Tooltip/TooltipPortal.vue,41,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/components/ui/UiChip.vue,27,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/composables/useAuth.ts,157,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+app/composables/useCommandPalette.ts,560,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/composables/useDynamicFavicon.ts,47,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/composables/useIsMobileDevice.ts,10,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/composables/useScrollList.ts,59,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/composables/useSettingsTabs.ts,36,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/directives/tooltip.ts,690,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/middleware/auth.global.ts,68,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/pages/404.vue,53,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/pages/authors/[id].vue,183,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/pages/authors/index.vue,234,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/pages/books/[id]/edit.vue,58,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/pages/books/[id]/index.vue,2246,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+app/pages/books/[id]/read.vue,1231,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+app/pages/books/index.vue,1433,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/pages/books/new.vue,37,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/pages/dev/infinite-scroll.vue,518,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/pages/index.vue,281,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/pages/login.vue,130,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/pages/publishers/[id].vue,190,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/pages/publishers/index.vue,234,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/pages/register.vue,169,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/pages/series/[id].vue,257,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/pages/series/index.vue,241,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/pages/settings/[...page].vue,106,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/pages/tags/[id].vue,178,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/pages/tags/index.vue,228,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/plugins/00-settings-ssr.server.ts,62,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/plugins/auth.client.ts,13,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/plugins/auth.server.ts,15,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/plugins/init-font.client.ts,21,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/plugins/init-font.server.ts,25,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/plugins/init-theme.client.ts,17,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/plugins/init-theme.server.ts,38,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/plugins/sync.client.ts,55,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+app/plugins/tooltip.client.ts,6,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/plugins/tooltip.server.ts,14,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/stores/bookSelection.ts,292,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/stores/booksIndexFilters.ts,115,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+app/stores/collections.ts,477,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/stores/globalSettings.ts,182,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/stores/ui.pages.test.ts,57,Executed existing test file; see saved test output
+app/stores/ui.ts,157,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/stores/userSettings.customTheme.test.ts,73,Executed existing test file; see saved test output
+app/stores/userSettings.ts,597,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+app/utils/auth.ts,221,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/utils/authErrors.ts,77,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/utils/coverUpload.test.ts,164,Executed existing test file; see saved test output
+app/utils/covers.ts,15,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/utils/customTheme.test.ts,115,Executed existing test file; see saved test output
+app/utils/customTheme.ts,111,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/utils/db/auth-schema.ts,60,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/utils/db/schema.ts,659,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/utils/debounce.ts,16,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/utils/descriptionHtml.ts,90,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/utils/device.ts,7,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/utils/logger.ts,23,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/utils/permissions.ts,24,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/utils/readerFullscreen.test.ts,89,Executed existing test file; see saved test output
+app/utils/responseError.ts,20,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/utils/sync/debounce.ts,12,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+app/utils/theme.ts,64,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+data/.gitkeep,0,Inventory only; no claim of manual full-file review
+docker-entrypoint.sh,21,Inventory only; no claim of manual full-file review
+docs/auth.md,29,Inventory only; no claim of manual full-file review
+docs/browse-cards.md,24,Inventory only; no claim of manual full-file review
+docs/calibre-database-schema.md,459,Inventory only; no claim of manual full-file review
+docs/calibre-import.md,251,Inventory only; no claim of manual full-file review
+docs/collections-sharing-rbac.md,233,Inventory only; no claim of manual full-file review
+docs/docker.md,54,Inventory only; no claim of manual full-file review
+docs/epub-reader.md,150,Inventory only; no claim of manual full-file review
+docs/global-search.md,19,Inventory only; no claim of manual full-file review
+docs/health-checks.md,156,Inventory only; no claim of manual full-file review
+docs/icons.md,18,Inventory only; no claim of manual full-file review
+docs/known-issues.md,133,Inventory only; no claim of manual full-file review
+docs/metadata-fetcher.md,249,Inventory only; no claim of manual full-file review
+docs/reader-fullscreen-fix.md,9,Inventory only; no claim of manual full-file review
+docs/reading-status-progress.md,59,Inventory only; no claim of manual full-file review
+docs/series.md,10,Inventory only; no claim of manual full-file review
+docs/settings.md,162,Inventory only; no claim of manual full-file review
+docs/tooltip.md,124,Inventory only; no claim of manual full-file review
+docs/ui-layout-philosophy.md,412,Inventory only; no claim of manual full-file review
+drizzle.config.ts,10,Inventory only; no claim of manual full-file review
+eslint.config.mjs,11,Inventory only; no claim of manual full-file review
+init.sh,79,"Targeted source review; see finding references, not a full-file certification"
+nuxt.config.ts,94,Inventory only; no claim of manual full-file review
+package.json,80,"Targeted source review; see finding references, not a full-file certification"
+packages/epub/.gitignore,2,Inventory only; no claim of manual full-file review
+packages/epub/LICENSE,21,Inventory only; no claim of manual full-file review
+packages/epub/README.md,61,Inventory only; no claim of manual full-file review
+packages/epub/package.json,48,Inventory only; no claim of manual full-file review
+packages/epub/src/archive.ts,314,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+packages/epub/src/cover.ts,345,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+packages/epub/src/document.ts,375,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+packages/epub/src/errors.ts,21,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+packages/epub/src/index.ts,13,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+packages/epub/src/node.ts,110,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+packages/epub/src/path.ts,85,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+packages/epub/src/types.ts,48,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+packages/epub/src/xml.ts,79,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+packages/epub/test/cover.test.js,451,Executed existing test file; see saved test output
+packages/epub/test/generate-epubcheck-fixtures.js,78,Inventory only; no claim of manual full-file review
+packages/epub/test/mimetype.test.js,284,Executed existing test file; see saved test output
+packages/epub/tsconfig.json,17,Inventory only; no claim of manual full-file review
+pnpm-lock.yaml,13809,Inventory only; no claim of manual full-file review
+pnpm-workspace.yaml,11,Inventory only; no claim of manual full-file review
+public/apple-touch-icon.png,binary,Inventory only; no claim of manual full-file review
+public/css/themes/8008.css,14,Inventory only; no claim of manual full-file review
+public/css/themes/80s_after_dark.css,13,Inventory only; no claim of manual full-file review
+public/css/themes/9009.css,46,Inventory only; no claim of manual full-file review
+public/css/themes/aether.css,38,Inventory only; no claim of manual full-file review
+public/css/themes/alduin.css,13,Inventory only; no claim of manual full-file review
+public/css/themes/alpine.css,17,Inventory only; no claim of manual full-file review
+public/css/themes/anti_hero.css,13,Inventory only; no claim of manual full-file review
+public/css/themes/arch.css,13,Inventory only; no claim of manual full-file review
+public/css/themes/aurora.css,102,Inventory only; no claim of manual full-file review
+public/css/themes/bento.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/bingsu.css,21,Inventory only; no claim of manual full-file review
+public/css/themes/bliss.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/blue_dolphin.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/blueberry_dark.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/blueberry_light.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/botanical.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/bouquet.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/breeze.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/bushido.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/cafe.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/camping.css,18,Inventory only; no claim of manual full-file review
+public/css/themes/carbon.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/catppuccin.css,40,Inventory only; no claim of manual full-file review
+public/css/themes/chaos_theory.css,201,Inventory only; no claim of manual full-file review
+public/css/themes/cheesecake.css,48,Inventory only; no claim of manual full-file review
+public/css/themes/cherry_blossom.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/comfy.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/copper.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/creamsicle.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/cyberspace.css,13,Inventory only; no claim of manual full-file review
+public/css/themes/dark.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/dark_magic_girl.css,13,Inventory only; no claim of manual full-file review
+public/css/themes/dark_note.css,178,Inventory only; no claim of manual full-file review
+public/css/themes/darling.css,17,Inventory only; no claim of manual full-file review
+public/css/themes/desert_oasis.css,33,Inventory only; no claim of manual full-file review
+public/css/themes/dev.css,13,Inventory only; no claim of manual full-file review
+public/css/themes/diner.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/dino.css,13,Inventory only; no claim of manual full-file review
+public/css/themes/discord.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/dmg.css,55,Inventory only; no claim of manual full-file review
+public/css/themes/dollar.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/dracula.css,36,Inventory only; no claim of manual full-file review
+public/css/themes/drowning.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/dualshot.css,40,Inventory only; no claim of manual full-file review
+public/css/themes/everblush.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/fire.css,79,Inventory only; no claim of manual full-file review
+public/css/themes/fledgling.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/fleuriste.css,19,Inventory only; no claim of manual full-file review
+public/css/themes/froyo.css,37,Inventory only; no claim of manual full-file review
+public/css/themes/frozen_llama.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/fruit_chew.css,33,Inventory only; no claim of manual full-file review
+public/css/themes/fundamentals.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/future_funk.css,37,Inventory only; no claim of manual full-file review
+public/css/themes/godspeed.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/graen.css,21,Inventory only; no claim of manual full-file review
+public/css/themes/grand_prix.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/grape.css,79,Inventory only; no claim of manual full-file review
+public/css/themes/gruvbox_dark.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/gruvbox_light.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/guage.css,19,Inventory only; no claim of manual full-file review
+public/css/themes/guage_dark.css,8,Inventory only; no claim of manual full-file review
+public/css/themes/guage_light.css,8,Inventory only; no claim of manual full-file review
+public/css/themes/hammerhead.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/hanok.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/hedge.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/horizon.css,33,Inventory only; no claim of manual full-file review
+public/css/themes/horizon_extended.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/husqy.css,17,Inventory only; no claim of manual full-file review
+public/css/themes/iceberg_dark.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/iceberg_light.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/incognito.css,34,Inventory only; no claim of manual full-file review
+public/css/themes/ishtar.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/iv_clover.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/iv_spade.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/joker.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/laser.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/lavender.css,30,Inventory only; no claim of manual full-file review
+public/css/themes/leather.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/lil_dragon.css,20,Inventory only; no claim of manual full-file review
+public/css/themes/lime.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/luna.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/macroblank.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/magic_girl.css,30,Inventory only; no claim of manual full-file review
+public/css/themes/mashu.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/material.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/matrix.css,17,Inventory only; no claim of manual full-file review
+public/css/themes/metaverse.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/metropolis.css,20,Inventory only; no claim of manual full-file review
+public/css/themes/miami.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/miami_nights.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/midnight.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/milkshake.css,40,Inventory only; no claim of manual full-file review
+public/css/themes/mint.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/mizu.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/modern_dolch.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/modern_dolch_light.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/modern_ink.css,33,Inventory only; no claim of manual full-file review
+public/css/themes/monochrome.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/monokai.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/moonlight.css,82,Inventory only; no claim of manual full-file review
+public/css/themes/mountain.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/mr_sleeves.css,37,Inventory only; no claim of manual full-file review
+public/css/themes/ms_cupcakes.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/muted.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/nautilus.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/nebula.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/night_fairy.css,36,Inventory only; no claim of manual full-file review
+public/css/themes/night_runner.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/nord.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/nord_light.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/norse.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/oblivion.css,33,Inventory only; no claim of manual full-file review
+public/css/themes/olive.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/olivia.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/onedark.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/paper.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/passion_fruit.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/pastel.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/peach_blossom.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/peaches.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/pink_lemonade.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/pulse.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/purpleish.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/rainbow_trail.css,207,Inventory only; no claim of manual full-file review
+public/css/themes/red_dragon.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/red_samurai.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/repose_dark.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/repose_light.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/retro.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/retrocast.css,33,Inventory only; no claim of manual full-file review
+public/css/themes/rgb.css,142,Inventory only; no claim of manual full-file review
+public/css/themes/rose_pine.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/rose_pine_dawn.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/rose_pine_moon.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/rudy.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/ryujinscales.css,14,Inventory only; no claim of manual full-file review
+public/css/themes/serika.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/serika_dark.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/sewing_tin.css,20,Inventory only; no claim of manual full-file review
+public/css/themes/sewing_tin_light.css,38,Inventory only; no claim of manual full-file review
+public/css/themes/shadow.css,45,Inventory only; no claim of manual full-file review
+public/css/themes/shoko.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/slambook.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/snes.css,117,Inventory only; no claim of manual full-file review
+public/css/themes/soaring_skies.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/solarized_dark.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/solarized_light.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/sonokai.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/stealth.css,25,Inventory only; no claim of manual full-file review
+public/css/themes/strawberry.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/striker.css,16,Inventory only; no claim of manual full-file review
+public/css/themes/superuser.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/sweden.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/tangerine.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/taro.css,43,Inventory only; no claim of manual full-file review
+public/css/themes/terminal.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/terra.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/terror_below.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/tiramisu.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/trackday.css,24,Inventory only; no claim of manual full-file review
+public/css/themes/trance.css,67,Inventory only; no claim of manual full-file review
+public/css/themes/vaporwave.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/viridescent.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/voc.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/vscode.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/watermelon.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/wavez.css,12,Inventory only; no claim of manual full-file review
+public/css/themes/witch_girl.css,16,Inventory only; no claim of manual full-file review
+public/favicon.svg,19,Inventory only; no claim of manual full-file review
+public/manifest.webmanifest,36,Inventory only; no claim of manual full-file review
+public/robots.txt,1,Inventory only; no claim of manual full-file review
+public/safari-pinned-tab.svg,10,Inventory only; no claim of manual full-file review
+review/README.md,83,Inventory only; no claim of manual full-file review
+review/build-browser-tests.mjs,20,Inventory only; no claim of manual full-file review
+review/demo/descriptions.html,27,Inventory only; no claim of manual full-file review
+review/demo/reader.html,36,Inventory only; no claim of manual full-file review
+review/deny-outbound.cjs,28,Inventory only; no claim of manual full-file review
+review/http-smoke.mjs,63,Inventory only; no claim of manual full-file review
+review/isolation.mjs,40,Inventory only; no claim of manual full-file review
+review/isolation.test.mjs,50,Executed existing test file; see saved test output
+review/maintenance.test.ts,53,Executed existing test file; see saved test output
+review/prepare-baseline.mjs,24,Inventory only; no claim of manual full-file review
+review/regressions.test.mjs,420,Executed existing test file; see saved test output
+review/setup-demo.mjs,66,Inventory only; no claim of manual full-file review
+review/start-demo.mjs,39,Inventory only; no claim of manual full-file review
+scripts/backfill-published-at.ts,52,Inventory only; no claim of manual full-file review
+server/api/auth/[...all].ts,13,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/authors/[id]/books.get.ts,320,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/api/authors/index.get.ts,200,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/api/authors/search.get.ts,137,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/books/[id].delete.ts,73,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/books/[id].get.ts,257,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/books/[id].put.ts,766,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/api/books/[id]/collections/index.get.ts,131,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/books/[id]/collections/index.put.ts,248,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/books/[id]/cover.get.ts,45,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/books/[id]/cover.post.ts,495,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/api/books/[id]/download.get.ts,198,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/books/[id]/files.get.ts,72,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/books/[id]/progress-logs.get.ts,112,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/books/[id]/progress-logs.post.ts,203,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/books/[id]/progress-sync.put.ts,153,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/books/[id]/rating.post.ts,174,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/api/books/[id]/reading-position.get.ts,111,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/books/[id]/reading-position.put.ts,267,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/books/[id]/status.get.ts,140,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/books/[id]/status.post.ts,674,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/api/books/bulk/status.post.ts,468,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/api/books/index.get.ts,692,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/api/books/index.post.ts,431,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/books/metadata-import/create.post.ts,976,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/api/books/metadata/cover.get.ts,38,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/api/books/metadata/hardcover/search.get.ts,367,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/books/metadata/search.get.ts,36,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/books/upload.post.ts,579,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/api/collections/[id]/books/bulk.post.ts,380,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/api/collections/[id]/index.delete.ts,100,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/collections/[id]/index.put.ts,111,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/collections/[id]/leave/index.post.ts,117,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/collections/[id]/members/[userId]/index.delete.ts,153,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/collections/[id]/members/index.get.ts,105,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/collections/[id]/members/index.put.ts,182,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/api/collections/[id]/transfer-ownership/index.post.ts,200,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/collections/index.get.ts,87,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/collections/index.post.ts,97,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/dashboard/index.get.ts,174,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/nuke.get.ts,28,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/publishers/[id]/books.get.ts,312,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/publishers/index.get.ts,196,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/publishers/search.get.ts,130,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/search/index.get.ts,514,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/api/series/[id]/books.get.ts,302,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/series/index.get.ts,203,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/series/search.get.ts,137,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/settings/admin/calibre.post.ts,1021,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/api/settings/admin/hardcover-token.put.ts,70,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/settings/admin/health.post.ts,839,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/settings/global.put.ts,89,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/settings/index.get.ts,74,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/settings/user.put.ts,73,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/tags/[id]/books.get.ts,305,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/tags/index.get.ts,195,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/tags/search.get.ts,131,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/api/users/delete.delete.ts,41,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/plugins/dropbox-ingest.ts,9,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/tsconfig.json,3,Inventory only; no claim of manual full-file review
+server/utils/books/cover-delivery.ts,216,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/utils/books/cover-update-transaction.test.ts,225,Executed existing test file; see saved test output
+server/utils/books/cover-update-transaction.ts,341,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/utils/books/cover-upload.test.ts,476,Executed existing test file; see saved test output
+server/utils/books/cover-url.ts,15,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/utils/books/covers.ts,393,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/utils/books/delete-book.ts,162,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/utils/books/dropbox/config.ts,138,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/utils/books/dropbox/ingest.ts,291,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/utils/books/dropbox/settings.ts,30,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/utils/books/dropbox/target.ts,134,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/utils/books/dropbox/watcher.ts,263,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/utils/books/duplicates.ts,265,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/utils/books/epub-cover.ts,376,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/utils/books/epub.ts,131,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/utils/books/external-image.ts,249,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/utils/books/fs.ts,91,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/utils/books/metadata/top-result.ts,379,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/utils/books/page-sort.test.ts,135,Executed existing test file; see saved test output
+server/utils/books/page-sort.ts,46,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/utils/books/published.ts,240,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/utils/books/storage/move/move-book-storage.ts,448,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/utils/books/storage/paths.ts,245,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/utils/db/cloud.ts,7,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/utils/import/calibre/calibre-reader.ts,1001,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/utils/secrets/hardcover.ts,93,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+server/utils/security/bootstrap.ts,20,"Targeted source review; see finding references, not a full-file certification; compiler/linter/build coverage where configured"
+server/utils/sort/keys.ts,68,Inventory only; no claim of manual full-file review; compiler/linter/build coverage where configured
+tsconfig.json,4,Inventory only; no claim of manual full-file review

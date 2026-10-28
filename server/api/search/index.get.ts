@@ -1,3 +1,4 @@
+import { visibleEntity } from '~~/server/utils/books/visibility';
 import { and, eq, inArray, like, sql } from 'drizzle-orm';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
@@ -28,7 +29,7 @@ import { buildBookCoverUrl } from '~~/server/utils/books/cover-url';
  *   - contains match
  * - Scores in-memory for stable ordering.
  * - Books are scoped to the caller's accessible collections (via collection membership).
- * - Non-book entities are currently global (not collection-scoped) to match existing endpoints.
+ * - Entity metadata is scoped to books visible to the caller.
  *
  * Query params:
  * - q: string (required)
@@ -414,18 +415,28 @@ export default defineEventHandler(async (event) => {
       });
     })();
 
-    // ---- Simple buckets (global, not collection-scoped)
+    // ---- Entity buckets scoped to visible books
     const authorsPromise = (async () => {
       const prefixRows = await cloudDb
         .select({ id: authors.id, name: authors.name })
         .from(authors)
-        .where(like(authors.name, prefix))
+        .where(
+          and(
+            like(authors.name, prefix),
+            visibleEntity('author', session.user.id),
+          ),
+        )
         .limit(perBucketLimit);
 
       const containsRows = await cloudDb
         .select({ id: authors.id, name: authors.name })
         .from(authors)
-        .where(like(authors.name, contains))
+        .where(
+          and(
+            like(authors.name, contains),
+            visibleEntity('author', session.user.id),
+          ),
+        )
         .limit(Math.max(perBucketLimit * 5, 25));
 
       return rankRows([...prefixRows, ...containsRows], perBucketLimit);
@@ -435,13 +446,23 @@ export default defineEventHandler(async (event) => {
       const prefixRows = await cloudDb
         .select({ id: series.id, name: series.name })
         .from(series)
-        .where(like(series.name, prefix))
+        .where(
+          and(
+            like(series.name, prefix),
+            visibleEntity('series', session.user.id),
+          ),
+        )
         .limit(perBucketLimit);
 
       const containsRows = await cloudDb
         .select({ id: series.id, name: series.name })
         .from(series)
-        .where(like(series.name, contains))
+        .where(
+          and(
+            like(series.name, contains),
+            visibleEntity('series', session.user.id),
+          ),
+        )
         .limit(Math.max(perBucketLimit * 5, 25));
 
       return rankRows([...prefixRows, ...containsRows], perBucketLimit);
@@ -451,13 +472,23 @@ export default defineEventHandler(async (event) => {
       const prefixRows = await cloudDb
         .select({ id: publishers.id, name: publishers.name })
         .from(publishers)
-        .where(like(publishers.name, prefix))
+        .where(
+          and(
+            like(publishers.name, prefix),
+            visibleEntity('publisher', session.user.id),
+          ),
+        )
         .limit(perBucketLimit);
 
       const containsRows = await cloudDb
         .select({ id: publishers.id, name: publishers.name })
         .from(publishers)
-        .where(like(publishers.name, contains))
+        .where(
+          and(
+            like(publishers.name, contains),
+            visibleEntity('publisher', session.user.id),
+          ),
+        )
         .limit(Math.max(perBucketLimit * 5, 25));
 
       return rankRows([...prefixRows, ...containsRows], perBucketLimit);
@@ -467,13 +498,17 @@ export default defineEventHandler(async (event) => {
       const prefixRows = await cloudDb
         .select({ id: tags.id, name: tags.name })
         .from(tags)
-        .where(like(tags.name, prefix))
+        .where(
+          and(like(tags.name, prefix), visibleEntity('tag', session.user.id)),
+        )
         .limit(perBucketLimit);
 
       const containsRows = await cloudDb
         .select({ id: tags.id, name: tags.name })
         .from(tags)
-        .where(like(tags.name, contains))
+        .where(
+          and(like(tags.name, contains), visibleEntity('tag', session.user.id)),
+        )
         .limit(Math.max(perBucketLimit * 5, 25));
 
       return rankRows([...prefixRows, ...containsRows], perBucketLimit);

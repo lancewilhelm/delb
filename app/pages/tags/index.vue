@@ -23,6 +23,7 @@ type FetchErrorLike = {
 
 type TagsListResponse = {
   data?: {
+    hasMore?: boolean;
     tags?: Array<{
       id: string;
       name: string;
@@ -56,78 +57,64 @@ const tags = ref<TagRow[]>([]);
 const loadingTags = ref(false);
 const tagQuery = ref('');
 
-const filteredTags = computed(() => {
-  const q = tagQuery.value.trim().toLowerCase();
-  const list = tags.value;
-  if (!q) return list;
-  return list.filter((t) => t.name.toLowerCase().includes(q));
-});
+const filteredTags = tags;
+const hasMore = ref(false);
+let generation = 0;
+const userSettingsStore = useUserSettingsStore();
+const maxTagsCovers = userSettingsStore.settingRef<number>(
+  'coverStyle.tagsMaxCovers',
+);
 
-async function refreshTags() {
+async function refreshTags(append = false) {
+  const request = append ? generation : ++generation;
   loadingTags.value = true;
   errorMessage.value = null;
-
+  if (!append) {
+    tags.value = [];
+    hasMore.value = false;
+  }
   try {
-    const query: Record<string, string> = {};
+    const query: Record<string, string> = {
+      offset: String(append ? tags.value.length : 0),
+      search: tagQuery.value.trim(),
+      previewLimit: String(maxTagsCovers.value ?? 8),
+    };
     if (
       collectionsStore.activeSelection.kind === 'collection' &&
       collectionsStore.activeSelection.collectionId
     ) {
       query.collectionId = collectionsStore.activeSelection.collectionId;
     }
-
-    // Use dedicated list endpoint so this view isn't dependent on how many books were loaded.
-    const res = await $fetch<TagsListResponse>('/api/tags', {
-      method: 'GET',
-      query,
-    });
-
-    const list = res?.data?.tags ?? [];
-
-    // Keep client-side sort stable/predictable (server may already sort).
-    tags.value = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    const res = await $fetch<TagsListResponse>('/api/tags', { query });
+    if (request !== generation) return;
+    const list = res.data?.tags ?? [];
+    tags.value = append ? [...tags.value, ...list] : list;
+    hasMore.value = res.data?.hasMore ?? false;
   } catch (err) {
+    if (request !== generation) return;
     const e = err as FetchErrorLike;
     errorMessage.value =
       e?.data?.message ||
       e?.statusMessage ||
       e?.message ||
       'Failed to load tags';
-    tags.value = [];
   } finally {
-    loadingTags.value = false;
+    if (request === generation) loadingTags.value = false;
   }
 }
 
-const userSettingsStore = useUserSettingsStore();
-const maxTagsCovers = userSettingsStore.settingRef<number>(
-  'coverStyle.tagsMaxCovers',
-);
-
-// ------------------------------
-// UI helpers
-// ------------------------------
-// When scope changes, refresh the result set for the active view.
 watch(
-  () => collectionsStore.activeSelection,
-  async () => {
-    // When scope changes, refresh the result set for the active view.
-    await refreshActiveView();
+  [() => collectionsStore.activeSelection, tagQuery, maxTagsCovers],
+  () => {
+    void refreshTags();
   },
-  { deep: true },
+  { deep: true, flush: 'sync' },
 );
-
-async function refreshActiveView() {
-  // Ensure collections are loaded so collection-scoped queries are valid after navigation.
-  if (!collectionsStore.collections.length) {
-    await collectionsStore.fetchCollections();
-  }
-
-  await refreshTags();
-}
 
 onMounted(async () => {
-  await refreshActiveView();
+  if (!collectionsStore.collections.length)
+    await collectionsStore.fetchCollections();
+  await refreshTags();
 });
 </script>
 
@@ -159,7 +146,9 @@ onMounted(async () => {
               />
             </div>
 
-            <div v-if="loadingTags" class="text-sm opacity-80">Loading...</div>
+            <div v-if="loadingTags && !tags.length" class="text-sm opacity-80">
+              Loading...
+            </div>
 
             <div v-else-if="errorMessage" class="text-sm text-(--error-color)">
               {{ errorMessage }}
@@ -220,6 +209,15 @@ onMounted(async () => {
                 </div>
               </div>
             </div>
+            <button
+              v-if="hasMore"
+              type="button"
+              class="px-3 py-2 rounded-md border border-(--sub-color) text-sm"
+              :disabled="loadingTags"
+              @click="refreshTags(true)"
+            >
+              {{ loadingTags ? 'Loading...' : 'Load more' }}
+            </button>
           </div>
         </div>
       </div>

@@ -1,0 +1,5 @@
+$ drizzle-kit migrate --config drizzle.config.ts
+Reading config file '/Users/lancewilhelm/.codex/worktrees/audit-repairs/delb/drizzle.config.ts'
+[⣷] applying migrations...[2K[1G[✓] migrations applied successfully!$ drizzle-kit migrate --config drizzle.config.ts
+Reading config file '/Users/lancewilhelm/.codex/worktrees/audit-repairs/delb/drizzle.config.ts'
+[⣷] applying migrations...[2K[1G[✓] migrations applied successfully!

@@ -1,3 +1,4 @@
+import { visibleEntity } from '~~/server/utils/books/visibility';
 import { and, desc, eq, inArray, lt, or } from 'drizzle-orm';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
@@ -102,7 +103,7 @@ export default defineEventHandler(async (event) => {
     const seriesRow = await cloudDb
       .select({ id: series.id, name: series.name })
       .from(series)
-      .where(eq(series.id, seriesId))
+      .where(and(eq(series.id, seriesId), visibleEntity('series', userId)))
       .limit(1);
 
     const seriesMeta = seriesRow[0] ?? null;

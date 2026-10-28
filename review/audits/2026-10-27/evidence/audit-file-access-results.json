@@ -1,0 +1,8 @@
+{
+  "check": "Private EPUB download granted by arbitrary bulk assignment",
+  "before": 404,
+  "assignment": 200,
+  "after": 200,
+  "zipMagic": "PK",
+  "bytes": 2083
+}

@@ -373,7 +373,9 @@ export default defineEventHandler(async (event) => {
             : cursor && sort === 'publishedDate'
               ? (() => {
                   const cursorMs = Number.parseInt(cursor.v, 10);
-                  const v = Number.isFinite(cursorMs) ? cursorMs : 0;
+                  const v = Number.isFinite(cursorMs)
+                    ? Math.floor(cursorMs / 1000)
+                    : 0;
 
                   return sortDir === 'asc'
                     ? or(

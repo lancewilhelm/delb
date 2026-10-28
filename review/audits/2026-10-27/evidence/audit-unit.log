@@ -1,0 +1,383 @@
+TAP version 13
+# Subtest: page sort defaults, direction toggling and actual preference persistence
+ok 1 - page sort defaults, direction toggling and actual preference persistence
+  ---
+  duration_ms: 32.46075
+  type: 'test'
+  ...
+# Subtest: legacy settings remain uninitialized until a palette is saved
+ok 2 - legacy settings remain uninitialized until a palette is saved
+  ---
+  duration_ms: 29.520125
+  type: 'test'
+  ...
+# Subtest: custom edits persist independently in default and mobile profiles
+ok 3 - custom edits persist independently in default and mobile profiles
+  ---
+  duration_ms: 7.613208
+  type: 'test'
+  ...
+# Subtest: editor preserves 422 detail: EPUB cover update failed: Signed EPUBs cannot be modified without invalidating their signatures
+ok 4 - editor preserves 422 detail: EPUB cover update failed: Signed EPUBs cannot be modified without invalidating their signatures
+  ---
+  duration_ms: 53.502708
+  type: 'test'
+  ...
+# Subtest: editor preserves 422 detail: EPUB cover update failed: The existing cover resource is encrypted: old.png
+ok 5 - editor preserves 422 detail: EPUB cover update failed: The existing cover resource is encrypted: old.png
+  ---
+  duration_ms: 17.258625
+  type: 'test'
+  ...
+# Subtest: editor preserves 422 detail: EPUB cover update failed: Invalid percent-encoding in EPUB href: 100%.css
+ok 6 - editor preserves 422 detail: EPUB cover update failed: Invalid percent-encoding in EPUB href: 100%.css
+  ---
+  duration_ms: 10.4685
+  type: 'test'
+  ...
+# Subtest: editor preserves 422 detail: EPUB cover update failed: EPUB mimetype is missing or invalid
+ok 7 - editor preserves 422 detail: EPUB cover update failed: EPUB mimetype is missing or invalid
+  ---
+  duration_ms: 8.188083
+  type: 'test'
+  ...
+# Subtest: editor preserves 409 detail: An associated EPUB file is missing. Restore the file or correct its library entry, then retry the cover upload.
+ok 8 - editor preserves 409 detail: An associated EPUB file is missing. Restore the file or correct its library entry, then retry the cover upload.
+  ---
+  duration_ms: 8.417833
+  type: 'test'
+  ...
+# Subtest: editor preserves 413 detail: Cover image exceeds the 25 MiB upload limit
+ok 9 - editor preserves 413 detail: Cover image exceeds the 25 MiB upload limit
+  ---
+  duration_ms: 8.094
+  type: 'test'
+  ...
+# Subtest: editor preserves 415 detail: Unsupported or invalid cover image
+ok 10 - editor preserves 415 detail: Unsupported or invalid cover image
+  ---
+  duration_ms: 6.849417
+  type: 'test'
+  ...
+# Subtest: editor preserves 507 detail: Library storage could not safely replace an existing cover file
+ok 11 - editor preserves 507 detail: Library storage could not safely replace an existing cover file
+  ---
+  duration_ms: 5.729125
+  type: 'test'
+  ...
+# Subtest: cover reset failure retains its detailed message and pending edits
+ok 12 - cover reset failure retains its detailed message and pending edits
+  ---
+  duration_ms: 11.46525
+  type: 'test'
+  ...
+# Subtest: successful upload clears selection, reloads, and returns to book
+ok 13 - successful upload clears selection, reloads, and returns to book
+  ---
+  duration_ms: 5.6275
+  type: 'test'
+  ...
+# Subtest: API error parsing supports message, plain text and empty or unreadable bodies
+ok 14 - API error parsing supports message, plain text and empty or unreadable bodies
+  ---
+  duration_ms: 0.290042
+  type: 'test'
+  ...
+# Subtest: palette normalization accepts opaque hex and repairs missing or unsafe colors
+ok 15 - palette normalization accepts opaque hex and repairs missing or unsafe colors
+  ---
+  duration_ms: 0.7025
+  type: 'test'
+  ...
+# Subtest: CSS includes six roles and derived legacy colors using validated values
+ok 16 - CSS includes six roles and derived legacy colors using validated values
+  ---
+  duration_ms: 0.1785
+  type: 'test'
+  ...
+# Subtest: HSV conversion preserves primary, neutral, and arbitrary colors
+ok 17 - HSV conversion preserves primary, neutral, and arbitrary colors
+  ---
+  duration_ms: 0.19775
+  type: 'test'
+  ...
+# Subtest: theme switching cancels stale loads and cleans up custom styles
+ok 18 - theme switching cancels stale loads and cleans up custom styles
+  ---
+  duration_ms: 0.310209
+  type: 'test'
+  ...
+# Subtest: fullscreen entry and exit resize the existing rendition without starting it again
+ok 19 - fullscreen entry and exit resize the existing rendition without starting it again
+  ---
+  duration_ms: 34.404958
+  type: 'test'
+  ...
+# Subtest: fullscreen toggle waits for the deliberate layout refresh to finish
+ok 20 - fullscreen toggle waits for the deliberate layout refresh to finish
+  ---
+  duration_ms: 8.277375
+  type: 'test'
+  ...
+# Subtest: demo refuses environment files without reading them
+ok 21 - demo refuses environment files without reading them
+  ---
+  duration_ms: 9.29025
+  type: 'test'
+  ...
+# Subtest: demo refuses nonempty book storage
+ok 22 - demo refuses nonempty book storage
+  ---
+  duration_ms: 12.943458
+  type: 'test'
+  ...
+# Subtest: setup refuses an existing disposable database
+ok 23 - setup refuses an existing disposable database
+  ---
+  duration_ms: 6.154375
+  type: 'test'
+  ...
+# Subtest: explicit backfill preserves publication sorting values using a disposable database
+ok 24 - explicit backfill preserves publication sorting values using a disposable database
+  ---
+  duration_ms: 19.144125
+  type: 'test'
+  ...
+# Subtest: description sanitizer strips nested handlers and unsafe links, retaining basic formatting
+ok 25 - description sanitizer strips nested handlers and unsafe links, retaining basic formatting
+  ---
+  duration_ms: 54.917917
+  type: 'test'
+  ...
+# Subtest: external cover deadline includes stalled response body
+ok 26 - external cover deadline includes stalled response body
+  ---
+  duration_ms: 44.120917
+  type: 'test'
+  ...
+# Subtest: external cover accepts a normal image and aborts rejected oversized bodies
+ok 27 - external cover accepts a normal image and aborts rejected oversized bodies
+  ---
+  duration_ms: 6.242167
+  type: 'test'
+  ...
+# Subtest: external cover cancels redirect bodies and validates the redirected image
+ok 28 - external cover cancels redirect bodies and validates the redirected image
+  ---
+  duration_ms: 2.927666
+  type: 'test'
+  ...
+# Subtest: book listing never runs a write backfill on its read path
+ok 29 - book listing never runs a write backfill on its read path
+  ---
+  duration_ms: 38.866959
+  type: 'test'
+  ...
+# Subtest: matching cover ETag returns 304 without reading bytes, while a normal request reads once
+ok 30 - matching cover ETag returns 304 without reading bytes, while a normal request reads once
+  ---
+  duration_ms: 31.335209
+  type: 'test'
+  ...
+# Subtest: commits all staged cover files after the database update
+ok 31 - commits all staged cover files after the database update
+  ---
+  duration_ms: 28.90775
+  type: 'test'
+  ...
+# Subtest: uses a verified copy when a union filesystem rejects the backup rename
+ok 32 - uses a verified copy when a union filesystem rejects the backup rename
+  ---
+  duration_ms: 42.266833
+  type: 'test'
+  ...
+# Subtest: leaves original files unchanged when the database update fails
+ok 33 - leaves original files unchanged when the database update fails
+  ---
+  duration_ms: 6.219666
+  type: 'test'
+  ...
+# Subtest: restores every original when a later file swap fails
+ok 34 - restores every original when a later file swap fails
+  ---
+  duration_ms: 11.154708
+  type: 'test'
+  ...
+# Subtest: restores an original copied for backup when a later swap fails
+ok 35 - restores an original copied for backup when a later swap fails
+  ---
+  duration_ms: 17.16575
+  type: 'test'
+  ...
+# Subtest: rolls a partially swapped committed operation forward during recovery
+ok 36 - rolls a partially swapped committed operation forward during recovery
+  ---
+  duration_ms: 17.864541
+  type: 'test'
+  ...
+# Subtest: cover uploads preserve files and database on every rejected EPUB or image
+    # Subtest: valid-epub3
+    ok 1 - valid-epub3
+      ---
+      duration_ms: 29.564875
+      type: 'test'
+      ...
+    # Subtest: valid-epub2
+    ok 2 - valid-epub2
+      ---
+      duration_ms: 12.924083
+      type: 'test'
+      ...
+    # Subtest: missing-cover
+    ok 3 - missing-cover
+      ---
+      duration_ms: 10.048666
+      type: 'test'
+      ...
+    # Subtest: font-obfuscation
+    ok 4 - font-obfuscation
+      ---
+      duration_ms: 9.573333
+      type: 'test'
+      ...
+    # Subtest: signed
+    ok 5 - signed
+      ---
+      duration_ms: 5.285375
+      type: 'test'
+      ...
+    # Subtest: encrypted-cover
+    ok 6 - encrypted-cover
+      ---
+      duration_ms: 5.000833
+      type: 'test'
+      ...
+    # Subtest: bad-percent
+    ok 7 - bad-percent
+      ---
+      duration_ms: 5.09225
+      type: 'test'
+      ...
+    # Subtest: missing-mimetype
+    ok 8 - missing-mimetype
+      ---
+      duration_ms: 12.094125
+      type: 'test'
+      ...
+    # Subtest: empty-mimetype
+    ok 9 - empty-mimetype
+      ---
+      duration_ms: 9.933875
+      type: 'test'
+      ...
+    # Subtest: padded-mimetype
+    ok 10 - padded-mimetype
+      ---
+      duration_ms: 9.152208
+      type: 'test'
+      ...
+    # Subtest: newline-mimetype
+    ok 11 - newline-mimetype
+      ---
+      duration_ms: 8.350208
+      type: 'test'
+      ...
+    # Subtest: bom-mimetype
+    ok 12 - bom-mimetype
+      ---
+      duration_ms: 9.12625
+      type: 'test'
+      ...
+    # Subtest: wrong-mimetype
+    ok 13 - wrong-mimetype
+      ---
+      duration_ms: 4.938417
+      type: 'test'
+      ...
+    # Subtest: repair-no-container
+    ok 14 - repair-no-container
+      ---
+      duration_ms: 4.712334
+      type: 'test'
+      ...
+    # Subtest: repair-signed
+    ok 15 - repair-signed
+      ---
+      duration_ms: 4.785583
+      type: 'test'
+      ...
+    # Subtest: repair-encrypted
+    ok 16 - repair-encrypted
+      ---
+      duration_ms: 6.7045
+      type: 'test'
+      ...
+    # Subtest: multi-repair-one-bad
+    ok 17 - multi-repair-one-bad
+      ---
+      duration_ms: 6.389333
+      type: 'test'
+      ...
+    # Subtest: multi-repair-one-missing
+    ok 18 - multi-repair-one-missing
+      ---
+      duration_ms: 5.600875
+      type: 'test'
+      ...
+    # Subtest: invalid-image
+    ok 19 - invalid-image
+      ---
+      duration_ms: 3.490375
+      type: 'test'
+      ...
+    # Subtest: oversized-image
+    ok 20 - oversized-image
+      ---
+      duration_ms: 2.98525
+      type: 'test'
+      ...
+    # Subtest: multi-one-bad
+    ok 21 - multi-one-bad
+      ---
+      duration_ms: 6.980333
+      type: 'test'
+      ...
+    # Subtest: missing-file
+    ok 22 - missing-file
+      ---
+      duration_ms: 4.285958
+      type: 'test'
+      ...
+    # Subtest: multi-one-missing
+    ok 23 - multi-one-missing
+      ---
+      duration_ms: 4.669417
+      type: 'test'
+      ...
+    1..23
+ok 37 - cover uploads preserve files and database on every rejected EPUB or image
+  ---
+  duration_ms: 242.7055
+  type: 'test'
+  ...
+# Subtest: numeric pages asc: stable cursors, unknowns last, filters and duplicate memberships
+ok 38 - numeric pages asc: stable cursors, unknowns last, filters and duplicate memberships
+  ---
+  duration_ms: 8.54225
+  type: 'test'
+  ...
+# Subtest: numeric pages desc: stable cursors, unknowns last, filters and duplicate memberships
+ok 39 - numeric pages desc: stable cursors, unknowns last, filters and duplicate memberships
+  ---
+  duration_ms: 5.423583
+  type: 'test'
+  ...
+1..39
+# tests 62
+# suites 0
+# pass 62
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1067.223417

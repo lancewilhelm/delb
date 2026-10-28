@@ -1,0 +1,23 @@
+[
+  {
+    "check": "native DOM description sanitizer",
+    "result": "BASELINE\nFAIL nested event handler\nFAIL nested unsafe link\nFAIL obfuscated scheme\nPASS formatting retained\nPASS safe links retained\nPASS relative links retained\nFAIL inline style removed\nFAIL SVG removed\n3/8 passed\nPATCHED\nPASS nested event handler\nPASS nested unsafe link\nPASS obfuscated scheme\nPASS formatting retained\nPASS safe links retained\nPASS relative links retained\nPASS inline style removed\nPASS SVG removed\n8/8 passed"
+  },
+  {
+    "check": "ordinary EPUB pages scripts disabled",
+    "result": "Loading pages; allowScriptedContent=false\nContent hook: PASS text present\nPASS display resolved; TOC entries=2\nRelocation 1: chapter1.xhtml\nPASS location generation; count=16\nPASS next resolved\nRelocation 2: chapter1.xhtml\nTheme API applied; inspect text color/font and navigation visually\nContent hook: PASS text present\nContent hook: PASS text present\nPASS chapter 2 display resolved\nRelocation 3: chapter2.xhtml"
+  },
+  {
+    "check": "ordinary EPUB scroll scripts disabled",
+    "result": "Loading scroll; allowScriptedContent=false\nContent hook: PASS text present\nPASS display resolved; TOC entries=2\nRelocation 1: chapter1.xhtml\nPASS location generation; count=16\nPASS next resolved\nRelocation 2: chapter1.xhtml\nTheme API applied; inspect text color/font and navigation visually\nContent hook: PASS text present\nContent hook: PASS text present\nPASS chapter 2 display resolved\nRelocation 3: chapter2.xhtml"
+  },
+  {
+    "check": "application login page",
+    "result": {
+      "title": "Login | Delb",
+      "headings": [],
+      "inputs": 2,
+      "body": "Delb\nLogin"
+    }
+  }
+]

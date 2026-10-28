@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { auth } from '~/utils/auth';
@@ -135,14 +135,22 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  await cloudDb
+  const deleted = await cloudDb
     .delete(collectionMembers)
     .where(
       and(
         eq(collectionMembers.collectionId, id),
         eq(collectionMembers.userId, targetUserId),
+        ne(collectionMembers.role, 'owner'),
       ),
-    );
+    )
+    .returning({ userId: collectionMembers.userId });
+  if (!deleted.length) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Transfer ownership before removing the owner',
+    });
+  }
 
   return {
     success: true,

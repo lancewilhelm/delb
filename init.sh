@@ -5,28 +5,17 @@ echo "Starting local initialization..."
 
 # Check Node.js
 if ! command -v node >/dev/null; then
-  echo "Node.js is not installed. Please install Node.js (version 20+ recommended)." >&2
+  echo "Node.js is not installed. Please install Node.js (version 22.22.3 or a supported newer LTS)." >&2
   exit 1
 fi
 
-# Nuxt's tooling can be sensitive to very new Node majors. Prefer Node 20/22.
-NODE_MAJOR=$(node -p "process.versions.node.split('.')[0]")
-if [ "$NODE_MAJOR" -lt 20 ]; then
-  echo "Node.js version is too old. Please install Node.js 20+." >&2
-  echo "Detected: $(node --version)" >&2
-  exit 1
-fi
-
-if [ "$NODE_MAJOR" -gt 22 ]; then
-  echo "Warning: Detected Node.js $(node --version). This project is tested primarily on Node 20/22." >&2
-  echo "If you hit errors during 'nuxt prepare', try switching to Node 22 (or 20) via your version manager." >&2
-fi
+node -e 'const [major, minor, patch] = process.versions.node.split(".").map(Number); const supported = (major === 22 && (minor > 22 || (minor === 22 && patch >= 3))) || (major === 24 && minor >= 15) || major >= 26; if (!supported) { console.error("Use Node 22.22.3, Node 24.15+, or Node 26+."); process.exit(1); }'
 
 # Check or install pnpm
 if ! command -v pnpm >/dev/null; then
   echo "pnpm is not installed. Installing pnpm..."
   corepack enable
-  corepack prepare pnpm@latest --activate
+  corepack install
 fi
 
 # Check for openssl
@@ -38,6 +27,8 @@ fi
 # Install dependencies
 echo "Installing dependencies with pnpm..."
 pnpm install --frozen-lockfile
+pnpm prepare:nuxt
+pnpm --filter @delb/epub build
 
 # Create data directory
 mkdir -p ./data
@@ -69,11 +60,11 @@ fi
 export DATABASE_URL="file:$(pwd)/data/delb.db"
 
 # Run Drizzle migrations
-echo "Running Drizzle database schema push..."
-NODE_ENV=production npx --yes drizzle-kit push --config=drizzle.config.ts
+echo "Running database migrations..."
+NODE_ENV=production pnpm db:migrate
 
 echo "Initialization complete. You may now run:"
 echo ""
 echo "  pnpm dev        # for development"
-echo "  pnpm start      # for production (if built)"
+echo "  pnpm preview    # for production (after pnpm build)"
 echo ""

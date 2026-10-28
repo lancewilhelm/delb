@@ -1,0 +1,7 @@
+Grid {"requests":["old"],"selectedCollection":"new","books":[{"id":"old-book"}],"cursor":"old-cursor"}
+List {"requests":["old"],"selectedCollection":"new","books":[{"id":"old-book"}],"cursor":"old-cursor"}
+unmount {"pendingBeforeUnmount":true,"pendingAfterUnmount":false,"saves":[]}
+generated {"visibleCfi":"new-cfi","displayCalls":[],"progress":10,"saves":[["old-cfi",10]]}
+generated-sync {"visibleCfi":"new-cfi","displayCalls":["synced-old-cfi"],"progress":10,"saves":[["synced-old-cfi",10]]}
+settings before response Inter false
+settings after response Nunito true 2020-01-01T00:00:00.000Z

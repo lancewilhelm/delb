@@ -62,70 +62,70 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Ensure collection exists and is not Personal (non-shareable)
-  const cRows = await cloudDb
-    .select({
-      id: collections.id,
-      isPersonal: collections.isPersonal,
-    })
-    .from(collections)
-    .where(eq(collections.id, id))
-    .limit(1);
-
-  const c = cRows[0];
-  if (!c?.id) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: 'Collection not found',
-    });
-  }
-
-  if (c.isPersonal) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Personal collections cannot transfer ownership',
-    });
-  }
-
-  const actingUserId = session.user.id;
-
-  // Must be current owner
-  const actingMembershipRows = await cloudDb
-    .select({ role: collectionMembers.role })
-    .from(collectionMembers)
-    .where(
-      and(
-        eq(collectionMembers.collectionId, id),
-        eq(collectionMembers.userId, actingUserId),
-      ),
-    )
-    .limit(1);
-
-  const actingRole = actingMembershipRows[0]?.role;
-  if (actingRole !== 'owner') {
-    throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
-  }
-
-  // Resolve email -> userId
-  const userRows = await cloudDb
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
-
-  const targetUserId = userRows[0]?.id ?? '';
-  if (!targetUserId) {
-    throw createError({ statusCode: 404, statusMessage: 'User not found' });
-  }
-
-  if (targetUserId === actingUserId) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'You cannot transfer ownership to yourself',
-    });
-  }
-
   const ownerUserId = await cloudDb.transaction(async (tx) => {
+    // Ensure collection exists and is not Personal (non-shareable)
+    const cRows = await tx
+      .select({
+        id: collections.id,
+        isPersonal: collections.isPersonal,
+      })
+      .from(collections)
+      .where(eq(collections.id, id))
+      .limit(1);
+
+    const c = cRows[0];
+    if (!c?.id) {
+      throw createError({
+        statusCode: 404,
+        statusMessage: 'Collection not found',
+      });
+    }
+
+    if (c.isPersonal) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Personal collections cannot transfer ownership',
+      });
+    }
+
+    const actingUserId = session.user.id;
+
+    // Must be current owner
+    const actingMembershipRows = await tx
+      .select({ role: collectionMembers.role })
+      .from(collectionMembers)
+      .where(
+        and(
+          eq(collectionMembers.collectionId, id),
+          eq(collectionMembers.userId, actingUserId),
+        ),
+      )
+      .limit(1);
+
+    const actingRole = actingMembershipRows[0]?.role;
+    if (actingRole !== 'owner') {
+      throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
+    }
+
+    // Resolve email -> userId
+    const userRows = await tx
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    const targetUserId = userRows[0]?.id ?? '';
+    if (!targetUserId) {
+      throw createError({ statusCode: 404, statusMessage: 'User not found' });
+    }
+
+    if (targetUserId === actingUserId) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'You cannot transfer ownership to yourself',
+      });
+    }
+
     // Ensure target is a member (insert if missing)
     const existingTargetRows = await tx
       .select({

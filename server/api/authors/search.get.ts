@@ -1,4 +1,5 @@
-import { like } from 'drizzle-orm';
+import { visibleEntity } from '~~/server/utils/books/visibility';
+import { and, like } from 'drizzle-orm';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { authors } from '~/utils/db/schema';
 import { logger } from '~/utils/logger';
@@ -74,14 +75,24 @@ export default defineEventHandler(async (event) => {
     const prefixRows = await cloudDb
       .select({ id: authors.id, name: authors.name })
       .from(authors)
-      .where(like(authors.name, prefix))
+      .where(
+        and(
+          like(authors.name, prefix),
+          visibleEntity('author', session.user.id),
+        ),
+      )
       .limit(take);
 
     // Pull extra contains matches (for ranking), then de-dup + trim in memory.
     const containsRows = await cloudDb
       .select({ id: authors.id, name: authors.name })
       .from(authors)
-      .where(like(authors.name, contains))
+      .where(
+        and(
+          like(authors.name, contains),
+          visibleEntity('author', session.user.id),
+        ),
+      )
       .limit(Math.max(take * 5, 25));
 
     const merged = [...prefixRows, ...containsRows];

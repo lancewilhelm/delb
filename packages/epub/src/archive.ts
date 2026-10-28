@@ -58,6 +58,18 @@ export function readArchive(
   return files;
 }
 
+export function validateArchiveLimits(
+  input: Uint8Array,
+  overrides?: Partial<ArchiveLimits>,
+): void {
+  try {
+    preflightArchive(input, { ...DEFAULT_ARCHIVE_LIMITS, ...overrides });
+  } catch (cause) {
+    if (cause instanceof EpubError) throw cause;
+    throw invalidEpub('The EPUB ZIP directory is malformed', cause);
+  }
+}
+
 function preflightArchive(input: Uint8Array, limits: ArchiveLimits): void {
   const view = new DataView(input.buffer, input.byteOffset, input.byteLength);
   const eocd = findSignature(

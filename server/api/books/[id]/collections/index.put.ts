@@ -88,161 +88,170 @@ export default defineEventHandler(async (event) => {
 
   assertNoOverlap(addCollectionIds, removeCollectionIds);
 
-  // Enforce "Personal is mandatory": user cannot remove from ANY personal collection.
-  // Even if it's not theirs, we treat it as non-removable guardrail.
-  const targetIds = Array.from(
-    new Set([...addCollectionIds, ...removeCollectionIds]),
-  );
-
-  // Load user's membership roles for target collections (RBAC gate: editor/owner for mutations).
-  const memberships = await cloudDb
-    .select({
-      collectionId: collectionMembers.collectionId,
-      role: collectionMembers.role,
-    })
-    .from(collectionMembers)
-    .where(
-      and(
-        eq(collectionMembers.userId, userId),
-        inArray(collectionMembers.collectionId, targetIds),
-      ),
-    );
-
-  const roleByCollectionId = new Map(
-    memberships.map((m) => [m.collectionId, m.role] as const),
-  );
-
-  const canEdit = (collectionId: string) => {
-    const role = roleByCollectionId.get(collectionId);
-    return role === 'owner' || role === 'editor';
-  };
-
-  const forbidden: string[] = [];
-  const eligibleAdd: string[] = [];
-  const eligibleRemove: string[] = [];
-
-  for (const id of addCollectionIds) {
-    if (!canEdit(id)) forbidden.push(id);
-    else eligibleAdd.push(id);
-  }
-
-  // For removals, we also need Personal guardrails; we’ll evaluate after loading collection.isPersonal.
-  for (const id of removeCollectionIds) {
-    if (!canEdit(id)) forbidden.push(id);
-    else eligibleRemove.push(id);
-  }
-
-  const uniqueForbidden = Array.from(new Set(forbidden));
-
-  // Determine which eligible removes are blocked due to Personal.
-  const ignoredPersonalRemovals: string[] = [];
-  let finalRemoveIds = eligibleRemove;
-
-  if (eligibleRemove.length) {
-    const personalRows = await cloudDb
-      .select({
-        id: collections.id,
-        isPersonal: collections.isPersonal,
-      })
-      .from(collections)
-      .where(inArray(collections.id, eligibleRemove));
-
-    const personalSet = new Set(
-      personalRows.filter((r) => r.isPersonal).map((r) => r.id),
-    );
-
-    if (personalSet.size) {
-      ignoredPersonalRemovals.push(
-        ...eligibleRemove.filter((id) => personalSet.has(id)),
-      );
-      finalRemoveIds = eligibleRemove.filter((id) => !personalSet.has(id));
-    }
-  }
-
-  // We do NOT currently assert book visibility here explicitly.
-  // Guardrails:
-  // - If the user can edit a collection, they can necessarily “see” it (they're a member).
-  // - Adding/removing a book requires the book to already exist; FK constraints handle invalid ids.
-  //
-  // If you later want stronger anti-leak behavior, we can:
-  // - check the book is visible to the user via any membership before doing anything,
-  // - and treat non-visible as 404.
-
-  const now = new Date();
-
-  const added: string[] = [];
-  const removed: string[] = [];
-
-  // ADD: idempotent insert into collection_books (skip if already exists)
-  for (const collectionId of eligibleAdd) {
-    const existing = await cloudDb
-      .select({
-        collectionId: collectionBooks.collectionId,
-      })
+  return cloudDb.transaction(async (tx) => {
+    const visible = await tx
+      .select({ bookId: collectionBooks.bookId })
       .from(collectionBooks)
+      .innerJoin(
+        collectionMembers,
+        eq(collectionMembers.collectionId, collectionBooks.collectionId),
+      )
       .where(
         and(
-          eq(collectionBooks.collectionId, collectionId),
           eq(collectionBooks.bookId, bookId),
+          eq(collectionMembers.userId, userId),
         ),
       )
       .limit(1);
+    if (!visible.length)
+      throw createError({ statusCode: 404, statusMessage: 'Book not found' });
+    // Enforce "Personal is mandatory": user cannot remove from ANY personal collection.
+    // Even if it's not theirs, we treat it as non-removable guardrail.
+    const targetIds = Array.from(
+      new Set([...addCollectionIds, ...removeCollectionIds]),
+    );
 
-    if (existing[0]) continue;
-
-    await cloudDb.insert(collectionBooks).values({
-      collectionId,
-      bookId,
-      addedByUserId: userId,
-      addedAt: now,
-    });
-
-    added.push(collectionId);
-  }
-
-  // REMOVE: idempotent delete from collection_books
-  for (const collectionId of finalRemoveIds) {
-    const res = await cloudDb
-      .delete(collectionBooks)
+    // Load user's membership roles for target collections (RBAC gate: editor/owner for mutations).
+    const memberships = await tx
+      .select({
+        collectionId: collectionMembers.collectionId,
+        role: collectionMembers.role,
+      })
+      .from(collectionMembers)
       .where(
         and(
-          eq(collectionBooks.collectionId, collectionId),
-          eq(collectionBooks.bookId, bookId),
+          eq(collectionMembers.userId, userId),
+          inArray(collectionMembers.collectionId, targetIds),
         ),
       );
 
-    // Drizzle's delete result typing varies by driver; be conservative:
-    // treat as "removed" if we attempted the delete and the pair is now absent.
-    const stillThere = await cloudDb
-      .select({ collectionId: collectionBooks.collectionId })
-      .from(collectionBooks)
-      .where(
-        and(
-          eq(collectionBooks.collectionId, collectionId),
-          eq(collectionBooks.bookId, bookId),
-        ),
-      )
-      .limit(1);
+    const roleByCollectionId = new Map(
+      memberships.map((m) => [m.collectionId, m.role] as const),
+    );
 
-    if (!stillThere[0]) {
-      removed.push(collectionId);
-    } else {
-      // If it remains, something is off (race or constraint). Don’t hard-fail;
-      // return partial success and log for investigation.
-      logger.warn(
-        { bookId, collectionId, deleteResult: res },
-        'PUT /api/books/:id/collections: expected row to be deleted but it still exists',
-      );
+    const canEdit = (collectionId: string) => {
+      const role = roleByCollectionId.get(collectionId);
+      return role === 'owner' || role === 'editor';
+    };
+
+    const forbidden: string[] = [];
+    const eligibleAdd: string[] = [];
+    const eligibleRemove: string[] = [];
+
+    for (const id of addCollectionIds) {
+      if (!canEdit(id)) forbidden.push(id);
+      else eligibleAdd.push(id);
     }
-  }
 
-  return {
-    success: true,
-    data: {
-      added,
-      removed,
-      forbidden: uniqueForbidden,
-      ignoredPersonalRemovals: Array.from(new Set(ignoredPersonalRemovals)),
-    },
-  };
+    // For removals, we also need Personal guardrails; we’ll evaluate after loading collection.isPersonal.
+    for (const id of removeCollectionIds) {
+      if (!canEdit(id)) forbidden.push(id);
+      else eligibleRemove.push(id);
+    }
+
+    const uniqueForbidden = Array.from(new Set(forbidden));
+
+    // Determine which eligible removes are blocked due to Personal.
+    const ignoredPersonalRemovals: string[] = [];
+    let finalRemoveIds = eligibleRemove;
+
+    if (eligibleRemove.length) {
+      const personalRows = await tx
+        .select({
+          id: collections.id,
+          isPersonal: collections.isPersonal,
+        })
+        .from(collections)
+        .where(inArray(collections.id, eligibleRemove));
+
+      const personalSet = new Set(
+        personalRows.filter((r) => r.isPersonal).map((r) => r.id),
+      );
+
+      if (personalSet.size) {
+        ignoredPersonalRemovals.push(
+          ...eligibleRemove.filter((id) => personalSet.has(id)),
+        );
+        finalRemoveIds = eligibleRemove.filter((id) => !personalSet.has(id));
+      }
+    }
+
+    const now = new Date();
+
+    const added: string[] = [];
+    const removed: string[] = [];
+
+    // ADD: idempotent insert into collection_books (skip if already exists)
+    for (const collectionId of eligibleAdd) {
+      const existing = await tx
+        .select({
+          collectionId: collectionBooks.collectionId,
+        })
+        .from(collectionBooks)
+        .where(
+          and(
+            eq(collectionBooks.collectionId, collectionId),
+            eq(collectionBooks.bookId, bookId),
+          ),
+        )
+        .limit(1);
+
+      if (existing[0]) continue;
+
+      await tx.insert(collectionBooks).values({
+        collectionId,
+        bookId,
+        addedByUserId: userId,
+        addedAt: now,
+      });
+
+      added.push(collectionId);
+    }
+
+    // REMOVE: idempotent delete from collection_books
+    for (const collectionId of finalRemoveIds) {
+      const res = await tx
+        .delete(collectionBooks)
+        .where(
+          and(
+            eq(collectionBooks.collectionId, collectionId),
+            eq(collectionBooks.bookId, bookId),
+          ),
+        );
+
+      // Drizzle's delete result typing varies by driver; be conservative:
+      // treat as "removed" if we attempted the delete and the pair is now absent.
+      const stillThere = await tx
+        .select({ collectionId: collectionBooks.collectionId })
+        .from(collectionBooks)
+        .where(
+          and(
+            eq(collectionBooks.collectionId, collectionId),
+            eq(collectionBooks.bookId, bookId),
+          ),
+        )
+        .limit(1);
+
+      if (!stillThere[0]) {
+        removed.push(collectionId);
+      } else {
+        // If it remains, something is off (race or constraint). Don’t hard-fail;
+        // return partial success and log for investigation.
+        logger.warn(
+          { bookId, collectionId, deleteResult: res },
+          'PUT /api/books/:id/collections: expected row to be deleted but it still exists',
+        );
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        added,
+        removed,
+        forbidden: uniqueForbidden,
+        ignoredPersonalRemovals: Array.from(new Set(ignoredPersonalRemovals)),
+      },
+    };
+  });
 });

@@ -120,8 +120,8 @@ function getBaseDefaults(): BaseUserSettings {
       glossySpine: true,
       roundedRight: false,
       grayscale: false,
-      authorsMaxCovers: -1,
-      seriesMaxCovers: -1,
+      authorsMaxCovers: 8,
+      seriesMaxCovers: 8,
       publishersMaxCovers: 8,
       tagsMaxCovers: 8,
     },
@@ -321,10 +321,55 @@ function buildSettingsPatch(
   return patch as Partial<BaseUserSettings>;
 }
 
+function mergeConcurrentEdits(
+  base: unknown,
+  local: unknown,
+  remote: unknown,
+): unknown {
+  if (JSON.stringify(base) === JSON.stringify(local)) return remote;
+  if (
+    base &&
+    local &&
+    remote &&
+    typeof base === 'object' &&
+    typeof local === 'object' &&
+    typeof remote === 'object' &&
+    !Array.isArray(base) &&
+    !Array.isArray(local) &&
+    !Array.isArray(remote)
+  ) {
+    const b = base as Record<string, unknown>;
+    const l = local as Record<string, unknown>;
+    const r = remote as Record<string, unknown>;
+    return Object.fromEntries(
+      [
+        ...new Set([...Object.keys(b), ...Object.keys(l), ...Object.keys(r)]),
+      ].map((key) => [key, mergeConcurrentEdits(b[key], l[key], r[key])]),
+    );
+  }
+  return local;
+}
+
+function timestampMillis(value: string | number | Date): number {
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function nextSettingsRevision(...timestamps: (string | number | Date)[]): Date {
+  return new Date(
+    Math.max(
+      Date.now(),
+      ...timestamps.map((timestamp) => timestampMillis(timestamp) + 1),
+    ),
+  );
+}
+
 export const useUserSettingsStore = defineStore(
   'userSettings',
   () => {
     const settings = ref<UserSettings>(getDefaultSettings());
+    let editBase: UserSettings | null = null;
+    let acknowledgedRevision = 0;
     const isMobile = useIsMobileDevice();
     const activeSettings = computed<BaseUserSettings>(() => {
       const base = getBaseSettings(settings.value);
@@ -343,19 +388,60 @@ export const useUserSettingsStore = defineStore(
      * Push the full user settings blob to the server.
      * Keep this intentionally lightweight; server stores JSON.
      */
-    async function push() {
+    async function push(attempt = 0) {
       const { session } = useAuth();
       if (!session.value) return;
 
-      await $fetch('/api/settings/user', {
+      const sessionId = session.value.id;
+      const snapshot = JSON.stringify(settings.value);
+      const revision = timestampMillis(updatedAt.value);
+      const result = await $fetch<{
+        success: boolean;
+        accepted: boolean;
+        data?: {
+          settings: Partial<UserSettings>;
+          updatedAt: string | Date;
+        } | null;
+      }>('/api/settings/user', {
         method: 'PUT',
         body: {
-          settings: settings.value,
-          updatedAt: updatedAt.value,
+          settings: JSON.parse(snapshot),
+          updatedAt: new Date(revision),
         },
       });
 
-      synced.value = true;
+      if (session.value?.id !== sessionId) return;
+      const unchanged =
+        revision === timestampMillis(updatedAt.value) &&
+        snapshot === JSON.stringify(settings.value);
+      if (result.success && result.accepted) {
+        if (revision >= acknowledgedRevision) {
+          acknowledgedRevision = revision;
+          editBase = unchanged ? null : JSON.parse(snapshot);
+        }
+        if (unchanged) synced.value = true;
+        return;
+      }
+      if (!unchanged) return;
+      synced.value = false;
+      if (!result.data) return;
+      const remote = normalizeSettings({
+        ...settings.value,
+        ...result.data.settings,
+      });
+      settings.value = normalizeSettings(
+        mergeConcurrentEdits(
+          editBase ?? JSON.parse(snapshot),
+          settings.value,
+          remote,
+        ) as UserSettings,
+      );
+      editBase = cloneValue(remote);
+      updatedAt.value = nextSettingsRevision(
+        updatedAt.value,
+        result.data.updatedAt,
+      );
+      if (attempt < 2) await push(attempt + 1);
     }
 
     /**
@@ -366,18 +452,43 @@ export const useUserSettingsStore = defineStore(
       const { session } = useAuth();
       if (!session.value) return;
 
+      const sessionId = session.value.id;
+      const before = cloneValue(settings.value);
       const res = await $fetch<SettingsApiGetResponse>('/api/settings', {
         method: 'GET',
       });
 
       const remote = res?.data?.userSettings;
-      if (!remote) return;
-
-      // Apply remote settings without triggering a push.
-      applyRemoteSettings(
-        remote.settings as Partial<UserSettings>,
-        remote.updatedAt,
-      );
+      if (
+        !remote ||
+        session.value?.id !== sessionId ||
+        timestampMillis(remote.updatedAt) < acknowledgedRevision
+      )
+        return;
+      const changed =
+        editBase !== null ||
+        JSON.stringify(before) !== JSON.stringify(settings.value);
+      const remoteSettings = normalizeSettings({
+        ...before,
+        ...(remote.settings as Partial<UserSettings>),
+      });
+      const merged = mergeConcurrentEdits(
+        editBase ?? before,
+        settings.value,
+        remoteSettings,
+      ) as UserSettings;
+      if (changed) {
+        settings.value = normalizeSettings(merged);
+        editBase = cloneValue(remoteSettings);
+        updatedAt.value = nextSettingsRevision(
+          updatedAt.value,
+          remote.updatedAt,
+        );
+        synced.value = false;
+        debouncedPush();
+      } else {
+        applyRemoteSettings(merged, remote.updatedAt);
+      }
     }
 
     /**
@@ -391,9 +502,15 @@ export const useUserSettingsStore = defineStore(
       if (!remote || Object.keys(remote).length === 0) return;
 
       settings.value = normalizeSettings({ ...settings.value, ...remote });
-      updatedAt.value = remoteUpdatedAt
-        ? new Date(remoteUpdatedAt)
-        : new Date();
+      editBase = null;
+      updatedAt.value =
+        remoteUpdatedAt !== undefined
+          ? new Date(timestampMillis(remoteUpdatedAt))
+          : new Date();
+      acknowledgedRevision = Math.max(
+        acknowledgedRevision,
+        timestampMillis(updatedAt.value),
+      );
       synced.value = true;
     }
 
@@ -426,6 +543,7 @@ export const useUserSettingsStore = defineStore(
       enabled: boolean,
       opts?: { immediate?: boolean },
     ) {
+      editBase ??= cloneValue(settings.value);
       const baseSettings = getBaseSettings(settings.value);
       const nextMobileSettings =
         enabled && !settings.value.mobile.enabled
@@ -440,7 +558,7 @@ export const useUserSettingsStore = defineStore(
           settings: nextMobileSettings,
         },
       });
-      updatedAt.value = new Date();
+      updatedAt.value = nextSettingsRevision(updatedAt.value);
       synced.value = false;
 
       if (opts?.immediate) {
@@ -456,6 +574,7 @@ export const useUserSettingsStore = defineStore(
     ) {
       if (!updated || Object.keys(updated).length === 0) return;
 
+      editBase ??= cloneValue(settings.value);
       const nextMobileSettings = mergeRecord(
         settings.value.mobile.settings as unknown as Record<string, unknown>,
         updated as unknown as Record<string, unknown>,
@@ -468,7 +587,7 @@ export const useUserSettingsStore = defineStore(
           settings: nextMobileSettings,
         },
       });
-      updatedAt.value = new Date();
+      updatedAt.value = nextSettingsRevision(updatedAt.value);
       synced.value = false;
 
       if (opts?.immediate) {
@@ -487,6 +606,7 @@ export const useUserSettingsStore = defineStore(
     ) {
       if (!updated || Object.keys(updated).length === 0) return;
 
+      editBase ??= cloneValue(settings.value);
       const baseSettings = getBaseSettings(settings.value);
 
       const nextBaseSettings = usingMobileOverrides.value
@@ -514,7 +634,7 @@ export const useUserSettingsStore = defineStore(
           settings: nextMobileSettings,
         },
       });
-      updatedAt.value = new Date();
+      updatedAt.value = nextSettingsRevision(updatedAt.value);
       synced.value = false;
 
       if (opts?.immediate) {
@@ -564,10 +684,12 @@ export const useUserSettingsStore = defineStore(
       });
     }
 
-    const updatedAt = ref<Date>(new Date(0));
+    const updatedAt = ref<string | Date>(new Date(0));
     const synced = ref(true);
 
     function $reset() {
+      editBase = null;
+      acknowledgedRevision = 0;
       settings.value = getDefaultSettings();
       updatedAt.value = new Date(0);
       synced.value = true;

@@ -13,6 +13,7 @@ useHead({
 
 // Scope (collection) lives in the header collection switcher dropdown.
 const collectionsStore = useCollectionsStore();
+const router = useRouter();
 
 type FetchErrorLike = {
   data?: { message?: string };
@@ -22,6 +23,7 @@ type FetchErrorLike = {
 
 type SeriesListResponse = {
   data?: {
+    hasMore?: boolean;
     series?: Array<{
       id: string;
       name: string;
@@ -57,79 +59,65 @@ const seriesRows = ref<SeriesRow[]>([]);
 const loadingSeries = ref(false);
 const seriesQuery = ref('');
 
-const filteredSeries = computed(() => {
-  const q = seriesQuery.value.trim().toLowerCase();
-  const list = seriesRows.value;
-  if (!q) return list;
-  return list.filter((s) => s.name.toLowerCase().includes(q));
-});
+const filteredSeries = seriesRows;
+const hasMore = ref(false);
+let generation = 0;
+const userSettingsStore = useUserSettingsStore();
+const maxSeriesCovers = userSettingsStore.settingRef<number>(
+  'coverStyle.seriesMaxCovers',
+);
 
-async function refreshSeries() {
+async function refreshSeries(append = false) {
+  const request = append ? generation : ++generation;
   loadingSeries.value = true;
   errorMessage.value = null;
-
+  if (!append) {
+    seriesRows.value = [];
+    hasMore.value = false;
+  }
   try {
-    const query: Record<string, string> = {};
+    const query: Record<string, string> = {
+      offset: String(append ? seriesRows.value.length : 0),
+      search: seriesQuery.value.trim(),
+      previewLimit: String(maxSeriesCovers.value ?? 8),
+    };
     if (
       collectionsStore.activeSelection.kind === 'collection' &&
       collectionsStore.activeSelection.collectionId
     ) {
       query.collectionId = collectionsStore.activeSelection.collectionId;
     }
-
-    // Use dedicated list endpoint so this view isn't dependent on how many books were loaded.
-    const res = await $fetch<SeriesListResponse>('/api/series', {
-      method: 'GET',
-      query,
-    });
-
-    const list = res?.data?.series ?? [];
-
-    // Keep client-side sort stable/predictable (server may already sort).
-    seriesRows.value = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    const res = await $fetch<SeriesListResponse>('/api/series', { query });
+    if (request !== generation) return;
+    const list = res.data?.series ?? [];
+    seriesRows.value = append ? [...seriesRows.value, ...list] : list;
+    hasMore.value = res.data?.hasMore ?? false;
   } catch (err) {
+    if (request !== generation) return;
     const e = err as FetchErrorLike;
     errorMessage.value =
       e?.data?.message ||
       e?.statusMessage ||
       e?.message ||
       'Failed to load series';
-    seriesRows.value = [];
   } finally {
-    loadingSeries.value = false;
+    if (request === generation) loadingSeries.value = false;
   }
 }
 
-const userSettingsStore = useUserSettingsStore();
-const maxSeriesCovers = userSettingsStore.settingRef<number>(
-  'coverStyle.seriesMaxCovers',
-);
-
-// ------------------------------
-// UI helpers
-// ------------------------------
 watch(
-  () => collectionsStore.activeSelection,
-  async () => {
-    await refreshActiveView();
+  [() => collectionsStore.activeSelection, seriesQuery, maxSeriesCovers],
+  () => {
+    void refreshSeries();
   },
-  { deep: true },
+  { deep: true, flush: 'sync' },
 );
-
-async function refreshActiveView() {
-  // Ensure collections are loaded so collection-scoped queries are valid after navigation.
-  if (!collectionsStore.collections.length) {
-    await collectionsStore.fetchCollections();
-  }
-
-  await refreshSeries();
-}
 
 onMounted(async () => {
-  await refreshActiveView();
+  if (!collectionsStore.collections.length)
+    await collectionsStore.fetchCollections();
+  await refreshSeries();
 });
-
-const router = useRouter();
 </script>
 
 <template>
@@ -160,7 +148,10 @@ const router = useRouter();
               />
             </div>
 
-            <div v-if="loadingSeries" class="text-sm opacity-80">
+            <div
+              v-if="loadingSeries && !seriesRows.length"
+              class="text-sm opacity-80"
+            >
               Loading...
             </div>
 
@@ -233,6 +224,15 @@ const router = useRouter();
                 </div>
               </div>
             </div>
+            <button
+              v-if="hasMore"
+              type="button"
+              class="px-3 py-2 rounded-md border border-(--sub-color) text-sm"
+              :disabled="loadingSeries"
+              @click="refreshSeries(true)"
+            >
+              {{ loadingSeries ? 'Loading...' : 'Load more' }}
+            </button>
           </div>
         </div>
       </div>

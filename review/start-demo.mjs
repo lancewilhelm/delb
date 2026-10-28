@@ -21,17 +21,24 @@ const env = {
   NUXT_TELEMETRY_DISABLED: '1',
   NODE_OPTIONS: '--require ' + path.resolve('review/deny-outbound.cjs'),
   LOG_LEVEL: 'warn',
+  NITRO_HOST: '127.0.0.1',
+  NITRO_PORT: '4317',
+  NODE_ENV: process.argv.includes('--production')
+    ? 'production'
+    : 'development',
 };
 const child = spawn(
   process.execPath,
-  [
-    'node_modules/nuxt/bin/nuxt.mjs',
-    'dev',
-    '--host',
-    '127.0.0.1',
-    '--port',
-    '4317',
-  ],
+  process.argv.includes('--production')
+    ? ['.output/server/index.mjs']
+    : [
+        'node_modules/nuxt/bin/nuxt.mjs',
+        'dev',
+        '--host',
+        '127.0.0.1',
+        '--port',
+        '4317',
+      ],
   { env, stdio: 'inherit' },
 );
 for (const signal of ['SIGINT', 'SIGTERM'])

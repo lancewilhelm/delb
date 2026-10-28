@@ -23,6 +23,7 @@ type FetchErrorLike = {
 
 type PublishersListResponse = {
   data?: {
+    hasMore?: boolean;
     publishers?: Array<{
       id: string;
       name: string;
@@ -56,78 +57,66 @@ const publishers = ref<PublisherRow[]>([]);
 const loadingPublishers = ref(false);
 const publisherQuery = ref('');
 
-const filteredPublishers = computed(() => {
-  const q = publisherQuery.value.trim().toLowerCase();
-  const list = publishers.value;
-  if (!q) return list;
-  return list.filter((p) => p.name.toLowerCase().includes(q));
-});
+const filteredPublishers = publishers;
+const hasMore = ref(false);
+let generation = 0;
+const userSettingsStore = useUserSettingsStore();
+const maxPublishersCovers = userSettingsStore.settingRef<number>(
+  'coverStyle.publishersMaxCovers',
+);
 
-async function refreshPublishers() {
+async function refreshPublishers(append = false) {
+  const request = append ? generation : ++generation;
   loadingPublishers.value = true;
   errorMessage.value = null;
-
+  if (!append) {
+    publishers.value = [];
+    hasMore.value = false;
+  }
   try {
-    const query: Record<string, string> = {};
+    const query: Record<string, string> = {
+      offset: String(append ? publishers.value.length : 0),
+      search: publisherQuery.value.trim(),
+      previewLimit: String(maxPublishersCovers.value ?? 8),
+    };
     if (
       collectionsStore.activeSelection.kind === 'collection' &&
       collectionsStore.activeSelection.collectionId
     ) {
       query.collectionId = collectionsStore.activeSelection.collectionId;
     }
-
-    // Use dedicated list endpoint so this view isn't dependent on how many books were loaded.
     const res = await $fetch<PublishersListResponse>('/api/publishers', {
-      method: 'GET',
       query,
     });
-
-    const list = res?.data?.publishers ?? [];
-
-    // Keep client-side sort stable/predictable (server may already sort).
-    publishers.value = [...list].sort((a, b) => a.name.localeCompare(b.name));
-  } catch (err: unknown) {
+    if (request !== generation) return;
+    const list = res.data?.publishers ?? [];
+    publishers.value = append ? [...publishers.value, ...list] : list;
+    hasMore.value = res.data?.hasMore ?? false;
+  } catch (err) {
+    if (request !== generation) return;
     const e = err as FetchErrorLike;
     errorMessage.value =
       e?.data?.message ||
       e?.statusMessage ||
       e?.message ||
       'Failed to load publishers';
-    publishers.value = [];
   } finally {
-    loadingPublishers.value = false;
+    if (request === generation) loadingPublishers.value = false;
   }
 }
 
-const userSettingsStore = useUserSettingsStore();
-const maxPublishersCovers = userSettingsStore.settingRef<number>(
-  'coverStyle.publishersMaxCovers',
-);
-
-// ------------------------------
-// UI helpers
-// ------------------------------
-// When scope changes, refresh the result set for the active view.
 watch(
-  () => collectionsStore.activeSelection,
-  async () => {
-    // When scope changes, refresh the result set for the active view.
-    await refreshActiveView();
+  [() => collectionsStore.activeSelection, publisherQuery, maxPublishersCovers],
+  () => {
+    void refreshPublishers();
   },
-  { deep: true },
+  { deep: true, flush: 'sync' },
 );
-
-async function refreshActiveView() {
-  // Ensure collections are loaded so collection-scoped queries are valid after navigation.
-  if (!collectionsStore.collections.length) {
-    await collectionsStore.fetchCollections();
-  }
-
-  await refreshPublishers();
-}
 
 onMounted(async () => {
-  await refreshActiveView();
+  if (!collectionsStore.collections.length)
+    await collectionsStore.fetchCollections();
+  await refreshPublishers();
 });
 </script>
 
@@ -161,7 +150,10 @@ onMounted(async () => {
               />
             </div>
 
-            <div v-if="loadingPublishers" class="text-sm opacity-80">
+            <div
+              v-if="loadingPublishers && !publishers.length"
+              class="text-sm opacity-80"
+            >
               Loading...
             </div>
 
@@ -226,6 +218,15 @@ onMounted(async () => {
                 </div>
               </div>
             </div>
+            <button
+              v-if="hasMore"
+              type="button"
+              class="px-3 py-2 rounded-md border border-(--sub-color) text-sm"
+              :disabled="loadingPublishers"
+              @click="refreshPublishers(true)"
+            >
+              {{ loadingPublishers ? 'Loading...' : 'Load more' }}
+            </button>
           </div>
         </div>
       </div>

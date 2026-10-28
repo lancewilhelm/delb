@@ -445,6 +445,8 @@ export const userBookReadingPosition = sqliteTable(
      * Keep nullable because some locations may not provide progress.
      */
     progress: real('progress'),
+    clientSessionId: text('client_session_id'),
+    clientSequence: integer('client_sequence'),
 
     updatedAt: integer('updated_at', { mode: 'timestamp' })
       .notNull()
@@ -573,7 +575,7 @@ export const bookNotes = sqliteTable('book_notes', {
 export const userSettings = sqliteTable('user_settings', {
   userId: text('user_id').primaryKey().unique(),
   settings: text('settings', { mode: 'json' }).notNull().default('{}'),
-  updatedAt: integer('updated_at', { mode: 'timestamp' })
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
     .notNull()
     .$defaultFn(() => new Date()),
 });
@@ -657,3 +659,15 @@ export type SelectUserBookProgressLog = InferSelectModel<
 >;
 export type SelectBookRating = InferSelectModel<typeof bookRatings>;
 export type SelectBookNote = InferSelectModel<typeof bookNotes>;
+
+export const storageOperations = sqliteTable('storage_operations', {
+  id: text('id').primaryKey(),
+  bookId: text('book_id').notNull(),
+  kind: text('kind').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
+export const systemState = sqliteTable('system_state', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+});

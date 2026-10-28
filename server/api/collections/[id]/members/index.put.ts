@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { auth } from '~/utils/auth';
@@ -70,21 +70,6 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Resolve email -> userId
-  const userRows = await cloudDb
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
-
-  const targetUserId = userRows[0]?.id ?? '';
-  if (!targetUserId) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: 'User not found',
-    });
-  }
-
   // Ensure collection exists and is not Personal (non-shareable)
   const c = await cloudDb
     .select({
@@ -129,6 +114,21 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
   }
 
+  // Resolve email -> userId
+  const userRows = await cloudDb
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+
+  const targetUserId = userRows[0]?.id ?? '';
+  if (!targetUserId) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: 'User not found',
+    });
+  }
+
   // Guardrail: user cannot change their own role here.
   if (targetUserId === actingUserId) {
     throw createError({
@@ -141,7 +141,7 @@ export default defineEventHandler(async (event) => {
 
   // Upsert membership (manual upsert to stay compatible with SQLite/Drizzle setup)
   const existing = await cloudDb
-    .select({ userId: collectionMembers.userId })
+    .select({ userId: collectionMembers.userId, role: collectionMembers.role })
     .from(collectionMembers)
     .where(
       and(
@@ -151,16 +151,30 @@ export default defineEventHandler(async (event) => {
     )
     .limit(1);
 
+  if (existing[0]?.role === 'owner') {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Transfer ownership before changing the owner role',
+    });
+  }
   if (existing[0]?.userId) {
-    await cloudDb
+    const updated = await cloudDb
       .update(collectionMembers)
       .set({ role })
       .where(
         and(
           eq(collectionMembers.collectionId, id),
           eq(collectionMembers.userId, targetUserId),
+          ne(collectionMembers.role, 'owner'),
         ),
-      );
+      )
+      .returning({ userId: collectionMembers.userId });
+    if (!updated.length) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Transfer ownership before changing the owner role',
+      });
+    }
   } else {
     await cloudDb.insert(collectionMembers).values({
       collectionId: id,

@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
+import { savePosition } from '~~/server/utils/books/save-position';
 import {
   books,
   collectionBooks,
@@ -47,6 +48,8 @@ export default defineEventHandler(async (event) => {
   const body = (await readBody(event).catch(() => null)) as {
     location?: unknown;
     progress?: unknown;
+    clientSessionId?: unknown;
+    clientSequence?: unknown;
   } | null;
 
   const rawLocation = body?.location;
@@ -54,6 +57,25 @@ export default defineEventHandler(async (event) => {
 
   const wantsClear =
     rawLocation === null || rawLocation === undefined || rawLocation === '';
+
+  const clientSessionId = body?.clientSessionId;
+  const clientSequence = body?.clientSequence;
+  const hasSession =
+    clientSessionId !== undefined || clientSequence !== undefined;
+  if (
+    hasSession &&
+    (wantsClear ||
+      typeof clientSessionId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        clientSessionId,
+      ) ||
+      typeof clientSequence !== 'number' ||
+      !Number.isSafeInteger(clientSequence) ||
+      clientSequence < 1)
+  ) {
+    setResponseStatus(event, 400);
+    return { success: false, message: 'Invalid client session or sequence.' };
+  }
 
   let location: string | null = null;
   if (!wantsClear) {
@@ -138,31 +160,18 @@ export default defineEventHandler(async (event) => {
       return { success: true, data: { location: null, progress: null } };
     }
 
-    const updatedAt = new Date();
-
-    const updateRes = await cloudDb
-      .update(userBookReadingPosition)
-      .set({ location: location ?? '', progress, updatedAt })
-      .where(
-        and(
-          eq(userBookReadingPosition.userId, userId),
-          eq(userBookReadingPosition.bookId, bookId),
-        ),
-      );
-
-    const rowsAffected =
-      typeof updateRes === 'number'
-        ? updateRes
-        : ((updateRes as { rowsAffected?: number })?.rowsAffected ?? 0);
-
-    if (!rowsAffected) {
-      await cloudDb.insert(userBookReadingPosition).values({
-        userId,
-        bookId,
-        location: location ?? '',
-        progress,
-        updatedAt,
-      });
+    const result = await savePosition(cloudDb, {
+      userId,
+      bookId,
+      location: location ?? '',
+      progress,
+      clientSessionId:
+        typeof clientSessionId === 'string' ? clientSessionId : null,
+      clientSequence:
+        typeof clientSequence === 'number' ? clientSequence : null,
+    });
+    if (!result.accepted) {
+      return { success: true, data: result.position };
     }
 
     if (progress != null) {
@@ -231,32 +240,6 @@ export default defineEventHandler(async (event) => {
 
     return { success: true, data: { location, progress } };
   } catch (error: unknown) {
-    const message =
-      typeof error === 'object' && error !== null && 'message' in error
-        ? String((error as { message?: unknown }).message ?? '')
-        : '';
-
-    if (message.toLowerCase().includes('unique')) {
-      try {
-        await cloudDb
-          .update(userBookReadingPosition)
-          .set({ location: location ?? '', progress, updatedAt: new Date() })
-          .where(
-            and(
-              eq(userBookReadingPosition.userId, userId),
-              eq(userBookReadingPosition.bookId, bookId),
-            ),
-          );
-
-        return { success: true, data: { location, progress } };
-      } catch (e) {
-        logger.error(
-          e,
-          'PUT /api/books/:id/reading-position: Error after unique retry',
-        );
-      }
-    }
-
     logger.error(
       error,
       'PUT /api/books/:id/reading-position: Error updating reading position',

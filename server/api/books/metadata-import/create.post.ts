@@ -1,3 +1,4 @@
+import { withBookStorageLock } from '~~/server/utils/books/storage/book-lock';
 import path from 'node:path';
 import { mkdir } from 'node:fs/promises';
 
@@ -125,8 +126,10 @@ function getGoogleCoverUrlFromVolumeInfo(vi: {
   return raw.replace('&edge=curl', '');
 }
 
-async function findOrCreateTagByName(name: string) {
-  const existing = await cloudDb
+type Transaction = Parameters<Parameters<typeof cloudDb.transaction>[0]>[0];
+
+async function findOrCreateTagByName(name: string, db: Transaction) {
+  const existing = await db
     .select()
     .from(tags)
     .where(eq(tags.name, name))
@@ -137,7 +140,7 @@ async function findOrCreateTagByName(name: string) {
   const id = crypto.randomUUID();
   const now = new Date();
 
-  await cloudDb.insert(tags).values({
+  await db.insert(tags).values({
     id,
     name,
     createdAt: now,
@@ -262,8 +265,8 @@ async function resolveCollectionIdsOrPersonal(opts: {
  * Find or create an author by name (lean v1: unique by exact name).
  * Matches upload approach.
  */
-async function findOrCreateAuthorByName(name: string) {
-  const existing = await cloudDb
+async function findOrCreateAuthorByName(name: string, db: Transaction) {
+  const existing = await db
     .select()
     .from(authors)
     .where(eq(authors.name, name))
@@ -274,7 +277,7 @@ async function findOrCreateAuthorByName(name: string) {
   const id = crypto.randomUUID();
   const now = new Date();
 
-  await cloudDb.insert(authors).values({
+  await db.insert(authors).values({
     id,
     name,
     sortName: makeAuthorSortKey(name),
@@ -289,8 +292,8 @@ async function findOrCreateAuthorByName(name: string) {
  * Find-or-create publisher/series by name if schema supports it.
  * These are best-effort and will be skipped if insert fails due to constraints.
  */
-async function findOrCreatePublisherByName(name: string) {
-  const existing = await cloudDb
+async function findOrCreatePublisherByName(name: string, db: Transaction) {
+  const existing = await db
     .select()
     .from(publishers)
     .where(eq(publishers.name, name))
@@ -301,7 +304,7 @@ async function findOrCreatePublisherByName(name: string) {
   const id = crypto.randomUUID();
   const now = new Date();
 
-  await cloudDb.insert(publishers).values({
+  await db.insert(publishers).values({
     id,
     name,
     createdAt: now,
@@ -311,8 +314,8 @@ async function findOrCreatePublisherByName(name: string) {
   return { id, name };
 }
 
-async function findOrCreateSeriesByName(name: string) {
-  const existing = await cloudDb
+async function findOrCreateSeriesByName(name: string, db: Transaction) {
+  const existing = await db
     .select()
     .from(series)
     .where(eq(series.name, name))
@@ -323,7 +326,7 @@ async function findOrCreateSeriesByName(name: string) {
   const id = crypto.randomUUID();
   const now = new Date();
 
-  await cloudDb.insert(series).values({
+  await db.insert(series).values({
     id,
     name,
     createdAt: now,
@@ -333,18 +336,55 @@ async function findOrCreateSeriesByName(name: string) {
   return { id, name };
 }
 
-async function addBookToCollectionsMissing(opts: {
-  userId: string;
-  bookId: string;
-  collectionIds: string[];
-}) {
+async function addBookToCollectionsMissingTx(
+  tx: Transaction,
+  opts: {
+    userId: string;
+    bookId: string;
+    collectionIds: string[];
+  },
+) {
   const uniqueCollectionIds = Array.from(new Set(opts.collectionIds)).filter(
     Boolean,
   );
   if (!uniqueCollectionIds.length)
     return { addedCollectionIds: [] as string[] };
 
-  const existing = await cloudDb
+  const visible = await tx
+    .select({ id: collectionBooks.bookId })
+    .from(collectionBooks)
+    .innerJoin(
+      collectionMembers,
+      eq(collectionMembers.collectionId, collectionBooks.collectionId),
+    )
+    .where(
+      and(
+        eq(collectionBooks.bookId, opts.bookId),
+        eq(collectionMembers.userId, opts.userId),
+      ),
+    )
+    .limit(1);
+  if (!visible.length)
+    throw createError({ statusCode: 404, statusMessage: 'Book not found' });
+  const memberships = await tx
+    .select({
+      id: collectionMembers.collectionId,
+      role: collectionMembers.role,
+    })
+    .from(collectionMembers)
+    .where(
+      and(
+        eq(collectionMembers.userId, opts.userId),
+        inArray(collectionMembers.collectionId, uniqueCollectionIds),
+      ),
+    );
+  if (
+    memberships.filter((m) => m.role === 'owner' || m.role === 'editor')
+      .length !== uniqueCollectionIds.length
+  ) {
+    throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
+  }
+  const existing = await tx
     .select({ collectionId: collectionBooks.collectionId })
     .from(collectionBooks)
     .where(
@@ -360,7 +400,7 @@ async function addBookToCollectionsMissing(opts: {
 
   const now = new Date();
   for (const collectionId of missing) {
-    await cloudDb.insert(collectionBooks).values({
+    await tx.insert(collectionBooks).values({
       collectionId,
       bookId: opts.bookId,
       addedByUserId: opts.userId,
@@ -369,6 +409,14 @@ async function addBookToCollectionsMissing(opts: {
   }
 
   return { addedCollectionIds: missing };
+}
+
+async function addBookToCollectionsMissing(opts: {
+  userId: string;
+  bookId: string;
+  collectionIds: string[];
+}) {
+  return cloudDb.transaction((tx) => addBookToCollectionsMissingTx(tx, opts));
 }
 
 export default defineEventHandler(async (event) => {
@@ -472,7 +520,7 @@ export default defineEventHandler(async (event) => {
   const categories = Array.isArray(vi.categories)
     ? uniqByLower(vi.categories)
     : [];
-  const industryIdentifiers = Array.isArray(vi.industryIdentifiers)
+  const rawIdentifiers = Array.isArray(vi.industryIdentifiers)
     ? vi.industryIdentifiers
         .map((x) => ({
           type: normalizeIdentifierTypeFromProvider(
@@ -485,10 +533,15 @@ export default defineEventHandler(async (event) => {
         .filter((x) => x.type && x.value)
     : [];
 
+  const industryIdentifiers = Array.from(
+    new Map(rawIdentifiers.map((item) => [item.type, item])).values(),
+  );
+
   const coverUrl = getGoogleCoverUrlFromVolumeInfo(vi);
 
   const now = new Date();
   const candidates = await findPossibleDuplicates({
+    userId,
     title,
     author: authorsToAttach.join(', '),
     identifiers: industryIdentifiers,
@@ -577,194 +630,193 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    // Replace: clear and rebuild author/tag/identifier links, then overwrite canonical fields.
-    const update: Partial<typeof books.$inferInsert> = {
-      title,
-      sortTitle: makeTitleSortKey(title),
-      description,
-      published,
-      publishedAt,
-      language,
-      pages,
-      updatedAt: new Date(),
-    };
-
-    // Optional relationships
-    if (publisherName) {
-      try {
-        const pub = await findOrCreatePublisherByName(publisherName);
-        update.publisherId = pub.id;
-      } catch {
-        // ignore
-      }
-    } else {
-      update.publisherId = null;
-    }
-
-    if (seriesName) {
-      try {
-        const s = await findOrCreateSeriesByName(seriesName);
-        update.seriesId = s.id;
-        update.seriesIndex = seriesIndex;
-      } catch {
-        // ignore
-      }
-    } else {
-      update.seriesId = null;
-      update.seriesIndex = null;
-    }
-
-    await cloudDb
-      .update(books)
-      .set(update as never)
-      .where(eq(books.id, replaceBookId));
-
-    await cloudDb
-      .delete(bookAuthors)
-      .where(eq(bookAuthors.bookId, replaceBookId));
-    for (let i = 0; i < authorsToAttach.length; i++) {
-      const name = authorsToAttach[i]!;
-      const author = await findOrCreateAuthorByName(name);
-      await cloudDb.insert(bookAuthors).values({
-        bookId: replaceBookId,
-        authorId: author.id,
-        position: i + 1,
-      });
-    }
-
-    await cloudDb.delete(bookTags).where(eq(bookTags.bookId, replaceBookId));
-    if (categories.length) {
-      for (const name of categories) {
-        const t = await findOrCreateTagByName(name);
-        await cloudDb
-          .insert(bookTags)
-          .values({ bookId: replaceBookId, tagId: t.id });
-      }
-    }
-
-    await cloudDb
-      .delete(bookIdentifiers)
-      .where(eq(bookIdentifiers.bookId, replaceBookId));
-    if (industryIdentifiers.length) {
-      for (const ident of industryIdentifiers) {
-        await cloudDb.insert(bookIdentifiers).values({
-          bookId: replaceBookId,
-          type: ident.type,
-          value: ident.value,
-        });
-      }
-    }
-
-    // Cover (best-effort): same logic as create, but targets the existing book id.
-    // Ensure the canonical folder exists even if we do not have a cover URL.
-    try {
-      const dirMarkerRel = buildBookStorageRelativePath({
-        authorNames: authorsToAttach,
-        title,
-        bookId: replaceBookId,
-        filename: 'dir.marker',
-        baseDir: 'library',
-      });
-
-      const outputDirRelPosix = path.posix.dirname(dirMarkerRel);
-      const outputDirAbs = resolveDataPath(outputDirRelPosix);
-      await mkdir(outputDirAbs, { recursive: true });
-    } catch (e) {
-      logger.warn(
-        {
-          bookId: replaceBookId,
-          err: e instanceof Error ? e.message : String(e),
-        },
-        'metadata-import: failed to ensure canonical book directory (replace; continuing)',
-      );
-    }
-
-    if (coverUrl) {
-      try {
-        logger.debug(
-          { bookId: replaceBookId, provider, coverUrl },
-          'metadata-import: cover (replace): starting',
-        );
-
-        const dirMarkerRel = buildBookStorageRelativePath({
-          authorNames: authorsToAttach,
+    return withBookStorageLock(
+      path.resolve(process.cwd(), 'library'),
+      replaceBookId,
+      async () => {
+        // Replace: clear and rebuild author/tag/identifier links, then overwrite canonical fields.
+        const update: Partial<typeof books.$inferInsert> = {
           title,
-          bookId: replaceBookId,
-          filename: 'cover.thumb.webp',
-          baseDir: 'library',
-        });
+          sortTitle: makeTitleSortKey(title),
+          description,
+          published,
+          publishedAt,
+          language,
+          pages,
+          updatedAt: new Date(),
+        };
 
-        const outputDirRelPosix = path.posix.dirname(dirMarkerRel);
-        const outputDirAbs = resolveDataPath(outputDirRelPosix);
-        await mkdir(outputDirAbs, { recursive: true });
+        const { addedCollectionIds } = await cloudDb.transaction(async (tx) => {
+          // Optional relationships
+          if (publisherName) {
+            const pub = await findOrCreatePublisherByName(publisherName, tx);
+            update.publisherId = pub.id;
+          } else {
+            update.publisherId = null;
+          }
 
-        const { bytes } = await fetchExternalImageBuffer(coverUrl);
+          if (seriesName) {
+            const s = await findOrCreateSeriesByName(seriesName, tx);
+            update.seriesId = s.id;
+            update.seriesIndex = seriesIndex;
+          } else {
+            update.seriesId = null;
+            update.seriesIndex = null;
+          }
 
-        const ensured = await ensureCoverOutputsFromBytes({
-          sourceBytes: bytes,
-          sourceMimeTypeHint: null,
-          sourceExtensionHint: null,
-          processing: {
-            outputDirAbs,
-            outputDirRelPosix,
-            doNotOverwrite: false,
-            sourceFormat: 'original',
-            sourceBaseName: 'cover.source',
-            thumbFileName: 'thumb.webp',
-            thumbMaxWidth: 320,
-            thumbWebpQuality: 80,
-          },
-        });
+          await tx
+            .update(books)
+            .set(update as never)
+            .where(eq(books.id, replaceBookId));
 
-        await cloudDb
-          .update(books)
-          .set({
-            coverImagePath: ensured.covers.thumb.relativePath,
-            updatedAt: new Date(),
-          } as never)
-          .where(eq(books.id, replaceBookId));
-      } catch (e) {
-        logger.warn(
-          {
+          await tx
+            .delete(bookAuthors)
+            .where(eq(bookAuthors.bookId, replaceBookId));
+          for (let i = 0; i < authorsToAttach.length; i++) {
+            const name = authorsToAttach[i]!;
+            const author = await findOrCreateAuthorByName(name, tx);
+            await tx.insert(bookAuthors).values({
+              bookId: replaceBookId,
+              authorId: author.id,
+              position: i + 1,
+            });
+          }
+
+          await tx.delete(bookTags).where(eq(bookTags.bookId, replaceBookId));
+          if (categories.length) {
+            for (const name of categories) {
+              const t = await findOrCreateTagByName(name, tx);
+              await tx
+                .insert(bookTags)
+                .values({ bookId: replaceBookId, tagId: t.id });
+            }
+          }
+
+          await tx
+            .delete(bookIdentifiers)
+            .where(eq(bookIdentifiers.bookId, replaceBookId));
+          if (industryIdentifiers.length) {
+            for (const ident of industryIdentifiers) {
+              await tx.insert(bookIdentifiers).values({
+                bookId: replaceBookId,
+                type: ident.type,
+                value: ident.value,
+              });
+            }
+          }
+
+          return addBookToCollectionsMissingTx(tx, {
+            userId,
             bookId: replaceBookId,
-            err: e instanceof Error ? e.message : String(e),
+            collectionIds,
+          });
+        });
+
+        // Cover (best-effort): same logic as create, but targets the existing book id.
+        // Ensure the canonical folder exists even if we do not have a cover URL.
+        try {
+          const dirMarkerRel = buildBookStorageRelativePath({
+            authorNames: authorsToAttach,
+            title,
+            bookId: replaceBookId,
+            filename: 'dir.marker',
+            baseDir: 'library',
+          });
+
+          const outputDirRelPosix = path.posix.dirname(dirMarkerRel);
+          const outputDirAbs = resolveDataPath(outputDirRelPosix);
+          await mkdir(outputDirAbs, { recursive: true });
+        } catch (e) {
+          logger.warn(
+            {
+              bookId: replaceBookId,
+              err: e instanceof Error ? e.message : String(e),
+            },
+            'metadata-import: failed to ensure canonical book directory (replace; continuing)',
+          );
+        }
+
+        if (coverUrl) {
+          try {
+            logger.debug(
+              { bookId: replaceBookId, provider, coverUrl },
+              'metadata-import: cover (replace): starting',
+            );
+
+            const dirMarkerRel = buildBookStorageRelativePath({
+              authorNames: authorsToAttach,
+              title,
+              bookId: replaceBookId,
+              filename: 'cover.thumb.webp',
+              baseDir: 'library',
+            });
+
+            const outputDirRelPosix = path.posix.dirname(dirMarkerRel);
+            const outputDirAbs = resolveDataPath(outputDirRelPosix);
+            await mkdir(outputDirAbs, { recursive: true });
+
+            const { bytes } = await fetchExternalImageBuffer(coverUrl);
+
+            const ensured = await ensureCoverOutputsFromBytes({
+              sourceBytes: bytes,
+              sourceMimeTypeHint: null,
+              sourceExtensionHint: null,
+              processing: {
+                outputDirAbs,
+                outputDirRelPosix,
+                doNotOverwrite: false,
+                sourceFormat: 'original',
+                sourceBaseName: 'cover.source',
+                thumbFileName: 'thumb.webp',
+                thumbMaxWidth: 320,
+                thumbWebpQuality: 80,
+              },
+            });
+
+            await cloudDb
+              .update(books)
+              .set({
+                coverImagePath: ensured.covers.thumb.relativePath,
+                updatedAt: new Date(),
+              } as never)
+              .where(eq(books.id, replaceBookId));
+          } catch (e) {
+            logger.warn(
+              {
+                bookId: replaceBookId,
+                err: e instanceof Error ? e.message : String(e),
+              },
+              'metadata-import: cover (replace): failed (continuing without cover)',
+            );
+          }
+        }
+
+        // Best-effort: keep storage canonical if title/authors changed.
+        try {
+          await moveBookStorageToCanonical({ bookId: replaceBookId });
+        } catch (e) {
+          logger.warn(
+            {
+              bookId: replaceBookId,
+              err: e instanceof Error ? e.message : String(e),
+            },
+            'metadata-import: replace: move-to-canonical failed',
+          );
+        }
+
+        return {
+          success: true,
+          data: {
+            book: { id: replaceBookId, title },
+            duplicateResolution: 'replace_existing' as const,
+            addedCollectionIds,
+            provider,
+            query,
+            collectionIds,
           },
-          'metadata-import: cover (replace): failed (continuing without cover)',
-        );
-      }
-    }
-
-    // Add to collections (only missing)
-    const { addedCollectionIds } = await addBookToCollectionsMissing({
-      userId,
-      bookId: replaceBookId,
-      collectionIds,
-    });
-
-    // Best-effort: keep storage canonical if title/authors changed.
-    try {
-      await moveBookStorageToCanonical({ bookId: replaceBookId });
-    } catch (e) {
-      logger.warn(
-        {
-          bookId: replaceBookId,
-          err: e instanceof Error ? e.message : String(e),
-        },
-        'metadata-import: replace: move-to-canonical failed',
-      );
-    }
-
-    return {
-      success: true,
-      data: {
-        book: { id: replaceBookId, title },
-        duplicateResolution: 'replace_existing' as const,
-        addedCollectionIds,
-        provider,
-        query,
-        collectionIds,
+        };
       },
-    };
+    );
   }
 
   const bookId = crypto.randomUUID();
@@ -787,63 +839,79 @@ export default defineEventHandler(async (event) => {
     updatedAt: now,
   };
 
-  // Optional relationships (best-effort)
-  try {
+  await cloudDb.transaction(async (tx) => {
+    const memberships = await tx
+      .select({ role: collectionMembers.role })
+      .from(collectionMembers)
+      .where(
+        and(
+          eq(collectionMembers.userId, userId),
+          inArray(collectionMembers.collectionId, collectionIds),
+        ),
+      );
+    if (
+      memberships.filter(
+        (member) => member.role === 'owner' || member.role === 'editor',
+      ).length !== collectionIds.length
+    ) {
+      throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
+    }
+    // Optional relationships
     if (publisherName) {
-      const pub = await findOrCreatePublisherByName(publisherName);
+      const pub = await findOrCreatePublisherByName(publisherName, tx);
       bookInsert.publisherId = pub.id;
     }
-  } catch {
-    // ignore
-  }
 
-  try {
     if (seriesName) {
-      const s = await findOrCreateSeriesByName(seriesName);
+      const s = await findOrCreateSeriesByName(seriesName, tx);
       bookInsert.seriesId = s.id;
       bookInsert.seriesIndex = seriesIndex;
     }
-  } catch {
-    // ignore
-  }
 
-  await cloudDb.insert(books).values(bookInsert as never);
+    await tx.insert(books).values(bookInsert as never);
 
-  // Best-effort relations + metadata tables
+    // Best-effort relations + metadata tables
 
-  // Attach authors (positions are 1-based)
-  for (let i = 0; i < authorsToAttach.length; i++) {
-    const name = authorsToAttach[i]!;
-    const author = await findOrCreateAuthorByName(name);
+    // Attach authors (positions are 1-based)
+    for (let i = 0; i < authorsToAttach.length; i++) {
+      const name = authorsToAttach[i]!;
+      const author = await findOrCreateAuthorByName(name, tx);
 
-    await cloudDb.insert(bookAuthors).values({
-      bookId,
-      authorId: author.id,
-      position: i + 1,
-    });
-  }
-
-  // Tags (from categories)
-  if (categories.length) {
-    for (const name of categories) {
-      const t = await findOrCreateTagByName(name);
-      await cloudDb.insert(bookTags).values({
+      await tx.insert(bookAuthors).values({
         bookId,
-        tagId: t.id,
+        authorId: author.id,
+        position: i + 1,
       });
     }
-  }
 
-  // Identifiers
-  if (industryIdentifiers.length) {
-    for (const ident of industryIdentifiers) {
-      await cloudDb.insert(bookIdentifiers).values({
-        bookId,
-        type: ident.type,
-        value: ident.value,
-      });
+    // Tags (from categories)
+    if (categories.length) {
+      for (const name of categories) {
+        const t = await findOrCreateTagByName(name, tx);
+        await tx.insert(bookTags).values({
+          bookId,
+          tagId: t.id,
+        });
+      }
     }
-  }
+
+    // Identifiers
+    if (industryIdentifiers.length) {
+      for (const ident of industryIdentifiers) {
+        await tx.insert(bookIdentifiers).values({
+          bookId,
+          type: ident.type,
+          value: ident.value,
+        });
+      }
+    }
+
+    for (const collectionId of collectionIds) {
+      await tx
+        .insert(collectionBooks)
+        .values({ collectionId, bookId, addedByUserId: userId, addedAt: now });
+    }
+  });
 
   // Ensure the canonical storage directory exists even when we didn't fetch a cover
   // (and before any book file upload exists).
@@ -893,7 +961,10 @@ export default defineEventHandler(async (event) => {
       // Ensure directory exists up-front (covers util also ensures, but this keeps intent explicit)
       await mkdir(outputDirAbs, { recursive: true });
 
-      logger.debug({ bookId, outputDirRelPosix }, 'metadata-import: cover: fetching bytes');
+      logger.debug(
+        { bookId, outputDirRelPosix },
+        'metadata-import: cover: fetching bytes',
+      );
 
       const { bytes } = await fetchExternalImageBuffer(coverUrl);
 
@@ -949,16 +1020,6 @@ export default defineEventHandler(async (event) => {
       );
       // ignore cover failures
     }
-  }
-
-  // Add to collections
-  for (const collectionId of collectionIds) {
-    await cloudDb.insert(collectionBooks).values({
-      collectionId,
-      bookId,
-      addedByUserId: userId,
-      addedAt: now,
-    });
   }
 
   return {

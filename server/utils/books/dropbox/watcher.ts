@@ -1,13 +1,19 @@
 import path from 'node:path';
-import { mkdir, readdir, rename, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, rename, stat } from 'node:fs/promises';
 
 import { logger } from '~/utils/logger';
+import { withBookStorageLock } from '~~/server/utils/books/storage/book-lock';
+import { cloudDb } from '~~/server/utils/db/cloud';
+import { bookFiles, storageOperations } from '~/utils/db/schema';
+import { and, eq } from 'drizzle-orm';
 
 import {
   getDropboxIngestConfigFromSettings,
   type DropboxIngestConfig,
 } from './config';
 import { ingestDropboxFile } from './ingest';
+import { finishCommittedDropboxClaim } from './claim';
+import { moveToFailed } from './failed';
 import { resolveDropboxTarget, type DropboxTarget } from './target';
 import { getGlobalSettingsRow } from './settings';
 
@@ -28,49 +34,9 @@ function getExtLower(filename: string): string {
   return path.extname(filename || '').toLowerCase();
 }
 
-function timestampForFilename(d = new Date()): string {
-  const pad = (n: number) => `${n}`.padStart(2, '0');
-  return [
-    d.getFullYear(),
-    pad(d.getMonth() + 1),
-    pad(d.getDate()),
-    '-',
-    pad(d.getHours()),
-    pad(d.getMinutes()),
-    pad(d.getSeconds()),
-  ].join('');
-}
-
 async function ensureDirs(cfg: DropboxIngestConfig) {
   await mkdir(cfg.dropboxDirAbs, { recursive: true });
   await mkdir(cfg.failedDirAbs, { recursive: true });
-}
-
-async function moveToFailed(opts: {
-  failedDirAbs: string;
-  fileAbs: string;
-  originalFilename: string;
-  reason: string;
-}) {
-  await mkdir(opts.failedDirAbs, { recursive: true });
-
-  const ext = path.extname(opts.originalFilename);
-  const base = path.basename(opts.originalFilename, ext);
-  const failedName = `${base}.${timestampForFilename()}${ext || ''}`;
-  const dest = path.join(opts.failedDirAbs, failedName);
-
-  try {
-    await rename(opts.fileAbs, dest);
-  } catch {
-    // best-effort; if rename fails, we leave the file where it is to avoid data loss
-    return;
-  }
-
-  try {
-    await writeFile(`${dest}.error.txt`, `${opts.reason}\n`, 'utf8');
-  } catch {
-    // ignore
-  }
 }
 
 export function startDropboxIngestWatcher(): DropboxWatcherState {
@@ -145,84 +111,156 @@ export function startDropboxIngestWatcher(): DropboxWatcherState {
     scanning = true;
 
     try {
-      const cfg = await getCfg();
-      if (!cfg.enabled) return;
+      await withBookStorageLock(
+        path.resolve(process.cwd(), 'library'),
+        '__dropbox_watcher__',
+        async () => {
+          const cfg = await getCfg();
+          if (!cfg.enabled) return;
 
-      await ensureDirs(cfg);
+          await ensureDirs(cfg);
 
-      const entries = await readdir(cfg.dropboxDirAbs, { withFileTypes: true });
-      pruneSeen(cfg);
-
-      const candidates = entries
-        .filter((e) => e.isFile())
-        .map((e) => e.name)
-        .filter((name) => !name.startsWith('.'))
-        .filter((name) => name !== '.gitkeep')
-        .filter((name) => !name.includes('.delb-processing-'))
-        .filter((name) => cfg.allowedExtensions.has(getExtLower(name)));
-
-      const ready: Array<{ fileAbs: string; filename: string }> = [];
-
-      for (const filename of candidates) {
-        const fileAbs = path.join(cfg.dropboxDirAbs, filename);
-        let st;
-        try {
-          st = await stat(fileAbs);
-        } catch {
-          continue;
-        }
-        if (!st.isFile()) continue;
-
-        const stableEnough = noteSeen(cfg, fileAbs, st.size, st.mtimeMs);
-        if (!stableEnough) continue;
-
-        ready.push({ fileAbs, filename });
-      }
-
-      if (!ready.length) return;
-
-      const target = await getTarget();
-
-      // Process sequentially to keep things simple and avoid locking issues.
-      for (const r of ready) {
-        const processingName = `${r.filename}.delb-processing-${crypto.randomUUID()}`;
-        const processingAbs = path.join(cfg.dropboxDirAbs, processingName);
-
-        try {
-          await rename(r.fileAbs, processingAbs);
-        } catch {
-          // File disappeared or got picked up elsewhere; skip.
-          continue;
-        }
-
-        try {
-          const result = await ingestDropboxFile({
-            fileAbs: processingAbs,
-            originalFilename: r.filename,
-            target,
+          const entries = await readdir(cfg.dropboxDirAbs, {
+            withFileTypes: true,
           });
-          logger.info(
-            { bookId: result.bookId, relativePath: result.relativePath },
-            'dropbox: ingested book',
-          );
-        } catch (err: unknown) {
-          const msg =
-            err && typeof err === 'object' && 'message' in err
-              ? String((err as { message?: unknown }).message)
-              : 'Failed to ingest';
+          pruneSeen(cfg);
 
-          logger.error({ err, filename: r.filename }, 'dropbox: ingest failed');
-          await moveToFailed({
-            failedDirAbs: cfg.failedDirAbs,
-            fileAbs: processingAbs,
-            originalFilename: r.filename,
-            reason: msg,
-          });
-        } finally {
-          seen.delete(r.fileAbs);
-          seen.delete(processingAbs);
-        }
-      }
+          const candidates = entries
+            .filter((e) => e.isFile())
+            .map((e) => e.name)
+            .filter((name) => !name.startsWith('.'))
+            .filter((name) => name !== '.gitkeep')
+            .filter(
+              (name) =>
+                cfg.allowedExtensions.has(getExtLower(name)) ||
+                /\.delb-processing-[0-9a-f-]{36}$/i.test(name),
+            );
+
+          const ready: Array<{ fileAbs: string; filename: string }> = [];
+
+          for (const filename of candidates) {
+            const fileAbs = path.join(cfg.dropboxDirAbs, filename);
+            let st;
+            try {
+              st = await stat(fileAbs);
+            } catch {
+              continue;
+            }
+            if (!st.isFile()) continue;
+
+            const stableEnough =
+              filename.includes('.delb-processing-') ||
+              noteSeen(cfg, fileAbs, st.size, st.mtimeMs);
+            if (!stableEnough) continue;
+
+            ready.push({ fileAbs, filename });
+          }
+
+          if (!ready.length) return;
+
+          const target = await getTarget();
+
+          // Process sequentially to keep things simple and avoid locking issues.
+          for (const r of ready) {
+            const claimed = r.filename.match(
+              /^(.*)\.delb-processing-([0-9a-f-]{36})$/i,
+            );
+            const originalFilename = claimed?.[1] ?? r.filename;
+            const operationId = claimed?.[2] ?? crypto.randomUUID();
+            const processingAbs = claimed
+              ? r.fileAbs
+              : path.join(
+                  cfg.dropboxDirAbs,
+                  `${originalFilename}.delb-processing-${operationId}`,
+                );
+            if (!claimed) {
+              try {
+                await rename(r.fileAbs, processingAbs);
+              } catch {
+                continue;
+              }
+            }
+            const marker = await cloudDb
+              .select()
+              .from(storageOperations)
+              .where(
+                and(
+                  eq(storageOperations.id, operationId),
+                  eq(storageOperations.kind, 'dropbox'),
+                ),
+              )
+              .limit(1);
+            if (marker[0]) {
+              const files = await cloudDb
+                .select()
+                .from(bookFiles)
+                .where(eq(bookFiles.bookId, marker[0].bookId))
+                .limit(1);
+              if (!files[0]?.relativePath)
+                throw new Error(
+                  `Dropbox committed file is missing: ${processingAbs}`,
+                );
+              await finishCommittedDropboxClaim({
+                input: processingAbs,
+                destination: path.resolve(process.cwd(), files[0].relativePath),
+                removeDecision: async () => {
+                  await cloudDb
+                    .delete(storageOperations)
+                    .where(eq(storageOperations.id, operationId));
+                },
+              });
+              continue;
+            }
+
+            try {
+              const result = await ingestDropboxFile({
+                fileAbs: processingAbs,
+                originalFilename,
+                operationId,
+                target,
+              });
+              await finishCommittedDropboxClaim({
+                input: processingAbs,
+                destination: path.resolve(process.cwd(), result.relativePath),
+                removeDecision: async () => {
+                  await cloudDb
+                    .delete(storageOperations)
+                    .where(eq(storageOperations.id, operationId));
+                },
+              });
+              logger.info(
+                { bookId: result.bookId, relativePath: result.relativePath },
+                'dropbox: ingested book',
+              );
+            } catch (err: unknown) {
+              const msg =
+                err && typeof err === 'object' && 'message' in err
+                  ? String((err as { message?: unknown }).message)
+                  : 'Failed to ingest';
+
+              logger.error(
+                { err, filename: r.filename },
+                'dropbox: ingest failed',
+              );
+              const committed = await cloudDb
+                .select({ id: storageOperations.id })
+                .from(storageOperations)
+                .where(eq(storageOperations.id, operationId))
+                .limit(1);
+              if (committed.length) continue;
+              await moveToFailed({
+                failedDirAbs: cfg.failedDirAbs,
+                fileAbs: processingAbs,
+                originalFilename,
+                reason: msg,
+              });
+            } finally {
+              seen.delete(r.fileAbs);
+              seen.delete(processingAbs);
+            }
+          }
+        },
+      );
     } finally {
       scanning = false;
     }

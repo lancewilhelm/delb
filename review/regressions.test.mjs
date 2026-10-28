@@ -1,3 +1,4 @@
+import './external-image.test.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
@@ -228,113 +229,6 @@ test('description sanitizer strips nested handlers and unsafe links, retaining b
     ),
   );
   assert.ok(!fn('<p style="position:fixed">text</p>').includes('style='));
-});
-
-test('external cover deadline includes stalled response body', async () => {
-  const originalFetch = globalThis.fetch;
-  let aborted = false;
-  let streamController;
-  let cleanup;
-  globalThis.fetch = async (_url, { signal }) => {
-    const body = new ReadableStream({
-      start(controller) {
-        streamController = controller;
-      },
-    });
-    signal.addEventListener('abort', () => {
-      aborted = true;
-      streamController.error(new Error('deadline'));
-    });
-    cleanup = setTimeout(() => {
-      if (!aborted) {
-        streamController.enqueue(new Uint8Array([1]));
-        streamController.close();
-      }
-    }, 100);
-    return new Response(body, { headers: { 'Content-Type': 'image/png' } });
-  };
-  try {
-    const { fetchExternalImageBuffer } = await loadSource(
-      'server/utils/books/external-image.ts',
-    );
-    await assert.rejects(
-      fetchExternalImageBuffer('https://93.184.216.34/synthetic.png'),
-      /deadline|fetch external image|timed out/i,
-    );
-    assert.equal(aborted, true);
-  } finally {
-    clearTimeout(cleanup);
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test('external cover accepts a normal image and aborts rejected oversized bodies', async () => {
-  const originalFetch = globalThis.fetch;
-  let signal;
-  try {
-    const { fetchExternalImageBuffer } = await loadSource(
-      'server/utils/books/external-image.ts',
-    );
-    globalThis.fetch = async (_url, options) => {
-      signal = options.signal;
-      return new Response(new Uint8Array([1, 2, 3]), {
-        headers: { 'Content-Type': 'image/png' },
-      });
-    };
-    const result = await fetchExternalImageBuffer(
-      'https://93.184.216.34/synthetic.png',
-    );
-    assert.deepEqual([...result.bytes], [1, 2, 3]);
-    assert.equal(result.contentType, 'image/png');
-    globalThis.fetch = async (_url, options) => {
-      signal = options.signal;
-      return new Response(new Uint8Array(10 * 1024 * 1024 + 1), {
-        headers: { 'Content-Type': 'image/png' },
-      });
-    };
-    await assert.rejects(
-      fetchExternalImageBuffer('https://93.184.216.34/synthetic.png'),
-      (error) => error.statusCode === 413,
-    );
-    if (!baseline)
-      assert.equal(signal.aborted, true, 'rejected requests must be aborted');
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test('external cover cancels redirect bodies and validates the redirected image', async () => {
-  const originalFetch = globalThis.fetch;
-  let requests = 0;
-  let canceled = false;
-  try {
-    const { fetchExternalImageBuffer } = await loadSource(
-      'server/utils/books/external-image.ts',
-    );
-    globalThis.fetch = async () => {
-      requests += 1;
-      if (requests === 1)
-        return new Response(
-          new ReadableStream({
-            cancel() {
-              canceled = true;
-            },
-          }),
-          { status: 302, headers: { Location: '/next.png' } },
-        );
-      return new Response(new Uint8Array([4]), {
-        headers: { 'Content-Type': 'image/png' },
-      });
-    };
-    const result = await fetchExternalImageBuffer(
-      'https://93.184.216.34/synthetic.png',
-    );
-    assert.deepEqual([...result.bytes], [4]);
-    assert.equal(requests, 2);
-    if (!baseline) assert.equal(canceled, true);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
 });
 
 test('book listing never runs a write backfill on its read path', async () => {

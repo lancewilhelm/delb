@@ -1,3 +1,4 @@
+import { visibleEntity } from '~~/server/utils/books/visibility';
 import { and, desc, eq, inArray, lt, or } from 'drizzle-orm';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
@@ -99,7 +100,7 @@ export default defineEventHandler(async (event) => {
     const authorRow = await cloudDb
       .select({ id: authors.id, name: authors.name })
       .from(authors)
-      .where(eq(authors.id, authorId))
+      .where(and(eq(authors.id, authorId), visibleEntity('author', userId)))
       .limit(1);
 
     const author = authorRow[0] ?? null;
@@ -132,20 +133,6 @@ export default defineEventHandler(async (event) => {
 
     if (!targetCollectionIds.length) {
       // If a specific collection was requested but user isn't a member, return empty
-      return { success: true, data: { author, books: [] } };
-    }
-
-    // 3) Get visible book ids from those collections
-    const visibleBookLinks = await cloudDb
-      .select({ bookId: collectionBooks.bookId })
-      .from(collectionBooks)
-      .where(inArray(collectionBooks.collectionId, targetCollectionIds));
-
-    const visibleBookIds = Array.from(
-      new Set(visibleBookLinks.map((r) => r.bookId)),
-    ).filter(Boolean);
-
-    if (!visibleBookIds.length) {
       return { success: true, data: { author, books: [] } };
     }
 

@@ -1,3 +1,4 @@
+import { visibleEntity } from '~~/server/utils/books/visibility';
 import { and, desc, eq, inArray, lt, or } from 'drizzle-orm';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
@@ -102,7 +103,9 @@ export default defineEventHandler(async (event) => {
     const publisherRow = await cloudDb
       .select({ id: publishers.id, name: publishers.name })
       .from(publishers)
-      .where(eq(publishers.id, publisherId))
+      .where(
+        and(eq(publishers.id, publisherId), visibleEntity('publisher', userId)),
+      )
       .limit(1);
 
     const publisher = publisherRow[0] ?? null;
@@ -141,19 +144,6 @@ export default defineEventHandler(async (event) => {
     }
 
     // 3) Get visible book ids from those collections
-    const visibleBookLinks = await cloudDb
-      .select({ bookId: collectionBooks.bookId })
-      .from(collectionBooks)
-      .where(inArray(collectionBooks.collectionId, targetCollectionIds));
-
-    const visibleBookIds = Array.from(
-      new Set(visibleBookLinks.map((r) => r.bookId)),
-    ).filter(Boolean);
-
-    if (!visibleBookIds.length) {
-      return { success: true, data: { publisher, books: [] } };
-    }
-
     // 4) Page query: visible books from this publisher in the scoped collections.
     // Sort: newest first, deterministic by id. Cursor is (createdAt,id).
     const pageRows = await cloudDb

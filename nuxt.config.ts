@@ -1,4 +1,21 @@
+import { createRequire } from 'node:module';
 import tailwindcss from '@tailwindcss/vite';
+
+const require = createRequire(import.meta.url);
+const libsqlRequire = createRequire(
+  createRequire(require.resolve('@libsql/client')).resolve('libsql'),
+);
+const nativeTargets = Object.keys(
+  libsqlRequire('./package.json').optionalDependencies,
+);
+const nativeSqliteFiles = nativeTargets.flatMap((target) => {
+  try {
+    return [libsqlRequire.resolve(target)];
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND') return [];
+    throw error;
+  }
+});
 
 export default defineNuxtConfig({
   ssr: true,
@@ -86,6 +103,7 @@ export default defineNuxtConfig({
   nitro: {
     externals: {
       inline: ['@delb/epub'],
+      traceInclude: nativeSqliteFiles,
     },
     experimental: {
       asyncContext: true,

@@ -49,8 +49,34 @@ type SearchApiResponse = {
 };
 
 const uiStore = useUiStore();
+const dialogRef = ref<HTMLElement | null>(null);
+let previousFocus: HTMLElement | null = null;
+function containFocus(event: KeyboardEvent) {
+  if (event.key !== 'Tab') return;
+  const controls = Array.from(
+    dialogRef.value?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), [tabindex="0"]',
+    ) ?? [],
+  );
+  if (!controls.length) {
+    event.preventDefault();
+    return;
+  }
+  const index = controls.indexOf(document.activeElement as HTMLElement);
+  if (event.shiftKey && index <= 0) {
+    event.preventDefault();
+    controls[controls.length - 1]?.focus();
+  } else if (
+    !event.shiftKey &&
+    (index === -1 || index === controls.length - 1)
+  ) {
+    event.preventDefault();
+    controls[0]?.focus();
+  }
+}
 
 const query = ref('');
+let searchGeneration = 0;
 const inputRef = ref<HTMLInputElement | null>(null);
 const optionsRef = ref<HTMLDivElement | null>(null);
 
@@ -183,7 +209,8 @@ function formatIsbnIdentifier(ident: { type: string; value: string }): string {
   return `${label} ${ident.value}`;
 }
 
-async function runSearch(q: string) {
+async function runSearch(q: string, generation: number) {
+  if (generation !== searchGeneration || !uiStore.globalSearchVisible) return;
   const trimmed = q.trim();
   errorMessage.value = null;
 
@@ -207,6 +234,7 @@ async function runSearch(q: string) {
       query: { q: trimmed },
     });
 
+    if (generation !== searchGeneration || !uiStore.globalSearchVisible) return;
     const buckets = res?.data?.buckets;
 
     const bookItems: GlobalSearchResultItem[] =
@@ -281,22 +309,27 @@ async function runSearch(q: string) {
     await nextTick();
     scrollToHighlighted();
   } catch {
-    errorMessage.value = 'Failed to search. Please try again.';
+    if (generation === searchGeneration)
+      errorMessage.value = 'Failed to search. Please try again.';
   } finally {
-    loading.value = false;
+    if (generation === searchGeneration) loading.value = false;
   }
 }
 
-const debouncedSearch = useDebounceFn((q: string) => {
-  runSearch(q);
+const debouncedSearch = useDebounceFn((q: string, generation: number) => {
+  void runSearch(q, generation);
 }, 150);
 
 watch(
   () => uiStore.globalSearchVisible,
   (open) => {
+    searchGeneration += 1;
     if (open) {
+      previousFocus = document.activeElement as HTMLElement;
       nextTick(() => inputRef.value?.focus());
     } else {
+      previousFocus?.focus();
+      previousFocus = null;
       query.value = '';
       errorMessage.value = null;
       loading.value = false;
@@ -310,13 +343,20 @@ watch(
       ];
     }
   },
+  { flush: 'sync' },
 );
 
 watch(
   () => query.value,
   (q) => {
-    debouncedSearch(q);
+    searchGeneration += 1;
+    loading.value = false;
+    results.value.forEach((group) => {
+      group.items = [];
+    });
+    debouncedSearch(q, searchGeneration);
   },
+  { flush: 'sync' },
 );
 
 function handleKeyDown(event: KeyboardEvent) {
@@ -379,7 +419,12 @@ onBeforeUnmount(() => {
     @click="closeModal"
   >
     <div
+      ref="dialogRef"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Search library"
       class="flex flex-col backdrop-blur-lg bg-(--bg-color)/80 w-180 h-150 m-4 md:max-w-[80%] lg:max-w-[60%] rounded-lg shadow-lg border border-(--sub-color) overflow-hidden"
+      @keydown="containFocus"
       @click.stop
     >
       <div
@@ -390,13 +435,27 @@ onBeforeUnmount(() => {
           ref="inputRef"
           v-model="query"
           type="text"
+          role="combobox"
+          aria-label="Search library"
+          aria-expanded="true"
+          aria-controls="global-search-options"
+          :aria-activedescendant="
+            highlightedIndex >= 0
+              ? `global-search-option-${highlightedIndex}`
+              : undefined
+          "
           placeholder="search library (title, author, ISBN)"
           class="w-full bg-transparent! px-2! rounded-t-lg! rounded-b-none! focus:outline-none"
         />
       </div>
 
       <div class="h-full overflow-hidden">
-        <div ref="optionsRef" class="h-full overflow-y-auto">
+        <div
+          id="global-search-options"
+          ref="optionsRef"
+          role="listbox"
+          class="h-full overflow-y-auto"
+        >
           <div
             class="px-3 py-2 text-xs opacity-70 border-b border-(--sub-color)"
           >
@@ -427,6 +486,7 @@ onBeforeUnmount(() => {
 
               <div
                 v-for="item in group.items"
+                :id="`global-search-option-${flatResults.findIndex((x) => x.item.id === item.id && x.item.kind === item.kind)}`"
                 :key="`${item.kind}:${item.id}`"
                 :ref="
                   (el: Element | null) =>
@@ -437,6 +497,11 @@ onBeforeUnmount(() => {
                           x.item.id === item.id && x.item.kind === item.kind,
                       ),
                     )
+                "
+                role="option"
+                :aria-selected="
+                  flatResults[highlightedIndex]?.item?.id === item.id &&
+                  flatResults[highlightedIndex]?.item?.kind === item.kind
                 "
                 class="h-9 cursor-pointer px-3 py-1 hover:bg-(--sub-alt-color) flex items-center gap-2"
                 :class="[
@@ -464,12 +529,7 @@ onBeforeUnmount(() => {
                 <BookCover
                   v-else
                   class="w-auto! aspect-2/3! shrink-0"
-                  :src="
-                    coverThumbUrl(
-                      item.id,
-                      item.updatedAt ?? undefined,
-                    )
-                  "
+                  :src="coverThumbUrl(item.id, item.updatedAt ?? undefined)"
                 />
                 <div class="flex flex-col min-w-0">
                   <div class="truncate">{{ item.title }}</div>

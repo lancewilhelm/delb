@@ -1,7 +1,11 @@
 import { and, eq } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { bookRatings, books } from '~/utils/db/schema';
+import {
+  bookRatings,
+  collectionBooks,
+  collectionMembers,
+} from '~/utils/db/schema';
 import { logger } from '~/utils/logger';
 import { auth } from '~/utils/auth';
 
@@ -71,35 +75,31 @@ export default defineEventHandler(async (event) => {
       };
     }
 
-    // We store integer half-stars (1..10).
-    // If client sends 0.5 increments as stars (e.g. 3.5), convert to half-star int.
-    // If client already sends 1..10, accept it.
-    if (
-      parsed > 0 &&
-      parsed <= 5 &&
-      Math.abs(parsed * 2 - Math.round(parsed * 2)) < 1e-9
-    ) {
-      rating = Math.round(parsed * 2);
-    } else {
-      rating = Math.round(parsed);
-    }
+    rating = parsed;
 
     if (!Number.isInteger(rating) || rating < 1 || rating > 10) {
       setResponseStatus(event, 400);
       return {
         success: false,
-        message:
-          'Invalid rating (must be 1..10 half-stars, or 0.5..5.0 stars).',
+        message: 'Invalid rating (must be an integer 1..10 half-stars).',
       };
     }
   }
 
   try {
-    // Ensure book exists (don't leak extra info; just 404 if missing)
     const exists = await cloudDb
-      .select({ id: books.id })
-      .from(books)
-      .where(eq(books.id, bookId))
+      .select({ id: collectionBooks.bookId })
+      .from(collectionBooks)
+      .innerJoin(
+        collectionMembers,
+        eq(collectionMembers.collectionId, collectionBooks.collectionId),
+      )
+      .where(
+        and(
+          eq(collectionBooks.bookId, bookId),
+          eq(collectionMembers.userId, userId),
+        ),
+      )
       .limit(1);
 
     if (!exists[0]) {

@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
@@ -6,6 +6,8 @@ import {
   bookAuthors,
   bookIdentifiers,
   books,
+  collectionBooks,
+  collectionMembers,
 } from '~/utils/db/schema';
 
 export type IdentifierInput = { type: string; value: string };
@@ -161,11 +163,21 @@ async function loadBooksForCandidates(bookIds: string[]) {
 }
 
 export async function findPossibleDuplicates(opts: {
+  userId?: string;
   title: string;
   author: string;
   identifiers?: IdentifierInput[];
   maxCandidates?: number;
 }): Promise<DuplicateCandidate[]> {
+  if (!opts.userId) return [];
+  const visibleBookIds = cloudDb
+    .select({ id: collectionBooks.bookId })
+    .from(collectionBooks)
+    .innerJoin(
+      collectionMembers,
+      eq(collectionMembers.collectionId, collectionBooks.collectionId),
+    )
+    .where(eq(collectionMembers.userId, opts.userId));
   const maxCandidates = Math.max(1, Math.min(25, opts.maxCandidates ?? 8));
 
   const title = normalizeSpaces(opts.title);
@@ -188,7 +200,12 @@ export async function findPossibleDuplicates(opts: {
     const rows = await cloudDb
       .select({ bookId: bookIdentifiers.bookId, value: bookIdentifiers.value })
       .from(bookIdentifiers)
-      .where(eq(bookIdentifiers.type, ident.type))
+      .where(
+        and(
+          eq(bookIdentifiers.type, ident.type),
+          inArray(bookIdentifiers.bookId, visibleBookIds),
+        ),
+      )
       // Keep bounded to avoid scanning unbounded rows for common identifier types.
       .limit(2000);
 
@@ -226,7 +243,12 @@ export async function findPossibleDuplicates(opts: {
   const titleMatches = await cloudDb
     .select({ id: books.id })
     .from(books)
-    .where(sql`LOWER(${books.title}) LIKE ${like.toLowerCase()}`)
+    .where(
+      and(
+        inArray(books.id, visibleBookIds),
+        sql`LOWER(${books.title}) LIKE ${like.toLowerCase()}`,
+      ),
+    )
     .limit(50);
 
   const bookIds = titleMatches.map((r) => r.id).filter(Boolean);

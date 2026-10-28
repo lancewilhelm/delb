@@ -1,0 +1,11 @@
+$ node review/run-api-regressions.mjs
+Fresh synthetic database and ordinary two-chapter EPUB created; no real data used.
+Concurrent signup statuses: 200, 200, 200 ; one owner and durable marker
+Fresh synthetic database and ordinary two-chapter EPUB created; no real data used.
+Synthetic HTTP regression checks passed
+PASS production settings retain millisecond order and acknowledge writes
+PASS unauthenticated book listing returns 401
+PASS synthetic registration in disposable database
+PASS synthetic EPUB upload and authenticated book listing
+PASS personal collection listing
+PASS isolated production bootstrap and API regressions

@@ -1,0 +1,16 @@
+ℹ Nuxt Icon server bundle mode is set to local
+✔ Nuxt Icon discovered local-installed 1 collections: lucide
+✔ Nuxt Icon loaded local collection local with 0 icons
+ℹ Nuxt Icon client bundle consist of 72 icons with 20.08KB(uncompressed) in size
+[Vue] Load plugin failed: vue-router/volar/sfc-route-blocks
+[Vue] Failed to create plugin TypeError: plugin is not a function
+    at /Users/lancewilhelm/projects/delb/node_modules/.pnpm/@vue+language-core@2.2.12_typescript@5.9.3/node_modules/@vue/language-core/lib/plugins.js:53:30
+    at Array.flatMap (<anonymous>)
+    at createPlugins (/Users/lancewilhelm/projects/delb/node_modules/.pnpm/@vue+language-core@2.2.12_typescript@5.9.3/node_modules/@vue/language-core/lib/plugins.js:51:10)
+    at Object.createVueLanguagePlugin (/Users/lancewilhelm/projects/delb/node_modules/.pnpm/@vue+language-core@2.2.12_typescript@5.9.3/node_modules/@vue/language-core/lib/languagePlugin.js:52:49)
+    at /Users/lancewilhelm/projects/delb/node_modules/.pnpm/vue-tsc@2.2.12_typescript@5.9.3/node_modules/vue-tsc/index.js:18:43
+    at Object.apply (/Users/lancewilhelm/projects/delb/node_modules/.pnpm/@volar+typescript@2.4.15_typescript@5.9.3/node_modules/@volar/typescript/lib/node/proxyCreateProgram.js:50:33)
+    at performCompilation (/Users/lancewilhelm/projects/delb/node_modules/.pnpm/typescript@5.9.3/node_modules/typescript/lib/tsc.js:132243:19)
+    at executeCommandLineWorker (/Users/lancewilhelm/projects/delb/node_modules/.pnpm/typescript@5.9.3/node_modules/typescript/lib/tsc.js:132050:7)
+    at executeCommandLine (/Users/lancewilhelm/projects/delb/node_modules/.pnpm/typescript@5.9.3/node_modules/typescript/lib/tsc.js:132132:12)
+    at Object.<anonymous> (/Users/lancewilhelm/projects/delb/node_modules/.pnpm/typescript@5.9.3/node_modules/typescript/lib/tsc.js:133823:1)

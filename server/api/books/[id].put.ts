@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { withBookStorageLock } from '~~/server/utils/books/storage/book-lock';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { normalizePublishedAt } from '~~/server/utils/books/published';
 import { makeAuthorSortKey, makeTitleSortKey } from '~~/server/utils/sort/keys';
@@ -145,7 +147,12 @@ function normalizeOptionalStringArray(
     .map((v) => (normalizeSpaces ? v.replace(/\s+/g, ' ').trim() : v.trim()))
     .filter((v) => v.length > 0);
 
-  return cleaned.length ? cleaned : null;
+  const unique = new Map<string, string>();
+  for (const value of cleaned) {
+    const key = value.toLowerCase();
+    if (!unique.has(key)) unique.set(key, value);
+  }
+  return unique.size ? Array.from(unique.values()) : null;
 }
 
 function normalizeIdentifierType(value: string): string {
@@ -194,13 +201,15 @@ function parseIdentifiersFromBody(
   return Array.from(byType.entries()).map(([type, value]) => ({ type, value }));
 }
 
+type Transaction = Parameters<Parameters<typeof cloudDb.transaction>[0]>[0];
+
 /**
  * Find or create an author by name (lean v1: unique by exact name).
  *
  * Case sensitivity: this uses an exact equality check on `authors.name`.
  */
-async function findOrCreateAuthorByName(name: string) {
-  const existing = await cloudDb
+async function findOrCreateAuthorByName(name: string, db: Transaction) {
+  const existing = await db
     .select()
     .from(authors)
     .where(eq(authors.name, name))
@@ -211,7 +220,7 @@ async function findOrCreateAuthorByName(name: string) {
   const id = crypto.randomUUID();
   const now = new Date();
 
-  await cloudDb.insert(authors).values({
+  await db.insert(authors).values({
     id,
     name,
     sortName: makeAuthorSortKey(name),
@@ -227,8 +236,8 @@ async function findOrCreateAuthorByName(name: string) {
  *
  * Case sensitivity: this uses an exact equality check on `tags.name`.
  */
-async function findOrCreateTagByName(name: string) {
-  const existing = await cloudDb
+async function findOrCreateTagByName(name: string, db: Transaction) {
+  const existing = await db
     .select()
     .from(tags)
     .where(eq(tags.name, name))
@@ -239,7 +248,7 @@ async function findOrCreateTagByName(name: string) {
   const id = crypto.randomUUID();
   const now = new Date();
 
-  await cloudDb.insert(tags).values({
+  await db.insert(tags).values({
     id,
     name,
     createdAt: now,
@@ -254,8 +263,8 @@ async function findOrCreateTagByName(name: string) {
  *
  * Case sensitivity: this uses an exact equality check on `publishers.name`.
  */
-async function findOrCreatePublisherByName(name: string) {
-  const existing = await cloudDb
+async function findOrCreatePublisherByName(name: string, db: Transaction) {
+  const existing = await db
     .select()
     .from(publishers)
     .where(eq(publishers.name, name))
@@ -266,7 +275,7 @@ async function findOrCreatePublisherByName(name: string) {
   const id = crypto.randomUUID();
   const now = new Date();
 
-  await cloudDb.insert(publishers).values({
+  await db.insert(publishers).values({
     id,
     name,
     createdAt: now,
@@ -281,8 +290,8 @@ async function findOrCreatePublisherByName(name: string) {
  *
  * Case sensitivity: this uses an exact equality check on `series.name`.
  */
-async function findOrCreateSeriesByName(name: string) {
-  const existing = await cloudDb
+async function findOrCreateSeriesByName(name: string, db: Transaction) {
+  const existing = await db
     .select()
     .from(series)
     .where(eq(series.name, name))
@@ -293,7 +302,7 @@ async function findOrCreateSeriesByName(name: string) {
   const id = crypto.randomUUID();
   const now = new Date();
 
-  await cloudDb.insert(series).values({
+  await db.insert(series).values({
     id,
     name,
     createdAt: now,
@@ -311,8 +320,8 @@ async function findOrCreateSeriesByName(name: string) {
  *
  * Important: This is intended to be run inside the same request after mutations.
  */
-async function deleteAuthorIfUnreferenced(authorId: string) {
-  const stillUsed = await cloudDb
+async function deleteAuthorIfUnreferenced(authorId: string, db: Transaction) {
+  const stillUsed = await db
     .select({ authorId: bookAuthors.authorId })
     .from(bookAuthors)
     .where(eq(bookAuthors.authorId, authorId))
@@ -320,11 +329,11 @@ async function deleteAuthorIfUnreferenced(authorId: string) {
 
   if (stillUsed[0]) return;
 
-  await cloudDb.delete(authors).where(eq(authors.id, authorId));
+  await db.delete(authors).where(eq(authors.id, authorId));
 }
 
-async function deleteTagIfUnreferenced(tagId: string) {
-  const stillUsed = await cloudDb
+async function deleteTagIfUnreferenced(tagId: string, db: Transaction) {
+  const stillUsed = await db
     .select({ tagId: bookTags.tagId })
     .from(bookTags)
     .where(eq(bookTags.tagId, tagId))
@@ -332,11 +341,14 @@ async function deleteTagIfUnreferenced(tagId: string) {
 
   if (stillUsed[0]) return;
 
-  await cloudDb.delete(tags).where(eq(tags.id, tagId));
+  await db.delete(tags).where(eq(tags.id, tagId));
 }
 
-async function deletePublisherIfUnreferenced(publisherId: string) {
-  const stillUsed = await cloudDb
+async function deletePublisherIfUnreferenced(
+  publisherId: string,
+  db: Transaction,
+) {
+  const stillUsed = await db
     .select({ id: books.id })
     .from(books)
     .where(eq(books.publisherId, publisherId))
@@ -344,11 +356,11 @@ async function deletePublisherIfUnreferenced(publisherId: string) {
 
   if (stillUsed[0]) return;
 
-  await cloudDb.delete(publishers).where(eq(publishers.id, publisherId));
+  await db.delete(publishers).where(eq(publishers.id, publisherId));
 }
 
-async function deleteSeriesIfUnreferenced(seriesId: string) {
-  const stillUsed = await cloudDb
+async function deleteSeriesIfUnreferenced(seriesId: string, db: Transaction) {
+  const stillUsed = await db
     .select({ id: books.id })
     .from(books)
     .where(eq(books.seriesId, seriesId))
@@ -356,7 +368,7 @@ async function deleteSeriesIfUnreferenced(seriesId: string) {
 
   if (stillUsed[0]) return;
 
-  await cloudDb.delete(series).where(eq(series.id, seriesId));
+  await db.delete(series).where(eq(series.id, seriesId));
 }
 
 /**
@@ -401,366 +413,394 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Enforce visibility: user must be a member of at least one collection that contains the requested book.
-  const memberships = await cloudDb
-    .select({ collectionId: collectionMembers.collectionId })
-    .from(collectionMembers)
-    .where(eq(collectionMembers.userId, userId));
+  return withBookStorageLock(
+    path.resolve(process.cwd(), 'library'),
+    id,
+    async () => {
+      // Enforce visibility: user must be a member of at least one collection that contains the requested book.
+      const memberships = await cloudDb
+        .select({ collectionId: collectionMembers.collectionId })
+        .from(collectionMembers)
+        .where(eq(collectionMembers.userId, userId));
 
-  const memberCollectionIds = Array.from(
-    new Set(memberships.map((m) => m.collectionId)),
-  ).filter(Boolean);
+      const memberCollectionIds = Array.from(
+        new Set(memberships.map((m) => m.collectionId)),
+      ).filter(Boolean);
 
-  if (!memberCollectionIds.length) {
-    throw createError({ statusCode: 404, statusMessage: 'Book not found' });
-  }
+      if (!memberCollectionIds.length) {
+        throw createError({ statusCode: 404, statusMessage: 'Book not found' });
+      }
 
-  const visible = await cloudDb
-    .select()
-    .from(books)
-    .innerJoin(
-      collectionBooks,
-      and(eq(collectionBooks.bookId, books.id), eq(books.id, id)),
-    )
-    .where(inArray(collectionBooks.collectionId, memberCollectionIds))
-    .limit(1);
+      const visible = await cloudDb
+        .select()
+        .from(books)
+        .innerJoin(
+          collectionBooks,
+          and(eq(collectionBooks.bookId, books.id), eq(books.id, id)),
+        )
+        .where(inArray(collectionBooks.collectionId, memberCollectionIds))
+        .limit(1);
 
-  const existingBook = visible[0]?.books;
-  if (!existingBook) {
-    throw createError({ statusCode: 404, statusMessage: 'Book not found' });
-  }
+      const existingBook = visible[0]?.books;
+      if (!existingBook) {
+        throw createError({ statusCode: 404, statusMessage: 'Book not found' });
+      }
 
-  const canEditOwn = Boolean(
-    existingBook.createdByUserId && existingBook.createdByUserId === userId,
-  );
-  if (!canEditAny && !canEditOwn) {
-    throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
-  }
+      const canEditOwn = Boolean(
+        existingBook.createdByUserId && existingBook.createdByUserId === userId,
+      );
+      if (!canEditAny && !canEditOwn) {
+        throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
+      }
 
-  // Capture previous references for orphan cleanup after mutations.
-  const prevPublisherId = existingBook.publisherId ?? null;
-  const prevSeriesId = existingBook.seriesId ?? null;
+      let shouldMoveStorage = false;
+      try {
+        await cloudDb.transaction(async (tx) => {
+          // Capture previous references for orphan cleanup after mutations.
+          const prevPublisherId = existingBook.publisherId ?? null;
+          const prevSeriesId = existingBook.seriesId ?? null;
 
-  const prevAuthorLinks = await cloudDb
-    .select({ authorId: bookAuthors.authorId })
-    .from(bookAuthors)
-    .where(eq(bookAuthors.bookId, id));
+          const prevAuthorLinks = await tx
+            .select({ authorId: bookAuthors.authorId })
+            .from(bookAuthors)
+            .where(eq(bookAuthors.bookId, id));
 
-  const prevTagLinks = await cloudDb
-    .select({ tagId: bookTags.tagId })
-    .from(bookTags)
-    .where(eq(bookTags.bookId, id));
+          const prevTagLinks = await tx
+            .select({ tagId: bookTags.tagId })
+            .from(bookTags)
+            .where(eq(bookTags.bookId, id));
 
-  const prevAuthorIds = prevAuthorLinks
-    .map((r) => r.authorId)
-    .filter((x): x is string => typeof x === 'string' && x.length > 0);
+          const prevAuthorIds = prevAuthorLinks
+            .map((r) => r.authorId)
+            .filter((x): x is string => typeof x === 'string' && x.length > 0);
 
-  const prevTagIds = prevTagLinks
-    .map((r) => r.tagId)
-    .filter((x): x is string => typeof x === 'string' && x.length > 0);
+          const prevTagIds = prevTagLinks
+            .map((r) => r.tagId)
+            .filter((x): x is string => typeof x === 'string' && x.length > 0);
 
-  // Build a partial update set only with provided fields.
-  const update: Partial<typeof books.$inferInsert> = {
-    updatedAt: new Date(),
-  };
+          // Build a partial update set only with provided fields.
+          const update: Partial<typeof books.$inferInsert> = {
+            updatedAt: new Date(),
+          };
 
-  // Track whether a storage move is needed after mutations.
-  // We treat any title change or author-list mutation as needing a canonical move.
-  let shouldMoveStorage = false;
+          // Track whether a storage move is needed after mutations.
+          // We treat any title change or author-list mutation as needing a canonical move.
+          const title = normalizeOptionalString((body as PutBookBody).title);
+          if (title !== undefined) {
+            if (!title) {
+              throw createError({
+                statusCode: 400,
+                statusMessage: 'Title is required',
+              });
+            }
+            update.title = title ?? '';
+            update.sortTitle = makeTitleSortKey(update.title);
+            shouldMoveStorage = true;
+          }
 
-  const title = normalizeOptionalString((body as PutBookBody).title);
-  if (title !== undefined) {
-    if (!title) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: 'Title is required',
-      });
-    }
-    update.title = title ?? '';
-    update.sortTitle = makeTitleSortKey(update.title);
-    shouldMoveStorage = true;
-  }
+          const description = normalizeOptionalString(
+            (body as PutBookBody).description,
+          );
+          if (description !== undefined) update.description = description;
 
-  const description = normalizeOptionalString(
-    (body as PutBookBody).description,
-  );
-  if (description !== undefined) update.description = description;
+          const published = normalizeOptionalString(
+            (body as PutBookBody).published,
+          );
+          if (published !== undefined) {
+            update.published = published;
+            update.publishedAt = published
+              ? normalizePublishedAt(published)
+              : null;
+          }
 
-  const published = normalizeOptionalString((body as PutBookBody).published);
-  if (published !== undefined) {
-    update.published = published;
-    update.publishedAt = published ? normalizePublishedAt(published) : null;
-  }
+          const language = normalizeOptionalString(
+            (body as PutBookBody).language,
+          );
+          if (language !== undefined) update.language = language;
 
-  const language = normalizeOptionalString((body as PutBookBody).language);
-  if (language !== undefined) update.language = language;
+          // Cover (optional)
+          // - undefined => unchanged
+          // - null      => clear cover (DB pointer only)
+          const coverImagePath = normalizeOptionalString(
+            (body as PutBookBody).coverImagePath,
+          );
+          if (coverImagePath !== undefined) {
+            update.coverImagePath = coverImagePath;
+          }
 
-  // Cover (optional)
-  // - undefined => unchanged
-  // - null      => clear cover (DB pointer only)
-  const coverImagePath = normalizeOptionalString(
-    (body as PutBookBody).coverImagePath,
-  );
-  if (coverImagePath !== undefined) {
-    update.coverImagePath = coverImagePath;
-  }
+          const publisherName = normalizeOptionalString(
+            (body as PutBookBody).publisherName,
+          );
+          const publisherId = normalizeOptionalString(
+            (body as PutBookBody).publisherId,
+          );
 
-  const publisherName = normalizeOptionalString(
-    (body as PutBookBody).publisherName,
-  );
-  const publisherId = normalizeOptionalString(
-    (body as PutBookBody).publisherId,
-  );
+          const seriesName = normalizeOptionalString(
+            (body as PutBookBody).seriesName,
+          );
+          const seriesId = normalizeOptionalString(
+            (body as PutBookBody).seriesId,
+          );
 
-  const seriesName = normalizeOptionalString((body as PutBookBody).seriesName);
-  const seriesId = normalizeOptionalString((body as PutBookBody).seriesId);
+          // Resolve name->id if a name field was explicitly provided (including null to clear)
+          if (publisherName !== undefined) {
+            if (publisherName === null) {
+              update.publisherId = null;
+            } else {
+              const p = await findOrCreatePublisherByName(publisherName, tx);
+              update.publisherId = p.id;
+            }
+          } else if (publisherId !== undefined) {
+            update.publisherId = publisherId;
+          }
 
-  // Resolve name->id if a name field was explicitly provided (including null to clear)
-  if (publisherName !== undefined) {
-    if (publisherName === null) {
-      update.publisherId = null;
-    } else {
-      const p = await findOrCreatePublisherByName(publisherName);
-      update.publisherId = p.id;
-    }
-  } else if (publisherId !== undefined) {
-    update.publisherId = publisherId;
-  }
+          if (seriesName !== undefined) {
+            if (seriesName === null) {
+              update.seriesId = null;
+            } else {
+              const s = await findOrCreateSeriesByName(seriesName, tx);
+              update.seriesId = s.id;
+            }
+          } else if (seriesId !== undefined) {
+            update.seriesId = seriesId;
+          }
 
-  if (seriesName !== undefined) {
-    if (seriesName === null) {
-      update.seriesId = null;
-    } else {
-      const s = await findOrCreateSeriesByName(seriesName);
-      update.seriesId = s.id;
-    }
-  } else if (seriesId !== undefined) {
-    update.seriesId = seriesId;
-  }
+          const seriesIndex = normalizeOptionalNumber(
+            (body as PutBookBody).seriesIndex,
+          );
+          if (seriesIndex !== undefined) update.seriesIndex = seriesIndex;
 
-  const seriesIndex = normalizeOptionalNumber(
-    (body as PutBookBody).seriesIndex,
-  );
-  if (seriesIndex !== undefined) update.seriesIndex = seriesIndex;
+          // Pages (optional)
+          const pages = normalizeOptionalInteger((body as PutBookBody).pages);
+          if (pages !== undefined) update.pages = pages;
 
-  // Pages (optional)
-  const pages = normalizeOptionalInteger((body as PutBookBody).pages);
-  if (pages !== undefined) update.pages = pages;
+          // Determine tag updates (optional)
+          const newTags = normalizeOptionalStringArray(
+            (body as PutBookBody).tags,
+            {
+              fieldName: 'tags',
+              normalizeSpaces: true,
+            },
+          );
 
-  // Determine tag updates (optional)
-  const newTags = normalizeOptionalStringArray((body as PutBookBody).tags, {
-    fieldName: 'tags',
-    normalizeSpaces: true,
-  });
+          // Determine identifier updates (optional)
+          const newIdentifiers = parseIdentifiersFromBody(
+            (body as PutBookBody).identifiers,
+          );
 
-  // Determine identifier updates (optional)
-  const newIdentifiers = parseIdentifiersFromBody(
-    (body as PutBookBody).identifiers,
-  );
+          // Determine author updates (optional)
+          const authorSingle = normalizeOptionalString(
+            (body as PutBookBody).author,
+          );
+          const authorsList = normalizeOptionalStringArray(
+            (body as PutBookBody).authors,
+            {
+              fieldName: 'authors',
+              normalizeSpaces: true,
+            },
+          );
 
-  // Determine author updates (optional)
-  const authorSingle = normalizeOptionalString((body as PutBookBody).author);
-  const authorsList = normalizeOptionalStringArray(
-    (body as PutBookBody).authors,
-    {
-      fieldName: 'authors',
-      normalizeSpaces: true,
+          // If `authors` is provided, it wins. If not, fall back to `author`.
+          const newAuthors: string[] | null | undefined =
+            authorsList !== undefined
+              ? authorsList
+              : authorSingle !== undefined
+                ? authorSingle
+                  ? [authorSingle]
+                  : null
+                : undefined;
+
+          if (newAuthors !== undefined && (!newAuthors || !newAuthors.length)) {
+            throw createError({
+              statusCode: 400,
+              statusMessage: 'At least one author is required',
+            });
+          }
+
+          // Ensure there's something to update besides updatedAt.
+          const keys = Object.keys(update).filter((k) => k !== 'updatedAt');
+          const hasAuthorMutation = newAuthors !== undefined;
+          const hasTagMutation = newTags !== undefined;
+          const hasIdentifierMutation = newIdentifiers !== undefined;
+          if (
+            keys.length === 0 &&
+            !hasAuthorMutation &&
+            !hasTagMutation &&
+            !hasIdentifierMutation
+          ) {
+            throw createError({
+              statusCode: 400,
+              statusMessage: 'No updatable fields provided',
+            });
+          }
+
+          // Update book row if any canonical fields provided
+          if (keys.length > 0) {
+            await tx.update(books).set(update).where(eq(books.id, id));
+          }
+
+          // Track which publisher/series ids might have become unreferenced
+          const maybeOrphanPublisherIds: string[] = [];
+          const maybeOrphanSeriesIds: string[] = [];
+
+          if (
+            prevPublisherId &&
+            update.publisherId !== undefined &&
+            update.publisherId !== prevPublisherId
+          ) {
+            maybeOrphanPublisherIds.push(prevPublisherId);
+          }
+          if (
+            prevSeriesId &&
+            update.seriesId !== undefined &&
+            update.seriesId !== prevSeriesId
+          ) {
+            maybeOrphanSeriesIds.push(prevSeriesId);
+          }
+
+          // Replace author links if requested
+          if (newAuthors !== undefined) {
+            await tx.delete(bookAuthors).where(eq(bookAuthors.bookId, id));
+
+            if (newAuthors && newAuthors.length) {
+              let pos = 1;
+              for (const name of newAuthors) {
+                const a = await findOrCreateAuthorByName(name, tx);
+                await tx.insert(bookAuthors).values({
+                  bookId: id,
+                  authorId: a.id,
+                  position: pos,
+                });
+                pos += 1;
+              }
+            }
+
+            // Any author-list mutation should trigger a canonical storage move.
+            shouldMoveStorage = true;
+
+            // Orphan cleanup: any authors that were previously linked but are no longer linked
+            const currentLinks = await tx
+              .select({ authorId: bookAuthors.authorId })
+              .from(bookAuthors)
+              .where(eq(bookAuthors.bookId, id));
+
+            const currentAuthorIds = new Set(
+              currentLinks
+                .map((r) => r.authorId)
+                .filter(
+                  (x): x is string => typeof x === 'string' && x.length > 0,
+                ),
+            );
+
+            const maybeOrphanAuthorIds = Array.from(
+              new Set(
+                prevAuthorIds.filter((aid) => !currentAuthorIds.has(aid)),
+              ),
+            );
+
+            for (const aid of maybeOrphanAuthorIds) {
+              await deleteAuthorIfUnreferenced(aid, tx);
+            }
+          }
+
+          // Replace tag links if requested
+          if (newTags !== undefined) {
+            await tx.delete(bookTags).where(eq(bookTags.bookId, id));
+
+            if (newTags && newTags.length) {
+              for (const name of newTags) {
+                const t = await findOrCreateTagByName(name, tx);
+                await tx.insert(bookTags).values({
+                  bookId: id,
+                  tagId: t.id,
+                });
+              }
+            }
+
+            // Orphan cleanup: any tags previously linked but no longer linked
+            const currentLinks = await tx
+              .select({ tagId: bookTags.tagId })
+              .from(bookTags)
+              .where(eq(bookTags.bookId, id));
+
+            const currentTagIds = new Set(
+              currentLinks
+                .map((r) => r.tagId)
+                .filter(
+                  (x): x is string => typeof x === 'string' && x.length > 0,
+                ),
+            );
+
+            const maybeOrphanTagIds = Array.from(
+              new Set(prevTagIds.filter((tid) => !currentTagIds.has(tid))),
+            );
+
+            for (const tid of maybeOrphanTagIds) {
+              await deleteTagIfUnreferenced(tid, tx);
+            }
+          }
+
+          // Replace identifiers if requested
+          if (newIdentifiers !== undefined) {
+            // Replace semantics: if null/empty => clear all identifiers
+            await tx
+              .delete(bookIdentifiers)
+              .where(eq(bookIdentifiers.bookId, id));
+
+            if (newIdentifiers && newIdentifiers.length) {
+              for (const ident of newIdentifiers) {
+                await tx
+                  .insert(bookIdentifiers)
+                  .values({ bookId: id, type: ident.type, value: ident.value })
+                  .onConflictDoUpdate({
+                    target: [bookIdentifiers.bookId, bookIdentifiers.type],
+                    set: { value: sql`EXCLUDED.value` },
+                  });
+              }
+            }
+          }
+
+          // Orphan cleanup for publisher/series (if changed/cleared)
+          for (const pid of Array.from(new Set(maybeOrphanPublisherIds))) {
+            await deletePublisherIfUnreferenced(pid, tx);
+          }
+          for (const sid of Array.from(new Set(maybeOrphanSeriesIds))) {
+            await deleteSeriesIfUnreferenced(sid, tx);
+          }
+        });
+
+        // If title/authors changed, move on-disk storage to the canonical folder derived from current metadata.
+        // This keeps the filesystem browsable for users.
+        if (shouldMoveStorage) {
+          try {
+            await moveBookStorageToCanonical({ bookId: id });
+          } catch (moveErr: unknown) {
+            // Do not fail the edit if the move fails; log for investigation.
+            logger.warn(
+              { bookId: id, error: moveErr },
+              'PUT /api/books/:id: failed to move book storage to canonical path',
+            );
+          }
+        }
+
+        return { success: true };
+      } catch (error: unknown) {
+        // Preserve explicit HTTP errors
+        if (
+          typeof error === 'object' &&
+          error !== null &&
+          'statusCode' in error &&
+          (error as { statusCode?: unknown }).statusCode
+        ) {
+          throw error;
+        }
+
+        logger.error(error, 'PUT /api/books/:id: Error updating book');
+        throw createError({
+          statusCode: 500,
+          statusMessage: 'Failed to update book',
+        });
+      }
     },
   );
-
-  // If `authors` is provided, it wins. If not, fall back to `author`.
-  const newAuthors: string[] | null | undefined =
-    authorsList !== undefined
-      ? authorsList
-      : authorSingle !== undefined
-        ? authorSingle
-          ? [authorSingle]
-          : null
-        : undefined;
-
-  if (newAuthors !== undefined && (!newAuthors || !newAuthors.length)) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'At least one author is required',
-    });
-  }
-
-  // Ensure there's something to update besides updatedAt.
-  const keys = Object.keys(update).filter((k) => k !== 'updatedAt');
-  const hasAuthorMutation = newAuthors !== undefined;
-  const hasTagMutation = newTags !== undefined;
-  const hasIdentifierMutation = newIdentifiers !== undefined;
-  if (
-    keys.length === 0 &&
-    !hasAuthorMutation &&
-    !hasTagMutation &&
-    !hasIdentifierMutation
-  ) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'No updatable fields provided',
-    });
-  }
-
-  try {
-    // Update book row if any canonical fields provided
-    if (keys.length > 0) {
-      await cloudDb.update(books).set(update).where(eq(books.id, id));
-    }
-
-    // Track which publisher/series ids might have become unreferenced
-    const maybeOrphanPublisherIds: string[] = [];
-    const maybeOrphanSeriesIds: string[] = [];
-
-    if (
-      prevPublisherId &&
-      update.publisherId !== undefined &&
-      update.publisherId !== prevPublisherId
-    ) {
-      maybeOrphanPublisherIds.push(prevPublisherId);
-    }
-    if (
-      prevSeriesId &&
-      update.seriesId !== undefined &&
-      update.seriesId !== prevSeriesId
-    ) {
-      maybeOrphanSeriesIds.push(prevSeriesId);
-    }
-
-    // Replace author links if requested
-    if (newAuthors !== undefined) {
-      await cloudDb.delete(bookAuthors).where(eq(bookAuthors.bookId, id));
-
-      if (newAuthors && newAuthors.length) {
-        let pos = 1;
-        for (const name of newAuthors) {
-          const a = await findOrCreateAuthorByName(name);
-          await cloudDb.insert(bookAuthors).values({
-            bookId: id,
-            authorId: a.id,
-            position: pos,
-          });
-          pos += 1;
-        }
-      }
-
-      // Any author-list mutation should trigger a canonical storage move.
-      shouldMoveStorage = true;
-
-      // Orphan cleanup: any authors that were previously linked but are no longer linked
-      const currentLinks = await cloudDb
-        .select({ authorId: bookAuthors.authorId })
-        .from(bookAuthors)
-        .where(eq(bookAuthors.bookId, id));
-
-      const currentAuthorIds = new Set(
-        currentLinks
-          .map((r) => r.authorId)
-          .filter((x): x is string => typeof x === 'string' && x.length > 0),
-      );
-
-      const maybeOrphanAuthorIds = Array.from(
-        new Set(prevAuthorIds.filter((aid) => !currentAuthorIds.has(aid))),
-      );
-
-      for (const aid of maybeOrphanAuthorIds) {
-        await deleteAuthorIfUnreferenced(aid);
-      }
-    }
-
-    // Replace tag links if requested
-    if (newTags !== undefined) {
-      await cloudDb.delete(bookTags).where(eq(bookTags.bookId, id));
-
-      if (newTags && newTags.length) {
-        for (const name of newTags) {
-          const t = await findOrCreateTagByName(name);
-          await cloudDb.insert(bookTags).values({
-            bookId: id,
-            tagId: t.id,
-          });
-        }
-      }
-
-      // Orphan cleanup: any tags previously linked but no longer linked
-      const currentLinks = await cloudDb
-        .select({ tagId: bookTags.tagId })
-        .from(bookTags)
-        .where(eq(bookTags.bookId, id));
-
-      const currentTagIds = new Set(
-        currentLinks
-          .map((r) => r.tagId)
-          .filter((x): x is string => typeof x === 'string' && x.length > 0),
-      );
-
-      const maybeOrphanTagIds = Array.from(
-        new Set(prevTagIds.filter((tid) => !currentTagIds.has(tid))),
-      );
-
-      for (const tid of maybeOrphanTagIds) {
-        await deleteTagIfUnreferenced(tid);
-      }
-    }
-
-    // Replace identifiers if requested
-    if (newIdentifiers !== undefined) {
-      // Replace semantics: if null/empty => clear all identifiers
-      await cloudDb
-        .delete(bookIdentifiers)
-        .where(eq(bookIdentifiers.bookId, id));
-
-      if (newIdentifiers && newIdentifiers.length) {
-        for (const ident of newIdentifiers) {
-          await cloudDb
-            .insert(bookIdentifiers)
-            .values({ bookId: id, type: ident.type, value: ident.value })
-            .onConflictDoUpdate({
-              target: [bookIdentifiers.bookId, bookIdentifiers.type],
-              set: { value: sql`EXCLUDED.value` },
-            });
-        }
-      }
-    }
-
-    // Orphan cleanup for publisher/series (if changed/cleared)
-    for (const pid of Array.from(new Set(maybeOrphanPublisherIds))) {
-      await deletePublisherIfUnreferenced(pid);
-    }
-    for (const sid of Array.from(new Set(maybeOrphanSeriesIds))) {
-      await deleteSeriesIfUnreferenced(sid);
-    }
-
-    // If title/authors changed, move on-disk storage to the canonical folder derived from current metadata.
-    // This keeps the filesystem browsable for users.
-    if (shouldMoveStorage) {
-      try {
-        await moveBookStorageToCanonical({ bookId: id });
-      } catch (moveErr: unknown) {
-        // Do not fail the edit if the move fails; log for investigation.
-        logger.warn(
-          { bookId: id, error: moveErr },
-          'PUT /api/books/:id: failed to move book storage to canonical path',
-        );
-      }
-    }
-
-    return { success: true };
-  } catch (error: unknown) {
-    // Preserve explicit HTTP errors
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'statusCode' in error &&
-      (error as { statusCode?: unknown }).statusCode
-    ) {
-      throw error;
-    }
-
-    logger.error(error, 'PUT /api/books/:id: Error updating book');
-    throw createError({
-      statusCode: 500,
-      statusMessage: 'Failed to update book',
-    });
-  }
 });

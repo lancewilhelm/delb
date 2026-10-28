@@ -1,0 +1,167 @@
+[
+  {
+    "name": "CONFIRMED private entity search leak",
+    "evidence": {
+      "foreignBookAccessBefore": 404,
+      "buckets": {
+        "books": [],
+        "authors": [
+          {
+            "id": "f550082c-f7d6-4b71-922e-c76a65df2e6a",
+            "name": "PrivateUniqueAuditAuthor"
+          }
+        ],
+        "series": [],
+        "publishers": [],
+        "tags": [
+          {
+            "id": "6d82887f-b3f2-4c69-8a2d-2fda85030741",
+            "name": "PrivateUniqueAuditTag"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "CONFIRMED explicit bulk assignment grants foreign book access",
+    "evidence": {
+      "before": 404,
+      "assignment": 200,
+      "after": 200
+    }
+  },
+  {
+    "name": "CONFIRMED duplicate resolution exposes and grants private book access",
+    "evidence": {
+      "duplicateStatus": 409,
+      "candidateExposed": true,
+      "resolution": 200,
+      "accessAfter": 200
+    }
+  },
+  {
+    "name": "CONFIRMED editor can demote collection owner",
+    "evidence": {
+      "demotion": 200,
+      "membership": {
+        "success": true,
+        "data": {
+          "members": [
+            {
+              "userId": "91rcZUO4r0jCbZNaDq7oeVp2htZ5oFYG",
+              "email": "audit-b@example.invalid",
+              "role": "editor"
+            },
+            {
+              "userId": "vgmFK0DauugrvpfoFQaCNGE8N9BqV1pv",
+              "email": "audit-a@example.invalid",
+              "role": "viewer"
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "CONFIRMED integer half-star rating doubled",
+    "evidence": {
+      "submitted": 1,
+      "persisted": 2
+    }
+  },
+  {
+    "name": "PAGINATION first page shape",
+    "evidence": {
+      "success": true,
+      "data": {
+        "books": [
+          {
+            "id": "da44812f-8d4b-48a5-a2aa-b15c8ce85030",
+            "title": "Private Audit Title One",
+            "sortTitle": "Private Audit Title One",
+            "calibreBookId": null,
+            "description": null,
+            "published": "2020-01-01",
+            "publishedAt": "2020-01-01T00:00:00.000Z",
+            "language": null,
+            "pages": null,
+            "coverImagePath": null,
+            "publisherId": null,
+            "seriesId": null,
+            "seriesIndex": null,
+            "createdByUserId": "vgmFK0DauugrvpfoFQaCNGE8N9BqV1pv",
+            "createdAt": "2026-10-28T02:26:05.000Z",
+            "updatedAt": "2026-10-28T02:26:05.000Z",
+            "author": "PrivateUniqueAuditAuthor",
+            "authorNames": [
+              "PrivateUniqueAuditAuthor"
+            ],
+            "authors": [
+              {
+                "id": "f550082c-f7d6-4b71-922e-c76a65df2e6a",
+                "name": "PrivateUniqueAuditAuthor"
+              }
+            ],
+            "publisher": null,
+            "series": null
+          }
+        ],
+        "nextCursor": "eyJ2IjoiMTU3NzgzNjgwMDAwMCIsImlkIjoiZGE0NDgxMmYtOGQ0Yi00OGE1LWEyYWEtYjE1YzhjZTg1MDMwIn0"
+      }
+    }
+  },
+  {
+    "name": "CONFIRMED published-date cursor unit mismatch",
+    "evidence": {
+      "firstBooks": [
+        {
+          "id": "da44812f-8d4b-48a5-a2aa-b15c8ce85030",
+          "publishedAt": "2020-01-01T00:00:00.000Z"
+        }
+      ],
+      "cursor": "eyJ2IjoiMTU3NzgzNjgwMDAwMCIsImlkIjoiZGE0NDgxMmYtOGQ0Yi00OGE1LWEyYWEtYjE1YzhjZTg1MDMwIn0",
+      "nextStatus": 200,
+      "nextBooks": []
+    }
+  },
+  {
+    "name": "METADATA duplicate author partial update",
+    "evidence": {
+      "editStatus": 500,
+      "bookAfter": {
+        "id": "da44812f-8d4b-48a5-a2aa-b15c8ce85030",
+        "title": "Changed Despite Failed Edit",
+        "sortTitle": "Changed Despite Failed Edit",
+        "calibreBookId": null,
+        "description": null,
+        "published": "2020-01-01",
+        "publishedAt": "2020-01-01T00:00:00.000Z",
+        "language": null,
+        "pages": null,
+        "coverImagePath": null,
+        "publisherId": null,
+        "seriesId": null,
+        "seriesIndex": null,
+        "createdByUserId": "vgmFK0DauugrvpfoFQaCNGE8N9BqV1pv",
+        "createdAt": "2026-10-28T02:26:05.000Z",
+        "updatedAt": "2026-10-28T02:26:05.000Z",
+        "publisher": null,
+        "series": null,
+        "tags": [
+          {
+            "id": "6d82887f-b3f2-4c69-8a2d-2fda85030741",
+            "name": "PrivateUniqueAuditTag"
+          }
+        ],
+        "identifiers": [],
+        "userRating": 2,
+        "userStatus": null,
+        "userStatusStartedAt": null,
+        "userStatusFinishedAt": null,
+        "userStatusDnfAt": null,
+        "userStatusTbrRank": null,
+        "userProgressSyncEnabled": false
+      }
+    }
+  }
+]

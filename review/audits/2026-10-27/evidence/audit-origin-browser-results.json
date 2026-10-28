@@ -1,0 +1,26 @@
+[
+  {
+    "check": "EPUB parent-origin access",
+    "allowScriptedContent": false,
+    "parentMarker": null,
+    "frameSandbox": "allow-same-origin"
+  },
+  {
+    "check": "EPUB parent-origin access",
+    "allowScriptedContent": true,
+    "parentMarker": "http://127.0.0.1:4317",
+    "frameSandbox": "allow-same-origin allow-scripts"
+  },
+  {
+    "check": "actual authenticated app reader",
+    "url": "/books/72fd13c7-34f5-4214-8709-22871df64b86/read",
+    "title": "Reading · Synthetic Audit Origin Proof | Delb",
+    "parentMarker": "http://127.0.0.1:4317",
+    "bodyMarker": "executed",
+    "iframes": [
+      {
+        "sandbox": "allow-same-origin allow-scripts"
+      }
+    ]
+  }
+]

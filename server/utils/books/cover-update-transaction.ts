@@ -23,7 +23,9 @@ type JournalEntry = {
 };
 
 type CoverUpdateJournal = {
-  version: 1;
+  version: 1 | 2;
+  operationId?: string;
+  bookId?: string;
   phase: 'prepared' | 'database-committed';
   previousCoverImagePath: string | null;
   expectedCoverImagePath: string;
@@ -61,13 +63,20 @@ export async function recoverPendingCoverUpdates(opts: {
   operationParent: string;
   allowedRoot: string;
   currentCoverImagePath: string | null;
+  bookId?: string;
+  decision?: {
+    isCommitted: (id: string) => Promise<boolean>;
+    remove: (id: string) => Promise<void>;
+  };
 }): Promise<CoverUpdateResult> {
   const backupFallbackPaths: string[] = [];
   let entries: string[];
   try {
     entries = await readdir(opts.operationParent);
-  } catch {
-    return { backupFallbackPaths };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT')
+      return { backupFallbackPaths };
+    throw error;
   }
   for (const name of entries.filter((entry) =>
     entry.startsWith('.cover-update-'),
@@ -79,15 +88,28 @@ export async function recoverPendingCoverUpdates(opts: {
         await readFile(path.join(operationDir, 'journal.json'), 'utf8'),
       ) as CoverUpdateJournal;
       validateJournal(journal, opts.allowedRoot, operationDir);
-    } catch {
-      // Preserve an unreadable operation directory: it may contain the only
-      // recoverable backups after an interrupted rename or disk failure.
-      continue;
+      if (journal.version === 2 && journal.bookId !== opts.bookId) continue;
+    } catch (error) {
+      throw new Error(`Cannot recover cover journal ${operationDir}`, {
+        cause: error,
+      });
     }
-    const databaseChanged =
+    let committed: boolean;
+    if (journal.version === 2) {
+      if (!opts.decision || !journal.operationId)
+        throw new Error(`Missing cover decision for ${operationDir}`);
+      committed = await opts.decision.isCommitted(journal.operationId);
+    } else if (journal.phase === 'database-committed') {
+      committed = true;
+    } else if (
       journal.previousCoverImagePath !== journal.expectedCoverImagePath &&
-      opts.currentCoverImagePath === journal.expectedCoverImagePath;
-    if (journal.phase === 'database-committed' || databaseChanged) {
+      opts.currentCoverImagePath === journal.previousCoverImagePath
+    ) {
+      committed = false;
+    } else {
+      throw new Error(`Ambiguous cover journal ${operationDir}`);
+    }
+    if (committed) {
       backupFallbackPaths.push(
         ...(await rollForward(operationDir, journal, rename)),
       );
@@ -95,6 +117,9 @@ export async function recoverPendingCoverUpdates(opts: {
       await rollbackFiles(operationDir, journal);
     }
     await rm(operationDir, { recursive: true, force: true });
+    if (journal.version === 2 && journal.operationId && opts.decision) {
+      await opts.decision.remove(journal.operationId);
+    }
   }
   return { backupFallbackPaths };
 }
@@ -104,26 +129,42 @@ export async function commitCoverUpdate(opts: {
   allowedRoot: string;
   previousCoverImagePath: string | null;
   expectedCoverImagePath: string;
+  bookId?: string;
   files: CoverUpdateFile[];
-  commitDatabase: () => Promise<void>;
+  commitDatabase: (operationId: string) => Promise<void>;
+  decision?: {
+    isCommitted: (id: string) => Promise<boolean>;
+    remove: (id: string) => Promise<void>;
+  };
   rollbackDatabase: () => Promise<void>;
   renameExistingToBackup?: RenameExistingToBackup;
 }): Promise<CoverUpdateResult> {
+  const operationId = crypto.randomUUID();
   const operationDir = path.join(
     opts.operationParent,
-    `.cover-update-${crypto.randomUUID()}`,
+    `.cover-update-${operationId}`,
   );
-  await mkdir(operationDir, { recursive: false });
+  const preparingDir = path.join(
+    opts.operationParent,
+    `.delb-preparing-cover-${operationId}`,
+  );
+  await mkdir(preparingDir, { recursive: false });
   const entries: JournalEntry[] = [];
+  let published = false;
   try {
     for (const [index, file] of opts.files.entries()) {
       assertInside(opts.allowedRoot, file.targetPath);
       const stagedName = `new-${index}`;
       const backupName = `old-${index}`;
       const hadOriginal = await exists(file.targetPath);
-      await writeFile(path.join(operationDir, stagedName), file.data, {
-        flag: 'wx',
-      });
+      const stagedPath = path.join(preparingDir, stagedName);
+      await writeFile(stagedPath, file.data, { flag: 'wx' });
+      const stagedHandle = await open(stagedPath, 'r');
+      try {
+        await stagedHandle.sync();
+      } finally {
+        await stagedHandle.close();
+      }
       entries.push({
         targetPath: file.targetPath,
         stagedName,
@@ -132,14 +173,18 @@ export async function commitCoverUpdate(opts: {
       });
     }
     const journal: CoverUpdateJournal = {
-      version: 1,
+      version: opts.decision ? 2 : 1,
+      operationId: opts.decision ? operationId : undefined,
+      bookId: opts.decision ? opts.bookId : undefined,
       phase: 'prepared',
       previousCoverImagePath: opts.previousCoverImagePath,
       expectedCoverImagePath: opts.expectedCoverImagePath,
       entries,
     };
-    await writeJournal(operationDir, journal);
-    await opts.commitDatabase();
+    await writeJournal(preparingDir, journal);
+    await rename(preparingDir, operationDir);
+    published = true;
+    await opts.commitDatabase(operationId);
     journal.phase = 'database-committed';
     await writeJournal(operationDir, journal);
     const backupFallbackPaths = await rollForward(
@@ -148,10 +193,21 @@ export async function commitCoverUpdate(opts: {
       opts.renameExistingToBackup ?? rename,
     );
     await rm(operationDir, { recursive: true, force: true });
+    if (opts.decision) await opts.decision.remove(operationId);
     return { backupFallbackPaths };
   } catch (error) {
+    if (!published) {
+      await rm(preparingDir, { recursive: true, force: true });
+      await opts.rollbackDatabase();
+      throw error;
+    }
+    if (opts.decision && (await opts.decision.isCommitted(operationId))) {
+      throw error;
+    }
     const journal: CoverUpdateJournal = {
-      version: 1,
+      version: opts.decision ? 2 : 1,
+      operationId: opts.decision ? operationId : undefined,
+      bookId: opts.decision ? opts.bookId : undefined,
       phase: 'prepared',
       previousCoverImagePath: opts.previousCoverImagePath,
       expectedCoverImagePath: opts.expectedCoverImagePath,
@@ -208,8 +264,21 @@ async function rollForward(
         renameExistingToBackup,
       );
       if (usedFallback) backupFallbackPaths.push(entry.targetPath);
-    } else if (await exists(entry.targetPath)) {
+    } else if (
+      entry.hadOriginal &&
+      (await exists(backup)) &&
+      (await exists(entry.targetPath))
+    ) {
+      if (
+        (await stat(backup)).size !== (await stat(entry.targetPath)).size ||
+        (await sha256(backup)) !== (await sha256(entry.targetPath))
+      )
+        throw new Error(
+          `Cover target unexpectedly exists: ${entry.targetPath}`,
+        );
       await unlink(entry.targetPath);
+    } else if (await exists(entry.targetPath)) {
+      throw new Error(`Cover target unexpectedly exists: ${entry.targetPath}`);
     }
     await rename(staged, entry.targetPath);
   }
@@ -247,9 +316,6 @@ async function moveExistingToBackup(
     } catch (fallbackError) {
       // The source is still present unless unlink succeeded. Never delete the
       // backup if it may now be the only recoverable copy.
-      if (await exists(source)) {
-        await unlink(backup).catch(() => undefined);
-      }
       throw new CoverUpdateStorageError(
         source,
         new AggregateError(
@@ -303,6 +369,12 @@ async function writeJournal(
 ): Promise<void> {
   const temporary = path.join(operationDir, 'journal.tmp');
   await writeFile(temporary, JSON.stringify(journal), { flag: 'w' });
+  const handle = await open(temporary, 'r');
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
   await rename(temporary, path.join(operationDir, 'journal.json'));
 }
 
@@ -311,7 +383,13 @@ function validateJournal(
   allowedRoot: string,
   operationDir: string,
 ): void {
-  if (journal.version !== 1 || !Array.isArray(journal.entries))
+  if (
+    (journal.version !== 1 && journal.version !== 2) ||
+    (journal.version === 2 &&
+      (typeof journal.operationId !== 'string' ||
+        typeof journal.bookId !== 'string')) ||
+    !Array.isArray(journal.entries)
+  )
     throw new Error('Invalid cover update journal');
   for (const entry of journal.entries) {
     assertInside(allowedRoot, entry.targetPath);
@@ -335,7 +413,8 @@ async function exists(filePath: string): Promise<boolean> {
   try {
     await access(filePath);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
   }
 }

@@ -1,0 +1,77 @@
+[
+  {
+    "check": "synthetic registration and EPUB upload",
+    "evidence": {
+      "status": 200
+    }
+  },
+  {
+    "check": "authenticated reader blocks EPUB script parent access",
+    "evidence": {
+      "flow": "scrolled",
+      "sandbox": "allow-same-origin",
+      "parentMarker": null,
+      "bodyMarker": null,
+      "text": true
+    }
+  },
+  {
+    "check": "reader controls have native labels",
+    "evidence": {
+      "font": true,
+      "line": true,
+      "selects": []
+    }
+  },
+  {
+    "check": "pages reader remains script disabled",
+    "evidence": {
+      "flow": "paginated",
+      "sandbox": "allow-same-origin",
+      "parentMarker": null,
+      "bodyMarker": null,
+      "text": true
+    }
+  },
+  {
+    "check": "scroll reader remains script disabled",
+    "evidence": {
+      "flow": "scrolled",
+      "sandbox": "allow-same-origin",
+      "parentMarker": null,
+      "bodyMarker": null,
+      "text": true
+    }
+  },
+  {
+    "check": "keyboard opens table of contents",
+    "evidence": {
+      "nativeButton": true
+    }
+  },
+  {
+    "check": "rapid in-app exit persists location",
+    "evidence": {
+      "status": 200,
+      "hasLocation": true,
+      "location": "epubcfi(/6/2!/4/16/1:0)"
+    }
+  },
+  {
+    "check": "global search exposes selected results",
+    "evidence": {
+      "label": "Search library",
+      "list": true,
+      "active": true,
+      "options": 1
+    }
+  },
+  {
+    "check": "command palette names results and contains keyboard focus",
+    "evidence": {
+      "list": true,
+      "active": true,
+      "controls": 1
+    }
+  }
+]

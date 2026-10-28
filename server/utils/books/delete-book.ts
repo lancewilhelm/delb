@@ -1,7 +1,7 @@
 import path from 'node:path';
-import { rm } from 'node:fs/promises';
+import { mkdir, stat } from 'node:fs/promises';
 
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
@@ -14,8 +14,11 @@ import {
   books,
   collectionBooks,
   userBookStatus,
+  storageOperations,
 } from '~/utils/db/schema';
-import { logger } from '~/utils/logger';
+import { withBookStorageLock } from '~~/server/utils/books/storage/book-lock';
+import { deleteStoredFiles } from '~~/server/utils/books/storage/delete-operation';
+import { deleteDecision } from '~~/server/utils/books/storage/delete-recovery';
 
 export type DeleteMode = 'db_only' | 'everything';
 
@@ -53,32 +56,6 @@ function resolveUnderLibrary(
   return abs;
 }
 
-async function safeRmFile(absPath: string, logCtx: string) {
-  try {
-    await rm(absPath, { force: true });
-  } catch (e) {
-    logger.warn(e, `${logCtx}: Failed to delete file (continuing)`);
-  }
-}
-
-async function safeRmDir(absPath: string, logCtx: string) {
-  try {
-    await rm(absPath, { force: true, recursive: true });
-  } catch (e) {
-    logger.warn(e, `${logCtx}: Failed to delete directory (continuing)`);
-  }
-}
-
-function getBookDirFromKnownAbsPath(
-  libraryBaseAbs: string,
-  absPath: string,
-): string | null {
-  const relToBase = path.relative(libraryBaseAbs, absPath);
-  if (relToBase.startsWith('..') || relToBase.includes(`..${path.sep}`))
-    return null;
-  return path.dirname(absPath);
-}
-
 function canDeleteBook(opts: {
   actor: DeleteBookActor;
   bookCreatedByUserId: string | null;
@@ -89,7 +66,7 @@ function canDeleteBook(opts: {
   return opts.bookCreatedByUserId === opts.actor.id;
 }
 
-export async function deleteBook(opts: {
+async function deleteBookUnlocked(opts: {
   bookId: string;
   mode: DeleteMode;
   actor: DeleteBookActor;
@@ -115,48 +92,88 @@ export async function deleteBook(opts: {
 
   const libraryBaseAbs = path.resolve(process.cwd(), 'library');
 
-  let bookDirAbs: string | null = null;
-  const firstFileRel =
-    fileRows.find((r) => r.relativePath)?.relativePath ?? null;
-
-  if (firstFileRel) {
-    const knownAbs = resolveUnderLibrary(libraryBaseAbs, firstFileRel);
-    bookDirAbs = getBookDirFromKnownAbsPath(libraryBaseAbs, knownAbs);
-  } else if (book.coverImagePath) {
-    const knownAbs = resolveUnderLibrary(libraryBaseAbs, book.coverImagePath);
-    bookDirAbs = getBookDirFromKnownAbsPath(libraryBaseAbs, knownAbs);
-  }
-
+  const sources: string[] = [];
   if (mode === 'everything') {
-    for (const f of fileRows) {
-      if (!f.relativePath) continue;
-      const fileAbs = resolveUnderLibrary(libraryBaseAbs, f.relativePath);
-      await safeRmFile(fileAbs, logCtx);
-    }
-
-    if (book.coverImagePath) {
-      const coverAbs = resolveUnderLibrary(libraryBaseAbs, book.coverImagePath);
-      await safeRmFile(coverAbs, logCtx);
-    }
-
-    if (bookDirAbs) {
-      await safeRmDir(bookDirAbs, logCtx);
+    const paths = [
+      ...fileRows.map((file) => file.relativePath),
+      book.coverImagePath,
+    ];
+    for (const stored of new Set(paths)) {
+      if (!stored) continue;
+      const [sharedFiles, sharedCovers] = await Promise.all([
+        cloudDb
+          .select({ id: bookFiles.id })
+          .from(bookFiles)
+          .where(
+            and(
+              eq(bookFiles.relativePath, stored),
+              ne(bookFiles.bookId, bookId),
+            ),
+          )
+          .limit(1),
+        cloudDb
+          .select({ id: books.id })
+          .from(books)
+          .where(and(eq(books.coverImagePath, stored), ne(books.id, bookId)))
+          .limit(1),
+      ]);
+      if (sharedFiles.length || sharedCovers.length) continue;
+      const file = resolveUnderLibrary(libraryBaseAbs, stored);
+      try {
+        await stat(file);
+        sources.push(file);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
     }
   }
-
-  await cloudDb
-    .delete(collectionBooks)
-    .where(eq(collectionBooks.bookId, bookId));
-  await cloudDb.delete(bookFiles).where(eq(bookFiles.bookId, bookId));
-  await cloudDb.delete(bookAuthors).where(eq(bookAuthors.bookId, bookId));
-  await cloudDb.delete(bookTags).where(eq(bookTags.bookId, bookId));
-  await cloudDb
-    .delete(bookIdentifiers)
-    .where(eq(bookIdentifiers.bookId, bookId));
-  await cloudDb.delete(userBookStatus).where(eq(userBookStatus.bookId, bookId));
-  await cloudDb.delete(bookRatings).where(eq(bookRatings.bookId, bookId));
-  await cloudDb.delete(bookNotes).where(eq(bookNotes.bookId, bookId));
-  await cloudDb.delete(books).where(eq(books.id, bookId));
+  const commit = async (operationId?: string) => {
+    await cloudDb.transaction(async (tx) => {
+      if (operationId)
+        await tx.insert(storageOperations).values({
+          id: operationId,
+          bookId,
+          kind: 'delete',
+          createdAt: new Date(),
+        });
+      await tx
+        .delete(collectionBooks)
+        .where(eq(collectionBooks.bookId, bookId));
+      await tx.delete(bookFiles).where(eq(bookFiles.bookId, bookId));
+      await tx.delete(bookAuthors).where(eq(bookAuthors.bookId, bookId));
+      await tx.delete(bookTags).where(eq(bookTags.bookId, bookId));
+      await tx
+        .delete(bookIdentifiers)
+        .where(eq(bookIdentifiers.bookId, bookId));
+      await tx.delete(userBookStatus).where(eq(userBookStatus.bookId, bookId));
+      await tx.delete(bookRatings).where(eq(bookRatings.bookId, bookId));
+      await tx.delete(bookNotes).where(eq(bookNotes.bookId, bookId));
+      await tx.delete(books).where(eq(books.id, bookId));
+    });
+  };
+  if (mode === 'everything') {
+    await mkdir(libraryBaseAbs, { recursive: true });
+    await deleteStoredFiles({
+      root: libraryBaseAbs,
+      bookId,
+      sources,
+      decision: deleteDecision,
+      commit,
+    });
+  } else {
+    await commit();
+  }
+  void logCtx;
 
   return { mode };
+}
+
+export async function deleteBook(
+  opts: Parameters<typeof deleteBookUnlocked>[0],
+) {
+  return await withBookStorageLock(
+    path.resolve(process.cwd(), 'library'),
+    opts.bookId,
+    async () => await deleteBookUnlocked(opts),
+  );
 }

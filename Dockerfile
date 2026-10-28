@@ -1,4 +1,4 @@
-ARG NODE_VERSION=20
+ARG NODE_VERSION=22.22.3
 
 FROM node:${NODE_VERSION}-slim AS base
 WORKDIR /app
@@ -28,7 +28,7 @@ RUN pnpm install --frozen-lockfile --prod
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN ./node_modules/.bin/esbuild .drizzle/migrate.ts --platform=node --format=esm --target=node20 --bundle --packages=external --outfile=.drizzle/migrate.mjs
+RUN ./node_modules/.bin/esbuild .drizzle/migrate.ts --platform=node --format=esm --target=node22 --bundle --packages=external --outfile=.drizzle/migrate.mjs
 RUN pnpm build
 
 # -------------------------------

@@ -3,6 +3,7 @@ name: Test
 on:
   push:
   pull_request:
+  workflow_call:
 
 jobs:
   test:
@@ -12,22 +13,19 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '22.22.3'
           cache: pnpm
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test:epub
-      - run: pnpm test:cover-transaction
-      - run: pnpm test:cover-upload
-      - run: pnpm test:page-sort
-      - run: pnpm test:review
-      - run: pnpm test:reader-fullscreen
+      - run: pnpm prepare:nuxt
+      - run: pnpm test
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm build
+      - run: pnpm test:integration
       - name: Generate EPUBCheck fixtures
         run: pnpm --filter @delb/epub fixtures:epubcheck -- "$RUNNER_TEMP/epub-fixtures"
       - name: Install EPUBCheck 5.4.0

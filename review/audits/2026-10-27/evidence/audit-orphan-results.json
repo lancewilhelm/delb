@@ -1,0 +1,6 @@
+{
+  "check": "Metadata import fails after persisting invisible orphan",
+  "response": 500,
+  "bookRows": 1,
+  "collectionCount": 0
+}

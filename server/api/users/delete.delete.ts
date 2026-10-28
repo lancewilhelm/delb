@@ -2,7 +2,7 @@ import { logger } from '~/utils/logger';
 import { auth } from '~/utils/auth';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { users } from '~/utils/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 
 export default defineEventHandler(async (event) => {
   logger.debug('DELETE /api/users/delete');
@@ -30,7 +30,14 @@ export default defineEventHandler(async (event) => {
 
   try {
     // Delete the user from the database
-    await cloudDb.delete(users).where(eq(users.id, id));
+    const deleted = await cloudDb
+      .delete(users)
+      .where(and(eq(users.id, id), ne(users.role, 'owner')))
+      .returning({ id: users.id });
+    if (!deleted.length) {
+      setResponseStatus(event, 404);
+      return { message: 'User not found or cannot be removed' };
+    }
 
     return { success: true };
   } catch (error) {

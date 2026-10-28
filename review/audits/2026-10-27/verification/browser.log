@@ -1,0 +1,9 @@
+PASS synthetic registration and EPUB upload {"status":200}
+PASS authenticated reader blocks EPUB script parent access {"flow":"scrolled","sandbox":"allow-same-origin","parentMarker":null,"bodyMarker":null,"text":true}
+PASS reader controls have native labels {"font":true,"line":true,"selects":[]}
+PASS pages reader remains script disabled {"flow":"paginated","sandbox":"allow-same-origin","parentMarker":null,"bodyMarker":null,"text":true}
+PASS scroll reader remains script disabled {"flow":"scrolled","sandbox":"allow-same-origin","parentMarker":null,"bodyMarker":null,"text":true}
+PASS keyboard opens table of contents {"nativeButton":true}
+PASS rapid in-app exit persists location {"status":200,"hasLocation":true,"location":"epubcfi(/6/2!/4/16/1:0)"}
+PASS global search exposes selected results {"label":"Search library","list":true,"active":true,"options":1}
+PASS command palette names results and contains keyboard focus {"list":true,"active":true,"controls":1}

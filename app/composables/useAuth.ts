@@ -71,12 +71,14 @@ export function useAuth() {
           globalSettingsStore.$reset();
           uiStore.$reset();
           collectionsStore.$reset();
+          useBooksIndexFiltersStore().clearAll();
 
           const storesToClear = [
             'delb.userSettings',
             'delb.globalSettings',
             'delb.ui',
             'delb.collections',
+            'delb.booksIndexFilters',
           ];
           for (const store of storesToClear) {
             localStorage.removeItem(store);
@@ -116,6 +118,7 @@ export function useAuth() {
     globalSettingsStore.$reset();
     uiStore.$reset();
     collectionsStore.$reset();
+    useBooksIndexFiltersStore().clearAll();
 
     // Clear persisted local storage
     const storesToClear = [
@@ -123,6 +126,7 @@ export function useAuth() {
       'delb.globalSettings',
       'delb.ui',
       'delb.collections',
+      'delb.booksIndexFilters',
     ];
     if (import.meta.client) {
       for (const store of storesToClear) {

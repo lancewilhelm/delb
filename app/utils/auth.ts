@@ -119,6 +119,42 @@ export const auth = betterAuth({
       },
     },
     user: {
+      update: {
+        before: async (changes, context) => {
+          if (changes.role === undefined) return;
+          const targetId =
+            context?.body && typeof context.body.userId === 'string'
+              ? context.body.userId
+              : null;
+          if (!targetId)
+            throw new APIError('FORBIDDEN', {
+              message: 'Role change target is required.',
+            });
+          const target = await cloudDb
+            .select({ role: schema.users.role })
+            .from(schema.users)
+            .where(eq(schema.users.id, targetId))
+            .limit(1);
+          if (
+            target[0]?.role === 'owner' ||
+            (typeof changes.role === 'string' &&
+              changes.role.split(',').includes('owner'))
+          ) {
+            throw new APIError('FORBIDDEN', {
+              message: 'The system owner role cannot be changed.',
+            });
+          }
+        },
+      },
+      delete: {
+        before: async (user) => {
+          if (user.role === 'owner') {
+            throw new APIError('FORBIDDEN', {
+              message: 'The system owner cannot be removed.',
+            });
+          }
+        },
+      },
       create: {
         before: async (user) => {
           // Determine whether creation is coming from admin endpoints (avoid circular auth reference)
