@@ -69,6 +69,10 @@ async function finish(
   validate(root, journal);
   if (await decision.isCommitted(journal.id)) {
     for (const { source, destination } of journal.entries) {
+      if (!(await exists(destination)))
+        throw new Error(
+          `Committed move destination is missing: ${destination}`,
+        );
       if (!(await exists(source))) continue;
       if (!(await sameFileContents(source, destination)))
         throw new Error(`Moved file changed: ${source}`);
