@@ -1,5 +1,6 @@
 import path from 'node:path';
-import { mkdir, readFile, unlink } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { mkdir, stat } from 'node:fs/promises';
 
 import { eq } from 'drizzle-orm';
 
@@ -10,9 +11,11 @@ import {
   bookFiles,
   books,
   collectionBooks,
+  storageOperations,
 } from '~/utils/db/schema';
 import { logger } from '~/utils/logger';
 import { copyVerifiedExclusive } from '~~/server/utils/books/storage/verified-copy';
+import { readBoundedUpload } from '~~/server/utils/books/storage/bounded-upload';
 
 import { parseEpubMetadataFromBuffer } from '~~/server/utils/books/epub';
 import { extractAndStoreEpubCover } from '~~/server/utils/books/epub-cover';
@@ -129,9 +132,15 @@ export async function ingestDropboxFile(opts: {
   fileAbs: string;
   originalFilename: string;
   target: DropboxTarget;
+  operationId: string;
 }): Promise<DropboxIngestResult> {
   const format = ensureSupportedBookFormat(opts.originalFilename);
-  const buffer = await readFile(opts.fileAbs);
+  if ((await stat(opts.fileAbs)).size > 100 * 1024 * 1024)
+    throw new Error('Dropbox file exceeds the 100 MiB limit');
+  const buffer = await readBoundedUpload(
+    createReadStream(opts.fileAbs),
+    100 * 1024 * 1024,
+  );
 
   const meta = await parseBookMetadataFromBuffer({
     buffer,
@@ -202,6 +211,12 @@ export async function ingestDropboxFile(opts: {
   const publishedAt = published ? normalizePublishedAt(published) : null;
 
   await cloudDb.transaction(async (tx) => {
+    await tx.insert(storageOperations).values({
+      id: opts.operationId,
+      bookId,
+      kind: 'dropbox',
+      createdAt: now,
+    });
     await tx.insert(books).values({
       id: bookId,
       title,
@@ -243,8 +258,6 @@ export async function ingestDropboxFile(opts: {
       });
     }
   });
-  // Keep the claimed input until the database commit has succeeded.
-  await unlink(opts.fileAbs);
 
   return { bookId, relativePath, title, author: authorName, format };
 }

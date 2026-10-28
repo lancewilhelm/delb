@@ -19,6 +19,15 @@ export async function copyVerifiedExclusive(
   } finally {
     await handle.close();
   }
+  if (!(await sameFileContents(source, destination))) {
+    throw new Error(`Copy verification failed for ${source}`);
+  }
+}
+
+export async function sameFileContents(
+  source: string,
+  destination: string,
+): Promise<boolean> {
   const [sourceStat, destinationStat, sourceHash, destinationHash] =
     await Promise.all([
       stat(source),
@@ -26,10 +35,7 @@ export async function copyVerifiedExclusive(
       digest(source),
       digest(destination),
     ]);
-  if (
-    sourceStat.size !== destinationStat.size ||
-    sourceHash !== destinationHash
-  ) {
-    throw new Error(`Copy verification failed for ${source}`);
-  }
+  return (
+    sourceStat.size === destinationStat.size && sourceHash === destinationHash
+  );
 }
