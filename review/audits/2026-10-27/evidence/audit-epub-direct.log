@@ -1,0 +1,472 @@
+TAP version 13
+# Subtest: replaces an EPUB 3 cover and produces a conforming mimetype entry
+ok 1 - replaces an EPUB 3 cover and produces a conforming mimetype entry
+  ---
+  duration_ms: 11.122708
+  type: 'test'
+  ...
+# Subtest: inserts a missing EPUB 2 cover, title page, guide, and first spine item
+ok 2 - inserts a missing EPUB 2 cover, title page, guide, and first spine item
+  ---
+  duration_ms: 1.996334
+  type: 'test'
+  ...
+# Subtest: repairs a simple first-spine cover and preserves unrelated files
+ok 3 - repairs a simple first-spine cover and preserves unrelated files
+  ---
+  duration_ms: 2.066
+  type: 'test'
+  ...
+# Subtest: replaces a direct-image first spine item with a valid title page
+ok 4 - replaces a direct-image first spine item with a valid title page
+  ---
+  duration_ms: 1.578708
+  type: 'test'
+  ...
+# Subtest: updates a root-level Calibre SVG cover page in place
+ok 5 - updates a root-level Calibre SVG cover page in place
+  ---
+  duration_ms: 1.811083
+  type: 'test'
+  ...
+# Subtest: inserts missing resources when the OPF is at the archive root
+ok 6 - inserts missing resources when the OPF is at the archive root
+  ---
+  duration_ms: 1.282291
+  type: 'test'
+  ...
+# Subtest: strict replacement rejects an EPUB without a detectable cover
+ok 7 - strict replacement rejects an EPUB without a detectable cover
+  ---
+  duration_ms: 0.562917
+  type: 'test'
+  ...
+# Subtest: rejects signed EPUBs and image bytes that do not match their media type
+ok 8 - rejects signed EPUBs and image bytes that do not match their media type
+  ---
+  duration_ms: 0.659959
+  type: 'test'
+  ...
+# Subtest: finds an encoded image path through an EPUB 2 guide wrapper
+ok 9 - finds an encoded image path through an EPUB 2 guide wrapper
+  ---
+  duration_ms: 0.745
+  type: 'test'
+  ...
+# Subtest: preserves a complex existing title page and reports the inserted replacement page
+ok 10 - preserves a complex existing title page and reports the inserted replacement page
+  ---
+  duration_ms: 1.445625
+  type: 'test'
+  ...
+# Subtest: rejects an encrypted existing cover resource
+ok 11 - rejects an encrypted existing cover resource
+  ---
+  duration_ms: 0.784542
+  type: 'test'
+  ...
+# Subtest: uses the package-media-type rootfile when the container declares multiple renditions
+ok 12 - uses the package-media-type rootfile when the container declares multiple renditions
+  ---
+  duration_ms: 0.411625
+  type: 'test'
+  ...
+# Subtest: enforces archive entry limits before cover inspection
+ok 13 - enforces archive entry limits before cover inspection
+  ---
+  duration_ms: 0.295042
+  type: 'test'
+  ...
+# Subtest: rejects malformed and traversal ZIP input with typed EPUB errors
+ok 14 - rejects malformed and traversal ZIP input with typed EPUB errors
+  ---
+  duration_ms: 0.715542
+  type: 'test'
+  ...
+# Subtest: honors both title-page aspect-ratio modes
+ok 15 - honors both title-page aspect-ratio modes
+  ---
+  duration_ms: 1.177125
+  type: 'test'
+  ...
+# Subtest: normalizes conflicting markers and selects unique resource IDs and paths
+ok 16 - normalizes conflicting markers and selects unique resource IDs and paths
+  ---
+  duration_ms: 1.070333
+  type: 'test'
+  ...
+# Subtest: Node file adapters inspect input and atomically write an explicit output
+ok 17 - Node file adapters inspect input and atomically write an explicit output
+  ---
+  duration_ms: 7.722209
+  type: 'test'
+  ...
+# Subtest: EPUB 2: opt-in normalization of missing preserves reading resources
+ok 18 - EPUB 2: opt-in normalization of missing preserves reading resources
+  ---
+  duration_ms: 13.698916
+  type: 'test'
+  ...
+# Subtest: EPUB 2: opt-in normalization of empty preserves reading resources
+ok 19 - EPUB 2: opt-in normalization of empty preserves reading resources
+  ---
+  duration_ms: 3.222584
+  type: 'test'
+  ...
+# Subtest: EPUB 2: opt-in normalization of trailing LF preserves reading resources
+ok 20 - EPUB 2: opt-in normalization of trailing LF preserves reading resources
+  ---
+  duration_ms: 2.482541
+  type: 'test'
+  ...
+# Subtest: EPUB 2: opt-in normalization of whitespace-only preserves reading resources
+ok 21 - EPUB 2: opt-in normalization of whitespace-only preserves reading resources
+  ---
+  duration_ms: 2.038291
+  type: 'test'
+  ...
+# Subtest: EPUB 2: opt-in normalization of CRLF and spaces preserves reading resources
+ok 22 - EPUB 2: opt-in normalization of CRLF and spaces preserves reading resources
+  ---
+  duration_ms: 1.996292
+  type: 'test'
+  ...
+# Subtest: EPUB 2: opt-in normalization of UTF-8 BOM preserves reading resources
+ok 23 - EPUB 2: opt-in normalization of UTF-8 BOM preserves reading resources
+  ---
+  duration_ms: 1.678958
+  type: 'test'
+  ...
+# Subtest: EPUB 2: opt-in normalization of BOM and newline preserves reading resources
+ok 24 - EPUB 2: opt-in normalization of BOM and newline preserves reading resources
+  ---
+  duration_ms: 1.439875
+  type: 'test'
+  ...
+# Subtest: EPUB 3: opt-in normalization of missing preserves reading resources
+ok 25 - EPUB 3: opt-in normalization of missing preserves reading resources
+  ---
+  duration_ms: 1.600833
+  type: 'test'
+  ...
+# Subtest: EPUB 3: opt-in normalization of empty preserves reading resources
+ok 26 - EPUB 3: opt-in normalization of empty preserves reading resources
+  ---
+  duration_ms: 1.563125
+  type: 'test'
+  ...
+# Subtest: EPUB 3: opt-in normalization of trailing LF preserves reading resources
+ok 27 - EPUB 3: opt-in normalization of trailing LF preserves reading resources
+  ---
+  duration_ms: 1.188458
+  type: 'test'
+  ...
+# Subtest: EPUB 3: opt-in normalization of whitespace-only preserves reading resources
+ok 28 - EPUB 3: opt-in normalization of whitespace-only preserves reading resources
+  ---
+  duration_ms: 1.079125
+  type: 'test'
+  ...
+# Subtest: EPUB 3: opt-in normalization of CRLF and spaces preserves reading resources
+ok 29 - EPUB 3: opt-in normalization of CRLF and spaces preserves reading resources
+  ---
+  duration_ms: 0.75475
+  type: 'test'
+  ...
+# Subtest: EPUB 3: opt-in normalization of UTF-8 BOM preserves reading resources
+ok 30 - EPUB 3: opt-in normalization of UTF-8 BOM preserves reading resources
+  ---
+  duration_ms: 1.043917
+  type: 'test'
+  ...
+# Subtest: EPUB 3: opt-in normalization of BOM and newline preserves reading resources
+ok 31 - EPUB 3: opt-in normalization of BOM and newline preserves reading resources
+  ---
+  duration_ms: 0.983
+  type: 'test'
+  ...
+# Subtest: canonical input does not need repair or a repair warning
+ok 32 - canonical input does not need repair or a repair warning
+  ---
+  duration_ms: 0.636416
+  type: 'test'
+  ...
+# Subtest: does not overwrite another MIME type
+ok 33 - does not overwrite another MIME type
+  ---
+  duration_ms: 0.28725
+  type: 'test'
+  ...
+# Subtest: does not overwrite arbitrary text
+ok 34 - does not overwrite arbitrary text
+  ---
+  duration_ms: 0.156458
+  type: 'test'
+  ...
+# Subtest: does not overwrite uppercase value
+ok 35 - does not overwrite uppercase value
+  ---
+  duration_ms: 0.15225
+  type: 'test'
+  ...
+# Subtest: does not overwrite MIME parameters
+ok 36 - does not overwrite MIME parameters
+  ---
+  duration_ms: 0.270542
+  type: 'test'
+  ...
+# Subtest: does not overwrite NUL suffix
+ok 37 - does not overwrite NUL suffix
+  ---
+  duration_ms: 0.135584
+  type: 'test'
+  ...
+# Subtest: does not overwrite invalid UTF-8
+ok 38 - does not overwrite invalid UTF-8
+  ---
+  duration_ms: 0.14325
+  type: 'test'
+  ...
+# Subtest: does not overwrite UTF-16
+ok 39 - does not overwrite UTF-16
+  ---
+  duration_ms: 0.119292
+  type: 'test'
+  ...
+# Subtest: does not overwrite oversized whitespace
+ok 40 - does not overwrite oversized whitespace
+  ---
+  duration_ms: 0.117417
+  type: 'test'
+  ...
+# Subtest: repair rejects unrelated ZIP without changing input
+ok 41 - repair rejects unrelated ZIP without changing input
+  ---
+  duration_ms: 0.09275
+  type: 'test'
+  ...
+# Subtest: repair rejects missing container without changing input
+ok 42 - repair rejects missing container without changing input
+  ---
+  duration_ms: 0.113375
+  type: 'test'
+  ...
+# Subtest: repair rejects wrong container namespace without changing input
+ok 43 - repair rejects wrong container namespace without changing input
+  ---
+  duration_ms: 0.225792
+  type: 'test'
+  ...
+# Subtest: repair rejects wrong container version without changing input
+ok 44 - repair rejects wrong container version without changing input
+  ---
+  duration_ms: 0.201
+  type: 'test'
+  ...
+# Subtest: repair rejects nested rootfile without changing input
+ok 45 - repair rejects nested rootfile without changing input
+  ---
+  duration_ms: 0.20175
+  type: 'test'
+  ...
+# Subtest: repair rejects wrong rootfile media type without changing input
+ok 46 - repair rejects wrong rootfile media type without changing input
+  ---
+  duration_ms: 0.206208
+  type: 'test'
+  ...
+# Subtest: repair rejects missing OPF without changing input
+ok 47 - repair rejects missing OPF without changing input
+  ---
+  duration_ms: 0.118084
+  type: 'test'
+  ...
+# Subtest: repair rejects wrong OPF namespace without changing input
+ok 48 - repair rejects wrong OPF namespace without changing input
+  ---
+  duration_ms: 0.432959
+  type: 'test'
+  ...
+# Subtest: repair rejects missing metadata without changing input
+ok 49 - repair rejects missing metadata without changing input
+  ---
+  duration_ms: 0.293833
+  type: 'test'
+  ...
+# Subtest: repair rejects duplicate manifest ID without changing input
+ok 50 - repair rejects duplicate manifest ID without changing input
+  ---
+  duration_ms: 0.241709
+  type: 'test'
+  ...
+# Subtest: repair rejects missing local resource without changing input
+ok 51 - repair rejects missing local resource without changing input
+  ---
+  duration_ms: 0.2
+  type: 'test'
+  ...
+# Subtest: repair rejects empty spine without changing input
+ok 52 - repair rejects empty spine without changing input
+  ---
+  duration_ms: 0.249708
+  type: 'test'
+  ...
+# Subtest: repair rejects bad spine reference without changing input
+ok 53 - repair rejects bad spine reference without changing input
+  ---
+  duration_ms: 0.240167
+  type: 'test'
+  ...
+# Subtest: repair rejects non-XHTML reading content without changing input
+ok 54 - repair rejects non-XHTML reading content without changing input
+  ---
+  duration_ms: 0.229416
+  type: 'test'
+  ...
+# Subtest: repair rejects path traversal without changing input
+ok 55 - repair rejects path traversal without changing input
+  ---
+  duration_ms: 0.121666
+  type: 'test'
+  ...
+# Subtest: missing does not bypass signed
+ok 56 - missing does not bypass signed
+  ---
+  duration_ms: 0.286417
+  type: 'test'
+  ...
+# Subtest: missing does not bypass encrypted-cover
+ok 57 - missing does not bypass encrypted-cover
+  ---
+  duration_ms: 0.373916
+  type: 'test'
+  ...
+# Subtest: missing does not bypass encrypted-mimetype
+ok 58 - missing does not bypass encrypted-mimetype
+  ---
+  duration_ms: 0.487875
+  type: 'test'
+  ...
+# Subtest: empty does not bypass signed
+ok 59 - empty does not bypass signed
+  ---
+  duration_ms: 0.250666
+  type: 'test'
+  ...
+# Subtest: empty does not bypass encrypted-cover
+ok 60 - empty does not bypass encrypted-cover
+  ---
+  duration_ms: 0.292459
+  type: 'test'
+  ...
+# Subtest: empty does not bypass encrypted-mimetype
+ok 61 - empty does not bypass encrypted-mimetype
+  ---
+  duration_ms: 0.256166
+  type: 'test'
+  ...
+# Subtest: trailing LF does not bypass signed
+ok 62 - trailing LF does not bypass signed
+  ---
+  duration_ms: 0.237916
+  type: 'test'
+  ...
+# Subtest: trailing LF does not bypass encrypted-cover
+ok 63 - trailing LF does not bypass encrypted-cover
+  ---
+  duration_ms: 0.274708
+  type: 'test'
+  ...
+# Subtest: trailing LF does not bypass encrypted-mimetype
+ok 64 - trailing LF does not bypass encrypted-mimetype
+  ---
+  duration_ms: 0.509666
+  type: 'test'
+  ...
+# Subtest: whitespace-only does not bypass signed
+ok 65 - whitespace-only does not bypass signed
+  ---
+  duration_ms: 0.916542
+  type: 'test'
+  ...
+# Subtest: whitespace-only does not bypass encrypted-cover
+ok 66 - whitespace-only does not bypass encrypted-cover
+  ---
+  duration_ms: 1.181625
+  type: 'test'
+  ...
+# Subtest: whitespace-only does not bypass encrypted-mimetype
+ok 67 - whitespace-only does not bypass encrypted-mimetype
+  ---
+  duration_ms: 0.390334
+  type: 'test'
+  ...
+# Subtest: CRLF and spaces does not bypass signed
+ok 68 - CRLF and spaces does not bypass signed
+  ---
+  duration_ms: 0.29525
+  type: 'test'
+  ...
+# Subtest: CRLF and spaces does not bypass encrypted-cover
+ok 69 - CRLF and spaces does not bypass encrypted-cover
+  ---
+  duration_ms: 0.343666
+  type: 'test'
+  ...
+# Subtest: CRLF and spaces does not bypass encrypted-mimetype
+ok 70 - CRLF and spaces does not bypass encrypted-mimetype
+  ---
+  duration_ms: 0.308292
+  type: 'test'
+  ...
+# Subtest: UTF-8 BOM does not bypass signed
+ok 71 - UTF-8 BOM does not bypass signed
+  ---
+  duration_ms: 0.268417
+  type: 'test'
+  ...
+# Subtest: UTF-8 BOM does not bypass encrypted-cover
+ok 72 - UTF-8 BOM does not bypass encrypted-cover
+  ---
+  duration_ms: 0.328875
+  type: 'test'
+  ...
+# Subtest: UTF-8 BOM does not bypass encrypted-mimetype
+ok 73 - UTF-8 BOM does not bypass encrypted-mimetype
+  ---
+  duration_ms: 0.305125
+  type: 'test'
+  ...
+# Subtest: BOM and newline does not bypass signed
+ok 74 - BOM and newline does not bypass signed
+  ---
+  duration_ms: 0.314375
+  type: 'test'
+  ...
+# Subtest: BOM and newline does not bypass encrypted-cover
+ok 75 - BOM and newline does not bypass encrypted-cover
+  ---
+  duration_ms: 0.344416
+  type: 'test'
+  ...
+# Subtest: BOM and newline does not bypass encrypted-mimetype
+ok 76 - BOM and newline does not bypass encrypted-mimetype
+  ---
+  duration_ms: 0.3445
+  type: 'test'
+  ...
+# Subtest: repair still enforces archive limits before decompression
+ok 77 - repair still enforces archive limits before decompression
+  ---
+  duration_ms: 0.195167
+  type: 'test'
+  ...
+1..77
+# tests 77
+# suites 0
+# pass 77
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 100.713375

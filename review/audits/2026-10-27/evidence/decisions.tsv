@@ -1,0 +1,8 @@
+ts	phase	decision	why	evidence	result
+2026-10-28T02:37:56.268945+00:00	frame	Completed an audit report before application fixes	Preserve scope and keep findings reviewable	report.md	report created; no fixes
+2026-10-28T02:37:56.268945+00:00	verification	Separated API browser source-probe and static evidence	A passing unit suite does not prove authorization or crash recovery	evidence/audit-http-results.json; evidence/audit-origin-browser-results.json	live flaws reproduced
+2026-10-28T02:37:56.268945+00:00	storage	Independently reran storage and client probes	Verify actual source and fixture outcomes rather than reviewer summaries	evidence/proof-storage.mjs; evidence/proof-client.mjs	reproduced; stub limits retained
+2026-10-28T02:37:56.268945+00:00	tooling	Used direct installed CLIs in a disposable source copy	pnpm task state refused symlinked dependencies	evidence/audit-build.log; evidence/audit-typecheck.log	build passed; typecheck qualified
+2026-10-28T02:37:56.268945+00:00	triage	Retained re-sharing policy and separated advisory severity from reachability	Avoid changing intended behavior or claiming unproved compromise	report.md	37 findings and explicit hypotheses
+2026-10-28T02:40:55.293692+00:00	review	Independent configured reviewer found no material accuracy flags	Challenge evidence levels counts sharing policy and source claims	report.md; evidence/audit-http-results.json	37 findings and 139 tests verified; inventory corrected to 452
+2026-10-28T02:40:55.293692+00:00	handoff	Stopped disposable server and browser and verified source unchanged	Leave only the requested audit artifacts	evidence/audit-final-lint.log	ports 4317 and 9231 closed; git diff empty; lint exit 0 with one existing warning

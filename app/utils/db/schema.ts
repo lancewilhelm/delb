@@ -657,3 +657,15 @@ export type SelectUserBookProgressLog = InferSelectModel<
 >;
 export type SelectBookRating = InferSelectModel<typeof bookRatings>;
 export type SelectBookNote = InferSelectModel<typeof bookNotes>;
+
+export const storageOperations = sqliteTable('storage_operations', {
+  id: text('id').primaryKey(),
+  bookId: text('book_id').notNull(),
+  kind: text('kind').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
+export const systemState = sqliteTable('system_state', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+});

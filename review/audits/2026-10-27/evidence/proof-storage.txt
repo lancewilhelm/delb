@@ -1,0 +1,5 @@
+COVER {"error":"ENOENT","final":"OLD","operations":[]}
+MOVE_COLLISION {"sourceExists":false,"destination":"OTHER","updates":[{"relativePath":"library/Author/New (12345678)/New.pdf"}]}
+MOVE_SIDECAR {"sideExists":false,"destinationExists":false}
+DROPBOX {"error":"injected database failure","inputExists":false,"destinationExists":false}
+UPLOAD {"error":"injected database failure","oldDeleteCalled":true,"newFileExists":true}

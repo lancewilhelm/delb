@@ -1,0 +1,6 @@
+
+/Users/lancewilhelm/projects/delb/app/components/Books/BookDescriptionEditor.vue
+  8:5  warning  Prop "modelValue" should be optional  vue/no-required-prop-with-default
+
+✖ 1 problem (0 errors, 1 warning)
+

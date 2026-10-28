@@ -1,0 +1,6 @@
+
+/private/var/folders/x7/z235slcn70zgpj17_pf2pk740000gn/T/delb-audit-20261027-qo5nng3q/app/components/Books/BookDescriptionEditor.vue
+  8:5  warning  Prop "modelValue" should be optional  vue/no-required-prop-with-default
+
+✖ 1 problem (0 errors, 1 warning)
+

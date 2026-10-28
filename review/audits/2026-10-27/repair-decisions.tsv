@@ -1,0 +1,2 @@
+ts	phase	decision	why	evidence	result
+2026-10-28T03:03:44.396911+00:00	frame	Created isolated repair branch from refreshed main	Preserve current checkout and audit while delivering one reviewable PR	ba80f27ff4da998d712bf25aaf0455a3b59a9c6f	worktree ready

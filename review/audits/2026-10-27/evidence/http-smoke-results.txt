@@ -1,0 +1,4 @@
+PASS unauthenticated book listing returns 401
+PASS synthetic registration in disposable database
+PASS synthetic EPUB upload and authenticated book listing
+PASS personal collection listing
