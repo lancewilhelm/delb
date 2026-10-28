@@ -29,6 +29,13 @@
       "when": 1793156762482,
       "tag": "0003_jazzy_rick_jones",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793158554757,
+      "tag": "0004_light_wallow",
+      "breakpoints": true
     }
   ]
 }

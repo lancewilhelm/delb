@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type Book from 'epubjs/types/book';
 import type Rendition from 'epubjs/types/rendition';
+import { v4 as uuidv4 } from 'uuid';
 import type { ReaderTheme } from '~/stores/userSettings';
 
 definePageMeta({
@@ -57,8 +58,13 @@ let bookInstance: Book | null = null;
 const renditionRef = ref<Rendition | null>(null);
 
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
-let pendingPosition: { location: string; progress: number | null } | null =
-  null;
+let pendingPosition: {
+  location: string;
+  progress: number | null;
+  clientSequence: number;
+} | null = null;
+const clientSessionId = uuidv4();
+let clientSequence = 0;
 let navigationVersion = 0;
 let readerActive = true;
 let saveQueue: Promise<void> = Promise.resolve();
@@ -172,7 +178,7 @@ function extractProgress(cfi: string | null) {
 function scheduleSave(location: string | null, progress: number | null) {
   if (!location) return;
 
-  pendingPosition = { location, progress };
+  pendingPosition = { location, progress, clientSequence: ++clientSequence };
   if (saveTimeout) clearTimeout(saveTimeout);
   saveTimeout = setTimeout(() => {
     void flushPosition();
@@ -186,7 +192,11 @@ async function flushPosition() {
   pendingPosition = null;
   if (pending) {
     saveQueue = saveQueue.then(() =>
-      saveReadingPosition(pending.location, pending.progress),
+      saveReadingPosition(
+        pending.location,
+        pending.progress,
+        pending.clientSequence,
+      ),
     );
     await saveQueue;
   } else {
@@ -196,7 +206,7 @@ async function flushPosition() {
 
 function flushPositionOnPageHide() {
   if (!pendingPosition || !bookId.value) return;
-  const { location, progress } = pendingPosition;
+  const { location, progress, clientSequence } = pendingPosition;
   void fetch(
     `/api/books/${encodeURIComponent(bookId.value)}/reading-position`,
     {
@@ -204,6 +214,8 @@ function flushPositionOnPageHide() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         location,
+        clientSessionId,
+        clientSequence,
         ...(progress == null ? {} : { progress }),
       }),
       keepalive: true,
@@ -629,10 +641,19 @@ async function loadLatestProgressLog() {
  * @param location The location to save
  * @param progress The progress to save
  */
-async function saveReadingPosition(location: string, progress?: number | null) {
+async function saveReadingPosition(
+  location: string,
+  progress: number | null,
+  clientSequence: number,
+) {
   if (!bookId.value) return;
 
-  const body: { location: string; progress?: number } = { location };
+  const body: {
+    location: string;
+    progress?: number;
+    clientSessionId: string;
+    clientSequence: number;
+  } = { location, clientSessionId, clientSequence };
   if (progress != null) {
     body.progress = progress;
   }

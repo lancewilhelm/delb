@@ -445,6 +445,8 @@ export const userBookReadingPosition = sqliteTable(
      * Keep nullable because some locations may not provide progress.
      */
     progress: real('progress'),
+    clientSessionId: text('client_session_id'),
+    clientSequence: integer('client_sequence'),
 
     updatedAt: integer('updated_at', { mode: 'timestamp' })
       .notNull()
