@@ -253,6 +253,7 @@ test('same-path recovery uses the committed database marker after interruption',
       commitCoverUpdate({
         operationParent: bookDir,
         allowedRoot: root,
+        bookId: 'book',
         previousCoverImagePath: 'library/book/thumb.webp',
         expectedCoverImagePath: 'library/book/thumb.webp',
         files: [{ targetPath: target, data: Buffer.from('new') }],
@@ -275,6 +276,7 @@ test('same-path recovery uses the committed database marker after interruption',
       operationParent: bookDir,
       allowedRoot: root,
       currentCoverImagePath: 'library/book/thumb.webp',
+      bookId: 'book',
       decision,
     });
     assert.equal(await readFile(target, 'utf8'), 'new');

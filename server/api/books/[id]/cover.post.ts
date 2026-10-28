@@ -301,6 +301,7 @@ export default defineEventHandler(async (event) => {
           operationParent: bookDirAbs,
           allowedRoot: libraryBaseAbs,
           currentCoverImagePath: book.coverImagePath,
+          bookId: id,
           decision,
         });
         for (const fallbackPath of recoveryResult.backupFallbackPaths) {
@@ -446,6 +447,7 @@ export default defineEventHandler(async (event) => {
         const commitResult = await commitCoverUpdate({
           operationParent: bookDirAbs,
           allowedRoot: libraryBaseAbs,
+          bookId: id,
           previousCoverImagePath: book.coverImagePath,
           expectedCoverImagePath: thumbRelPosix,
           files: updates,

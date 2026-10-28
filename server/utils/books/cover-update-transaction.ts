@@ -25,6 +25,7 @@ type JournalEntry = {
 type CoverUpdateJournal = {
   version: 1 | 2;
   operationId?: string;
+  bookId?: string;
   phase: 'prepared' | 'database-committed';
   previousCoverImagePath: string | null;
   expectedCoverImagePath: string;
@@ -62,6 +63,7 @@ export async function recoverPendingCoverUpdates(opts: {
   operationParent: string;
   allowedRoot: string;
   currentCoverImagePath: string | null;
+  bookId?: string;
   decision?: {
     isCommitted: (id: string) => Promise<boolean>;
     remove: (id: string) => Promise<void>;
@@ -84,10 +86,9 @@ export async function recoverPendingCoverUpdates(opts: {
         await readFile(path.join(operationDir, 'journal.json'), 'utf8'),
       ) as CoverUpdateJournal;
       validateJournal(journal, opts.allowedRoot, operationDir);
-    } catch {
-      // Preserve an unreadable operation directory: it may contain the only
-      // recoverable backups after an interrupted rename or disk failure.
-      continue;
+      if (journal.version === 2 && journal.bookId !== opts.bookId) continue;
+    } catch (error) {
+      throw new Error(`Cannot recover cover journal ${operationDir}`, { cause: error });
     }
     let committed: boolean;
     if (journal.version === 2) {
@@ -123,6 +124,7 @@ export async function commitCoverUpdate(opts: {
   allowedRoot: string;
   previousCoverImagePath: string | null;
   expectedCoverImagePath: string;
+  bookId?: string;
   files: CoverUpdateFile[];
   commitDatabase: (operationId: string) => Promise<void>;
   decision?: {
@@ -158,6 +160,7 @@ export async function commitCoverUpdate(opts: {
     const journal: CoverUpdateJournal = {
       version: opts.decision ? 2 : 1,
       operationId: opts.decision ? operationId : undefined,
+      bookId: opts.decision ? opts.bookId : undefined,
       phase: 'prepared',
       previousCoverImagePath: opts.previousCoverImagePath,
       expectedCoverImagePath: opts.expectedCoverImagePath,
@@ -182,6 +185,7 @@ export async function commitCoverUpdate(opts: {
     const journal: CoverUpdateJournal = {
       version: opts.decision ? 2 : 1,
       operationId: opts.decision ? operationId : undefined,
+      bookId: opts.decision ? opts.bookId : undefined,
       phase: 'prepared',
       previousCoverImagePath: opts.previousCoverImagePath,
       expectedCoverImagePath: opts.expectedCoverImagePath,
@@ -343,7 +347,9 @@ function validateJournal(
 ): void {
   if (
     (journal.version !== 1 && journal.version !== 2) ||
-    (journal.version === 2 && typeof journal.operationId !== 'string') ||
+    (journal.version === 2 &&
+      (typeof journal.operationId !== 'string' ||
+        typeof journal.bookId !== 'string')) ||
     !Array.isArray(journal.entries)
   )
     throw new Error('Invalid cover update journal');
