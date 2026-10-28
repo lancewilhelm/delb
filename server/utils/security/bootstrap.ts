@@ -11,6 +11,12 @@ export async function claimBootstrapOwner(userId: string): Promise<boolean> {
       .onConflictDoNothing()
       .returning({ key: systemState.key });
     if (!claimed.length) return false;
+    const existingOwner = await tx
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.role, 'owner'))
+      .limit(1);
+    if (existingOwner.length) return false;
     const updated = await tx
       .update(users)
       .set({ role: 'owner' })
