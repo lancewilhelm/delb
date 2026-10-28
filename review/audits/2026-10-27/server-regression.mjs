@@ -6,6 +6,7 @@ const base = 'http://127.0.0.1:4317';
 async function request(path, cookie, method = 'GET', body) {
   const response = await fetch(base + path, {
     method,
+    signal: AbortSignal.timeout(20000),
     headers: {
       Origin: base,
       ...(cookie ? { Cookie: cookie } : {}),
@@ -67,6 +68,13 @@ const leak = await request('/api/search?q=PrivateUniqueAudit', b.cookie);
 assert.equal(leak.status, 200);
 assert.ok(!JSON.stringify(leak.data).includes('PrivateUniqueAuditAuthor'));
 assert.ok(!JSON.stringify(leak.data).includes('PrivateUniqueAuditTag'));
+const singleAssign = await request(
+  `/api/books/${aBook}/collections`,
+  b.cookie,
+  'PUT',
+  { addCollectionIds: [bCollection] },
+);
+assert.equal(singleAssign.status, 404);
 const assign = await request(
   `/api/collections/${bCollection}/books/bulk`,
   b.cookie,
@@ -225,5 +233,170 @@ try {
 } finally {
   await db.execute('DROP TRIGGER IF EXISTS audit_reject_author_link');
   db.close();
+}
+const extraBooks = [];
+for (const title of ['Status Two', 'Status Three']) {
+  const result = await request('/api/books', a.cookie, 'POST', {
+    title,
+    authors: ['Status Writer'],
+  });
+  assert.equal(result.status, 200);
+  extraBooks.push(result.data.data.book.id);
+}
+const statusIds = [aBook, ...extraBooks];
+const bulkSet = await request('/api/books/bulk/status', a.cookie, 'POST', {
+  bookIds: statusIds,
+  status: 'to_be_read',
+});
+assert.equal(bulkSet.status, 200, JSON.stringify(bulkSet.data));
+assert.equal(bulkSet.data.data.updated, 3);
+async function ranks() {
+  return Promise.all(
+    statusIds.map(
+      async (id) =>
+        (await request(`/api/books/${id}/status`, a.cookie)).data.data.tbrRank,
+    ),
+  );
+}
+assert.deepEqual(await ranks(), [1, 2, 3]);
+assert.equal(
+  (
+    await request(`/api/books/${aBook}/status`, a.cookie, 'POST', {
+      status: null,
+    })
+  ).status,
+  200,
+);
+assert.deepEqual(await ranks(), [null, 1, 2]);
+assert.equal(
+  (
+    await request(`/api/books/${aBook}/status`, a.cookie, 'POST', {
+      status: 'to_be_read',
+      tbrRank: 1,
+    })
+  ).status,
+  200,
+);
+assert.deepEqual(await ranks(), [1, 2, 3]);
+const clear = await request('/api/books/bulk/status', a.cookie, 'POST', {
+  bookIds: [extraBooks[0]],
+  status: null,
+});
+assert.equal(clear.data.data.cleared, 1);
+assert.deepEqual(await ranks(), [1, null, 2]);
+const concurrent = await Promise.all(
+  statusIds.map((id) =>
+    request('/api/books/bulk/status', a.cookie, 'POST', {
+      bookIds: [id],
+      status: 'to_be_read',
+    }),
+  ),
+);
+for (const response of concurrent)
+  assert.equal(response.status, 200, JSON.stringify(response.data));
+assert.deepEqual(
+  (await ranks()).sort((x, y) => x - y),
+  [1, 2, 3],
+);
+const overlap = await Promise.all([
+  request('/api/books/bulk/status', a.cookie, 'POST', {
+    bookIds: statusIds,
+    status: 'reading',
+  }),
+  request('/api/books/bulk/status', a.cookie, 'POST', {
+    bookIds: statusIds,
+    status: 'reading',
+  }),
+]);
+for (const response of overlap) {
+  assert.equal(response.status, 200, JSON.stringify(response.data));
+  assert.equal(response.data.data.updated, 3);
+}
+for (const id of statusIds) {
+  const state = (await request(`/api/books/${id}/status`, a.cookie)).data.data;
+  assert.equal(state.status, 'reading');
+  assert.ok(state.startedAt);
+  assert.equal(state.tbrRank, null);
+}
+const restore = await request('/api/books/bulk/status', a.cookie, 'POST', {
+  bookIds: statusIds,
+  status: 'to_be_read',
+});
+assert.equal(restore.data.data.updated, 3);
+const finished = await request(`/api/books/${aBook}/status`, a.cookie, 'POST', {
+  status: 'finished',
+});
+assert.equal(finished.status, 200);
+assert.ok(finished.data.data.startedAt && finished.data.data.finishedAt);
+assert.deepEqual(
+  (await ranks()).filter((x) => x !== null).sort((x, y) => x - y),
+  [1, 2],
+);
+const transfer = await request(
+  `/api/collections/${aCollection}/transfer-ownership`,
+  a.cookie,
+  'POST',
+  { email: b.email },
+);
+assert.equal(transfer.status, 200, JSON.stringify(transfer.data));
+assert.equal(
+  (
+    await request(
+      `/api/collections/${aCollection}/transfer-ownership`,
+      a.cookie,
+      'POST',
+      { email: b.email },
+    )
+  ).status,
+  403,
+);
+const authDb = createClient({ url: 'file:./review/demo/synthetic.db' });
+try {
+  const collectionOwners = await authDb.execute({
+    sql: "SELECT user_id FROM collection_members WHERE collection_id = ? AND role = 'owner'",
+    args: [aCollection],
+  });
+  assert.equal(collectionOwners.rows.length, 1);
+  assert.equal(collectionOwners.rows[0].user_id, b.id);
+  const owner = await authDb.execute(
+    "SELECT id FROM users WHERE role = 'owner' LIMIT 1",
+  );
+  assert.equal(owner.rows.length, 1);
+  await authDb.execute({
+    sql: "UPDATE users SET role = 'admin' WHERE id = ?",
+    args: [a.id],
+  });
+  for (const [path, body] of [
+    ['/api/auth/admin/remove-user', { userId: owner.rows[0].id }],
+    ['/api/auth/admin/set-role', { userId: owner.rows[0].id, role: 'user' }],
+    [
+      '/api/auth/admin/update-user',
+      { userId: owner.rows[0].id, data: { role: 'user' } },
+    ],
+    ['/api/users/delete', { id: owner.rows[0].id }],
+  ]) {
+    const response = await request(
+      path,
+      a.cookie,
+      path === '/api/users/delete' ? 'DELETE' : 'POST',
+      body,
+    );
+    assert.equal(
+      response.status,
+      path === '/api/users/delete' ? 404 : 403,
+      `${path} returned ${response.status}: ${JSON.stringify(response.data)}`,
+    );
+  }
+  assert.equal(
+    (
+      await authDb.execute({
+        sql: 'SELECT role FROM users WHERE id = ?',
+        args: [owner.rows[0].id],
+      })
+    ).rows[0].role,
+    'owner',
+  );
+} finally {
+  authDb.close();
 }
 console.log('Synthetic HTTP regression checks passed');
