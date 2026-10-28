@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { createClient } from '@libsql/client';
 const base = 'http://127.0.0.1:4317';
 async function request(path, cookie, method = 'GET', body) {
   const response = await fetch(base + path, {
@@ -155,4 +157,73 @@ assert.ok(
   JSON.stringify(visibleSearch.data).includes('PrivateUniqueAuditAuthor'),
 );
 
+const edited = await request(`/api/books/${aBook}`, a.cookie, 'PUT', {
+  title: 'Edited Audit Book',
+  authors: ['Repeated Writer', 'Repeated Writer'],
+  tags: ['Repeated Tag', 'Repeated Tag'],
+});
+assert.equal(edited.status, 200, JSON.stringify(edited.data));
+const editedBook = await request(`/api/books/${aBook}`, a.cookie);
+assert.equal(editedBook.data.data.book.title, 'Edited Audit Book');
+const imported = await request(
+  '/api/books/metadata-import/create',
+  b.cookie,
+  'POST',
+  {
+    provider: 'googleBooks',
+    item: {
+      id: 'duplicates',
+      volumeInfo: {
+        title: 'Import With Duplicate Identifiers',
+        authors: ['Import Writer', 'Import Writer'],
+        industryIdentifiers: [
+          { type: 'ISBN_13', identifier: '1234567890123' },
+          { type: 'ISBN_13', identifier: '1234567890123' },
+        ],
+      },
+    },
+  },
+);
+assert.equal(imported.status, 200, JSON.stringify(imported.data));
+assert.equal(
+  (await request(`/api/books/${imported.data.data.book.id}`, b.cookie)).status,
+  200,
+);
+assert.equal(
+  (await readFile('review/demo/.synthetic-review', 'utf8')).trim(),
+  'synthetic-delb-review',
+);
+const db = createClient({ url: 'file:./review/demo/synthetic.db' });
+try {
+  await db.execute(
+    `CREATE TRIGGER audit_reject_author_link BEFORE INSERT ON book_authors WHEN (SELECT title FROM books WHERE id = NEW.book_id) = 'Rollback Probe' BEGIN SELECT RAISE(ABORT, 'injected failure'); END`,
+  );
+  const failedEdit = await request(`/api/books/${aBook}`, a.cookie, 'PUT', {
+    title: 'Rollback Probe',
+    authors: ['Failure Writer'],
+  });
+  assert.equal(failedEdit.status, 500);
+  const afterFailure = await request(`/api/books/${aBook}`, a.cookie);
+  assert.equal(afterFailure.data.data.book.title, 'Edited Audit Book');
+  const failedImport = await request(
+    '/api/books/metadata-import/create',
+    b.cookie,
+    'POST',
+    {
+      provider: 'googleBooks',
+      item: {
+        id: 'rollback',
+        volumeInfo: { title: 'Rollback Probe', authors: ['Failure Writer'] },
+      },
+    },
+  );
+  assert.equal(failedImport.status, 500);
+  const orphans = await db.execute(
+    "SELECT id FROM books WHERE title = 'Rollback Probe'",
+  );
+  assert.equal(orphans.rows.length, 0);
+} finally {
+  await db.execute('DROP TRIGGER IF EXISTS audit_reject_author_link');
+  db.close();
+}
 console.log('Synthetic HTTP regression checks passed');
