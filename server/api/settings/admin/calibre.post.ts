@@ -32,6 +32,7 @@ import {
   type CalibreFormatFile,
 } from '~~/server/utils/import/calibre/calibre-reader';
 import { makeAuthorSortKey, makeTitleSortKey } from '~~/server/utils/sort/keys';
+import { confinedCalibrePath } from '~~/server/utils/books/storage/calibre-path';
 
 type Body = {
   /**
@@ -213,9 +214,8 @@ async function scanBookDirForFormats(opts: {
   const relDir = safeNonEmptyString(opts.calibreBook.path);
   if (!relDir) return [];
 
-  const dirAbs = path.resolve(opts.calibreRootAbs, relDir);
-
   try {
+    const dirAbs = await confinedCalibrePath(opts.calibreRootAbs, relDir);
     const entries = await readdir(dirAbs, { withFileTypes: true });
     const files = entries
       .filter((e) => e.isFile())
@@ -684,12 +684,18 @@ export default defineEventHandler(async (event) => {
       summary.results.coverCandidatesFound += coverCandidates.length;
 
       for (const c of coverCandidates) {
-        if (!(await fileExists(c.absPath))) continue;
-
         try {
+          const coverSource = await confinedCalibrePath(
+            calibreRootAbs,
+            c.absPath,
+          );
+          if (!(await fileExists(coverSource))) continue;
           if (!dryRun) {
-            const srcBytes = await readFile(c.absPath);
-            const ext = path.extname(c.filename).replace(/^\./, '').toLowerCase();
+            const srcBytes = await readFile(coverSource);
+            const ext = path
+              .extname(c.filename)
+              .replace(/^\./, '')
+              .toLowerCase();
 
             const ensured = await ensureCoverOutputsFromBytes({
               sourceBytes: srcBytes,
@@ -870,7 +876,15 @@ export default defineEventHandler(async (event) => {
         const sourceRel = rawRelativePath
           .replace(/^library[\\/]/, '')
           .replace(/^calibre[\\/]/, '');
-        const sourceAbs = path.resolve(calibreRootAbs, sourceRel);
+        let sourceAbs: string;
+        try {
+          sourceAbs = await confinedCalibrePath(calibreRootAbs, sourceRel);
+        } catch {
+          summary.results.warnings.push(
+            `Invalid or missing Calibre source: ${sourceRel}`,
+          );
+          continue;
+        }
 
         const destFileName = `${bookTitle}.${format}`;
         const relativePath = buildBookStorageRelativePath({
@@ -893,10 +907,7 @@ export default defineEventHandler(async (event) => {
           try {
             await copyFileIfMissing(sourceAbs, destAbs);
           } catch (error) {
-            logger.warn(
-              error,
-              'calibre import: failed to copy format file',
-            );
+            logger.warn(error, 'calibre import: failed to copy format file');
             summary.results.warnings.push(
               `Failed to copy file for calibreBookId=${calibreBook.calibreBookId}: ${sourceRel}`,
             );
