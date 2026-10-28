@@ -223,3 +223,65 @@ test('rolls a partially swapped committed operation forward during recovery', as
   assert.equal(await readFile(first, 'utf8'), 'new-one');
   assert.equal(await readFile(second, 'utf8'), 'new-two');
 });
+
+test('same-path recovery uses the committed database marker after interruption', async () => {
+  const { createClient } = await import('@libsql/client');
+  const db = createClient({ url: ':memory:' });
+  await db.execute('CREATE TABLE decisions (id TEXT PRIMARY KEY)');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'delb-cover-marker-'));
+  const bookDir = path.join(root, 'book');
+  await mkdir(bookDir);
+  const target = path.join(bookDir, 'thumb.webp');
+  await writeFile(target, 'old');
+  const decision = {
+    isCommitted: async (id: string) =>
+      (
+        await db.execute({
+          sql: 'SELECT id FROM decisions WHERE id = ?',
+          args: [id],
+        })
+      ).rows.length > 0,
+    remove: async (id: string) => {
+      await db.execute({
+        sql: 'DELETE FROM decisions WHERE id = ?',
+        args: [id],
+      });
+    },
+  };
+  try {
+    await assert.rejects(
+      commitCoverUpdate({
+        operationParent: bookDir,
+        allowedRoot: root,
+        previousCoverImagePath: 'library/book/thumb.webp',
+        expectedCoverImagePath: 'library/book/thumb.webp',
+        files: [{ targetPath: target, data: Buffer.from('new') }],
+        decision,
+        commitDatabase: async (id) => {
+          await db.execute({
+            sql: 'INSERT INTO decisions VALUES (?)',
+            args: [id],
+          });
+          throw new Error('interrupted after commit');
+        },
+        rollbackDatabase: async () => {
+          throw new Error('must not roll back a committed decision');
+        },
+      }),
+      /interrupted after commit/,
+    );
+    assert.equal(await readFile(target, 'utf8'), 'old');
+    await recoverPendingCoverUpdates({
+      operationParent: bookDir,
+      allowedRoot: root,
+      currentCoverImagePath: 'library/book/thumb.webp',
+      decision,
+    });
+    assert.equal(await readFile(target, 'utf8'), 'new');
+    assert.equal((await db.execute('SELECT id FROM decisions')).rows.length, 0);
+  } finally {
+    db.close();
+    const { rm } = await import('node:fs/promises');
+    await rm(root, { recursive: true, force: true });
+  }
+});

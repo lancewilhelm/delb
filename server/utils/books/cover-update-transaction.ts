@@ -23,7 +23,8 @@ type JournalEntry = {
 };
 
 type CoverUpdateJournal = {
-  version: 1;
+  version: 1 | 2;
+  operationId?: string;
   phase: 'prepared' | 'database-committed';
   previousCoverImagePath: string | null;
   expectedCoverImagePath: string;
@@ -61,6 +62,10 @@ export async function recoverPendingCoverUpdates(opts: {
   operationParent: string;
   allowedRoot: string;
   currentCoverImagePath: string | null;
+  decision?: {
+    isCommitted: (id: string) => Promise<boolean>;
+    remove: (id: string) => Promise<void>;
+  };
 }): Promise<CoverUpdateResult> {
   const backupFallbackPaths: string[] = [];
   let entries: string[];
@@ -84,10 +89,21 @@ export async function recoverPendingCoverUpdates(opts: {
       // recoverable backups after an interrupted rename or disk failure.
       continue;
     }
-    const databaseChanged =
+    let committed: boolean;
+    if (journal.version === 2) {
+      if (!opts.decision || !journal.operationId) continue;
+      committed = await opts.decision.isCommitted(journal.operationId);
+    } else if (journal.phase === 'database-committed') {
+      committed = true;
+    } else if (
       journal.previousCoverImagePath !== journal.expectedCoverImagePath &&
-      opts.currentCoverImagePath === journal.expectedCoverImagePath;
-    if (journal.phase === 'database-committed' || databaseChanged) {
+      opts.currentCoverImagePath === journal.previousCoverImagePath
+    ) {
+      committed = false;
+    } else {
+      continue;
+    }
+    if (committed) {
       backupFallbackPaths.push(
         ...(await rollForward(operationDir, journal, rename)),
       );
@@ -95,6 +111,9 @@ export async function recoverPendingCoverUpdates(opts: {
       await rollbackFiles(operationDir, journal);
     }
     await rm(operationDir, { recursive: true, force: true });
+    if (journal.version === 2 && journal.operationId && opts.decision) {
+      await opts.decision.remove(journal.operationId);
+    }
   }
   return { backupFallbackPaths };
 }
@@ -105,13 +124,18 @@ export async function commitCoverUpdate(opts: {
   previousCoverImagePath: string | null;
   expectedCoverImagePath: string;
   files: CoverUpdateFile[];
-  commitDatabase: () => Promise<void>;
+  commitDatabase: (operationId: string) => Promise<void>;
+  decision?: {
+    isCommitted: (id: string) => Promise<boolean>;
+    remove: (id: string) => Promise<void>;
+  };
   rollbackDatabase: () => Promise<void>;
   renameExistingToBackup?: RenameExistingToBackup;
 }): Promise<CoverUpdateResult> {
+  const operationId = crypto.randomUUID();
   const operationDir = path.join(
     opts.operationParent,
-    `.cover-update-${crypto.randomUUID()}`,
+    `.cover-update-${operationId}`,
   );
   await mkdir(operationDir, { recursive: false });
   const entries: JournalEntry[] = [];
@@ -132,14 +156,15 @@ export async function commitCoverUpdate(opts: {
       });
     }
     const journal: CoverUpdateJournal = {
-      version: 1,
+      version: opts.decision ? 2 : 1,
+      operationId: opts.decision ? operationId : undefined,
       phase: 'prepared',
       previousCoverImagePath: opts.previousCoverImagePath,
       expectedCoverImagePath: opts.expectedCoverImagePath,
       entries,
     };
     await writeJournal(operationDir, journal);
-    await opts.commitDatabase();
+    await opts.commitDatabase(operationId);
     journal.phase = 'database-committed';
     await writeJournal(operationDir, journal);
     const backupFallbackPaths = await rollForward(
@@ -148,10 +173,15 @@ export async function commitCoverUpdate(opts: {
       opts.renameExistingToBackup ?? rename,
     );
     await rm(operationDir, { recursive: true, force: true });
+    if (opts.decision) await opts.decision.remove(operationId);
     return { backupFallbackPaths };
   } catch (error) {
+    if (opts.decision && (await opts.decision.isCommitted(operationId))) {
+      throw error;
+    }
     const journal: CoverUpdateJournal = {
-      version: 1,
+      version: opts.decision ? 2 : 1,
+      operationId: opts.decision ? operationId : undefined,
       phase: 'prepared',
       previousCoverImagePath: opts.previousCoverImagePath,
       expectedCoverImagePath: opts.expectedCoverImagePath,
@@ -311,7 +341,11 @@ function validateJournal(
   allowedRoot: string,
   operationDir: string,
 ): void {
-  if (journal.version !== 1 || !Array.isArray(journal.entries))
+  if (
+    (journal.version !== 1 && journal.version !== 2) ||
+    (journal.version === 2 && typeof journal.operationId !== 'string') ||
+    !Array.isArray(journal.entries)
+  )
     throw new Error('Invalid cover update journal');
   for (const entry of journal.entries) {
     assertInside(allowedRoot, entry.targetPath);
