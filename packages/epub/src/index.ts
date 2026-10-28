@@ -1,6 +1,6 @@
 export { EpubError } from './errors.js';
 export { inspectCover, replaceCover, setCover } from './cover.js';
-export { DEFAULT_ARCHIVE_LIMITS } from './archive.js';
+export { DEFAULT_ARCHIVE_LIMITS, validateArchiveLimits } from './archive.js';
 export type {
   ArchiveLimits,
   CoverImageInput,

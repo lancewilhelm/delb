@@ -1,4 +1,5 @@
 import { EPub } from 'epub2';
+import { validateArchiveLimits } from '@delb/epub';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -41,6 +42,12 @@ export async function parseEpubMetadataFromBuffer(
   buffer: Buffer,
   opts?: { fallbackTitle?: string },
 ): Promise<EpubMetadata> {
+  if (buffer.byteLength > 100 * 1024 * 1024)
+    throw new Error('EPUB exceeds the 100 MiB file limit');
+  validateArchiveLimits(buffer, {
+    maxEntryUncompressedBytes: 32 * 1024 * 1024,
+    maxTotalUncompressedBytes: 256 * 1024 * 1024,
+  });
   const fallbackTitle = opts?.fallbackTitle?.trim() || 'Untitled';
 
   const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'delb-epub-'));

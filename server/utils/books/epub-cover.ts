@@ -1,7 +1,11 @@
 import path from 'node:path';
-import { mkdir, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import { createReadStream } from 'node:fs';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 
 import { EPub } from 'epub2';
+import { validateArchiveLimits } from '@delb/epub';
+import { readBoundedUpload } from './storage/bounded-upload';
 import sharp from 'sharp';
 
 /**
@@ -47,7 +51,7 @@ export type ExtractedCover = {
  *
  * Returns `null` if no cover could be extracted.
  */
-export async function extractAndStoreEpubCover(opts: {
+async function extractAndStoreEpubCoverFromValidatedFile(opts: {
   /**
    * Absolute path to the EPUB file on disk (epub2 expects a file path).
    */
@@ -373,4 +377,28 @@ export async function extractAndStoreEpubCover(opts: {
     thumbByteLength: thumbBytes.byteLength,
     sourceByteLength: sourceBytes.byteLength,
   };
+}
+
+export async function extractAndStoreEpubCover(
+  opts: Parameters<typeof extractAndStoreEpubCoverFromValidatedFile>[0],
+): Promise<ExtractedCover | null> {
+  const bytes = await readBoundedUpload(
+    createReadStream(opts.epubFilePath),
+    100 * 1024 * 1024,
+  );
+  validateArchiveLimits(bytes, {
+    maxEntryUncompressedBytes: 32 * 1024 * 1024,
+    maxTotalUncompressedBytes: 256 * 1024 * 1024,
+  });
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'delb-cover-input-'));
+  try {
+    const filename = path.join(dir, 'book.epub');
+    await writeFile(filename, bytes, { flag: 'wx' });
+    return await extractAndStoreEpubCoverFromValidatedFile({
+      ...opts,
+      epubFilePath: filename,
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }

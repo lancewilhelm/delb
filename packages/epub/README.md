@@ -50,7 +50,7 @@ their explicit atomic output requirement. The Delb cover-upload endpoint opts in
 to repair and commits the repaired EPUB together with the new cover files.
 
 Archive limits default to 10,000 entries, 1 GiB total uncompressed data, and
-256 MiB per entry. They can be lowered or raised through the `limits` option.
+256 MiB per entry. They can be lowered or raised through the `limits` option. `validateArchiveLimits` checks ZIP directory declarations without decompressing. Consumers must also bound the input and use an inflater that enforces the declared size. Delb's metadata and cover extraction limit EPUB files to 100 MiB, individual entries to 32 MiB, and declared total expansion to 256 MiB, together with the pinned epub2 inflater.
 All archive paths are validated before extraction. For canonical marker input or
 successful guarded repair, output follows OCF ZIP requirements by writing
 `mimetype` first, uncompressed, with exact `application/epub+zip` contents and no
