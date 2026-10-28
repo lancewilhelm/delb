@@ -379,21 +379,36 @@ async function performSearch() {
   const providers = activeProviders();
 
   try {
-    const tasks: Promise<SearchResult[]>[] = [];
+    const tasks: Array<{ name: string; request: Promise<SearchResult[]> }> = [];
 
     if (providers.includes('googleBooks')) {
-      tasks.push(searchGoogleBooks(searchQuery.value));
+      tasks.push({
+        name: 'Google Books',
+        request: searchGoogleBooks(searchQuery.value),
+      });
     }
 
     if (providers.includes('hardcover')) {
-      tasks.push(searchHardcover(searchQuery.value));
+      tasks.push({
+        name: 'Hardcover',
+        request: searchHardcover(searchQuery.value),
+      });
     }
 
-    const resultsByProvider = await Promise.all(tasks);
-    const merged = resultsByProvider.flat();
+    const resultsByProvider = await Promise.allSettled(
+      tasks.map((task) => task.request),
+    );
+    const merged = resultsByProvider.flatMap((result) =>
+      result.status === 'fulfilled' ? result.value : [],
+    );
+    const failed = tasks
+      .filter((_, i) => resultsByProvider[i]?.status === 'rejected')
+      .map((task) => task.name);
 
     if (!isActive()) return;
 
+    if (failed.length)
+      errorMessage.value = `Search failed for ${failed.join(', ')}.`;
     if (merged.length > 0) {
       searchResults.value = merged;
 
@@ -404,7 +419,7 @@ async function performSearch() {
         }
       });
     } else {
-      errorMessage.value = 'No results found';
+      if (!failed.length) errorMessage.value = 'No results found';
     }
   } catch (error) {
     console.error('Search error:', error);

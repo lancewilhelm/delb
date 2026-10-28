@@ -321,6 +321,35 @@ function buildSettingsPatch(
   return patch as Partial<BaseUserSettings>;
 }
 
+function mergeConcurrentEdits(
+  base: unknown,
+  local: unknown,
+  remote: unknown,
+): unknown {
+  if (JSON.stringify(base) === JSON.stringify(local)) return remote;
+  if (
+    base &&
+    local &&
+    remote &&
+    typeof base === 'object' &&
+    typeof local === 'object' &&
+    typeof remote === 'object' &&
+    !Array.isArray(base) &&
+    !Array.isArray(local) &&
+    !Array.isArray(remote)
+  ) {
+    const b = base as Record<string, unknown>;
+    const l = local as Record<string, unknown>;
+    const r = remote as Record<string, unknown>;
+    return Object.fromEntries(
+      [
+        ...new Set([...Object.keys(b), ...Object.keys(l), ...Object.keys(r)]),
+      ].map((key) => [key, mergeConcurrentEdits(b[key], l[key], r[key])]),
+    );
+  }
+  return local;
+}
+
 export const useUserSettingsStore = defineStore(
   'userSettings',
   () => {
@@ -347,6 +376,7 @@ export const useUserSettingsStore = defineStore(
       const { session } = useAuth();
       if (!session.value) return;
 
+      const snapshot = JSON.stringify(settings.value);
       await $fetch('/api/settings/user', {
         method: 'PUT',
         body: {
@@ -355,7 +385,7 @@ export const useUserSettingsStore = defineStore(
         },
       });
 
-      synced.value = true;
+      if (snapshot === JSON.stringify(settings.value)) synced.value = true;
     }
 
     /**
@@ -366,18 +396,30 @@ export const useUserSettingsStore = defineStore(
       const { session } = useAuth();
       if (!session.value) return;
 
+      const sessionId = session.value.id;
+      const before = cloneValue(settings.value);
       const res = await $fetch<SettingsApiGetResponse>('/api/settings', {
         method: 'GET',
       });
 
       const remote = res?.data?.userSettings;
-      if (!remote) return;
-
-      // Apply remote settings without triggering a push.
-      applyRemoteSettings(
-        remote.settings as Partial<UserSettings>,
-        remote.updatedAt,
-      );
+      if (!remote || session.value?.id !== sessionId) return;
+      const changed = JSON.stringify(before) !== JSON.stringify(settings.value);
+      const merged = mergeConcurrentEdits(
+        before,
+        settings.value,
+        normalizeSettings({
+          ...before,
+          ...(remote.settings as Partial<UserSettings>),
+        }),
+      ) as UserSettings;
+      if (changed) {
+        settings.value = normalizeSettings(merged);
+        synced.value = false;
+        debouncedPush();
+      } else {
+        applyRemoteSettings(merged, remote.updatedAt);
+      }
     }
 
     /**

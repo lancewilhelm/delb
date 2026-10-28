@@ -57,7 +57,11 @@ let bookInstance: Book | null = null;
 const renditionRef = ref<Rendition | null>(null);
 
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
-let lastSavedLocation: string | null = null;
+let pendingPosition: { location: string; progress: number | null } | null =
+  null;
+let navigationVersion = 0;
+let readerActive = true;
+let saveQueue: Promise<void> = Promise.resolve();
 
 const userSettingsStore = useUserSettingsStore();
 const isSettingsOpen = ref(false);
@@ -168,25 +172,59 @@ function extractProgress(cfi: string | null) {
 function scheduleSave(location: string | null, progress: number | null) {
   if (!location) return;
 
-  // Never persist "unknown" progress. We'll keep showing cached progress
-  // until locations are generated and `percentageFromCfi` can produce a value.
-  if (progress == null) return;
-
+  pendingPosition = { location, progress };
   if (saveTimeout) clearTimeout(saveTimeout);
-
-  saveTimeout = setTimeout(async () => {
-    if (lastSavedLocation === location) return;
-    await saveReadingPosition(location, progress);
+  saveTimeout = setTimeout(() => {
+    void flushPosition();
   }, 1500);
 }
 
+async function flushPosition() {
+  if (saveTimeout) clearTimeout(saveTimeout);
+  saveTimeout = null;
+  const pending = pendingPosition;
+  pendingPosition = null;
+  if (pending) {
+    saveQueue = saveQueue.then(() =>
+      saveReadingPosition(pending.location, pending.progress),
+    );
+    await saveQueue;
+  } else {
+    await saveQueue;
+  }
+}
+
+function flushPositionOnPageHide() {
+  if (!pendingPosition || !bookId.value) return;
+  const { location, progress } = pendingPosition;
+  void fetch(
+    `/api/books/${encodeURIComponent(bookId.value)}/reading-position`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location,
+        ...(progress == null ? {} : { progress }),
+      }),
+      keepalive: true,
+    },
+  );
+}
+
+onBeforeRouteLeave(async () => {
+  readerActive = false;
+  await flushPosition();
+});
+
 /** Navigate to the previous book page. */
 function goPrev() {
+  navigationVersion += 1;
   renditionRef.value?.prev();
 }
 
 /** Navigate to the next book page. */
 function goNext() {
+  navigationVersion += 1;
   renditionRef.value?.next();
 }
 
@@ -277,7 +315,7 @@ function getRenditionOptions(mode: ReaderDisplayMode) {
       width: '100%',
       height: '100%',
       minSpreadWidth: 1100,
-      allowScriptedContent: true,
+      allowScriptedContent: false,
     };
   }
 
@@ -288,7 +326,7 @@ function getRenditionOptions(mode: ReaderDisplayMode) {
     height: '100%',
     spread: 'none',
     minSpreadWidth: 900,
-    allowScriptedContent: true,
+    allowScriptedContent: false,
   };
 }
 
@@ -355,8 +393,7 @@ async function loadToc() {
 
   try {
     const loaded = (bookInstance as unknown as { loaded?: unknown })?.loaded as
-      | { navigation?: Promise<unknown> }
-      | undefined;
+      { navigation?: Promise<unknown> } | undefined;
 
     const rawNav = await loaded?.navigation;
 
@@ -377,6 +414,7 @@ async function loadToc() {
 }
 
 async function goToTocHref(href: string) {
+  navigationVersion += 1;
   if (!href) return;
 
   try {
@@ -414,6 +452,8 @@ function attachRenditionHandlers(
     'relocated',
     (loc: { start?: { cfi?: string; href?: string } }) => {
       const cfi = loc?.start?.cfi ?? null;
+      navigationVersion += 1;
+      if (cfi) scheduleSave(cfi, null);
       currentSectionHref.value = loc?.start?.href ?? null;
       const progress = extractProgress(cfi);
 
@@ -611,7 +651,6 @@ async function saveReadingPosition(location: string, progress?: number | null) {
       throw new Error(`Failed to save reading position (${res.status})`);
     }
 
-    lastSavedLocation = location;
     saveErrorMessage.value = null;
   } catch (err) {
     const e = err as FetchErrorLike;
@@ -734,11 +773,15 @@ async function loadEpub() {
 
     const [saved, syncedProgress] = await Promise.all([
       loadReadingPosition(),
-      progressSyncEnabled.value ? loadLatestProgressLog() : Promise.resolve(null),
+      progressSyncEnabled.value
+        ? loadLatestProgressLog()
+        : Promise.resolve(null),
     ]);
     const savedLocation = saved?.location ?? null;
     syncedProgressPercent.value =
-      progressSyncEnabled.value && syncedProgress != null ? syncedProgress : null;
+      progressSyncEnabled.value && syncedProgress != null
+        ? syncedProgress
+        : null;
 
     // Always kick off location generation in the background. It can be slow,
     // but it should not block the initial render or cached progress display.
@@ -757,7 +800,7 @@ async function loadEpub() {
     const initialProgress =
       progressSyncEnabled.value && syncedProgressPercent.value != null
         ? syncedProgressPercent.value
-        : saved?.progress ?? null;
+        : (saved?.progress ?? null);
 
     if (initialProgress != null) {
       currentProgress.value = initialProgress;
@@ -767,15 +810,19 @@ async function loadEpub() {
     if (shouldGenerateLocations) {
       isAwaitingLocations.value = true;
 
+      const generationNavigationVersion = navigationVersion;
       setTimeout(() => {
         bookInstance?.locations
           .generate(400)
           .then(() => {
+            if (!readerActive) return;
+            const navigated = navigationVersion !== generationNavigationVersion;
             const fallbackLocation =
-              savedLocation ?? renditionRef.value?.location?.start?.cfi ?? null;
+              renditionRef.value?.location?.start?.cfi ?? savedLocation;
             let targetLocation = fallbackLocation;
 
             if (
+              !navigated &&
               progressSyncEnabled.value &&
               syncedProgressPercent.value != null &&
               bookInstance?.locations?.cfiFromPercentage
@@ -784,8 +831,9 @@ async function loadEpub() {
                 0,
                 Math.min(100, syncedProgressPercent.value),
               );
-              const syncedLocation =
-                bookInstance.locations.cfiFromPercentage(pct / 100);
+              const syncedLocation = bookInstance.locations.cfiFromPercentage(
+                pct / 100,
+              );
               if (syncedLocation) {
                 targetLocation = syncedLocation;
                 if (syncedLocation !== fallbackLocation) {
@@ -802,7 +850,7 @@ async function loadEpub() {
               isAwaitingLocations.value = false;
               currentProgress.value = progress;
               if (targetLocation) {
-                void saveReadingPosition(targetLocation, progress);
+                scheduleSave(targetLocation, progress);
               }
             }
           })
@@ -844,11 +892,14 @@ onMounted(async () => {
   await nextTick();
   await loadEpub();
   window.addEventListener('keydown', onKeydown);
+  window.addEventListener('pagehide', flushPositionOnPageHide);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
-  if (saveTimeout) clearTimeout(saveTimeout);
+  window.removeEventListener('pagehide', flushPositionOnPageHide);
+  readerActive = false;
+  void flushPosition();
   if (fullscreenHideTimeout) clearTimeout(fullscreenHideTimeout);
   (
     renditionRef.value as { off?: (event: string, handler: () => void) => void }
@@ -919,12 +970,17 @@ watch(
     >
       <div class="flex items-center gap-3 min-w-0">
         <!-- Back button -->
-        <icon
-          v-tooltip="'Back to book'"
-          name="lucide:arrow-left"
-          class="text-3xl opacity-80 hover:opacity-100 cursor-pointer shrink-0"
-          @click="backToBook"
-        />
+        <button
+          type="button"
+          aria-label="Back to book"
+          @click.stop="backToBook"
+        >
+          <icon
+            v-tooltip="'Back to book'"
+            name="lucide:arrow-left"
+            class="text-3xl opacity-80 hover:opacity-100 cursor-pointer shrink-0"
+          />
+        </button>
 
         <div class="min-w-0">
           <div class="text-lg font-semibold truncate">{{ bookTitle }}</div>
@@ -932,21 +988,31 @@ watch(
       </div>
 
       <div class="flex items-center gap-3 text-sm">
-        <icon
-          v-tooltip="'Table of contents'"
-          name="lucide:list"
-          class="text-2xl opacity-80 hover:opacity-100 cursor-pointer"
-          :class="{ 'text-(--main-color) opacity-100': isTocOpen }"
+        <button
+          type="button"
+          aria-label="Table of contents"
           @click.stop="toggleToc"
-        />
+        >
+          <icon
+            v-tooltip="'Table of contents'"
+            name="lucide:list"
+            class="text-2xl opacity-80 hover:opacity-100 cursor-pointer"
+            :class="{ 'text-(--main-color) opacity-100': isTocOpen }"
+          />
+        </button>
         <div class="relative">
           <div ref="settingsButtonRef" class="flex">
-            <icon
-              v-tooltip="'Reader settings'"
-              name="lucide:settings-2"
-              class="text-2xl opacity-80 hover:opacity-100 cursor-pointer"
+            <button
+              type="button"
+              aria-label="Reader settings"
               @click.stop="toggleSettings"
-            />
+            >
+              <icon
+                v-tooltip="'Reader settings'"
+                name="lucide:settings-2"
+                class="text-2xl opacity-80 hover:opacity-100 cursor-pointer"
+              />
+            </button>
           </div>
 
           <!-- Settings menu -->
@@ -962,6 +1028,7 @@ watch(
                 <div class="flex items-center gap-2">
                   <input
                     v-model.number="readerFontSize"
+                    aria-label="Font size"
                     type="range"
                     min="70"
                     max="150"
@@ -977,6 +1044,7 @@ watch(
                 <div class="flex items-center gap-2">
                   <input
                     v-model.number="readerLineHeight"
+                    aria-label="Line height"
                     type="range"
                     min="100"
                     max="200"
@@ -1115,12 +1183,17 @@ watch(
             class="flex items-center justify-between px-3 py-1 border-b border-(--sub-color)"
           >
             <div class="text-sm font-semibold">Contents</div>
-            <icon
-              v-tooltip="'Close'"
-              name="lucide:x"
-              class="text-2xl opacity-80 hover:opacity-100 cursor-pointer md:hidden"
-              @click="closeToc"
-            />
+            <button
+              type="button"
+              aria-label="Close table of contents"
+              @click.stop="closeToc"
+            >
+              <icon
+                v-tooltip="'Close'"
+                name="lucide:x"
+                class="text-2xl opacity-80 hover:opacity-100 cursor-pointer md:hidden"
+              />
+            </button>
           </div>
 
           <div class="min-h-0 flex-1 overflow-y-auto p-2">
@@ -1165,14 +1238,16 @@ watch(
         @click="closeSettings"
       />
       <!-- Previous page button -->
-      <div
+      <button
         v-if="readerDisplayMode === 'pages' && !isMobileDevice"
+        type="button"
+        aria-label="Previous page"
         class="flex items-center p-2 cursor-pointer shrink-0"
         :class="getThemeClass(true)"
         @click.stop="goPrev"
       >
         <icon name="lucide:arrow-left" class="text-2xl opacity-80" />
-      </div>
+      </button>
 
       <!-- Page content -->
       <div class="h-full flex-1 min-w-0" :class="getThemeClass()">
@@ -1194,25 +1269,29 @@ watch(
       </div>
 
       <!-- Next page button -->
-      <div
+      <button
         v-if="readerDisplayMode === 'pages' && !isMobileDevice"
+        type="button"
+        aria-label="Next page"
         class="flex items-center p-2 hover:bg-(--sub-color)/5 cursor-pointer shrink-0"
         :class="getThemeClass(true)"
         @click.stop="goNext"
       >
         <icon name="lucide:arrow-right" class="text-2xl opacity-80" />
-      </div>
+      </button>
 
       <!-- Full screen toggle -->
       <div class="absolute right-0 top-0 h-40 w-40 group">
-        <div
+        <button
+          type="button"
+          aria-label="Toggle fullscreen"
           class="flex items-center justify-center absolute right-4 top-4 w-13 h-13 rounded-full bg-(--sub-alt-color) transition-opacity cursor-pointer full-screen-toggle-btn"
           :class="
             isMobileDevice
               ? fullscreenVisible
                 ? 'opacity-90 pointer-events-auto'
                 : 'opacity-0 pointer-events-none'
-              : 'opacity-0 pointer-events-none group-hover:opacity-90 group-hover:pointer-events-auto'
+              : 'opacity-0 pointer-events-none group-hover:opacity-90 group-hover:pointer-events-auto focus:opacity-90 focus:pointer-events-auto'
           "
           @click.stop="toggleFullscreen"
         >
@@ -1224,7 +1303,7 @@ watch(
             "
             class="text-3xl"
           />
-        </div>
+        </button>
       </div>
     </div>
   </div>

@@ -259,10 +259,7 @@ function getBookIndex(bookId: string) {
   return books.value.findIndex((b) => b.id === bookId);
 }
 
-function onBookToggleSelect(
-  bookId: string,
-  meta?: { shiftKey?: boolean },
-) {
+function onBookToggleSelect(bookId: string, meta?: { shiftKey?: boolean }) {
   if (!props.selectionEnabled) return;
 
   const isShift = Boolean(meta?.shiftKey);
@@ -504,7 +501,11 @@ function setupObserver() {
   io.observe(sentinel);
 }
 
+let requestGeneration = 0;
+
 function reset() {
+  requestGeneration += 1;
+  loading.value = false;
   books.value = [];
   nextCursor.value = null;
   errorMessage.value = null;
@@ -525,6 +526,7 @@ function reset() {
 async function fetchPage(opts: { cursor?: string | null; append: boolean }) {
   if (loading.value) return;
 
+  const generation = requestGeneration;
   loading.value = true;
   errorMessage.value = null;
 
@@ -549,6 +551,7 @@ async function fetchPage(opts: { cursor?: string | null; append: boolean }) {
       query,
     });
 
+    if (generation !== requestGeneration) return;
     const page = res?.data?.books ?? [];
     const cursor = (res?.data?.nextCursor ?? null) as string | null;
 
@@ -574,6 +577,7 @@ async function fetchPage(opts: { cursor?: string | null; append: boolean }) {
       nextCursor: cursor,
     });
   } catch (err) {
+    if (generation !== requestGeneration) return;
     const e = err as FetchErrorLike;
     const msg =
       e?.data?.message ||
@@ -583,7 +587,7 @@ async function fetchPage(opts: { cursor?: string | null; append: boolean }) {
     errorMessage.value = msg;
     emit('error', msg);
   } finally {
-    loading.value = false;
+    if (generation === requestGeneration) loading.value = false;
   }
 }
 
@@ -611,6 +615,7 @@ watch(
   async () => {
     await loadFirstPage();
   },
+  { flush: 'sync' },
 );
 
 // If layout changes (columns/height), restart paging to avoid mixed chunk sizes
@@ -650,6 +655,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  requestGeneration += 1;
   teardownObserver();
   if (resizeObserver) {
     resizeObserver.disconnect();
@@ -691,7 +697,9 @@ onBeforeUnmount(() => {
         range={{ gridMetrics.startIndex }}-{{ gridMetrics.endIndex }} scroll={{
           Math.round(scrollTop)
         }}
-        total={{ Math.round(gridMetrics.totalHeight) }} loading={{ loading }}
+        total={{ Math.round(gridMetrics.totalHeight) }} loading={{
+          loading
+        }}
         hasMore={{ hasMore }} nextCursor={{ nextCursor ?? 'null' }}
       </div>
 

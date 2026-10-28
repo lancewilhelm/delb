@@ -187,9 +187,7 @@ const listContentMinWidthPx = computed(() => {
   const columnsTotal =
     columnMinWidths.title + columnMinWidths.authors + columnMinWidths.series;
   const gapTotal = listColumnGapPx * 3;
-  return (
-    headerCoverWidthPx.value + columnsTotal + gapTotal + rowPaddingX * 2
-  );
+  return headerCoverWidthPx.value + columnsTotal + gapTotal + rowPaddingX * 2;
 });
 
 const listRowLayoutStyle = computed<Record<string, string>>(() => ({
@@ -389,7 +387,11 @@ function setupObserver() {
   io.observe(sentinel);
 }
 
+let requestGeneration = 0;
+
 function reset() {
+  requestGeneration += 1;
+  loading.value = false;
   books.value = [];
   nextCursor.value = null;
   errorMessage.value = null;
@@ -409,6 +411,7 @@ function reset() {
 async function fetchPage(opts: { cursor?: string | null; append: boolean }) {
   if (loading.value) return;
 
+  const generation = requestGeneration;
   loading.value = true;
   errorMessage.value = null;
 
@@ -433,6 +436,7 @@ async function fetchPage(opts: { cursor?: string | null; append: boolean }) {
       query,
     });
 
+    if (generation !== requestGeneration) return;
     const page = res?.data?.books ?? [];
     const cursor = (res?.data?.nextCursor ?? null) as string | null;
 
@@ -457,6 +461,7 @@ async function fetchPage(opts: { cursor?: string | null; append: boolean }) {
       nextCursor: cursor,
     });
   } catch (err) {
+    if (generation !== requestGeneration) return;
     const e = err as FetchErrorLike;
     const msg =
       e?.data?.message ||
@@ -466,7 +471,7 @@ async function fetchPage(opts: { cursor?: string | null; append: boolean }) {
     errorMessage.value = msg;
     emit('error', msg);
   } finally {
-    loading.value = false;
+    if (generation === requestGeneration) loading.value = false;
   }
 }
 
@@ -493,6 +498,7 @@ watch(
   async () => {
     await loadFirstPage();
   },
+  { flush: 'sync' },
 );
 
 watch(
@@ -531,6 +537,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  requestGeneration += 1;
   teardownObserver();
   if (resizeObserver) {
     resizeObserver.disconnect();
