@@ -327,8 +327,13 @@ async function processOneBookUploadUnlocked(
   const absolutePath = resolveDataPath(relativePath);
   const bookDirAbsolute = path.dirname(absolutePath);
 
-  // Ensure directories exist then write file
-  await mkdir(bookDirAbsolute, { recursive: true });
+  // New book directories are exclusive so generated covers cannot overwrite another book.
+  if (input.replaceBookId) {
+    await mkdir(bookDirAbsolute, { recursive: true });
+  } else {
+    await mkdir(path.dirname(bookDirAbsolute), { recursive: true });
+    await mkdir(bookDirAbsolute);
+  }
   await writeFile(absolutePath, filePart.data, { flag: 'wx' });
   const handle = await open(absolutePath, 'r');
   try {
@@ -396,14 +401,12 @@ async function processOneBookUploadUnlocked(
   const persist = async (operationId?: string) =>
     await cloudDb.transaction(async (tx) => {
       if (operationId)
-        await tx
-          .insert(storageOperations)
-          .values({
-            id: operationId,
-            bookId: id,
-            kind: 'replace',
-            createdAt: now,
-          });
+        await tx.insert(storageOperations).values({
+          id: operationId,
+          bookId: id,
+          kind: 'replace',
+          createdAt: now,
+        });
       if (input.replaceBookId) {
         await tx
           .update(books)

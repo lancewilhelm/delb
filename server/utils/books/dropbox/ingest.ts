@@ -161,7 +161,8 @@ export async function ingestDropboxFile(opts: {
   const absoluteDest = path.resolve(process.cwd(), relativePath);
   const bookDirAbs = path.dirname(absoluteDest);
 
-  await mkdir(bookDirAbs, { recursive: true });
+  await mkdir(path.dirname(bookDirAbs), { recursive: true });
+  await mkdir(bookDirAbs);
   await copyVerifiedExclusive(opts.fileAbs, absoluteDest);
 
   let coverImagePath: string | null = null;
