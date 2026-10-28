@@ -1,3 +1,4 @@
+import { withBookStorageLock } from '~~/server/utils/books/storage/book-lock';
 import path from 'node:path';
 import { mkdir } from 'node:fs/promises';
 
@@ -629,185 +630,193 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    // Replace: clear and rebuild author/tag/identifier links, then overwrite canonical fields.
-    const update: Partial<typeof books.$inferInsert> = {
-      title,
-      sortTitle: makeTitleSortKey(title),
-      description,
-      published,
-      publishedAt,
-      language,
-      pages,
-      updatedAt: new Date(),
-    };
-
-    const { addedCollectionIds } = await cloudDb.transaction(async (tx) => {
-      // Optional relationships
-      if (publisherName) {
-        const pub = await findOrCreatePublisherByName(publisherName, tx);
-        update.publisherId = pub.id;
-      } else {
-        update.publisherId = null;
-      }
-
-      if (seriesName) {
-        const s = await findOrCreateSeriesByName(seriesName, tx);
-        update.seriesId = s.id;
-        update.seriesIndex = seriesIndex;
-      } else {
-        update.seriesId = null;
-        update.seriesIndex = null;
-      }
-
-      await tx
-        .update(books)
-        .set(update as never)
-        .where(eq(books.id, replaceBookId));
-
-      await tx.delete(bookAuthors).where(eq(bookAuthors.bookId, replaceBookId));
-      for (let i = 0; i < authorsToAttach.length; i++) {
-        const name = authorsToAttach[i]!;
-        const author = await findOrCreateAuthorByName(name, tx);
-        await tx.insert(bookAuthors).values({
-          bookId: replaceBookId,
-          authorId: author.id,
-          position: i + 1,
-        });
-      }
-
-      await tx.delete(bookTags).where(eq(bookTags.bookId, replaceBookId));
-      if (categories.length) {
-        for (const name of categories) {
-          const t = await findOrCreateTagByName(name, tx);
-          await tx
-            .insert(bookTags)
-            .values({ bookId: replaceBookId, tagId: t.id });
-        }
-      }
-
-      await tx
-        .delete(bookIdentifiers)
-        .where(eq(bookIdentifiers.bookId, replaceBookId));
-      if (industryIdentifiers.length) {
-        for (const ident of industryIdentifiers) {
-          await tx.insert(bookIdentifiers).values({
-            bookId: replaceBookId,
-            type: ident.type,
-            value: ident.value,
-          });
-        }
-      }
-
-      return addBookToCollectionsMissingTx(tx, {
-        userId,
-        bookId: replaceBookId,
-        collectionIds,
-      });
-    });
-
-    // Cover (best-effort): same logic as create, but targets the existing book id.
-    // Ensure the canonical folder exists even if we do not have a cover URL.
-    try {
-      const dirMarkerRel = buildBookStorageRelativePath({
-        authorNames: authorsToAttach,
-        title,
-        bookId: replaceBookId,
-        filename: 'dir.marker',
-        baseDir: 'library',
-      });
-
-      const outputDirRelPosix = path.posix.dirname(dirMarkerRel);
-      const outputDirAbs = resolveDataPath(outputDirRelPosix);
-      await mkdir(outputDirAbs, { recursive: true });
-    } catch (e) {
-      logger.warn(
-        {
-          bookId: replaceBookId,
-          err: e instanceof Error ? e.message : String(e),
-        },
-        'metadata-import: failed to ensure canonical book directory (replace; continuing)',
-      );
-    }
-
-    if (coverUrl) {
-      try {
-        logger.debug(
-          { bookId: replaceBookId, provider, coverUrl },
-          'metadata-import: cover (replace): starting',
-        );
-
-        const dirMarkerRel = buildBookStorageRelativePath({
-          authorNames: authorsToAttach,
+    return withBookStorageLock(
+      path.resolve(process.cwd(), 'library'),
+      replaceBookId,
+      async () => {
+        // Replace: clear and rebuild author/tag/identifier links, then overwrite canonical fields.
+        const update: Partial<typeof books.$inferInsert> = {
           title,
-          bookId: replaceBookId,
-          filename: 'cover.thumb.webp',
-          baseDir: 'library',
-        });
+          sortTitle: makeTitleSortKey(title),
+          description,
+          published,
+          publishedAt,
+          language,
+          pages,
+          updatedAt: new Date(),
+        };
 
-        const outputDirRelPosix = path.posix.dirname(dirMarkerRel);
-        const outputDirAbs = resolveDataPath(outputDirRelPosix);
-        await mkdir(outputDirAbs, { recursive: true });
+        const { addedCollectionIds } = await cloudDb.transaction(async (tx) => {
+          // Optional relationships
+          if (publisherName) {
+            const pub = await findOrCreatePublisherByName(publisherName, tx);
+            update.publisherId = pub.id;
+          } else {
+            update.publisherId = null;
+          }
 
-        const { bytes } = await fetchExternalImageBuffer(coverUrl);
+          if (seriesName) {
+            const s = await findOrCreateSeriesByName(seriesName, tx);
+            update.seriesId = s.id;
+            update.seriesIndex = seriesIndex;
+          } else {
+            update.seriesId = null;
+            update.seriesIndex = null;
+          }
 
-        const ensured = await ensureCoverOutputsFromBytes({
-          sourceBytes: bytes,
-          sourceMimeTypeHint: null,
-          sourceExtensionHint: null,
-          processing: {
-            outputDirAbs,
-            outputDirRelPosix,
-            doNotOverwrite: false,
-            sourceFormat: 'original',
-            sourceBaseName: 'cover.source',
-            thumbFileName: 'thumb.webp',
-            thumbMaxWidth: 320,
-            thumbWebpQuality: 80,
-          },
-        });
+          await tx
+            .update(books)
+            .set(update as never)
+            .where(eq(books.id, replaceBookId));
 
-        await cloudDb
-          .update(books)
-          .set({
-            coverImagePath: ensured.covers.thumb.relativePath,
-            updatedAt: new Date(),
-          } as never)
-          .where(eq(books.id, replaceBookId));
-      } catch (e) {
-        logger.warn(
-          {
+          await tx
+            .delete(bookAuthors)
+            .where(eq(bookAuthors.bookId, replaceBookId));
+          for (let i = 0; i < authorsToAttach.length; i++) {
+            const name = authorsToAttach[i]!;
+            const author = await findOrCreateAuthorByName(name, tx);
+            await tx.insert(bookAuthors).values({
+              bookId: replaceBookId,
+              authorId: author.id,
+              position: i + 1,
+            });
+          }
+
+          await tx.delete(bookTags).where(eq(bookTags.bookId, replaceBookId));
+          if (categories.length) {
+            for (const name of categories) {
+              const t = await findOrCreateTagByName(name, tx);
+              await tx
+                .insert(bookTags)
+                .values({ bookId: replaceBookId, tagId: t.id });
+            }
+          }
+
+          await tx
+            .delete(bookIdentifiers)
+            .where(eq(bookIdentifiers.bookId, replaceBookId));
+          if (industryIdentifiers.length) {
+            for (const ident of industryIdentifiers) {
+              await tx.insert(bookIdentifiers).values({
+                bookId: replaceBookId,
+                type: ident.type,
+                value: ident.value,
+              });
+            }
+          }
+
+          return addBookToCollectionsMissingTx(tx, {
+            userId,
             bookId: replaceBookId,
-            err: e instanceof Error ? e.message : String(e),
+            collectionIds,
+          });
+        });
+
+        // Cover (best-effort): same logic as create, but targets the existing book id.
+        // Ensure the canonical folder exists even if we do not have a cover URL.
+        try {
+          const dirMarkerRel = buildBookStorageRelativePath({
+            authorNames: authorsToAttach,
+            title,
+            bookId: replaceBookId,
+            filename: 'dir.marker',
+            baseDir: 'library',
+          });
+
+          const outputDirRelPosix = path.posix.dirname(dirMarkerRel);
+          const outputDirAbs = resolveDataPath(outputDirRelPosix);
+          await mkdir(outputDirAbs, { recursive: true });
+        } catch (e) {
+          logger.warn(
+            {
+              bookId: replaceBookId,
+              err: e instanceof Error ? e.message : String(e),
+            },
+            'metadata-import: failed to ensure canonical book directory (replace; continuing)',
+          );
+        }
+
+        if (coverUrl) {
+          try {
+            logger.debug(
+              { bookId: replaceBookId, provider, coverUrl },
+              'metadata-import: cover (replace): starting',
+            );
+
+            const dirMarkerRel = buildBookStorageRelativePath({
+              authorNames: authorsToAttach,
+              title,
+              bookId: replaceBookId,
+              filename: 'cover.thumb.webp',
+              baseDir: 'library',
+            });
+
+            const outputDirRelPosix = path.posix.dirname(dirMarkerRel);
+            const outputDirAbs = resolveDataPath(outputDirRelPosix);
+            await mkdir(outputDirAbs, { recursive: true });
+
+            const { bytes } = await fetchExternalImageBuffer(coverUrl);
+
+            const ensured = await ensureCoverOutputsFromBytes({
+              sourceBytes: bytes,
+              sourceMimeTypeHint: null,
+              sourceExtensionHint: null,
+              processing: {
+                outputDirAbs,
+                outputDirRelPosix,
+                doNotOverwrite: false,
+                sourceFormat: 'original',
+                sourceBaseName: 'cover.source',
+                thumbFileName: 'thumb.webp',
+                thumbMaxWidth: 320,
+                thumbWebpQuality: 80,
+              },
+            });
+
+            await cloudDb
+              .update(books)
+              .set({
+                coverImagePath: ensured.covers.thumb.relativePath,
+                updatedAt: new Date(),
+              } as never)
+              .where(eq(books.id, replaceBookId));
+          } catch (e) {
+            logger.warn(
+              {
+                bookId: replaceBookId,
+                err: e instanceof Error ? e.message : String(e),
+              },
+              'metadata-import: cover (replace): failed (continuing without cover)',
+            );
+          }
+        }
+
+        // Best-effort: keep storage canonical if title/authors changed.
+        try {
+          await moveBookStorageToCanonical({ bookId: replaceBookId });
+        } catch (e) {
+          logger.warn(
+            {
+              bookId: replaceBookId,
+              err: e instanceof Error ? e.message : String(e),
+            },
+            'metadata-import: replace: move-to-canonical failed',
+          );
+        }
+
+        return {
+          success: true,
+          data: {
+            book: { id: replaceBookId, title },
+            duplicateResolution: 'replace_existing' as const,
+            addedCollectionIds,
+            provider,
+            query,
+            collectionIds,
           },
-          'metadata-import: cover (replace): failed (continuing without cover)',
-        );
-      }
-    }
-
-    // Best-effort: keep storage canonical if title/authors changed.
-    try {
-      await moveBookStorageToCanonical({ bookId: replaceBookId });
-    } catch (e) {
-      logger.warn(
-        {
-          bookId: replaceBookId,
-          err: e instanceof Error ? e.message : String(e),
-        },
-        'metadata-import: replace: move-to-canonical failed',
-      );
-    }
-
-    return {
-      success: true,
-      data: {
-        book: { id: replaceBookId, title },
-        duplicateResolution: 'replace_existing' as const,
-        addedCollectionIds,
-        provider,
-        query,
-        collectionIds,
+        };
       },
-    };
+    );
   }
 
   const bookId = crypto.randomUUID();
