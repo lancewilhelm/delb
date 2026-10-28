@@ -1,11 +1,12 @@
 import path from 'node:path';
-import { mkdir, rename, rm, stat, readdir, rmdir } from 'node:fs/promises';
+import { mkdir, rm, stat, readdir, rmdir } from 'node:fs/promises';
 
 import { eq } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { authors, bookAuthors, bookFiles, books } from '~/utils/db/schema';
 import { logger } from '~/utils/logger';
+import { copyVerifiedExclusive } from '~~/server/utils/books/storage/verified-copy';
 import {
   BOOK_STORAGE_DEFAULTS,
   buildBookStorageRelativePath,
@@ -41,10 +42,7 @@ import {
 export type MoveBookStorageResult = {
   moved: boolean;
   reason?:
-    | 'no-files'
-    | 'already-canonical'
-    | 'moved'
-    | 'skipped-missing-on-disk';
+    'no-files' | 'already-canonical' | 'moved' | 'skipped-missing-on-disk';
   fromDir?: string;
   toDir?: string;
   updatedFileCount?: number;
@@ -90,8 +88,9 @@ async function fileExists(absPath: string): Promise<boolean> {
   try {
     await stat(absPath);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
   }
 }
 
@@ -149,8 +148,7 @@ export async function moveBookStorageToCanonical(opts: {
   if (files.length) {
     // Determine "current directory" by looking at a preferred file.
     const preferred =
-      files.find((f) => (f.format ?? '').toLowerCase() === 'epub') ??
-      files[0];
+      files.find((f) => (f.format ?? '').toLowerCase() === 'epub') ?? files[0];
 
     const currentRel = preferred?.relativePath;
     if (currentRel) {
@@ -216,15 +214,6 @@ export async function moveBookStorageToCanonical(opts: {
     // If source is missing, skip (do not fail the whole move).
     const srcExists = await fileExists(src);
     if (!srcExists) {
-      if (await fileExists(destAbs)) {
-        await cloudDb
-          .update(bookFiles)
-          .set({ relativePath: desiredRelPosix })
-          .where(eq(bookFiles.id, f.id));
-        movedNames.add(path.basename(destAbs));
-        continue;
-      }
-
       logger.warn(
         { bookId, relativePath: rel },
         'moveBookStorageToCanonical: source file missing on disk; skipping move',
@@ -232,22 +221,8 @@ export async function moveBookStorageToCanonical(opts: {
       continue;
     }
 
-    if (await fileExists(destAbs)) {
-      // Destination exists. Treat as already-migrated and remove the old file.
-      try {
-        await rm(src, { force: true });
-      } catch {
-        // ignore
-      }
-      await cloudDb
-        .update(bookFiles)
-        .set({ relativePath: desiredRelPosix })
-        .where(eq(bookFiles.id, f.id));
-      movedNames.add(path.basename(destAbs));
-      continue;
-    }
-
-    await rename(src, destAbs);
+    // Exclusive creation preserves both copies on collisions or failed DB updates.
+    await copyVerifiedExclusive(src, destAbs);
     movedNames.add(path.basename(destAbs));
 
     await cloudDb
@@ -255,6 +230,7 @@ export async function moveBookStorageToCanonical(opts: {
       .set({ relativePath: desiredRelPosix })
       .where(eq(bookFiles.id, f.id));
 
+    await rm(src);
     updatedFileCount += 1;
   }
 
@@ -268,22 +244,11 @@ export async function moveBookStorageToCanonical(opts: {
       const coverFileName = path.basename(srcCoverAbs);
       const destCoverAbs = path.join(targetDirAbs, coverFileName);
 
-      if (
-        path.resolve(srcCoverAbs) !== path.resolve(destCoverAbs) &&
-        !(await fileExists(destCoverAbs))
-      ) {
-        await rename(srcCoverAbs, destCoverAbs);
+      const coverNeedsMove =
+        path.resolve(srcCoverAbs) !== path.resolve(destCoverAbs);
+      if (coverNeedsMove) {
+        await copyVerifiedExclusive(srcCoverAbs, destCoverAbs);
         movedCover = true;
-      } else if (
-        path.resolve(srcCoverAbs) !== path.resolve(destCoverAbs) &&
-        (await fileExists(destCoverAbs))
-      ) {
-        // If cover already exists at destination, keep it and remove old one (best-effort).
-        try {
-          await rm(srcCoverAbs, { force: true });
-        } catch {
-          // ignore
-        }
       }
 
       movedNames.add(coverFileName);
@@ -297,6 +262,7 @@ export async function moveBookStorageToCanonical(opts: {
         .update(books)
         .set({ coverImagePath: destCoverRelPosix, updatedAt: new Date() })
         .where(eq(books.id, bookId));
+      if (coverNeedsMove) await rm(srcCoverAbs);
     } else {
       // Missing cover file is fine.
     }
@@ -316,26 +282,23 @@ export async function moveBookStorageToCanonical(opts: {
       const src = path.join(currentDirAbs, name);
       const dest = path.join(targetDirAbs, name);
 
-      if (await fileExists(dest)) {
-        // Avoid overwriting; best-effort cleanup.
-        try {
-          await rm(src, { recursive: entry.isDirectory(), force: true });
-        } catch {
-          // ignore
-        }
-        continue;
+      if (!entry.isFile()) {
+        throw new Error(`Cannot safely move sidecar: ${src}`);
       }
-
-      await rename(src, dest);
+      await copyVerifiedExclusive(src, dest);
+      await rm(src);
     }
-  } catch {
-    // ignore
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
 
   // Best-effort cleanup: remove the old directory after moving.
-  if (currentDirAbs && path.resolve(currentDirAbs) !== path.resolve(targetDirAbs)) {
+  if (
+    currentDirAbs &&
+    path.resolve(currentDirAbs) !== path.resolve(targetDirAbs)
+  ) {
     try {
-      await rm(currentDirAbs, { recursive: true, force: true });
+      await rmdir(currentDirAbs);
     } catch {
       // ignore
     }
@@ -373,49 +336,12 @@ function normalizePosix(p: string): string {
     .replace(/\/$/, '');
 }
 
-const IGNORED_ENTRY_NAMES = new Set([
-  '.DS_Store',
-  'Thumbs.db',
-  '.AppleDouble',
-]);
-
-function isIgnorableEntryName(name: string): boolean {
-  if (IGNORED_ENTRY_NAMES.has(name)) return true;
-  if (name.startsWith('._')) return true;
-  return false;
-}
-
 async function removeDirIfOnlyIgnorable(dirAbs: string): Promise<boolean> {
   try {
-    const entries = await readdir(dirAbs, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const entryAbs = path.join(dirAbs, entry.name);
-
-      if (entry.isDirectory()) {
-        const removed = await removeDirIfOnlyIgnorable(entryAbs);
-        if (!removed) return false;
-        continue;
-      }
-
-      if (isIgnorableEntryName(entry.name)) {
-        try {
-          await rm(entryAbs, { force: true });
-        } catch {
-          return false;
-        }
-        continue;
-      }
-
-      return false;
-    }
-
     await rmdir(dirAbs);
     return true;
   } catch (error: unknown) {
-    const e = error as { code?: string };
-    if (e?.code === 'ENOENT') return true;
-    return false;
+    return (error as NodeJS.ErrnoException).code === 'ENOENT';
   }
 }
 

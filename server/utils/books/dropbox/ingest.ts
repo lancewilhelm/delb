@@ -1,13 +1,5 @@
 import path from 'node:path';
-import {
-  copyFile,
-  mkdir,
-  readFile,
-  rename,
-  readdir,
-  rm,
-  unlink,
-} from 'node:fs/promises';
+import { mkdir, readFile, unlink } from 'node:fs/promises';
 
 import { eq } from 'drizzle-orm';
 
@@ -20,6 +12,7 @@ import {
   collectionBooks,
 } from '~/utils/db/schema';
 import { logger } from '~/utils/logger';
+import { copyVerifiedExclusive } from '~~/server/utils/books/storage/verified-copy';
 
 import { parseEpubMetadataFromBuffer } from '~~/server/utils/books/epub';
 import { extractAndStoreEpubCover } from '~~/server/utils/books/epub-cover';
@@ -124,27 +117,6 @@ async function findOrCreateAuthorByName(db: DbLike, name: string) {
   return { id, name };
 }
 
-async function moveFileAbs(sourceAbs: string, destAbs: string) {
-  try {
-    await rename(sourceAbs, destAbs);
-  } catch (err: unknown) {
-    const e = err as NodeJS.ErrnoException;
-    if (e?.code !== 'EXDEV') throw err;
-    await copyFile(sourceAbs, destAbs);
-    await unlink(sourceAbs);
-  }
-}
-
-async function tryRemoveDirIfEmpty(dirAbs: string) {
-  try {
-    const entries = await readdir(dirAbs);
-    if (entries.length > 0) return;
-    await rm(dirAbs, { recursive: false, force: true });
-  } catch {
-    // ignore
-  }
-}
-
 export type DropboxIngestResult = {
   bookId: string;
   relativePath: string;
@@ -185,7 +157,7 @@ export async function ingestDropboxFile(opts: {
   const bookDirAbs = path.dirname(absoluteDest);
 
   await mkdir(bookDirAbs, { recursive: true });
-  await moveFileAbs(opts.fileAbs, absoluteDest);
+  await copyVerifiedExclusive(opts.fileAbs, absoluteDest);
 
   let coverImagePath: string | null = null;
   if (format === 'epub') {
@@ -229,63 +201,50 @@ export async function ingestDropboxFile(opts: {
   const published = (meta.published || null) as string | null;
   const publishedAt = published ? normalizePublishedAt(published) : null;
 
-  try {
-    await cloudDb.transaction(async (tx) => {
-      await tx.insert(books).values({
-        id: bookId,
-        title,
-        sortTitle: makeTitleSortKey(title),
-        description: (meta.description || null) as string | null,
-        published,
-        publishedAt,
-        language: (meta.language || null) as string | null,
-        coverImagePath,
-        createdByUserId: opts.target.ownerUserId,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      const author = await findOrCreateAuthorByName(
-        tx as unknown as DbLike,
-        authorName,
-      );
-      await tx.insert(bookAuthors).values({
-        bookId,
-        authorId: author.id,
-        position: 1,
-      });
-
-      await tx.insert(bookFiles).values({
-        id: crypto.randomUUID(),
-        bookId,
-        format,
-        relativePath,
-        createdAt: now,
-      });
-
-      for (const collectionId of opts.target.collectionIds) {
-        await tx.insert(collectionBooks).values({
-          collectionId,
-          bookId,
-          addedByUserId: opts.target.ownerUserId,
-          addedAt: now,
-        });
-      }
+  await cloudDb.transaction(async (tx) => {
+    await tx.insert(books).values({
+      id: bookId,
+      title,
+      sortTitle: makeTitleSortKey(title),
+      description: (meta.description || null) as string | null,
+      published,
+      publishedAt,
+      language: (meta.language || null) as string | null,
+      coverImagePath,
+      createdByUserId: opts.target.ownerUserId,
+      createdAt: now,
+      updatedAt: now,
     });
-  } catch (err) {
-    // Try to clean up the moved file to avoid "orphaned on disk" entries.
-    try {
-      await unlink(absoluteDest);
-    } catch {
-      // ignore
+
+    const author = await findOrCreateAuthorByName(
+      tx as unknown as DbLike,
+      authorName,
+    );
+    await tx.insert(bookAuthors).values({
+      bookId,
+      authorId: author.id,
+      position: 1,
+    });
+
+    await tx.insert(bookFiles).values({
+      id: crypto.randomUUID(),
+      bookId,
+      format,
+      relativePath,
+      createdAt: now,
+    });
+
+    for (const collectionId of opts.target.collectionIds) {
+      await tx.insert(collectionBooks).values({
+        collectionId,
+        bookId,
+        addedByUserId: opts.target.ownerUserId,
+        addedAt: now,
+      });
     }
-    try {
-      await tryRemoveDirIfEmpty(bookDirAbs);
-    } catch {
-      // ignore
-    }
-    throw err;
-  }
+  });
+  // Keep the claimed input until the database commit has succeeded.
+  await unlink(opts.fileAbs);
 
   return { bookId, relativePath, title, author: authorName, format };
 }

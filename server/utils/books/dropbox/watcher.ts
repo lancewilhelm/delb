@@ -1,7 +1,15 @@
 import path from 'node:path';
-import { mkdir, readdir, rename, stat, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  readdir,
+  rename,
+  stat,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 
 import { logger } from '~/utils/logger';
+import { copyVerifiedExclusive } from '~~/server/utils/books/storage/verified-copy';
 
 import {
   getDropboxIngestConfigFromSettings,
@@ -56,11 +64,12 @@ async function moveToFailed(opts: {
 
   const ext = path.extname(opts.originalFilename);
   const base = path.basename(opts.originalFilename, ext);
-  const failedName = `${base}.${timestampForFilename()}${ext || ''}`;
+  const failedName = `${base}.${timestampForFilename()}.${crypto.randomUUID()}${ext || ''}`;
   const dest = path.join(opts.failedDirAbs, failedName);
 
   try {
-    await rename(opts.fileAbs, dest);
+    await copyVerifiedExclusive(opts.fileAbs, dest);
+    await unlink(opts.fileAbs);
   } catch {
     // best-effort; if rename fails, we leave the file where it is to avoid data loss
     return;
