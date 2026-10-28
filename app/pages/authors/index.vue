@@ -23,6 +23,7 @@ type FetchErrorLike = {
 
 type AuthorsListResponse = {
   data?: {
+    hasMore?: boolean;
     authors?: Array<{
       id: string;
       name: string;
@@ -56,78 +57,64 @@ const authors = ref<AuthorRow[]>([]);
 const loadingAuthors = ref(false);
 const authorQuery = ref('');
 
-const filteredAuthors = computed(() => {
-  const q = authorQuery.value.trim().toLowerCase();
-  const list = authors.value;
-  if (!q) return list;
-  return list.filter((a) => a.name.toLowerCase().includes(q));
-});
+const filteredAuthors = authors;
+const hasMore = ref(false);
+let generation = 0;
+const userSettingsStore = useUserSettingsStore();
+const maxAuthorsCovers = userSettingsStore.settingRef<number>(
+  'coverStyle.authorsMaxCovers',
+);
 
-async function refreshAuthors() {
+async function refreshAuthors(append = false) {
+  const request = append ? generation : ++generation;
   loadingAuthors.value = true;
   errorMessage.value = null;
-
+  if (!append) {
+    authors.value = [];
+    hasMore.value = false;
+  }
   try {
-    const query: Record<string, string> = {};
+    const query: Record<string, string> = {
+      offset: String(append ? authors.value.length : 0),
+      search: authorQuery.value.trim(),
+      previewLimit: String(maxAuthorsCovers.value ?? 8),
+    };
     if (
       collectionsStore.activeSelection.kind === 'collection' &&
       collectionsStore.activeSelection.collectionId
     ) {
       query.collectionId = collectionsStore.activeSelection.collectionId;
     }
-
-    // Use dedicated list endpoint so this view isn't dependent on how many books were loaded.
-    const res = await $fetch<AuthorsListResponse>('/api/authors', {
-      method: 'GET',
-      query,
-    });
-
-    const list = res?.data?.authors ?? [];
-
-    // Keep client-side sort stable/predictable (server may already sort).
-    authors.value = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    const res = await $fetch<AuthorsListResponse>('/api/authors', { query });
+    if (request !== generation) return;
+    const list = res.data?.authors ?? [];
+    authors.value = append ? [...authors.value, ...list] : list;
+    hasMore.value = res.data?.hasMore ?? false;
   } catch (err) {
+    if (request !== generation) return;
     const e = err as FetchErrorLike;
     errorMessage.value =
       e?.data?.message ||
       e?.statusMessage ||
       e?.message ||
       'Failed to load authors';
-    authors.value = [];
   } finally {
-    loadingAuthors.value = false;
+    if (request === generation) loadingAuthors.value = false;
   }
 }
 
-const userSettingsStore = useUserSettingsStore();
-const maxAuthorsCovers = userSettingsStore.settingRef<number>(
-  'coverStyle.authorsMaxCovers',
-);
-
-// ------------------------------
-// UI helpers
-// ------------------------------
-// When scope changes, refresh the result set for the active view.
 watch(
-  () => collectionsStore.activeSelection,
-  async () => {
-    // When scope changes, refresh the result set for the active view.
-    await refreshActiveView();
+  [() => collectionsStore.activeSelection, authorQuery, maxAuthorsCovers],
+  () => {
+    void refreshAuthors();
   },
-  { deep: true },
+  { deep: true, flush: 'sync' },
 );
-
-async function refreshActiveView() {
-  // Ensure collections are loaded so collection-scoped queries are valid after navigation.
-  if (!collectionsStore.collections.length) {
-    await collectionsStore.fetchCollections();
-  }
-
-  await refreshAuthors();
-}
 
 onMounted(async () => {
-  await refreshActiveView();
+  if (!collectionsStore.collections.length)
+    await collectionsStore.fetchCollections();
+  await refreshAuthors();
 });
 </script>
 
@@ -161,7 +148,10 @@ onMounted(async () => {
               />
             </div>
 
-            <div v-if="loadingAuthors" class="text-sm opacity-80">
+            <div
+              v-if="loadingAuthors && !authors.length"
+              class="text-sm opacity-80"
+            >
               Loading...
             </div>
 
@@ -226,6 +216,15 @@ onMounted(async () => {
                 </div>
               </div>
             </div>
+            <button
+              v-if="hasMore"
+              type="button"
+              class="px-3 py-2 rounded-md border border-(--sub-color) text-sm"
+              :disabled="loadingAuthors"
+              @click="refreshAuthors(true)"
+            >
+              {{ loadingAuthors ? 'Loading...' : 'Load more' }}
+            </button>
           </div>
         </div>
       </div>

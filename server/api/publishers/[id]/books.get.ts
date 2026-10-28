@@ -144,19 +144,6 @@ export default defineEventHandler(async (event) => {
     }
 
     // 3) Get visible book ids from those collections
-    const visibleBookLinks = await cloudDb
-      .select({ bookId: collectionBooks.bookId })
-      .from(collectionBooks)
-      .where(inArray(collectionBooks.collectionId, targetCollectionIds));
-
-    const visibleBookIds = Array.from(
-      new Set(visibleBookLinks.map((r) => r.bookId)),
-    ).filter(Boolean);
-
-    if (!visibleBookIds.length) {
-      return { success: true, data: { publisher, books: [] } };
-    }
-
     // 4) Page query: visible books from this publisher in the scoped collections.
     // Sort: newest first, deterministic by id. Cursor is (createdAt,id).
     const pageRows = await cloudDb
