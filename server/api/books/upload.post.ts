@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { mkdir, open, readFile, writeFile } from 'node:fs/promises';
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
@@ -13,6 +13,7 @@ import {
   collectionMembers,
   collectionBooks,
   collections,
+  storageOperations,
 } from '~/utils/db/schema';
 import { logger } from '~/utils/logger';
 import { auth } from '~/utils/auth';
@@ -24,6 +25,8 @@ import { makeAuthorSortKey, makeTitleSortKey } from '~~/server/utils/sort/keys';
 import { buildBookStorageRelativePath } from '~~/server/utils/books/storage/paths';
 import { normalizePublishedAt } from '~~/server/utils/books/published';
 import { withBookStorageLock } from '~~/server/utils/books/storage/book-lock';
+import { deleteStoredFiles } from '~~/server/utils/books/storage/delete-operation';
+import { deleteDecision } from '~~/server/utils/books/storage/delete-recovery';
 import { findPossibleDuplicates } from '~~/server/utils/books/duplicates';
 import {
   readBoundedUpload,
@@ -390,70 +393,121 @@ async function processOneBookUploadUnlocked(
   const published = (meta.published || null) as string | null;
   const publishedAt = published ? normalizePublishedAt(published) : null;
 
-  await cloudDb.transaction(async (tx) => {
-    if (input.replaceBookId) {
-      await tx
-        .update(books)
-        .set({
+  const persist = async (operationId?: string) =>
+    await cloudDb.transaction(async (tx) => {
+      if (operationId)
+        await tx
+          .insert(storageOperations)
+          .values({
+            id: operationId,
+            bookId: id,
+            kind: 'replace',
+            createdAt: now,
+          });
+      if (input.replaceBookId) {
+        await tx
+          .update(books)
+          .set({
+            title,
+            sortTitle: makeTitleSortKey(title),
+            description: meta.description || null,
+            published,
+            publishedAt,
+            language: meta.language || null,
+            updatedAt: now,
+          })
+          .where(eq(books.id, id));
+        await tx.delete(bookAuthors).where(eq(bookAuthors.bookId, id));
+        await tx.delete(bookIdentifiers).where(eq(bookIdentifiers.bookId, id));
+        await tx.delete(bookFiles).where(eq(bookFiles.bookId, id));
+      } else {
+        await tx.insert(books).values({
+          id,
           title,
           sortTitle: makeTitleSortKey(title),
           description: meta.description || null,
           published,
           publishedAt,
           language: meta.language || null,
+          coverImagePath,
+          createdByUserId: input.userId,
+          createdAt: now,
           updatedAt: now,
-        })
-        .where(eq(books.id, id));
-      await tx.delete(bookAuthors).where(eq(bookAuthors.bookId, id));
-      await tx.delete(bookIdentifiers).where(eq(bookIdentifiers.bookId, id));
-      await tx.delete(bookFiles).where(eq(bookFiles.bookId, id));
-    } else {
-      await tx.insert(books).values({
-        id,
-        title,
-        sortTitle: makeTitleSortKey(title),
-        description: meta.description || null,
-        published,
-        publishedAt,
-        language: meta.language || null,
-        coverImagePath,
-        createdByUserId: input.userId,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
-    const author = await findOrCreateAuthorByName(
-      tx as unknown as DbLike,
-      authorName,
-    );
-    await tx
-      .insert(bookAuthors)
-      .values({ bookId: id, authorId: author.id, position: 1 });
-    await tx.insert(bookFiles).values({
-      id: crypto.randomUUID(),
-      bookId: id,
-      format,
-      relativePath,
-      createdAt: now,
-    });
-    for (const ident of meta.identifiers ?? []) {
-      const type = (ident.type ?? '').trim().toLowerCase();
-      const value = (ident.value ?? '').trim();
-      if (type && value)
-        await tx.insert(bookIdentifiers).values({ bookId: id, type, value });
-    }
-    for (const collectionId of new Set(input.collectionIds)) {
+        });
+      }
+      const author = await findOrCreateAuthorByName(
+        tx as unknown as DbLike,
+        authorName,
+      );
       await tx
-        .insert(collectionBooks)
-        .values({
-          collectionId,
-          bookId: id,
-          addedByUserId: input.userId,
-          addedAt: now,
-        })
-        .onConflictDoNothing();
+        .insert(bookAuthors)
+        .values({ bookId: id, authorId: author.id, position: 1 });
+      await tx.insert(bookFiles).values({
+        id: crypto.randomUUID(),
+        bookId: id,
+        format,
+        relativePath,
+        createdAt: now,
+      });
+      for (const ident of meta.identifiers ?? []) {
+        const type = (ident.type ?? '').trim().toLowerCase();
+        const value = (ident.value ?? '').trim();
+        if (type && value)
+          await tx.insert(bookIdentifiers).values({ bookId: id, type, value });
+      }
+      for (const collectionId of new Set(input.collectionIds)) {
+        await tx
+          .insert(collectionBooks)
+          .values({
+            collectionId,
+            bookId: id,
+            addedByUserId: input.userId,
+            addedAt: now,
+          })
+          .onConflictDoNothing();
+      }
+    });
+  if (input.replaceBookId) {
+    const oldFiles = await cloudDb
+      .select({ relativePath: bookFiles.relativePath })
+      .from(bookFiles)
+      .where(eq(bookFiles.bookId, id));
+    const sources: string[] = [];
+    for (const file of oldFiles) {
+      if (!file.relativePath || file.relativePath === existingCoverImagePath)
+        continue;
+      const [sharedFiles, sharedCovers] = await Promise.all([
+        cloudDb
+          .select({ id: bookFiles.id })
+          .from(bookFiles)
+          .where(
+            and(
+              eq(bookFiles.relativePath, file.relativePath),
+              ne(bookFiles.bookId, id),
+            ),
+          )
+          .limit(1),
+        cloudDb
+          .select({ id: books.id })
+          .from(books)
+          .where(
+            and(eq(books.coverImagePath, file.relativePath), ne(books.id, id)),
+          )
+          .limit(1),
+      ]);
+      if (!sharedFiles.length && !sharedCovers.length)
+        sources.push(resolveDataPath(file.relativePath));
     }
-  });
+    await deleteStoredFiles({
+      root: path.resolve(process.cwd(), 'library'),
+      bookId: id,
+      sources,
+      decision: deleteDecision,
+      commit: persist,
+    });
+  } else {
+    await persist();
+  }
 
   return {
     id,

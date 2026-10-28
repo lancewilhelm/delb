@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { storageOperations } from '~/utils/db/schema';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { withBookStorageLock } from './book-lock';
@@ -14,7 +14,7 @@ export const deleteDecision = {
         .where(
           and(
             eq(storageOperations.id, id),
-            eq(storageOperations.kind, 'delete'),
+            inArray(storageOperations.kind, ['delete', 'replace']),
           ),
         )
         .limit(1)
@@ -23,7 +23,10 @@ export const deleteDecision = {
     await cloudDb
       .delete(storageOperations)
       .where(
-        and(eq(storageOperations.id, id), eq(storageOperations.kind, 'delete')),
+        and(
+          eq(storageOperations.id, id),
+          inArray(storageOperations.kind, ['delete', 'replace']),
+        ),
       );
   },
 };

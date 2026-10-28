@@ -121,3 +121,70 @@ test('recovery retains the backup when a committed source changed', async () => 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('replacement decision and file row commit together before retiring old bytes', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'delb-replace-'));
+  const old = path.join(root, 'old.epub');
+  const replacement = path.join(root, 'new.epub');
+  const db = createClient({ url: `file:${path.join(root, 'test.db')}` });
+  await db.executeMultiple(
+    "CREATE TABLE decisions (id TEXT PRIMARY KEY); CREATE TABLE books (path TEXT); INSERT INTO books VALUES ('old.epub');",
+  );
+  const decision = {
+    isCommitted: async (id: string) =>
+      (
+        await db.execute({
+          sql: 'SELECT id FROM decisions WHERE id = ?',
+          args: [id],
+        })
+      ).rows.length > 0,
+    remove: async (id: string) => {
+      await db.execute({
+        sql: 'DELETE FROM decisions WHERE id = ?',
+        args: [id],
+      });
+    },
+  };
+  try {
+    await writeFile(old, 'old bytes');
+    await writeFile(replacement, 'new bytes');
+    await assert.rejects(
+      deleteStoredFiles({
+        root,
+        bookId: 'book',
+        sources: [old],
+        decision,
+        commit: async (id) => {
+          const tx = await db.transaction('write');
+          try {
+            await tx.execute({
+              sql: 'INSERT INTO decisions VALUES (?)',
+              args: [id],
+            });
+            await tx.execute("UPDATE books SET path = 'new.epub'");
+            await tx.commit();
+          } finally {
+            tx.close();
+          }
+          throw new Error('interrupted');
+        },
+      }),
+      /interrupted/,
+    );
+    assert.equal(
+      (await db.execute('SELECT path FROM books')).rows[0]?.path,
+      'new.epub',
+    );
+    assert.equal(await readFile(old, 'utf8'), 'old bytes');
+    await recoverStoredDeletes({
+      root,
+      decision,
+      withLock: async (_id, work) => await work(),
+    });
+    await assert.rejects(readFile(old), { code: 'ENOENT' });
+    assert.equal(await readFile(replacement, 'utf8'), 'new bytes');
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
