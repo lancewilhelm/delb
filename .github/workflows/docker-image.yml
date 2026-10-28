@@ -8,7 +8,13 @@ on:
     types: [published]
 
 jobs:
+  verify:
+    uses: ./.github/workflows/test.yml
+    permissions:
+      contents: read
+
   build-and-push:
+    needs: verify
     runs-on: ubuntu-latest
 
     permissions:

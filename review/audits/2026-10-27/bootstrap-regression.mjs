@@ -1,3 +1,4 @@
+import { fetchAuth } from '../../fetch-auth.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
@@ -15,7 +16,7 @@ try {
   );
   const results = await Promise.all(
     Array.from({ length: 3 }, (_, i) =>
-      fetch('http://127.0.0.1:4317/api/auth/sign-up/email', {
+      fetchAuth('http://127.0.0.1:4317/api/auth/sign-up/email', {
         method: 'POST',
         signal: AbortSignal.timeout(20000),
         headers: {
@@ -46,19 +47,22 @@ try {
     sql: 'DELETE FROM users WHERE id = ?',
     args: [owners.rows[0].id],
   });
-  const later = await fetch('http://127.0.0.1:4317/api/auth/sign-up/email', {
-    method: 'POST',
-    signal: AbortSignal.timeout(20000),
-    headers: {
-      Origin: 'http://127.0.0.1:4317',
-      'Content-Type': 'application/json',
+  const later = await fetchAuth(
+    'http://127.0.0.1:4317/api/auth/sign-up/email',
+    {
+      method: 'POST',
+      signal: AbortSignal.timeout(20000),
+      headers: {
+        Origin: 'http://127.0.0.1:4317',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Later signup',
+        email: `later-${randomBytes(4).toString('hex')}@example.invalid`,
+        password: randomBytes(20).toString('hex'),
+      }),
     },
-    body: JSON.stringify({
-      name: 'Later signup',
-      email: `later-${randomBytes(4).toString('hex')}@example.invalid`,
-      password: randomBytes(20).toString('hex'),
-    }),
-  });
+  );
   assert.equal(later.status, 200);
   assert.equal(
     (await db.execute("SELECT id FROM users WHERE role = 'owner'")).rows.length,

@@ -1,3 +1,4 @@
+import { fetchAuth } from './fetch-auth.mjs';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
@@ -10,7 +11,7 @@ const record = (text) => {
 const guest = await fetch(base + '/api/books');
 assert.equal(guest.status, 401);
 record('PASS unauthenticated book listing returns 401');
-const registration = await fetch(base + '/api/auth/sign-up/email', {
+const registration = await fetchAuth(base + '/api/auth/sign-up/email', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json', Origin: base },
   body: JSON.stringify({

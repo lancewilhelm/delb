@@ -1,3 +1,4 @@
+import { fetchAuth } from '../../fetch-auth.mjs';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -24,7 +25,7 @@ async function request(path, cookie, method = 'GET', body) {
 }
 async function signup(label) {
   const email = `repair-${label}-${randomBytes(5).toString('hex')}@example.invalid`;
-  const response = await fetch(base + '/api/auth/sign-up/email', {
+  const response = await fetchAuth(base + '/api/auth/sign-up/email', {
     method: 'POST',
     signal: AbortSignal.timeout(20000),
     headers: { Origin: base, 'Content-Type': 'application/json' },

@@ -18,3 +18,12 @@ dropbox
 # Logs
 *.log
 
+
+.env
+.env.*
+!.env.example
+calibre
+review
+.audit
+
+public/__review
