@@ -26,6 +26,7 @@ async function signup(label) {
   const email = `repair-${label}-${randomBytes(5).toString('hex')}@example.invalid`;
   const response = await fetch(base + '/api/auth/sign-up/email', {
     method: 'POST',
+    signal: AbortSignal.timeout(20000),
     headers: { Origin: base, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: 'Audit ' + label,
@@ -332,6 +333,40 @@ assert.deepEqual(
   (await ranks()).filter((x) => x !== null).sort((x, y) => x - y),
   [1, 2],
 );
+for (const [title, published] of [
+  ['Date tie one', '2022-01-01'],
+  ['Date tie two', '2022-01-01'],
+  ['Date later', '2024-01-01'],
+  ['Date unknown', null],
+]) {
+  const created = await request('/api/books', a.cookie, 'POST', {
+    title,
+    published,
+    authors: ['Date Writer'],
+  });
+  assert.equal(created.status, 200);
+}
+for (const direction of ['asc', 'desc']) {
+  const full = await request(
+    `/api/books?sort=publishedDate&sortDir=${direction}&limit=200`,
+    a.cookie,
+  );
+  assert.equal(full.status, 200);
+  const expected = full.data.data.books.map((book) => book.id);
+  const found = [];
+  let cursor = null;
+  do {
+    const page = await request(
+      `/api/books?sort=publishedDate&sortDir=${direction}&limit=1${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`,
+      a.cookie,
+    );
+    assert.equal(page.status, 200);
+    found.push(...page.data.data.books.map((book) => book.id));
+    cursor = page.data.data.nextCursor;
+    assert.ok(found.length <= expected.length);
+  } while (cursor);
+  assert.deepEqual(found, expected);
+}
 const transfer = await request(
   `/api/collections/${aCollection}/transfer-ownership`,
   a.cookie,

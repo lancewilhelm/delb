@@ -840,7 +840,23 @@ export default defineEventHandler(async (event) => {
   };
 
   await cloudDb.transaction(async (tx) => {
-    // Optional relationships (best-effort)
+    const memberships = await tx
+      .select({ role: collectionMembers.role })
+      .from(collectionMembers)
+      .where(
+        and(
+          eq(collectionMembers.userId, userId),
+          inArray(collectionMembers.collectionId, collectionIds),
+        ),
+      );
+    if (
+      memberships.filter(
+        (member) => member.role === 'owner' || member.role === 'editor',
+      ).length !== collectionIds.length
+    ) {
+      throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
+    }
+    // Optional relationships
     if (publisherName) {
       const pub = await findOrCreatePublisherByName(publisherName, tx);
       bookInsert.publisherId = pub.id;
