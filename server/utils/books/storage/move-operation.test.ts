@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createClient } from '@libsql/client';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -207,39 +207,56 @@ test('recovery refuses to discard a committed journal when destination is missin
   }
 });
 
-test('recovery retains changed uncommitted destinations', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'delb-move-changed-'));
-  const source = path.join(root, 'source');
-  const destination = path.join(root, 'destination');
-  const decision = {
-    isCommitted: async () => false,
-    remove: async () => undefined,
-  };
-  try {
-    await writeFile(source, 'original');
-    await assert.rejects(
-      moveStoredFiles({
-        root,
-        bookId: 'book',
-        entries: [{ source, destination }],
-        decision,
-        commit: async () => {
-          throw new Error('interrupted');
-        },
-      }),
-    );
-    await writeFile(destination, 'changed');
-    await assert.rejects(
-      recoverStoredMoves({
+for (const copy of ['ori', 'different bytes'])
+  test(`recovery retains an uncommitted destination containing ${copy}`, async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'delb-move-changed-'));
+    const source = path.join(root, 'source');
+    const destination = path.join(root, 'destination');
+    const decision = {
+      isCommitted: async () => false,
+      remove: async () => undefined,
+    };
+    try {
+      await writeFile(source, 'original');
+      await assert.rejects(
+        moveStoredFiles({
+          root,
+          bookId: 'book',
+          entries: [{ source, destination }],
+          decision,
+          commit: async () => {
+            throw new Error('interrupted');
+          },
+        }),
+      );
+      await writeFile(destination, copy);
+      const warnings = await recoverStoredMoves({
         root,
         decision,
         withLock: async (_id, work) => await work(),
-      }),
-      /requires inspection/,
-    );
-    assert.equal(await readFile(source, 'utf8'), 'original');
-    assert.equal(await readFile(destination, 'utf8'), 'changed');
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
+      });
+      assert.equal(await readFile(source, 'utf8'), 'original');
+      assert.equal(await readFile(destination, 'utf8'), copy);
+      const names = await readdir(root);
+      const failed = names.find((name) =>
+        name.startsWith('.delb-failed-move-'),
+      );
+      assert.ok(failed);
+      const journal = names.find((name) => name.startsWith('.delb-move-'));
+      assert.ok(journal);
+      assert.equal(warnings.length, 1);
+      assert.equal(warnings[0]?.journalDir, path.join(root, journal));
+      assert.equal(warnings[0]?.marker, path.join(root, failed));
+      assert.deepEqual(warnings[0]?.entries, [{ source, destination }]);
+      assert.deepEqual(
+        await recoverStoredMoves({
+          root,
+          decision,
+          withLock: async (_id, work) => await work(),
+        }),
+        warnings,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });

@@ -14,6 +14,11 @@ import path from 'node:path';
 import { copyVerifiedExclusive, sameFileContents } from './verified-copy';
 
 type MoveEntry = { source: string; destination: string };
+type MoveRecoveryWarning = {
+  journalDir: string;
+  marker: string;
+  entries: MoveEntry[];
+};
 type MoveJournal = {
   version: 1;
   id: string;
@@ -66,9 +71,22 @@ async function finish(
   dir: string,
   journal: MoveJournal,
   decision: Decision,
-): Promise<void> {
+): Promise<MoveRecoveryWarning | undefined> {
   validate(root, journal);
-  if (await decision.isCommitted(journal.id)) {
+  const marker = path.join(root, `.delb-failed-move-${journal.id}`);
+  const committed = await decision.isCommitted(journal.id);
+  if (!committed) {
+    for (const { source } of journal.entries) {
+      if (!(await exists(source)))
+        throw new Error(`Uncommitted move source is missing: ${source}`);
+    }
+  }
+  if (await exists(marker)) {
+    if (committed)
+      throw new Error(`Committed move has a failed recovery marker: ${marker}`);
+    return { journalDir: dir, marker, entries: journal.entries };
+  }
+  if (committed) {
     for (const { source, destination } of journal.entries) {
       if (!(await exists(destination)))
         throw new Error(
@@ -82,11 +100,15 @@ async function finish(
   } else {
     for (const { source, destination } of journal.entries) {
       if (!(await exists(destination))) continue;
-      if (
-        !(await exists(source)) ||
-        !(await sameFileContents(source, destination))
-      )
-        throw new Error(`Uncommitted move requires inspection: ${dir}`);
+      if (!(await sameFileContents(source, destination))) {
+        const handle = await open(marker, 'wx');
+        try {
+          await handle.sync();
+        } finally {
+          await handle.close();
+        }
+        return { journalDir: dir, marker, entries: journal.entries };
+      }
       await unlink(destination);
     }
   }
@@ -134,12 +156,13 @@ export async function recoverStoredMoves(opts: {
   root: string;
   decision: Decision;
   withLock: (bookId: string, work: () => Promise<void>) => Promise<void>;
-}): Promise<void> {
+}): Promise<MoveRecoveryWarning[]> {
+  const warnings: MoveRecoveryWarning[] = [];
   let names: string[];
   try {
     names = await readdir(opts.root);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return warnings;
     throw error;
   }
   for (const name of names.filter((item) => item.startsWith('.delb-move-'))) {
@@ -161,10 +184,13 @@ export async function recoverStoredMoves(opts: {
     if (name !== `.delb-move-${journal.id}`)
       throw new Error('Invalid move journal identity');
     await opts.withLock(journal.bookId, async () => {
-      if (await exists(dir))
-        await finish(opts.root, dir, journal, opts.decision);
+      if (await exists(dir)) {
+        const warning = await finish(opts.root, dir, journal, opts.decision);
+        if (warning) warnings.push(warning);
+      }
     });
   }
+  return warnings;
 }
 
 async function existsDirectory(dir: string): Promise<boolean> {
