@@ -27,6 +27,8 @@ import { normalizePublishedAt } from '~~/server/utils/books/published';
 import { withBookStorageLock } from '~~/server/utils/books/storage/book-lock';
 import { deleteStoredFiles } from '~~/server/utils/books/storage/delete-operation';
 import { deleteDecision } from '~~/server/utils/books/storage/delete-recovery';
+import { beginStoredCreate } from '~~/server/utils/books/storage/create-operation';
+import { createDecision } from '~~/server/utils/books/storage/create-recovery';
 import { findPossibleDuplicates } from '~~/server/utils/books/duplicates';
 import {
   readBoundedUpload,
@@ -227,6 +229,7 @@ async function processOneBookUploadUnlocked(
     allowDuplicate?: boolean;
     replaceBookId?: string | null;
   },
+  newBookId: string,
 ) {
   if (!filePart.filename || !filePart.data) {
     throw createError({ statusCode: 400, statusMessage: 'Missing book file' });
@@ -315,7 +318,7 @@ async function processOneBookUploadUnlocked(
 
   const safeTitle = toSafePathSegment(title, 'Untitled');
 
-  const id = input.replaceBookId ?? crypto.randomUUID();
+  const id = input.replaceBookId ?? newBookId;
   const relativePath = buildBookStorageRelativePath({
     authorNames: [authorName],
     title,
@@ -327,212 +330,240 @@ async function processOneBookUploadUnlocked(
   const absolutePath = resolveDataPath(relativePath);
   const bookDirAbsolute = path.dirname(absolutePath);
 
-  // New book directories are exclusive so generated covers cannot overwrite another book.
+  let creation: Awaited<ReturnType<typeof beginStoredCreate>> | undefined;
   if (input.replaceBookId) {
     await mkdir(bookDirAbsolute, { recursive: true });
   } else {
-    await mkdir(path.dirname(bookDirAbsolute), { recursive: true });
-    await mkdir(bookDirAbsolute);
+    creation = await beginStoredCreate({
+      root: path.resolve(process.cwd(), 'library'),
+      bookId: id,
+      directory: bookDirAbsolute,
+      file: absolutePath,
+      decision: createDecision,
+    });
   }
-  await writeFile(absolutePath, filePart.data, { flag: 'wx' });
-  const handle = await open(absolutePath, 'r');
+  let finalizingCreation = false;
   try {
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-  if (!(await readFile(absolutePath)).equals(filePart.data)) {
-    throw new Error('Uploaded file failed verification');
-  }
-
-  // Best-effort cover extraction (EPUB only for now)
-  //
-  // New cover storage model:
-  // - Store extracted original cover bytes as: `source.<ext>` (true original, full resolution)
-  // - Store a 320px-wide thumbnail as: `thumb.webp` (used almost everywhere)
-  // - Persist `books.coverImagePath` as the thumbnail path (`thumb.webp`)
-  //
-  // The full-res source is served only on-demand by requesting its path.
-  let coverImagePath: string | null = existingCoverImagePath;
-  if (format === 'epub' && !input.replaceBookId) {
+    await writeFile(absolutePath, filePart.data, { flag: 'wx' });
+    const handle = await open(absolutePath, 'r');
     try {
-      const thumbRelativePath = buildBookStorageRelativePath({
-        authorNames: [authorName],
-        title,
-        bookId: id,
-        filename: 'thumb.webp',
-        baseDir: 'library',
-      });
-
-      const sourceRelativePath = buildBookStorageRelativePath({
-        authorNames: [authorName],
-        title,
-        bookId: id,
-        filename: 'source.bin',
-        baseDir: 'library',
-      });
-
-      const extracted = await extractAndStoreEpubCover({
-        epubFilePath: absolutePath,
-        outputDirAbsolute: bookDirAbsolute,
-        outputThumbRelativePathPosix: thumbRelativePath,
-        outputSourceRelativePathPosix: sourceRelativePath,
-        maxWidth: 320,
-        webpQuality: 80,
-      });
-
-      // Store thumbnail path in DB
-      coverImagePath = extracted?.thumbRelativePath ?? null;
-    } catch (error) {
-      logger.debug(
-        error,
-        'POST /api/books/upload: Failed to extract cover (continuing without cover)',
-      );
-      coverImagePath = null;
+      await handle.sync();
+    } finally {
+      await handle.close();
     }
-  }
+    if (!(await readFile(absolutePath)).equals(filePart.data)) {
+      throw new Error('Uploaded file failed verification');
+    }
 
-  const now = new Date();
-
-  // Create canonical book record
-  const published = (meta.published || null) as string | null;
-  const publishedAt = published ? normalizePublishedAt(published) : null;
-
-  const persist = async (operationId?: string) =>
-    await cloudDb.transaction(async (tx) => {
-      if (operationId)
-        await tx.insert(storageOperations).values({
-          id: operationId,
+    // Best-effort cover extraction (EPUB only for now)
+    //
+    // New cover storage model:
+    // - Store extracted original cover bytes as: `source.<ext>` (true original, full resolution)
+    // - Store a 320px-wide thumbnail as: `thumb.webp` (used almost everywhere)
+    // - Persist `books.coverImagePath` as the thumbnail path (`thumb.webp`)
+    //
+    // The full-res source is served only on-demand by requesting its path.
+    let coverImagePath: string | null = existingCoverImagePath;
+    if (format === 'epub' && !input.replaceBookId) {
+      try {
+        const thumbRelativePath = buildBookStorageRelativePath({
+          authorNames: [authorName],
+          title,
           bookId: id,
-          kind: 'replace',
-          createdAt: now,
+          filename: 'thumb.webp',
+          baseDir: 'library',
         });
-      if (input.replaceBookId) {
-        await tx
-          .update(books)
-          .set({
+
+        const sourceRelativePath = buildBookStorageRelativePath({
+          authorNames: [authorName],
+          title,
+          bookId: id,
+          filename: 'source.bin',
+          baseDir: 'library',
+        });
+
+        const extracted = await extractAndStoreEpubCover({
+          epubFilePath: absolutePath,
+          outputDirAbsolute: bookDirAbsolute,
+          outputThumbRelativePathPosix: thumbRelativePath,
+          outputSourceRelativePathPosix: sourceRelativePath,
+          maxWidth: 320,
+          webpQuality: 80,
+        });
+
+        // Store thumbnail path in DB
+        coverImagePath = extracted?.thumbRelativePath ?? null;
+      } catch (error) {
+        logger.debug(
+          error,
+          'POST /api/books/upload: Failed to extract cover (continuing without cover)',
+        );
+        coverImagePath = null;
+      }
+    }
+
+    const now = new Date();
+
+    // Create canonical book record
+    const published = (meta.published || null) as string | null;
+    const publishedAt = published ? normalizePublishedAt(published) : null;
+
+    const persist = async (operationId?: string) =>
+      await cloudDb.transaction(async (tx) => {
+        if (operationId)
+          await tx.insert(storageOperations).values({
+            id: operationId,
+            bookId: id,
+            kind: input.replaceBookId ? 'replace' : 'create',
+            createdAt: now,
+          });
+        if (input.replaceBookId) {
+          await tx
+            .update(books)
+            .set({
+              title,
+              sortTitle: makeTitleSortKey(title),
+              description: meta.description || null,
+              published,
+              publishedAt,
+              language: meta.language || null,
+              updatedAt: now,
+            })
+            .where(eq(books.id, id));
+          await tx.delete(bookAuthors).where(eq(bookAuthors.bookId, id));
+          await tx
+            .delete(bookIdentifiers)
+            .where(eq(bookIdentifiers.bookId, id));
+          await tx.delete(bookFiles).where(eq(bookFiles.bookId, id));
+        } else {
+          await tx.insert(books).values({
+            id,
             title,
             sortTitle: makeTitleSortKey(title),
             description: meta.description || null,
             published,
             publishedAt,
             language: meta.language || null,
+            coverImagePath,
+            createdByUserId: input.userId,
+            createdAt: now,
             updatedAt: now,
-          })
-          .where(eq(books.id, id));
-        await tx.delete(bookAuthors).where(eq(bookAuthors.bookId, id));
-        await tx.delete(bookIdentifiers).where(eq(bookIdentifiers.bookId, id));
-        await tx.delete(bookFiles).where(eq(bookFiles.bookId, id));
-      } else {
-        await tx.insert(books).values({
-          id,
-          title,
-          sortTitle: makeTitleSortKey(title),
-          description: meta.description || null,
-          published,
-          publishedAt,
-          language: meta.language || null,
-          coverImagePath,
-          createdByUserId: input.userId,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-      const author = await findOrCreateAuthorByName(
-        tx as unknown as DbLike,
-        authorName,
-      );
-      await tx
-        .insert(bookAuthors)
-        .values({ bookId: id, authorId: author.id, position: 1 });
-      await tx.insert(bookFiles).values({
-        id: crypto.randomUUID(),
-        bookId: id,
-        format,
-        relativePath,
-        createdAt: now,
-      });
-      for (const ident of meta.identifiers ?? []) {
-        const type = (ident.type ?? '').trim().toLowerCase();
-        const value = (ident.value ?? '').trim();
-        if (type && value)
-          await tx.insert(bookIdentifiers).values({ bookId: id, type, value });
-      }
-      for (const collectionId of new Set(input.collectionIds)) {
+          });
+        }
+        const author = await findOrCreateAuthorByName(
+          tx as unknown as DbLike,
+          authorName,
+        );
         await tx
-          .insert(collectionBooks)
-          .values({
-            collectionId,
-            bookId: id,
-            addedByUserId: input.userId,
-            addedAt: now,
-          })
-          .onConflictDoNothing();
+          .insert(bookAuthors)
+          .values({ bookId: id, authorId: author.id, position: 1 });
+        await tx.insert(bookFiles).values({
+          id: crypto.randomUUID(),
+          bookId: id,
+          format,
+          relativePath,
+          createdAt: now,
+        });
+        for (const ident of meta.identifiers ?? []) {
+          const type = (ident.type ?? '').trim().toLowerCase();
+          const value = (ident.value ?? '').trim();
+          if (type && value)
+            await tx
+              .insert(bookIdentifiers)
+              .values({ bookId: id, type, value });
+        }
+        for (const collectionId of new Set(input.collectionIds)) {
+          await tx
+            .insert(collectionBooks)
+            .values({
+              collectionId,
+              bookId: id,
+              addedByUserId: input.userId,
+              addedAt: now,
+            })
+            .onConflictDoNothing();
+        }
+      });
+    if (input.replaceBookId) {
+      const oldFiles = await cloudDb
+        .select({ relativePath: bookFiles.relativePath })
+        .from(bookFiles)
+        .where(eq(bookFiles.bookId, id));
+      const sources: string[] = [];
+      for (const file of oldFiles) {
+        if (!file.relativePath || file.relativePath === existingCoverImagePath)
+          continue;
+        const [sharedFiles, sharedCovers] = await Promise.all([
+          cloudDb
+            .select({ id: bookFiles.id })
+            .from(bookFiles)
+            .where(
+              and(
+                eq(bookFiles.relativePath, file.relativePath),
+                ne(bookFiles.bookId, id),
+              ),
+            )
+            .limit(1),
+          cloudDb
+            .select({ id: books.id })
+            .from(books)
+            .where(
+              and(
+                eq(books.coverImagePath, file.relativePath),
+                ne(books.id, id),
+              ),
+            )
+            .limit(1),
+        ]);
+        if (!sharedFiles.length && !sharedCovers.length)
+          sources.push(resolveDataPath(file.relativePath));
       }
-    });
-  if (input.replaceBookId) {
-    const oldFiles = await cloudDb
-      .select({ relativePath: bookFiles.relativePath })
-      .from(bookFiles)
-      .where(eq(bookFiles.bookId, id));
-    const sources: string[] = [];
-    for (const file of oldFiles) {
-      if (!file.relativePath || file.relativePath === existingCoverImagePath)
-        continue;
-      const [sharedFiles, sharedCovers] = await Promise.all([
-        cloudDb
-          .select({ id: bookFiles.id })
-          .from(bookFiles)
-          .where(
-            and(
-              eq(bookFiles.relativePath, file.relativePath),
-              ne(bookFiles.bookId, id),
-            ),
-          )
-          .limit(1),
-        cloudDb
-          .select({ id: books.id })
-          .from(books)
-          .where(
-            and(eq(books.coverImagePath, file.relativePath), ne(books.id, id)),
-          )
-          .limit(1),
-      ]);
-      if (!sharedFiles.length && !sharedCovers.length)
-        sources.push(resolveDataPath(file.relativePath));
+      await deleteStoredFiles({
+        root: path.resolve(process.cwd(), 'library'),
+        bookId: id,
+        sources,
+        decision: deleteDecision,
+        commit: persist,
+      });
+    } else {
+      await persist(creation?.id);
     }
-    await deleteStoredFiles({
-      root: path.resolve(process.cwd(), 'library'),
-      bookId: id,
-      sources,
-      decision: deleteDecision,
-      commit: persist,
-    });
-  } else {
-    await persist();
-  }
+    finalizingCreation = true;
+    await creation?.finish();
 
-  return {
-    id,
-    title,
-    author: authorName,
-    format,
-    relativePath,
-    coverImagePath,
-    createdAt: now,
-  };
+    return {
+      id,
+      title,
+      author: authorName,
+      format,
+      relativePath,
+      coverImagePath,
+      createdAt: now,
+    };
+  } catch (error) {
+    if (creation && !finalizingCreation) {
+      try {
+        await creation.finish();
+      } catch (recoveryError) {
+        throw new AggregateError(
+          [error, recoveryError],
+          'Upload failed and recovery is pending',
+        );
+      }
+    }
+    throw error;
+  }
 }
 
 async function processOneBookUpload(
   filePart: MultipartFilePart,
   input: Parameters<typeof processOneBookUploadUnlocked>[1],
 ) {
-  if (!input.replaceBookId)
-    return await processOneBookUploadUnlocked(filePart, input);
+  const bookId = input.replaceBookId ?? crypto.randomUUID();
   return await withBookStorageLock(
     path.resolve(process.cwd(), 'library'),
-    input.replaceBookId,
-    async () => await processOneBookUploadUnlocked(filePart, input),
+    bookId,
+    async () => await processOneBookUploadUnlocked(filePart, input, bookId),
   );
 }
 
