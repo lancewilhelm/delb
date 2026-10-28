@@ -30,10 +30,7 @@ import { deleteDecision } from '~~/server/utils/books/storage/delete-recovery';
 import { beginStoredCreate } from '~~/server/utils/books/storage/create-operation';
 import { createDecision } from '~~/server/utils/books/storage/create-recovery';
 import { findPossibleDuplicates } from '~~/server/utils/books/duplicates';
-import {
-  readBoundedUpload,
-  UploadTooLargeError,
-} from '~~/server/utils/books/storage/bounded-upload';
+import { cacheBoundedRequestBody } from '~~/server/utils/books/storage/bounded-upload';
 
 type SupportedBookFormat = 'epub' | 'pdf' | 'mobi' | 'azw3';
 const SUPPORTED_BOOK_FORMATS: ReadonlyArray<SupportedBookFormat> = [
@@ -581,27 +578,11 @@ export default defineEventHandler(async (event) => {
 
   const userId = session.user.id;
 
-  // Bound streamed bodies before the multipart parser buffers them.
-  const maxUploadBytes = 100 * 1024 * 1024;
-  const declaredLength = Number(event.node.req.headers['content-length']);
-  if (Number.isFinite(declaredLength) && declaredLength > maxUploadBytes) {
-    throw createError({
-      statusCode: 413,
-      statusMessage: 'Upload exceeds the 100 MiB limit',
-    });
-  }
-  try {
-    const rawBody = await readBoundedUpload(event.node.req, maxUploadBytes);
-    (event.node.req as typeof event.node.req & { rawBody?: Buffer }).rawBody =
-      rawBody;
-  } catch (error) {
-    if (error instanceof UploadTooLargeError)
-      throw createError({
-        statusCode: 413,
-        statusMessage: 'Upload exceeds the 100 MiB limit',
-      });
-    throw error;
-  }
+  await cacheBoundedRequestBody(
+    event.node.req,
+    event.node.res,
+    100 * 1024 * 1024,
+  );
   const form = await readMultipartFormData(event);
   if (!form?.length) {
     throw createError({ statusCode: 400, statusMessage: 'Missing form data' });

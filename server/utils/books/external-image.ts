@@ -142,7 +142,9 @@ async function fetchImage(
       const metadata = await image.metadata();
       if (!['jpeg', 'png', 'webp'].includes(metadata.format ?? ''))
         throw failure();
-      const bytes = await image.png().toBuffer();
+      const bytes = await image.timeout({ seconds: 10 }).png().toBuffer();
+      if (bytes.length > DEFAULT_MAX_BYTES)
+        throw failure(413, 'External image is too large');
       return { bytes, contentType: 'image/png' };
     } finally {
       response.destroy();

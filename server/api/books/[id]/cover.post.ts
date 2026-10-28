@@ -1,3 +1,4 @@
+import { cacheBoundedRequestBody } from '~~/server/utils/books/storage/bounded-upload';
 import path from 'node:path';
 import { mkdir, readFile, readdir, unlink } from 'node:fs/promises';
 
@@ -80,6 +81,11 @@ export default defineEventHandler(async (event) => {
   }
 
   // Parse multipart form
+  await cacheBoundedRequestBody(
+    event.node.req,
+    event.node.res,
+    26 * 1024 * 1024,
+  );
   const form = await readMultipartFormData(event);
   if (!form?.length) {
     throw createError({ statusCode: 400, statusMessage: 'Missing form data' });
