@@ -1,15 +1,7 @@
 import path from 'node:path';
-import {
-  mkdir,
-  readdir,
-  rename,
-  stat,
-  unlink,
-  writeFile,
-} from 'node:fs/promises';
+import { mkdir, readdir, rename, stat } from 'node:fs/promises';
 
 import { logger } from '~/utils/logger';
-import { copyVerifiedExclusive } from '~~/server/utils/books/storage/verified-copy';
 import { withBookStorageLock } from '~~/server/utils/books/storage/book-lock';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { bookFiles, storageOperations } from '~/utils/db/schema';
@@ -21,6 +13,7 @@ import {
 } from './config';
 import { ingestDropboxFile } from './ingest';
 import { finishCommittedDropboxClaim } from './claim';
+import { moveToFailed } from './failed';
 import { resolveDropboxTarget, type DropboxTarget } from './target';
 import { getGlobalSettingsRow } from './settings';
 
@@ -41,50 +34,9 @@ function getExtLower(filename: string): string {
   return path.extname(filename || '').toLowerCase();
 }
 
-function timestampForFilename(d = new Date()): string {
-  const pad = (n: number) => `${n}`.padStart(2, '0');
-  return [
-    d.getFullYear(),
-    pad(d.getMonth() + 1),
-    pad(d.getDate()),
-    '-',
-    pad(d.getHours()),
-    pad(d.getMinutes()),
-    pad(d.getSeconds()),
-  ].join('');
-}
-
 async function ensureDirs(cfg: DropboxIngestConfig) {
   await mkdir(cfg.dropboxDirAbs, { recursive: true });
   await mkdir(cfg.failedDirAbs, { recursive: true });
-}
-
-async function moveToFailed(opts: {
-  failedDirAbs: string;
-  fileAbs: string;
-  originalFilename: string;
-  reason: string;
-}) {
-  await mkdir(opts.failedDirAbs, { recursive: true });
-
-  const ext = path.extname(opts.originalFilename);
-  const base = path.basename(opts.originalFilename, ext);
-  const failedName = `${base}.${timestampForFilename()}.${crypto.randomUUID()}${ext || ''}`;
-  const dest = path.join(opts.failedDirAbs, failedName);
-
-  try {
-    await copyVerifiedExclusive(opts.fileAbs, dest);
-    await unlink(opts.fileAbs);
-  } catch {
-    // best-effort; if rename fails, we leave the file where it is to avoid data loss
-    return;
-  }
-
-  try {
-    await writeFile(`${dest}.error.txt`, `${opts.reason}\n`, 'utf8');
-  } catch {
-    // ignore
-  }
 }
 
 export function startDropboxIngestWatcher(): DropboxWatcherState {
