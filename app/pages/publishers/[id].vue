@@ -134,7 +134,9 @@ onMounted(async () => {
     <div class="px-2 shrink-0 border-b border-(--sub-color)">
       <div class="flex items-center justify-between gap-2">
         <ViewSelectorDropdown />
-        <BooksViewToggle />
+        <div class="flex items-center gap-3">
+          <BooksSortDropdown /><BooksViewToggle />
+        </div>
       </div>
     </div>
 
@@ -172,6 +174,8 @@ onMounted(async () => {
         :key="`${gridKey}-${effectiveBooksViewMode}`"
         :endpoint="gridEndpoint"
         :collection-id="activeCollectionId"
+        :sort="uiStore.booksSortKey"
+        :sort-dir="uiStore.booksSortDirection"
         class="flex-1 min-h-0"
         @error="handleGridError"
         @update:count="(n: number) => (bookCount = n)"
@@ -181,6 +185,8 @@ onMounted(async () => {
         :key="`${gridKey}-${effectiveBooksViewMode}`"
         :endpoint="gridEndpoint"
         :collection-id="activeCollectionId"
+        :sort="uiStore.booksSortKey"
+        :sort-dir="uiStore.booksSortDirection"
         class="flex-1 min-h-0"
         @error="handleGridError"
         @update:count="(n: number) => (bookCount = n)"
