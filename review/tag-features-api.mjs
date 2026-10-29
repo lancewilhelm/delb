@@ -114,13 +114,39 @@ await db.execute({
 await db.execute(
   "INSERT INTO collection_books(collection_id,book_id,added_at) VALUES('tag-extra-collection','tag-book-1',1700000000)",
 );
+await db.execute({
+  sql: "INSERT INTO books(id,title,sort_title,created_at,updated_at,created_by_user_id) VALUES('tag-hidden-book','Hidden fixture','hidden',1700000000,1700000000,?)",
+  args: [member.id],
+});
+await db.execute({
+  sql: "INSERT INTO collection_books(collection_id,book_id,added_at) VALUES(?,'tag-hidden-book',1700000000)",
+  args: [memberCollection],
+});
+await db.execute(
+  "INSERT INTO authors(id,name,created_at,updated_at) VALUES('sort-author','Sorting author',1700000000,1700000000),('hidden-author','Hidden author',1700000000,1700000000)",
+);
+await db.execute(
+  "INSERT INTO publishers(id,name,created_at,updated_at) VALUES('sort-publisher','Sorting publisher',1700000000,1700000000),('hidden-publisher','Hidden publisher',1700000000,1700000000)",
+);
+await db.execute(
+  "INSERT INTO book_authors(book_id,author_id,position) SELECT id,'sort-author',0 FROM books",
+);
+await db.execute(
+  "INSERT INTO book_authors(book_id,author_id,position) VALUES('tag-hidden-book','hidden-author',1)",
+);
+await db.execute("UPDATE books SET publisher_id='sort-publisher'");
 const expected = {
   dateAdded: { asc: [1, 2, 3, 4, 5, 6, 7], desc: [7, 6, 5, 4, 3, 2, 1] },
   alphabetical: { asc: [2, 3, 5, 7, 1, 6, 4], desc: [4, 6, 1, 7, 5, 3, 2] },
   publishedDate: { asc: [2, 6, 3, 7, 1, 4, 5], desc: [5, 4, 1, 7, 3, 6, 2] },
   pages: { asc: [3, 7, 1, 4, 5, 2, 6], desc: [5, 4, 1, 7, 3, 6, 2] },
 };
-for (const endpoint of ['/api/books', '/api/tags/tag-sort/books']) {
+for (const endpoint of [
+  '/api/books',
+  '/api/tags/tag-sort/books',
+  '/api/authors/sort-author/books',
+  '/api/publishers/sort-publisher/books',
+]) {
   for (const [sort, directions] of Object.entries(expected)) {
     for (const [sortDir, order] of Object.entries(directions)) {
       let cursor;
@@ -152,6 +178,30 @@ for (const endpoint of ['/api/books', '/api/tags/tag-sort/books']) {
     }
   }
 }
+for (const kind of ['authors', 'publishers']) {
+  const id = kind === 'authors' ? 'sort-author' : 'sort-publisher';
+  const hidden = kind === 'authors' ? 'hidden-author' : 'hidden-publisher';
+  assert.equal(
+    (await request(`/api/${kind}/${hidden}/books`, owner.cookie)).status,
+    404,
+  );
+  const scoped = await request(
+    `/api/${kind}/${id}/books?collectionId=${memberCollection}&sort=pages&sortDir=asc`,
+    owner.cookie,
+  );
+  assert.equal(scoped.status, 200);
+  assert.deepEqual(scoped.data.data.books, []);
+  const visible = await request(
+    `/api/${kind}/${id}/books?limit=200&sort=alphabetical&sortDir=asc`,
+    member.cookie,
+  );
+  assert.equal(visible.status, 200);
+  assert.deepEqual(
+    visible.data.data.books.map((book) => book.id),
+    ['tag-hidden-book'],
+  );
+  pass(`${kind} sorting preserves entity visibility and collection membership`);
+}
 const oldCursor = Buffer.from(
   JSON.stringify({
     createdAt: new Date(1700000200000).toISOString(),
@@ -171,14 +221,6 @@ await tag('tag-delete', 'Delete fixture');
 for (const id of ['tag-source', 'tag-target', 'tag-delete'])
   await link('tag-book-1', id);
 await link('tag-book-2', 'tag-source');
-await db.execute({
-  sql: "INSERT INTO books(id,title,sort_title,created_at,updated_at,created_by_user_id) VALUES('tag-hidden-book','Hidden fixture','hidden',1700000000,1700000000,?)",
-  args: [member.id],
-});
-await db.execute({
-  sql: "INSERT INTO collection_books(collection_id,book_id,added_at) VALUES(?,'tag-hidden-book',1700000000)",
-  args: [memberCollection],
-});
 for (const id of ['tag-source', 'tag-hidden', 'tag-delete'])
   await link('tag-hidden-book', id);
 for (const [cookie, status, label] of [

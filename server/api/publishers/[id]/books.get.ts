@@ -1,5 +1,12 @@
 import { visibleEntity } from '~~/server/utils/books/visibility';
-import { and, desc, eq, inArray, lt, or } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
+import {
+  bookSort,
+  decodeCursor,
+  nextBookCursor,
+  normalizeSortDir,
+  normalizeSortKey,
+} from '~~/server/utils/books/book-sort';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
   authors,
@@ -24,7 +31,6 @@ import { auth } from '~/utils/auth';
  * - Optional `collectionId` further scopes results to that one collection (if user is a member)
  *
  * Pagination:
- * - Cursor-based pagination using (createdAt,id) ordering (newest first)
  * - Returns `nextCursor` when more results exist
  *
  * Response shape mirrors GET /api/books (list) enough for reuse in the UI:
@@ -34,11 +40,6 @@ import { auth } from '~/utils/auth';
  * Additionally returns:
  * - `publisher`: { id, name }
  */
-type Cursor = {
-  createdAt: string;
-  id: string;
-};
-
 function clampInt(
   input: unknown,
   opts: { min: number; max: number; fallback: number },
@@ -46,26 +47,6 @@ function clampInt(
   const n = Number.parseInt((input ?? '').toString(), 10);
   if (!Number.isFinite(n)) return opts.fallback;
   return Math.max(opts.min, Math.min(opts.max, n));
-}
-
-function encodeCursor(c: Cursor): string {
-  return Buffer.from(JSON.stringify(c), 'utf8').toString('base64url');
-}
-
-function decodeCursor(raw: unknown): Cursor | null {
-  if (typeof raw !== 'string' || !raw.trim()) return null;
-  try {
-    const json = Buffer.from(raw, 'base64url').toString('utf8');
-    const parsed = JSON.parse(json) as Partial<Cursor>;
-    const createdAt = (parsed.createdAt ?? '').toString().trim();
-    const id = (parsed.id ?? '').toString().trim();
-    if (!createdAt || !id) return null;
-    const t = new Date(createdAt).getTime();
-    if (!Number.isFinite(t)) return null;
-    return { createdAt, id };
-  } catch {
-    return null;
-  }
 }
 
 export default defineEventHandler(async (event) => {
@@ -92,11 +73,15 @@ export default defineEventHandler(async (event) => {
     collectionId?: string;
     limit?: string;
     cursor?: string;
+    sort?: string;
+    sortDir?: string;
   };
 
   const collectionId = q.collectionId;
   const limit = clampInt(q.limit, { min: 1, max: 200, fallback: 48 });
-  const cursor = decodeCursor(q.cursor);
+  const sort = normalizeSortKey(q.sort);
+  const sortDir = normalizeSortDir(q.sortDir, sort);
+  const ordering = bookSort(sort, sortDir, decodeCursor(q.cursor));
 
   try {
     // Fetch publisher metadata (nice UX). Still avoids leaking books the user can't access.
@@ -145,7 +130,6 @@ export default defineEventHandler(async (event) => {
 
     // 3) Get visible book ids from those collections
     // 4) Page query: visible books from this publisher in the scoped collections.
-    // Sort: newest first, deterministic by id. Cursor is (createdAt,id).
     const pageRows = await cloudDb
       .select({ book: books })
       .from(books)
@@ -154,19 +138,11 @@ export default defineEventHandler(async (event) => {
         and(
           eq(books.publisherId, publisherId),
           inArray(collectionBooks.collectionId, targetCollectionIds),
-          cursor
-            ? or(
-                lt(books.createdAt, new Date(cursor.createdAt)),
-                and(
-                  eq(books.createdAt, new Date(cursor.createdAt)),
-                  lt(books.id, cursor.id),
-                ),
-              )
-            : undefined,
+          ordering.where,
         ),
       )
       .groupBy(books.id)
-      .orderBy(desc(books.createdAt), desc(books.id))
+      .orderBy(...ordering.orderBy)
       .limit(limit + 1);
 
     const rows = pageRows
@@ -273,13 +249,7 @@ export default defineEventHandler(async (event) => {
     });
 
     const last = out[out.length - 1];
-    const nextCursor =
-      hasMore && last?.createdAt && last?.id
-        ? encodeCursor({
-            createdAt: new Date(last.createdAt).toISOString(),
-            id: last.id,
-          })
-        : null;
+    const nextCursor = nextBookCursor(sort, hasMore, last);
 
     return { success: true, data: { publisher, books: out, nextCursor } };
   } catch (error: unknown) {
