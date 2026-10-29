@@ -1,13 +1,24 @@
 <script setup lang="ts">
-const props = defineProps<{ tag: { id: string; name: string } }>();
-const emit = defineEmits<{ changed: [targetId?: string] }>();
-const { isAdmin } = useAuth();
 type TagRef = { id: string; name: string };
+type MenuOrigin =
+  | { kind: 'pointer'; x: number; y: number; returnFocus: HTMLElement | null }
+  | { kind: 'anchor'; anchor: HTMLElement; returnFocus: HTMLElement | null };
 type DialogState =
   | { kind: 'closed' }
   | { kind: 'delete' }
   | { kind: 'merge'; target: TagRef | null };
+const props = withDefaults(
+  defineProps<{
+    tag?: TagRef;
+    showTrigger?: boolean;
+    focusFallback?: () => void;
+  }>(),
+  { showTrigger: true, tag: undefined, focusFallback: undefined },
+);
+const emit = defineEmits<{ changed: [targetId?: string] }>();
+const { isAdmin } = useAuth();
 const state = ref<DialogState>({ kind: 'closed' });
+const source = ref<TagRef | null>(null);
 const menuOpen = ref(false);
 const id = useId();
 const titleId = `${id}-title`;
@@ -21,52 +32,69 @@ const trigger = ref<HTMLButtonElement | null>(null);
 const panel = ref<HTMLElement | null>(null);
 const menuPosition = ref({ left: 0, top: 0 });
 const dialog = ref<HTMLDialogElement | null>(null);
+let returnFocus: HTMLElement | null = null;
 let searchGeneration = 0;
-async function openMenu() {
-  if (!isAdmin.value) return;
-  menuOpen.value = true;
-  await nextTick();
-  const anchor = trigger.value?.getBoundingClientRect();
-  const bounds = panel.value?.getBoundingClientRect();
-  if (!anchor || !bounds) return;
-  menuPosition.value = {
-    left: Math.max(
-      8,
-      Math.min(
-        anchor.right - bounds.width,
-        window.innerWidth - bounds.width - 8,
-      ),
-    ),
-    top:
-      anchor.bottom + bounds.height + 4 <= window.innerHeight - 8
-        ? anchor.bottom + 4
-        : Math.max(8, anchor.top - bounds.height - 4),
-  };
-  panel.value?.querySelector('button')?.focus();
-}
-function toggleMenu() {
-  if (menuOpen.value) menuOpen.value = false;
-  else void openMenu();
+let menuGeneration = 0;
+function restoreFocus() {
+  if (returnFocus?.isConnected) returnFocus.focus();
+  else props.focusFallback?.();
 }
 function closeMenu() {
   menuOpen.value = false;
+  menuGeneration++;
 }
-
-defineExpose({ openMenu });
+async function openFor(tag: TagRef, origin: MenuOrigin) {
+  if (!isAdmin.value || pending.value || state.value.kind !== 'closed') return;
+  const generation = ++menuGeneration;
+  source.value = { id: tag.id, name: tag.name };
+  returnFocus = origin.returnFocus;
+  menuOpen.value = true;
+  await nextTick();
+  if (generation !== menuGeneration || !menuOpen.value) return;
+  const bounds = panel.value?.getBoundingClientRect();
+  if (!bounds) return;
+  const anchor =
+    origin.kind === 'anchor' ? origin.anchor.getBoundingClientRect() : null;
+  const x = origin.kind === 'pointer' ? origin.x : (anchor?.left ?? 0);
+  const y = origin.kind === 'pointer' ? origin.y : (anchor?.bottom ?? 0);
+  menuPosition.value = {
+    left: Math.max(0, Math.min(x, window.innerWidth - bounds.width)),
+    top: Math.max(0, Math.min(y, window.innerHeight - bounds.height)),
+  };
+  panel.value?.querySelector('button')?.focus();
+}
+function openTriggerMenu() {
+  if (props.tag && trigger.value)
+    void openFor(props.tag, {
+      kind: 'anchor',
+      anchor: trigger.value,
+      returnFocus: trigger.value,
+    });
+}
+function toggleMenu() {
+  if (menuOpen.value) closeMenu();
+  else openTriggerMenu();
+}
+defineExpose({ openFor });
 function closeDialog() {
   if (!pending.value) dialog.value?.close();
 }
 function openDialog(kind: 'delete' | 'merge') {
-  menuOpen.value = false;
+  if (!source.value || pending.value || state.value.kind !== 'closed') return;
+  closeMenu();
+  searchGeneration++;
   error.value = '';
   query.value = '';
   results.value = [];
   state.value = kind === 'delete' ? { kind } : { kind, target: null };
-  nextTick(() => dialog.value?.showModal());
+  nextTick(() => {
+    if (state.value.kind !== 'closed') dialog.value?.showModal();
+  });
 }
 function onClose() {
+  searchGeneration++;
   state.value = { kind: 'closed' };
-  trigger.value?.focus();
+  restoreFocus();
 }
 function onOutside(event: MouseEvent) {
   if (
@@ -75,7 +103,7 @@ function onOutside(event: MouseEvent) {
     !menu.value?.contains(event.target) &&
     !panel.value?.contains(event.target)
   )
-    menuOpen.value = false;
+    closeMenu();
 }
 function onFocus(event: FocusEvent) {
   if (
@@ -87,14 +115,10 @@ function onFocus(event: FocusEvent) {
 }
 function onKey(event: KeyboardEvent) {
   if (!menuOpen.value || !panel.value?.contains(document.activeElement)) return;
-  if (event.key === 'Tab') {
+  if (event.key === 'Tab' || event.key === 'Escape') {
+    if (event.key === 'Escape') event.preventDefault();
     closeMenu();
-    trigger.value?.focus();
-    return;
-  }
-  if (event.key === 'Escape') {
-    closeMenu();
-    trigger.value?.focus();
+    restoreFocus();
     return;
   }
   const items = Array.from(panel.value?.querySelectorAll('button') ?? []);
@@ -127,6 +151,8 @@ onMounted(() => {
   window.addEventListener('resize', closeMenu);
 });
 onBeforeUnmount(() => {
+  menuGeneration++;
+  searchGeneration++;
   document.removeEventListener('mousedown', onOutside);
   document.removeEventListener('keydown', onKey);
   document.removeEventListener('focusin', onFocus);
@@ -135,34 +161,37 @@ onBeforeUnmount(() => {
 });
 watch(query, async (value) => {
   const generation = ++searchGeneration;
+  const sourceId = source.value?.id;
   results.value = [];
-  if (!value.trim()) return;
+  if (!value.trim() || state.value.kind !== 'merge') return;
   try {
     const response = await $fetch<{ data: { results: TagRef[] } }>(
       '/api/tags/search',
       { query: { q: value, limit: 20 } },
     );
-    if (generation === searchGeneration)
+    if (generation === searchGeneration && state.value.kind === 'merge')
       results.value = response.data.results.filter(
-        (tag) => tag.id !== props.tag.id,
+        (tag) => tag.id !== sourceId,
       );
   } catch {
-    if (generation === searchGeneration)
+    if (generation === searchGeneration && state.value.kind === 'merge')
       error.value = 'Could not search tags. Try again.';
   }
 });
 async function submit() {
   if (
     pending.value ||
+    !source.value ||
     state.value.kind === 'closed' ||
     (state.value.kind === 'merge' && !state.value.target)
   )
     return;
+  const sourceId = source.value.id;
   const target = state.value.kind === 'merge' ? state.value.target : null;
   pending.value = true;
   error.value = '';
   try {
-    const path = `/api/tags/${encodeURIComponent(props.tag.id)}`;
+    const path = `/api/tags/${encodeURIComponent(sourceId)}`;
     if (target)
       await $fetch(`${path}/merge`, {
         method: 'POST',
@@ -183,6 +212,7 @@ async function submit() {
 <template>
   <div v-if="isAdmin" ref="menu" class="relative">
     <button
+      v-if="showTrigger && tag"
       ref="trigger"
       type="button"
       class="p-2 rounded-md hover:bg-(--sub-color)/20"
@@ -190,7 +220,7 @@ async function submit() {
       :aria-expanded="menuOpen"
       aria-haspopup="menu"
       @click.stop="toggleMenu"
-      @keydown.down.prevent="openMenu"
+      @keydown.down.prevent="openTriggerMenu"
     >
       <Icon name="lucide:ellipsis" />
     </button>
@@ -208,7 +238,7 @@ async function submit() {
         <button
           type="button"
           role="menuitem"
-          class="w-full px-3 py-2 text-left hover:bg-(--sub-color)/15"
+          class="w-full justify-start! px-3 py-2 text-left hover:bg-(--sub-color)/15"
           @click="openDialog('merge')"
         >
           Merge tag
@@ -216,7 +246,7 @@ async function submit() {
         <button
           type="button"
           role="menuitem"
-          class="w-full px-3 py-2 text-left hover:bg-(--sub-color)/15"
+          class="w-full justify-start! px-3 py-2 text-left hover:bg-(--sub-color)/15"
           @click="openDialog('delete')"
         >
           Delete tag
@@ -233,15 +263,42 @@ async function submit() {
           {{ state.kind === 'merge' ? 'Merge tag' : 'Delete tag' }}
         </div>
         <p v-if="state.kind === 'merge'" class="text-sm mb-4">
-          Move all books tagged “{{ tag.name }}” to an existing tag across all
-          collections. The destination tag stays and “{{ tag.name }}” is
+          Move all books tagged “{{ source?.name }}” to an existing tag across
+          all collections. The destination tag stays and “{{ source?.name }}” is
           deleted. Books are not deleted.
         </p>
         <p v-else class="text-sm mb-4">
-          Delete “{{ tag.name }}” from all books across all collections. Books
-          are not deleted.
+          Delete “{{ source?.name }}” from all books across all collections.
+          Books are not deleted.
         </p>
         <div v-if="state.kind === 'merge'" class="space-y-2">
+          <div
+            role="group"
+            aria-label="Tag merge preview"
+            class="flex items-center gap-3 mb-4"
+          >
+            <div role="group" aria-label="From tag" class="flex-1 min-w-0">
+              <div class="text-xs opacity-70 mb-1">From tag</div>
+              <div
+                class="border border-(--sub-color) rounded-md px-3 py-2 truncate"
+              >
+                {{ source?.name }}
+              </div>
+            </div>
+            <Icon
+              name="lucide:arrow-right"
+              aria-hidden="true"
+              class="mt-5 shrink-0"
+            />
+            <div role="group" aria-label="To tag" class="flex-1 min-w-0">
+              <div class="text-xs opacity-70 mb-1">To tag</div>
+              <div
+                class="border border-(--sub-color) rounded-md px-3 py-2 truncate min-h-10"
+              >
+                {{ state.target?.name }}
+              </div>
+            </div>
+          </div>
           <label :for="searchId" class="text-sm">Destination tag</label>
           <input
             :id="searchId"
@@ -251,15 +308,12 @@ async function submit() {
             :disabled="pending"
             @input="state.target = null"
           />
-          <div v-if="state.target" class="text-sm">
-            Selected: {{ state.target.name }}
-          </div>
-          <div v-else class="max-h-40 overflow-auto">
+          <div v-if="!state.target" class="max-h-40 overflow-auto">
             <button
               v-for="result in results"
               :key="result.id"
               type="button"
-              class="block w-full text-left px-3 py-2 hover:bg-(--sub-color)/15"
+              class="flex w-full justify-start! text-left px-3 py-2 hover:bg-(--sub-color)/15"
               @click="state.target = result"
             >
               {{ result.name }}

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type TagsActions from '~/components/Tags/Actions.vue';
 definePageMeta({
   auth: {
     only: 'user',
@@ -38,25 +39,33 @@ type TagsListResponse = {
 };
 
 const errorMessage = ref<string | null>(null);
-const actionRefs = new Map<string, { openMenu: () => void }>();
-function setActionRef(id: string, el: unknown) {
-  if (
-    el &&
-    typeof el === 'object' &&
-    'openMenu' in el &&
-    typeof el.openMenu === 'function'
-  )
-    actionRefs.set(id, {
-      openMenu: () => {
-        if (typeof el.openMenu === 'function') el.openMenu();
-      },
-    });
-  else actionRefs.delete(id);
-}
-function onTagContextMenu(event: MouseEvent, id: string) {
+const actions = ref<InstanceType<typeof TagsActions> | null>(null);
+const filterInput = ref<HTMLInputElement | null>(null);
+function onTagContextMenu(event: MouseEvent, tag: TagRow) {
   if (!isAdmin.value) return;
   event.preventDefault();
-  actionRefs.get(id)?.openMenu();
+  const card = event.currentTarget;
+  const link = card instanceof HTMLElement ? card.querySelector('a') : null;
+  actions.value?.openFor(tag, {
+    kind: 'pointer',
+    x: event.clientX,
+    y: event.clientY,
+    returnFocus: link,
+  });
+}
+function onTagKey(event: KeyboardEvent, tag: TagRow) {
+  if (
+    !isAdmin.value ||
+    !(event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))
+  )
+    return;
+  const anchor = event.target;
+  if (!(anchor instanceof HTMLElement)) return;
+  event.preventDefault();
+  actions.value?.openFor(tag, { kind: 'anchor', anchor, returnFocus: anchor });
+}
+function focusFilter() {
+  filterInput.value?.focus();
 }
 
 // ------------------------------
@@ -141,6 +150,12 @@ onMounted(async () => {
 <template>
   <div class="flex flex-col w-full h-full overflow-hidden">
     <AppHeader class="w-full" />
+    <TagsActions
+      ref="actions"
+      :show-trigger="false"
+      :focus-fallback="focusFilter"
+      @changed="refreshTags()"
+    />
 
     <div class="flex w-full h-full overflow-hidden">
       <!-- Main content (fixed header + scrollable content area) -->
@@ -159,6 +174,7 @@ onMounted(async () => {
             <!-- Tags -->
             <div class="flex items-center justify-between gap-3">
               <input
+                ref="filterInput"
                 v-model="tagQuery"
                 class="px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm w-56"
                 placeholder="Filter tags..."
@@ -186,7 +202,8 @@ onMounted(async () => {
                 v-for="t in filteredTags"
                 :key="t.id"
                 class="relative flex items-center justify-between gap-3 border border-(--sub-color) hover:border-(--main-color) hover:bg-(--sub-color)/10 rounded-md px-3 py-2 overflow-hidden h-32 cursor-pointer shadow-sm hover:shadow-md"
-                @contextmenu="onTagContextMenu($event, t.id)"
+                @contextmenu="onTagContextMenu($event, t)"
+                @keydown="onTagKey($event, t)"
               >
                 <NuxtLink
                   :to="`/tags/${encodeURIComponent(t.id)}`"
@@ -202,12 +219,6 @@ onMounted(async () => {
                   </div>
                 </div>
 
-                <TagsActions
-                  :ref="(el) => setActionRef(t.id, el)"
-                  class="z-102 ml-auto"
-                  :tag="t"
-                  @changed="refreshTags()"
-                />
                 <div
                   v-if="
                     (t.books ?? []).some(
