@@ -117,11 +117,11 @@ const filteredAuthors = authors;
               <div
                 v-for="a in filteredAuthors"
                 :key="a.id"
-                class="flex items-center justify-between gap-3 border border-(--sub-color) hover:border-(--main-color) hover:bg-(--sub-color)/10 rounded-md px-3 py-2 overflow-hidden h-32 cursor-pointer shadow-sm hover:shadow-md"
+                class="flex items-center justify-between gap-3 border border-(--sub-color) hover:border-(--main-color) hover:bg-(--sub-color)/10 rounded-md px-3 py-2 overflow-hidden min-h-32 cursor-pointer shadow-sm hover:shadow-md"
                 @click="router.push(`/authors/${a.id}`)"
               >
-                <div class="min-w-0 z-101">
-                  <div class="text-wrap">
+                <div class="min-w-0 flex-1 z-101">
+                  <div class="break-words">
                     {{ a.name }}
                   </div>
                   <div class="text-xs opacity-70">
@@ -137,7 +137,7 @@ const filteredAuthors = authors;
                         b.coverThumbnailUrl,
                     )
                   "
-                  class="shrink-0 flex items-center h-full"
+                  class="ml-auto flex h-28 max-w-[45%] shrink-0 items-center justify-end overflow-hidden"
                 >
                   <BookCover
                     v-for="(b, i) in (a.books ?? [])
