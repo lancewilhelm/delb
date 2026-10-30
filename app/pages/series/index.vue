@@ -15,34 +15,6 @@ useHead({
 const collectionsStore = useCollectionsStore();
 const router = useRouter();
 
-type FetchErrorLike = {
-  data?: { message?: string };
-  statusMessage?: string;
-  message?: string;
-};
-
-type SeriesListResponse = {
-  data?: {
-    hasMore?: boolean;
-    series?: Array<{
-      id: string;
-      name: string;
-      bookCount: number;
-      books?: Array<{
-        id: string;
-        title: string;
-        seriesIndex: number | null;
-        coverThumbnailUrl: string | null;
-      }>;
-    }>;
-  };
-};
-
-const errorMessage = ref<string | null>(null);
-
-// ------------------------------
-// Series view
-// ------------------------------
 type SeriesRow = {
   id: string;
   name: string;
@@ -55,69 +27,44 @@ type SeriesRow = {
   }>;
 };
 
-const seriesRows = ref<SeriesRow[]>([]);
-const loadingSeries = ref(false);
 const seriesQuery = ref('');
-
-const filteredSeries = seriesRows;
-const hasMore = ref(false);
-let generation = 0;
 const userSettingsStore = useUserSettingsStore();
 const maxSeriesCovers = userSettingsStore.settingRef<number>(
   'coverStyle.seriesMaxCovers',
 );
-
-async function refreshSeries(append = false) {
-  const request = append ? generation : ++generation;
-  loadingSeries.value = true;
-  errorMessage.value = null;
-  if (!append) {
-    seriesRows.value = [];
-    hasMore.value = false;
-  }
-  try {
-    const query: Record<string, string> = {
-      offset: String(append ? seriesRows.value.length : 0),
-      search: seriesQuery.value.trim(),
-      previewLimit: String(maxSeriesCovers.value ?? 8),
-    };
-    if (
-      collectionsStore.activeSelection.kind === 'collection' &&
-      collectionsStore.activeSelection.collectionId
-    ) {
-      query.collectionId = collectionsStore.activeSelection.collectionId;
-    }
-    const res = await $fetch<SeriesListResponse>('/api/series', { query });
-    if (request !== generation) return;
-    const list = res.data?.series ?? [];
-    seriesRows.value = append ? [...seriesRows.value, ...list] : list;
-    hasMore.value = res.data?.hasMore ?? false;
-  } catch (err) {
-    if (request !== generation) return;
-    const e = err as FetchErrorLike;
-    errorMessage.value =
-      e?.data?.message ||
-      e?.statusMessage ||
-      e?.message ||
-      'Failed to load series';
-  } finally {
-    if (request === generation) loadingSeries.value = false;
-  }
-}
-
-watch(
-  [() => collectionsStore.activeSelection, seriesQuery, maxSeriesCovers],
-  () => {
-    void refreshSeries();
+const {
+  rows: seriesRows,
+  hasMore,
+  loading: loadingSeries,
+  error: errorMessage,
+  scrollRoot,
+  loadMore,
+  retry,
+} = useEntityPagination<SeriesRow>({
+  inputs: () => ({
+    search: seriesQuery.value,
+    previewLimit: maxSeriesCovers.value ?? 8,
+    collectionId:
+      collectionsStore.activeSelection.kind === 'collection'
+        ? collectionsStore.activeSelection.collectionId
+        : undefined,
+  }),
+  initialize: async () => {
+    if (!collectionsStore.collections.length)
+      await collectionsStore.fetchCollections();
   },
-  { deep: true, flush: 'sync' },
-);
-
-onMounted(async () => {
-  if (!collectionsStore.collections.length)
-    await collectionsStore.fetchCollections();
-  await refreshSeries();
+  fetchPage: async (query) => {
+    const response = await $fetch<{
+      data?: { series?: SeriesRow[]; hasMore?: boolean };
+    }>('/api/series', { query });
+    return {
+      rows: response.data?.series ?? [],
+      hasMore: response.data?.hasMore ?? false,
+    };
+  },
+  failureMessage: 'Failed to load series',
 });
+const filteredSeries = seriesRows;
 </script>
 
 <template>
@@ -137,7 +84,10 @@ onMounted(async () => {
 
         <!-- Body -->
         <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
-          <div class="flex-1 min-h-0 overflow-auto p-4 space-y-6">
+          <div
+            ref="scrollRoot"
+            class="flex-1 min-h-0 overflow-auto p-4 space-y-6"
+          >
             <!-- Filter input -->
             <div class="flex items-center justify-between gap-3">
               <input
@@ -155,12 +105,8 @@ onMounted(async () => {
               Loading...
             </div>
 
-            <div v-else-if="errorMessage" class="text-sm text-(--error-color)">
-              {{ errorMessage }}
-            </div>
-
             <div
-              v-else-if="filteredSeries.length === 0"
+              v-else-if="filteredSeries.length === 0 && !errorMessage"
               class="text-sm opacity-80"
             >
               No series found in the selected collection.
@@ -224,15 +170,15 @@ onMounted(async () => {
                 </div>
               </div>
             </div>
-            <button
-              v-if="hasMore"
-              type="button"
-              class="px-3 py-2 rounded-md border border-(--sub-color) text-sm"
-              :disabled="loadingSeries"
-              @click="refreshSeries(true)"
-            >
-              {{ loadingSeries ? 'Loading...' : 'Load more' }}
-            </button>
+            <EntityPaginationControl
+              :root="scrollRoot"
+              :row-count="seriesRows.length"
+              :has-more="hasMore"
+              :loading="loadingSeries"
+              :error="errorMessage"
+              @load="loadMore"
+              @retry="retry"
+            />
           </div>
         </div>
       </div>

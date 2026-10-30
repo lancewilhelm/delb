@@ -15,33 +15,6 @@ useHead({
 const collectionsStore = useCollectionsStore();
 const router = useRouter();
 
-type FetchErrorLike = {
-  data?: { message?: string };
-  statusMessage?: string;
-  message?: string;
-};
-
-type AuthorsListResponse = {
-  data?: {
-    hasMore?: boolean;
-    authors?: Array<{
-      id: string;
-      name: string;
-      bookCount: number;
-      books?: Array<{
-        id: string;
-        title: string;
-        coverThumbnailUrl: string | null;
-      }>;
-    }>;
-  };
-};
-
-const errorMessage = ref<string | null>(null);
-
-// ------------------------------
-// Authors view (MVP: aggregated from /api/books)
-// ------------------------------
 type AuthorRow = {
   id: string;
   name: string;
@@ -53,69 +26,44 @@ type AuthorRow = {
   }>;
 };
 
-const authors = ref<AuthorRow[]>([]);
-const loadingAuthors = ref(false);
 const authorQuery = ref('');
-
-const filteredAuthors = authors;
-const hasMore = ref(false);
-let generation = 0;
 const userSettingsStore = useUserSettingsStore();
 const maxAuthorsCovers = userSettingsStore.settingRef<number>(
   'coverStyle.authorsMaxCovers',
 );
-
-async function refreshAuthors(append = false) {
-  const request = append ? generation : ++generation;
-  loadingAuthors.value = true;
-  errorMessage.value = null;
-  if (!append) {
-    authors.value = [];
-    hasMore.value = false;
-  }
-  try {
-    const query: Record<string, string> = {
-      offset: String(append ? authors.value.length : 0),
-      search: authorQuery.value.trim(),
-      previewLimit: String(maxAuthorsCovers.value ?? 8),
-    };
-    if (
-      collectionsStore.activeSelection.kind === 'collection' &&
-      collectionsStore.activeSelection.collectionId
-    ) {
-      query.collectionId = collectionsStore.activeSelection.collectionId;
-    }
-    const res = await $fetch<AuthorsListResponse>('/api/authors', { query });
-    if (request !== generation) return;
-    const list = res.data?.authors ?? [];
-    authors.value = append ? [...authors.value, ...list] : list;
-    hasMore.value = res.data?.hasMore ?? false;
-  } catch (err) {
-    if (request !== generation) return;
-    const e = err as FetchErrorLike;
-    errorMessage.value =
-      e?.data?.message ||
-      e?.statusMessage ||
-      e?.message ||
-      'Failed to load authors';
-  } finally {
-    if (request === generation) loadingAuthors.value = false;
-  }
-}
-
-watch(
-  [() => collectionsStore.activeSelection, authorQuery, maxAuthorsCovers],
-  () => {
-    void refreshAuthors();
+const {
+  rows: authors,
+  hasMore,
+  loading: loadingAuthors,
+  error: errorMessage,
+  scrollRoot,
+  loadMore,
+  retry,
+} = useEntityPagination<AuthorRow>({
+  inputs: () => ({
+    search: authorQuery.value,
+    previewLimit: maxAuthorsCovers.value ?? 8,
+    collectionId:
+      collectionsStore.activeSelection.kind === 'collection'
+        ? collectionsStore.activeSelection.collectionId
+        : undefined,
+  }),
+  initialize: async () => {
+    if (!collectionsStore.collections.length)
+      await collectionsStore.fetchCollections();
   },
-  { deep: true, flush: 'sync' },
-);
-
-onMounted(async () => {
-  if (!collectionsStore.collections.length)
-    await collectionsStore.fetchCollections();
-  await refreshAuthors();
+  fetchPage: async (query) => {
+    const response = await $fetch<{
+      data?: { authors?: AuthorRow[]; hasMore?: boolean };
+    }>('/api/authors', { query });
+    return {
+      rows: response.data?.authors ?? [],
+      hasMore: response.data?.hasMore ?? false,
+    };
+  },
+  failureMessage: 'Failed to load authors',
 });
+const filteredAuthors = authors;
 </script>
 
 <template>
@@ -137,7 +85,10 @@ onMounted(async () => {
 
         <!-- Body -->
         <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
-          <div class="flex-1 min-h-0 overflow-auto p-4 space-y-6">
+          <div
+            ref="scrollRoot"
+            class="flex-1 min-h-0 overflow-auto p-4 space-y-6"
+          >
             <!-- Authors -->
             <div class="flex items-center justify-between gap-3">
               <input
@@ -155,12 +106,8 @@ onMounted(async () => {
               Loading...
             </div>
 
-            <div v-else-if="errorMessage" class="text-sm text-(--error-color)">
-              {{ errorMessage }}
-            </div>
-
             <div
-              v-else-if="filteredAuthors.length === 0"
+              v-else-if="filteredAuthors.length === 0 && !errorMessage"
               class="text-sm opacity-80"
             >
               No authors found in the selected collection.
@@ -216,15 +163,15 @@ onMounted(async () => {
                 </div>
               </div>
             </div>
-            <button
-              v-if="hasMore"
-              type="button"
-              class="px-3 py-2 rounded-md border border-(--sub-color) text-sm"
-              :disabled="loadingAuthors"
-              @click="refreshAuthors(true)"
-            >
-              {{ loadingAuthors ? 'Loading...' : 'Load more' }}
-            </button>
+            <EntityPaginationControl
+              :root="scrollRoot"
+              :row-count="authors.length"
+              :has-more="hasMore"
+              :loading="loadingAuthors"
+              :error="errorMessage"
+              @load="loadMore"
+              @retry="retry"
+            />
           </div>
         </div>
       </div>

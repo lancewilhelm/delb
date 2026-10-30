@@ -15,33 +15,6 @@ useHead({
 const collectionsStore = useCollectionsStore();
 const router = useRouter();
 
-type FetchErrorLike = {
-  data?: { message?: string };
-  statusMessage?: string;
-  message?: string;
-};
-
-type PublishersListResponse = {
-  data?: {
-    hasMore?: boolean;
-    publishers?: Array<{
-      id: string;
-      name: string;
-      bookCount: number;
-      books?: Array<{
-        id: string;
-        title: string;
-        coverThumbnailUrl: string | null;
-      }>;
-    }>;
-  };
-};
-
-const errorMessage = ref<string | null>(null);
-
-// ------------------------------
-// Publishers view
-// ------------------------------
 type PublisherRow = {
   id: string;
   name: string;
@@ -53,71 +26,44 @@ type PublisherRow = {
   }>;
 };
 
-const publishers = ref<PublisherRow[]>([]);
-const loadingPublishers = ref(false);
 const publisherQuery = ref('');
-
-const filteredPublishers = publishers;
-const hasMore = ref(false);
-let generation = 0;
 const userSettingsStore = useUserSettingsStore();
 const maxPublishersCovers = userSettingsStore.settingRef<number>(
   'coverStyle.publishersMaxCovers',
 );
-
-async function refreshPublishers(append = false) {
-  const request = append ? generation : ++generation;
-  loadingPublishers.value = true;
-  errorMessage.value = null;
-  if (!append) {
-    publishers.value = [];
-    hasMore.value = false;
-  }
-  try {
-    const query: Record<string, string> = {
-      offset: String(append ? publishers.value.length : 0),
-      search: publisherQuery.value.trim(),
-      previewLimit: String(maxPublishersCovers.value ?? 8),
-    };
-    if (
-      collectionsStore.activeSelection.kind === 'collection' &&
-      collectionsStore.activeSelection.collectionId
-    ) {
-      query.collectionId = collectionsStore.activeSelection.collectionId;
-    }
-    const res = await $fetch<PublishersListResponse>('/api/publishers', {
-      query,
-    });
-    if (request !== generation) return;
-    const list = res.data?.publishers ?? [];
-    publishers.value = append ? [...publishers.value, ...list] : list;
-    hasMore.value = res.data?.hasMore ?? false;
-  } catch (err) {
-    if (request !== generation) return;
-    const e = err as FetchErrorLike;
-    errorMessage.value =
-      e?.data?.message ||
-      e?.statusMessage ||
-      e?.message ||
-      'Failed to load publishers';
-  } finally {
-    if (request === generation) loadingPublishers.value = false;
-  }
-}
-
-watch(
-  [() => collectionsStore.activeSelection, publisherQuery, maxPublishersCovers],
-  () => {
-    void refreshPublishers();
+const {
+  rows: publishers,
+  hasMore,
+  loading: loadingPublishers,
+  error: errorMessage,
+  scrollRoot,
+  loadMore,
+  retry,
+} = useEntityPagination<PublisherRow>({
+  inputs: () => ({
+    search: publisherQuery.value,
+    previewLimit: maxPublishersCovers.value ?? 8,
+    collectionId:
+      collectionsStore.activeSelection.kind === 'collection'
+        ? collectionsStore.activeSelection.collectionId
+        : undefined,
+  }),
+  initialize: async () => {
+    if (!collectionsStore.collections.length)
+      await collectionsStore.fetchCollections();
   },
-  { deep: true, flush: 'sync' },
-);
-
-onMounted(async () => {
-  if (!collectionsStore.collections.length)
-    await collectionsStore.fetchCollections();
-  await refreshPublishers();
+  fetchPage: async (query) => {
+    const response = await $fetch<{
+      data?: { publishers?: PublisherRow[]; hasMore?: boolean };
+    }>('/api/publishers', { query });
+    return {
+      rows: response.data?.publishers ?? [],
+      hasMore: response.data?.hasMore ?? false,
+    };
+  },
+  failureMessage: 'Failed to load publishers',
 });
+const filteredPublishers = publishers;
 </script>
 
 <template>
@@ -139,7 +85,10 @@ onMounted(async () => {
 
         <!-- Body -->
         <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
-          <div class="flex-1 min-h-0 overflow-auto p-4 space-y-6">
+          <div
+            ref="scrollRoot"
+            class="flex-1 min-h-0 overflow-auto p-4 space-y-6"
+          >
             <!-- Publishers -->
             <div class="flex items-center justify-between gap-3">
               <input
@@ -157,12 +106,8 @@ onMounted(async () => {
               Loading...
             </div>
 
-            <div v-else-if="errorMessage" class="text-sm text-(--error-color)">
-              {{ errorMessage }}
-            </div>
-
             <div
-              v-else-if="filteredPublishers.length === 0"
+              v-else-if="filteredPublishers.length === 0 && !errorMessage"
               class="text-sm opacity-80"
             >
               No publishers found in the selected collection.
@@ -218,15 +163,15 @@ onMounted(async () => {
                 </div>
               </div>
             </div>
-            <button
-              v-if="hasMore"
-              type="button"
-              class="px-3 py-2 rounded-md border border-(--sub-color) text-sm"
-              :disabled="loadingPublishers"
-              @click="refreshPublishers(true)"
-            >
-              {{ loadingPublishers ? 'Loading...' : 'Load more' }}
-            </button>
+            <EntityPaginationControl
+              :root="scrollRoot"
+              :row-count="publishers.length"
+              :has-more="hasMore"
+              :loading="loadingPublishers"
+              :error="errorMessage"
+              @load="loadMore"
+              @retry="retry"
+            />
           </div>
         </div>
       </div>

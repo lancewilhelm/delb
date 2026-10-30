@@ -16,29 +16,6 @@ useHead({
 const collectionsStore = useCollectionsStore();
 const { isAdmin } = useAuth();
 
-type FetchErrorLike = {
-  data?: { message?: string };
-  statusMessage?: string;
-  message?: string;
-};
-
-type TagsListResponse = {
-  data?: {
-    hasMore?: boolean;
-    tags?: Array<{
-      id: string;
-      name: string;
-      bookCount: number;
-      books?: Array<{
-        id: string;
-        title: string;
-        coverThumbnailUrl: string | null;
-      }>;
-    }>;
-  };
-};
-
-const errorMessage = ref<string | null>(null);
 const actions = ref<InstanceType<typeof TagsActions> | null>(null);
 const filterInput = ref<HTMLInputElement | null>(null);
 function onTagContextMenu(event: MouseEvent, tag: TagRow) {
@@ -68,9 +45,6 @@ function focusFilter() {
   filterInput.value?.focus();
 }
 
-// ------------------------------
-// Tags view
-// ------------------------------
 type TagRow = {
   id: string;
   name: string;
@@ -82,69 +56,45 @@ type TagRow = {
   }>;
 };
 
-const tags = ref<TagRow[]>([]);
-const loadingTags = ref(false);
 const tagQuery = ref('');
-
-const filteredTags = tags;
-const hasMore = ref(false);
-let generation = 0;
 const userSettingsStore = useUserSettingsStore();
 const maxTagsCovers = userSettingsStore.settingRef<number>(
   'coverStyle.tagsMaxCovers',
 );
-
-async function refreshTags(append = false) {
-  const request = append ? generation : ++generation;
-  loadingTags.value = true;
-  errorMessage.value = null;
-  if (!append) {
-    tags.value = [];
-    hasMore.value = false;
-  }
-  try {
-    const query: Record<string, string> = {
-      offset: String(append ? tags.value.length : 0),
-      search: tagQuery.value.trim(),
-      previewLimit: String(maxTagsCovers.value ?? 8),
-    };
-    if (
-      collectionsStore.activeSelection.kind === 'collection' &&
-      collectionsStore.activeSelection.collectionId
-    ) {
-      query.collectionId = collectionsStore.activeSelection.collectionId;
-    }
-    const res = await $fetch<TagsListResponse>('/api/tags', { query });
-    if (request !== generation) return;
-    const list = res.data?.tags ?? [];
-    tags.value = append ? [...tags.value, ...list] : list;
-    hasMore.value = res.data?.hasMore ?? false;
-  } catch (err) {
-    if (request !== generation) return;
-    const e = err as FetchErrorLike;
-    errorMessage.value =
-      e?.data?.message ||
-      e?.statusMessage ||
-      e?.message ||
-      'Failed to load tags';
-  } finally {
-    if (request === generation) loadingTags.value = false;
-  }
-}
-
-watch(
-  [() => collectionsStore.activeSelection, tagQuery, maxTagsCovers],
-  () => {
-    void refreshTags();
+const {
+  rows: tags,
+  hasMore,
+  loading: loadingTags,
+  error: errorMessage,
+  scrollRoot,
+  reset: refreshTags,
+  loadMore,
+  retry,
+} = useEntityPagination<TagRow>({
+  inputs: () => ({
+    search: tagQuery.value,
+    previewLimit: maxTagsCovers.value ?? 8,
+    collectionId:
+      collectionsStore.activeSelection.kind === 'collection'
+        ? collectionsStore.activeSelection.collectionId
+        : undefined,
+  }),
+  initialize: async () => {
+    if (!collectionsStore.collections.length)
+      await collectionsStore.fetchCollections();
   },
-  { deep: true, flush: 'sync' },
-);
-
-onMounted(async () => {
-  if (!collectionsStore.collections.length)
-    await collectionsStore.fetchCollections();
-  await refreshTags();
+  fetchPage: async (query) => {
+    const response = await $fetch<{
+      data?: { tags?: TagRow[]; hasMore?: boolean };
+    }>('/api/tags', { query });
+    return {
+      rows: response.data?.tags ?? [],
+      hasMore: response.data?.hasMore ?? false,
+    };
+  },
+  failureMessage: 'Failed to load tags',
 });
+const filteredTags = tags;
 </script>
 
 <template>
@@ -170,7 +120,10 @@ onMounted(async () => {
 
         <!-- Body -->
         <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
-          <div class="flex-1 min-h-0 overflow-auto p-4 space-y-6">
+          <div
+            ref="scrollRoot"
+            class="flex-1 min-h-0 overflow-auto p-4 space-y-6"
+          >
             <!-- Tags -->
             <div class="flex items-center justify-between gap-3">
               <input
@@ -186,12 +139,8 @@ onMounted(async () => {
               Loading...
             </div>
 
-            <div v-else-if="errorMessage" class="text-sm text-(--error-color)">
-              {{ errorMessage }}
-            </div>
-
             <div
-              v-else-if="filteredTags.length === 0"
+              v-else-if="filteredTags.length === 0 && !errorMessage"
               class="text-sm opacity-80"
             >
               No tags found in the selected collection.
@@ -251,15 +200,15 @@ onMounted(async () => {
                 </div>
               </div>
             </div>
-            <button
-              v-if="hasMore"
-              type="button"
-              class="px-3 py-2 rounded-md border border-(--sub-color) text-sm"
-              :disabled="loadingTags"
-              @click="refreshTags(true)"
-            >
-              {{ loadingTags ? 'Loading...' : 'Load more' }}
-            </button>
+            <EntityPaginationControl
+              :root="scrollRoot"
+              :row-count="tags.length"
+              :has-more="hasMore"
+              :loading="loadingTags"
+              :error="errorMessage"
+              @load="loadMore"
+              @retry="retry"
+            />
           </div>
         </div>
       </div>
