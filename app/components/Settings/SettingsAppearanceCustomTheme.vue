@@ -171,8 +171,8 @@ function keydown(event: KeyboardEvent) {
         :is-favorite="store.activeSettings.favoriteThemes.includes('custom')"
       />
       <p class="text-sm text-(--sub-color)">
-        Select custom to apply your colors, or use its options to assign a
-        system slot. Changes save automatically.
+        Select custom to apply your colors, or right-click or press and hold it
+        to assign a system slot. Changes save automatically.
       </p>
     </div>
     <div class="min-w-0">

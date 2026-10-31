@@ -12,10 +12,55 @@ const props = defineProps<{
 const store = useUserSettingsStore();
 const appearance = useThemeAppearance();
 const menuOpen = ref(false);
+const isHovered = ref(false);
 const root = ref<HTMLElement>();
-const menuButton = ref<HTMLButtonElement>();
+const selectButton = ref<HTMLButtonElement>();
 const preference = computed(() => store.activeSettings.themePreference);
 const current = computed(() => appearance.resolved.value === props.theme.name);
+let longPress: ReturnType<typeof setTimeout> | undefined;
+let touchStart: { x: number; y: number } | undefined;
+let suppressClick = false;
+
+function cancelLongPress() {
+  clearTimeout(longPress);
+  longPress = undefined;
+  touchStart = undefined;
+}
+function openMenu() {
+  menuOpen.value = true;
+  selectButton.value?.focus();
+}
+function onMenuKey(event: KeyboardEvent) {
+  if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10'))
+    return;
+  event.preventDefault();
+  openMenu();
+}
+function onPointerDown(event: PointerEvent) {
+  if (event.pointerType !== 'touch' || event.button !== 0) return;
+  suppressClick = false;
+  touchStart = { x: event.clientX, y: event.clientY };
+  longPress = setTimeout(() => {
+    longPress = undefined;
+    suppressClick = true;
+    openMenu();
+  }, 500);
+}
+function onPointerMove(event: PointerEvent) {
+  if (
+    touchStart &&
+    Math.hypot(event.clientX - touchStart.x, event.clientY - touchStart.y) > 10
+  )
+    cancelLongPress();
+}
+function selectTheme() {
+  if (suppressClick) {
+    suppressClick = false;
+    return;
+  }
+  appearance.selectFixed(props.theme.name);
+}
+onBeforeUnmount(cancelLongPress);
 
 function favorite() {
   const favorites = store.activeSettings.favoriteThemes;
@@ -25,12 +70,11 @@ function favorite() {
       : [...favorites, props.theme.name],
   });
   menuOpen.value = false;
-  menuButton.value?.focus();
 }
 function assign(slot: 'light' | 'dark') {
   appearance.assignSlot(slot, props.theme.name);
   menuOpen.value = false;
-  menuButton.value?.focus();
+  selectButton.value?.focus();
 }
 function onFocusOut(event: FocusEvent) {
   if (!root.value?.contains(event.relatedTarget as Node | null))
@@ -40,38 +84,41 @@ function onEscape(event: KeyboardEvent) {
   if (!menuOpen.value) return;
   event.stopPropagation();
   menuOpen.value = false;
-  menuButton.value?.focus();
+  selectButton.value?.focus();
 }
 </script>
 <template>
   <div
     ref="root"
     class="theme-card relative min-w-0"
+    @mouseenter="isHovered = true"
+    @mouseleave="isHovered = false"
     @focusout="onFocusOut"
     @keydown.esc="onEscape"
-    @contextmenu.prevent="
-      menuOpen = true;
-      menuButton?.focus();
-    "
+    @contextmenu.prevent="openMenu"
   >
     <div
       class="theme-item flex w-full items-center rounded-full border-2 font-mono"
       :style="{
         backgroundColor: theme.bgColor,
         color: theme.textColor,
-        borderColor: current ? theme.mainColor : theme.subColor,
+        borderColor: isHovered || current ? theme.mainColor : 'var(--bg-color)',
       }"
     >
       <button
+        ref="selectButton"
         type="button"
         class="theme-select min-w-0 flex-1 text-left rounded-full px-3 py-1"
-        :aria-pressed="
-          preference.mode === 'fixed' && preference.fixed === theme.name
-        "
+        :aria-pressed="current"
         :aria-label="`Use ${theme.name} as fixed theme${preference.light === theme.name ? ', system light' : ''}${preference.dark === theme.name ? ', system dark' : ''}`"
-        @click="appearance.selectFixed(theme.name)"
+        :aria-expanded="menuOpen"
+        @keydown="onMenuKey"
+        @pointerdown="onPointerDown"
+        @pointermove="onPointerMove"
+        @pointerup="cancelLongPress"
+        @pointercancel="cancelLongPress"
+        @click="selectTheme"
       >
-        <span v-if="isFavorite" aria-hidden="true">★</span>
         <span class="truncate">{{ theme.name }}</span>
         <span
           v-if="preference.light === theme.name"
@@ -86,6 +133,16 @@ function onEscape(event: KeyboardEvent) {
           >Dark</span
         >
       </button>
+      <button
+        type="button"
+        class="theme-favorite rounded-full p-1"
+        :class="{ 'is-favorite': isFavorite }"
+        :aria-label="`${isFavorite ? 'Remove' : 'Add'} ${theme.name} ${isFavorite ? 'from' : 'to'} favorites`"
+        :aria-pressed="isFavorite"
+        @click="favorite"
+      >
+        <Icon :name="isFavorite ? 'fa6-solid:star' : 'fa6-regular:star'" />
+      </button>
       <span class="theme-swatches" aria-hidden="true">
         <span
           v-for="(color, index) in [
@@ -97,16 +154,6 @@ function onEscape(event: KeyboardEvent) {
           :style="{ backgroundColor: color }"
         />
       </span>
-      <button
-        ref="menuButton"
-        type="button"
-        class="theme-menu-button rounded-full px-2 py-1"
-        :aria-label="`Options for ${theme.name}`"
-        :aria-expanded="menuOpen"
-        @click="menuOpen = !menuOpen"
-      >
-        ⋯
-      </button>
     </div>
     <div
       v-if="menuOpen"
@@ -116,15 +163,12 @@ function onEscape(event: KeyboardEvent) {
         Use for system light
       </button>
       <button type="button" @click="assign('dark')">Use for system dark</button>
-      <button type="button" @click="favorite">
-        {{ isFavorite ? 'Remove favorite' : 'Add favorite' }}
-      </button>
     </div>
   </div>
 </template>
 <style scoped>
 .theme-select,
-.theme-menu-button {
+.theme-favorite {
   background: transparent !important;
   color: inherit !important;
   cursor: pointer;
@@ -136,21 +180,31 @@ function onEscape(event: KeyboardEvent) {
 }
 .theme-swatches {
   display: flex;
-  gap: 0.15rem;
+  gap: 0.25rem;
+  padding-right: 0.5rem;
 }
 .theme-swatches span {
-  width: 0.65rem;
-  height: 0.65rem;
+  width: 1rem;
+  height: 1rem;
   border-radius: 50%;
 }
 .theme-select:focus-visible,
-.theme-menu-button:focus-visible {
+.theme-favorite:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 2px;
 }
-.theme-select:hover,
-.theme-menu-button:hover {
-  background: color-mix(in srgb, currentColor 15%, transparent) !important;
+.theme-favorite {
+  opacity: 0;
+}
+.theme-favorite.is-favorite,
+.theme-card:hover .theme-favorite,
+.theme-favorite:focus-visible {
+  opacity: 1;
+}
+@media (hover: none) {
+  .theme-favorite {
+    opacity: 1;
+  }
 }
 .slot-label {
   font-size: 0.65rem;

@@ -361,7 +361,8 @@ function handleSortChange(target: string) {
           Follow system appearance
         </button>
         <span class="text-(--sub-color)"
-          >Use ⋯ or right-click a theme to set its system slot.</span
+          >Right-click or press and hold a theme to set its system slot. On a
+          keyboard, use Shift+F10.</span
         >
       </div>
       <div class="w-full flex gap-2 mb-4">
