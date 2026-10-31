@@ -82,6 +82,7 @@ test('theme switching cancels stale loads and cleans up custom styles', async ()
     value: {
       querySelector: (selector: string) =>
         [...elements].find((e) => '#' + e.id === selector) ?? null,
+      querySelectorAll: () => [],
       createElement: (tag: string) => new Element(tag),
       head: { appendChild: (element: Element) => elements.add(element) },
     },

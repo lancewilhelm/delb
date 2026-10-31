@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
+import {
+  defaultThemePreference,
+  normalizeThemePreference,
+} from '../../../../app/utils/themePreference.ts';
 
 for (const name of ['Grid', 'List']) {
   test(`${name} retains the latest scope when responses arrive out of order`, async () => {
@@ -62,7 +66,7 @@ for (const name of ['Grid', 'List']) {
 test('settings pull keeps local edits while adopting unchanged remote fields', async () => {
   const src = fs
     .readFileSync('app/stores/userSettings.ts', 'utf8')
-    .replace(/^import .*;\n/gm, '')
+    .replace(/^import [\s\S]*? from .*;\n/gm, '')
     .replace(/\bexport\s+/g, '');
   let resolve;
   const remoteUpdatedAt = '2099-01-01T00:00:00.000Z';
@@ -99,6 +103,8 @@ test('settings pull keeps local edits while adopting unchanged remote fields', a
           })(),
     useDebounceFn: () => () => {},
     normalizeCustomTheme: (x) => x,
+    defaultThemePreference,
+    normalizeThemePreference,
     console,
   };
   vm.createContext(c);

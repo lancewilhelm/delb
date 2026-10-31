@@ -90,10 +90,6 @@ async function handleSubmit() {
       globalSettingsStore.pullLatest(),
     ]);
 
-    if (userSettingsStore.activeSettings.theme) {
-      await loadTheme(userSettingsStore.activeSettings.theme);
-    }
-
     return navigateTo('/');
   } catch (error) {
     logger.error({ error }, 'Error signing up');

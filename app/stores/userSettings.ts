@@ -1,4 +1,9 @@
 import { normalizeCustomTheme, type CustomTheme } from '~/utils/customTheme';
+import {
+  defaultThemePreference,
+  normalizeThemePreference,
+  type ThemePreference,
+} from '~/utils/themePreference';
 
 export type MetadataProviderKey = 'googleBooks' | 'hardcover';
 
@@ -24,7 +29,7 @@ export type FunboxMode = (typeof funboxModes)[number];
 export type ReaderTheme = 'system' | 'light' | 'gray' | 'shadow' | 'app';
 
 export interface BaseUserSettings {
-  theme?: string;
+  themePreference: ThemePreference;
   customTheme?: CustomTheme;
   fontFamily: FontFamily;
   favoriteThemes: string[];
@@ -109,6 +114,7 @@ export interface UserSettings extends BaseUserSettings {
 
 function getBaseDefaults(): BaseUserSettings {
   return {
+    themePreference: defaultThemePreference(),
     fontFamily: 'Nunito',
     favoriteThemes: [],
     themeSorting: {
@@ -237,7 +243,8 @@ function normalizeReaderTheme(theme: unknown): ReaderTheme {
 function normalizeReaderSettings(settings: BaseUserSettings): BaseUserSettings {
   return {
     ...settings,
-    ...(settings.customTheme !== undefined || settings.theme === 'custom'
+    ...(settings.customTheme !== undefined ||
+    Object.values(settings.themePreference).includes('custom')
       ? { customTheme: normalizeCustomTheme(settings.customTheme) }
       : {}),
     reader: {
@@ -247,12 +254,37 @@ function normalizeReaderSettings(settings: BaseUserSettings): BaseUserSettings {
   };
 }
 
+function migrateProfile(value: unknown): Record<string, unknown> {
+  if (!isPlainObject(value)) return {};
+  const { theme, ...profile } = value;
+  if (typeof theme === 'string' && theme) {
+    profile.themePreference = normalizeThemePreference(undefined, theme);
+  } else if ('themePreference' in profile) {
+    profile.themePreference = normalizeThemePreference(profile.themePreference);
+  }
+  return profile;
+}
+
+function migrateIncoming(value: unknown): Partial<UserSettings> {
+  if (!isPlainObject(value)) return {};
+  const profile = migrateProfile(value);
+  if (isPlainObject(value.mobile)) {
+    const mobile = { ...value.mobile } as Record<string, unknown>;
+    if (isPlainObject(mobile.settings))
+      mobile.settings = migrateProfile(mobile.settings);
+    if (isPlainObject(mobile.overrides))
+      mobile.overrides = migrateProfile(mobile.overrides);
+    profile.mobile = mobile;
+  }
+  return profile as Partial<UserSettings>;
+}
+
 function normalizeSettings(remote: Partial<UserSettings>): UserSettings {
   const baseDefaults = getBaseDefaults();
   const defaults = getDefaultSettings();
   const merged = mergeRecord(
     defaults as unknown as Record<string, unknown>,
-    remote as unknown as Record<string, unknown>,
+    migrateIncoming(remote) as unknown as Record<string, unknown>,
   ) as unknown as UserSettings;
 
   const mobileBase = isPlainObject(merged.mobile)
@@ -268,14 +300,20 @@ function normalizeSettings(remote: Partial<UserSettings>): UserSettings {
         .overrides as Partial<BaseUserSettings>)
     : null;
 
-  const mobileSettings = isPlainObject(mobileBase.settings)
-    ? (mergeRecord(
-        cloneValue(baseDefaults) as unknown as Record<string, unknown>,
-        mobileBase.settings as unknown as Record<string, unknown>,
-      ) as unknown as BaseUserSettings)
-    : legacyOverrides
-      ? applyOverrides(normalizedBase, legacyOverrides)
-      : cloneValue(baseDefaults);
+  const incomingMobile = isPlainObject(remote.mobile)
+    ? remote.mobile
+    : undefined;
+  const hasLegacyOverrides =
+    incomingMobile && isPlainObject(incomingMobile.overrides);
+  const mobileSettings =
+    !hasLegacyOverrides && isPlainObject(mobileBase.settings)
+      ? (mergeRecord(
+          cloneValue(baseDefaults) as unknown as Record<string, unknown>,
+          mobileBase.settings as unknown as Record<string, unknown>,
+        ) as unknown as BaseUserSettings)
+      : legacyOverrides
+        ? applyOverrides(normalizedBase, legacyOverrides)
+        : cloneValue(baseDefaults);
 
   return {
     ...merged,
@@ -427,7 +465,7 @@ export const useUserSettingsStore = defineStore(
       if (!result.data) return;
       const remote = normalizeSettings({
         ...settings.value,
-        ...result.data.settings,
+        ...migrateIncoming(result.data.settings),
       });
       settings.value = normalizeSettings(
         mergeConcurrentEdits(
@@ -470,7 +508,7 @@ export const useUserSettingsStore = defineStore(
         JSON.stringify(before) !== JSON.stringify(settings.value);
       const remoteSettings = normalizeSettings({
         ...before,
-        ...(remote.settings as Partial<UserSettings>),
+        ...migrateIncoming(remote.settings as Partial<UserSettings>),
       });
       const merged = mergeConcurrentEdits(
         editBase ?? before,
@@ -501,7 +539,10 @@ export const useUserSettingsStore = defineStore(
     ) {
       if (!remote || Object.keys(remote).length === 0) return;
 
-      settings.value = normalizeSettings({ ...settings.value, ...remote });
+      settings.value = normalizeSettings({
+        ...settings.value,
+        ...migrateIncoming(remote),
+      });
       editBase = null;
       updatedAt.value =
         remoteUpdatedAt !== undefined
@@ -714,6 +755,10 @@ export const useUserSettingsStore = defineStore(
     };
   },
   {
-    persist: true,
+    persist: {
+      afterHydrate: ({ store }) => {
+        store.settings = normalizeSettings(store.settings);
+      },
+    },
   },
 );

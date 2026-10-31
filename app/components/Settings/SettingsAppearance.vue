@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import themesList from '~/assets/json/themes.json';
+import { normalizeCustomTheme } from '~/utils/customTheme';
 
 interface Theme {
   name: string;
@@ -10,6 +11,7 @@ interface Theme {
 }
 
 const userSettingsStore = useUserSettingsStore();
+const appearance = useThemeAppearance();
 const isMobileDevice = useIsMobileDevice();
 
 // ------------------------------
@@ -110,7 +112,13 @@ const allThemes = computed(() =>
 );
 
 const favoriteThemes = computed(() =>
-  JSON.parse(JSON.stringify(themesList))
+  [
+    ...themesList,
+    {
+      name: 'custom',
+      ...normalizeCustomTheme(userSettingsStore.activeSettings.customTheme),
+    },
+  ]
     .filter((theme: Theme) => {
       if (!userSettingsStore.activeSettings.favoriteThemes) return false;
       return userSettingsStore.activeSettings.favoriteThemes.includes(
@@ -336,6 +344,27 @@ function handleSortChange(target: string) {
       <SettingsAppearanceFonts />
     </SettingsUIGroup>
     <SettingsUIGroup title="Themes" icon="lucide:palette">
+      <div class="flex flex-wrap items-center gap-3 mb-4 text-sm">
+        <span>{{
+          userSettingsStore.activeSettings.themePreference.mode === 'system'
+            ? 'Following system appearance'
+            : 'Fixed theme'
+        }}</span>
+        <button
+          v-if="
+            userSettingsStore.activeSettings.themePreference.mode === 'fixed'
+          "
+          type="button"
+          class="rounded-lg px-3 py-1 bg-(--sub-alt-color)!"
+          @click="appearance.useSystem()"
+        >
+          Follow system appearance
+        </button>
+        <span class="text-(--sub-color)"
+          >Right-click or press and hold a theme to set its system slot. On a
+          keyboard, use Shift+F10.</span
+        >
+      </div>
       <div class="w-full flex gap-2 mb-4">
         <button
           :class="[
@@ -397,14 +426,6 @@ function handleSortChange(target: string) {
             :key="theme.name"
             :theme="theme"
             :is-favorite="true"
-            @click="
-              () => {
-                userSettingsStore.updateSettings({
-                  theme: theme.name,
-                });
-                loadTheme(theme.name);
-              }
-            "
           />
         </div>
       </SettingsUISubGroup>
@@ -418,14 +439,6 @@ function handleSortChange(target: string) {
               userSettingsStore.activeSettings.favoriteThemes?.includes(
                 theme.name,
               )
-            "
-            @click="
-              () => {
-                userSettingsStore.updateSettings({
-                  theme: theme.name,
-                });
-                loadTheme(theme.name);
-              }
             "
           />
         </div>

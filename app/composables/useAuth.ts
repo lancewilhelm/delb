@@ -108,7 +108,6 @@ export function useAuth() {
     const res = await client.signOut();
     session.value = null;
     user.value = null;
-    loadTheme('guage');
 
     // Reset all stores
     const userSettingsStore = useUserSettingsStore();

@@ -73,10 +73,6 @@ async function handleSubmit() {
 
     // Load the theme immediately after pulling settings so there's no "default theme"
     // flash between login and the app.
-    if (userSettingsStore.activeSettings.theme) {
-      await loadTheme(userSettingsStore.activeSettings.theme);
-    }
-
     // Navigate to the home page
     return navigateTo('/');
   } catch (error) {

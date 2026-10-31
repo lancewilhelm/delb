@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { whenThemeReady } from '~/utils/theme';
 import {
   defaultCustomTheme,
   hexToHsv,
@@ -14,7 +15,7 @@ const selected = ref<ThemeColorKey>('bgColor');
 const palette = computed(() =>
   normalizeCustomTheme(store.activeSettings.customTheme),
 );
-const active = computed(() => store.activeSettings.theme === 'custom');
+const appearance = useThemeAppearance();
 const hsv = ref(hexToHsv(palette.value[selected.value]));
 const hexInput = ref(palette.value[selected.value]);
 const square = ref<HTMLElement>();
@@ -27,13 +28,22 @@ let initialization = 0;
 async function initialize() {
   const request = ++initialization;
   if (store.activeSettings.customTheme) return;
-  const theme = store.activeSettings.theme;
+  const theme = appearance.resolved.value;
+  const mobile = store.usingMobileOverrides;
   try {
-    await loadTheme(theme || 'guage');
+    await nextTick();
+    await whenThemeReady();
   } catch {
     return;
   }
-  if (request !== initialization || store.activeSettings.customTheme) return;
+  if (
+    request !== initialization ||
+    store.activeSettings.customTheme ||
+    mobile !== store.usingMobileOverrides ||
+    theme !== appearance.resolved.value ||
+    appearance.preview.value
+  )
+    return;
   const styles = getComputedStyle(document.documentElement);
   const colors = Object.fromEntries(
     themeColorRoles.map(({ key, variable }) => {
@@ -71,7 +81,11 @@ onBeforeUnmount(() => {
   initialization++;
 });
 watch(
-  () => [store.usingMobileOverrides, store.activeSettings.theme],
+  () => [
+    store.usingMobileOverrides,
+    appearance.resolved.value,
+    appearance.preview.value,
+  ],
   () => {
     if (mounted) void initialize();
   },
@@ -152,30 +166,13 @@ function keydown(event: KeyboardEvent) {
 <template>
   <div class="grid w-full grid-cols-1 md:grid-cols-2 gap-6 custom-theme-editor">
     <div class="flex flex-col justify-center gap-3">
-      <button
-        type="button"
-        class="custom-theme-chip flex w-full items-center justify-between rounded-full border-2 px-3 py-1 font-mono cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-4"
-        :style="{
-          backgroundColor: palette.bgColor,
-          color: palette.textColor,
-          borderColor: active ? palette.mainColor : palette.subColor,
-        }"
-        :aria-pressed="active"
-        aria-label="Use custom theme"
-        @click="store.updateSettings({ theme: 'custom', customTheme: palette })"
-      >
-        <span>custom</span>
-        <span class="flex gap-1" aria-hidden="true">
-          <span
-            v-for="key in ['mainColor', 'subColor', 'textColor'] as const"
-            :key="key"
-            class="w-4 h-4 rounded-full"
-            :style="{ backgroundColor: palette[key] }"
-          />
-        </span>
-      </button>
+      <SettingsUITheme
+        :theme="{ name: 'custom', ...palette }"
+        :is-favorite="store.activeSettings.favoriteThemes.includes('custom')"
+      />
       <p class="text-sm text-(--sub-color)">
-        Select custom to apply your colors. Changes save automatically.
+        Select custom to apply your colors, or right-click or press and hold it
+        to assign a system slot. Changes save automatically.
       </p>
     </div>
     <div class="min-w-0">
