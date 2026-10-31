@@ -6,8 +6,19 @@ import { transformSync } from 'esbuild';
 import { createPinia, defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import { normalizeCustomTheme } from '../utils/customTheme';
+import {
+  defaultThemePreference,
+  normalizeThemePreference,
+} from '../utils/themePreference';
 
-type FetchOptions = { body: { settings: { theme: string }; updatedAt: Date } };
+const pref = (fixed: string) => ({
+  ...defaultThemePreference(),
+  mode: 'fixed' as const,
+  fixed,
+});
+type FetchOptions = {
+  body: { settings: { themePreference: { fixed: string } }; updatedAt: Date };
+};
 
 function createStore(
   fetch: (url: string, options: FetchOptions) => Promise<unknown>,
@@ -16,7 +27,9 @@ function createStore(
   const source = readFileSync(
     new URL('./userSettings.ts', import.meta.url),
     'utf8',
-  ).replace(/import [\s\S]*?from '~\/utils\/customTheme';/, '');
+  )
+    .replace(/import [\s\S]*?from '~\/utils\/customTheme';/, '')
+    .replace(/import [\s\S]*?from '~\/utils\/themePreference';/, '');
   const code = transformSync(source, { loader: 'ts', format: 'cjs' }).code;
   const module = { exports: {} as typeof import('./userSettings') };
   const session = ref<{ id: string } | null>({ id: 'first' });
@@ -27,6 +40,8 @@ function createStore(
     computed,
     ref,
     normalizeCustomTheme,
+    defaultThemePreference,
+    normalizeThemePreference,
     Date: class extends Date {
       static override now() {
         return now();
@@ -50,7 +65,7 @@ test('persisted timestamp strings survive edits and concurrent pulls', async () 
   );
   store.updatedAt = '2030-01-01T00:00:00.000Z';
   const pull = store.pull();
-  await store.updateSettings({ theme: 'paper' });
+  await store.updateSettings({ themePreference: pref('paper') });
   resolvePull({
     data: {
       userSettings: {
@@ -60,7 +75,7 @@ test('persisted timestamp strings survive edits and concurrent pulls', async () 
     },
   });
   await pull;
-  assert.equal(store.settings.theme, 'paper');
+  assert.equal(store.settings.themePreference.fixed, 'paper');
   assert.equal(store.settings.fontFamily, 'Inter');
   assert.ok(
     new Date(store.updatedAt).getTime() >
@@ -71,7 +86,7 @@ test('persisted timestamp strings survive edits and concurrent pulls', async () 
 
 test('reversed immediate pushes retain the latest edit and guard sync state', async () => {
   const requests: {
-    body: { settings: { theme: string }; updatedAt: Date };
+    body: { settings: { themePreference: { fixed: string } }; updatedAt: Date };
     resolve: () => void;
   }[] = [];
   const { store, session } = createStore(
@@ -83,8 +98,14 @@ test('reversed immediate pushes retain the latest edit and guard sync state', as
         });
       }),
   );
-  const first = store.updateSettings({ theme: 'paper' }, { immediate: true });
-  const second = store.updateSettings({ theme: 'dark' }, { immediate: true });
+  const first = store.updateSettings(
+    { themePreference: pref('paper') },
+    { immediate: true },
+  );
+  const second = store.updateSettings(
+    { themePreference: pref('dark') },
+    { immediate: true },
+  );
   assert.equal(requests.length, 2);
   let serverRevision = 0;
   let serverTheme = '';
@@ -92,7 +113,7 @@ test('reversed immediate pushes retain the latest edit and guard sync state', as
     const revision = new Date(request.body.updatedAt).getTime();
     if (serverRevision < revision) {
       serverRevision = revision;
-      serverTheme = request.body.settings.theme;
+      serverTheme = request.body.settings.themePreference.fixed;
     }
     request.resolve();
     await Promise.resolve();
@@ -101,8 +122,11 @@ test('reversed immediate pushes retain the latest edit and guard sync state', as
   assert.equal(serverTheme, 'dark');
   assert.equal(store.synced, true);
 
-  const third = store.updateSettings({ theme: 'paper' }, { immediate: true });
-  await store.updateSettings({ theme: 'dark' });
+  const third = store.updateSettings(
+    { themePreference: pref('paper') },
+    { immediate: true },
+  );
+  await store.updateSettings({ themePreference: pref('dark') });
   requests[2]!.resolve();
   await third;
   assert.equal(store.synced, false);
@@ -119,7 +143,10 @@ test('a rejected write remains unsynced', async () => {
     success: true,
     accepted: false,
   }));
-  await store.updateSettings({ theme: 'paper' }, { immediate: true });
+  await store.updateSettings(
+    { themePreference: pref('paper') },
+    { immediate: true },
+  );
   assert.equal(store.synced, false);
 });
 
@@ -160,7 +187,10 @@ test('SQLite preserves millisecond order and reports rejected writes', async () 
       exports: {} as {
         default: (event: unknown) => Promise<{
           accepted: boolean;
-          data: { settings: { theme: string }; updatedAt: Date };
+          data: {
+            settings: { themePreference: { fixed: string } };
+            updatedAt: Date;
+          };
         }>;
       },
     };
@@ -182,13 +212,16 @@ test('SQLite preserves millisecond order and reports rejected writes', async () 
     const put = (theme: string, revision: number) =>
       module.exports.default({
         headers: {},
-        body: { settings: { theme }, updatedAt: revision },
+        body: {
+          settings: { themePreference: pref(theme) },
+          updatedAt: revision,
+        },
       });
     const base = 1700000001000;
     assert.equal((await put('latest', base + 2)).accepted, true);
     const rejected = await put('older', base + 1);
     assert.equal(rejected.accepted, false);
-    assert.equal(rejected.data.settings.theme, 'latest');
+    assert.equal(rejected.data.settings.themePreference.fixed, 'latest');
     assert.equal(new Date(rejected.data.updatedAt).getTime(), base + 2);
     assert.equal((await put('other client', base + 3)).accepted, true);
     assert.equal((await put('same millisecond', base + 3)).accepted, false);
@@ -207,38 +240,40 @@ test('SQLite preserves millisecond order and reports rejected writes', async () 
     const firstTab = createStore(adapter, () => clock).store;
     const secondTab = createStore(adapter, () => clock).store;
     for (let index = 0; index < 100; index++)
-      await firstTab.updateSettings({ theme: `rapid-${index}` });
+      await firstTab.updateSettings({
+        themePreference: pref(`rapid-${index}`),
+      });
     assert.ok(new Date(firstTab.updatedAt).getTime() <= clock + 100);
     await firstTab.push();
     assert.equal(firstTab.synced, true);
     clock += 1000;
     await secondTab.updateSettings(
-      { theme: 'later second tab' },
+      { themePreference: pref('later-second-tab') },
       { immediate: true },
     );
     assert.equal(secondTab.synced, true);
     await firstTab.push();
     assert.equal(firstTab.synced, true);
-    assert.equal(firstTab.settings.theme, 'later second tab');
+    assert.equal(firstTab.settings.themePreference.fixed, 'later-second-tab');
     const stored = await client.execute('SELECT settings FROM user_settings');
     assert.equal(
-      JSON.parse(String(stored.rows[0]?.settings)).theme,
-      'later second tab',
+      JSON.parse(String(stored.rows[0]?.settings)).themePreference.fixed,
+      'later-second-tab',
     );
     const thirdTab = createStore(adapter, () => clock).store;
     thirdTab.applyRemoteSettings(
-      { theme: 'later second tab', fontFamily: 'Nunito' },
+      { themePreference: pref('later-second-tab'), fontFamily: 'Nunito' },
       new Date(clock + 1),
     );
     await thirdTab.updateSettings({ fontFamily: 'Inter' });
-    assert.equal((await put('new remote theme', clock + 2)).accepted, true);
+    assert.equal((await put('new-remote-theme', clock + 2)).accepted, true);
     await thirdTab.push();
     assert.equal(thirdTab.synced, true);
     const reconciled = await client.execute(
       'SELECT settings FROM user_settings',
     );
     const reconciledSettings = JSON.parse(String(reconciled.rows[0]?.settings));
-    assert.equal(reconciledSettings.theme, 'new remote theme');
+    assert.equal(reconciledSettings.themePreference.fixed, 'new-remote-theme');
     assert.equal(reconciledSettings.fontFamily, 'Inter');
   } finally {
     client.close();
@@ -255,19 +290,25 @@ test('a delayed pull cannot overwrite an acknowledged local save', async () => {
         else resolveGet = resolve;
       }),
   );
-  store.applyRemoteSettings({ theme: 'paper' }, new Date(1000));
-  const write = store.updateSettings({ theme: 'dark' }, { immediate: true });
+  store.applyRemoteSettings({ themePreference: pref('paper') }, new Date(1000));
+  const write = store.updateSettings(
+    { themePreference: pref('dark') },
+    { immediate: true },
+  );
   const read = store.pull();
   resolvePut({ success: true, accepted: true });
   await write;
   const acknowledged = new Date(store.updatedAt).getTime();
   resolveGet({
     data: {
-      userSettings: { settings: { theme: 'paper' }, updatedAt: new Date(1000) },
+      userSettings: {
+        settings: { themePreference: pref('paper') },
+        updatedAt: new Date(1000),
+      },
     },
   });
   await read;
-  assert.equal(store.settings.theme, 'dark');
+  assert.equal(store.settings.themePreference.fixed, 'dark');
   assert.equal(new Date(store.updatedAt).getTime(), acknowledged);
   assert.equal(store.synced, true);
 });

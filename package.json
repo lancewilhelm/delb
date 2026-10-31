@@ -11,7 +11,7 @@
     "prepare:nuxt": "nuxt prepare",
     "typecheck": "pnpm --filter @delb/epub typecheck && nuxt typecheck",
     "test:page-sort": "node --import tsx --test server/utils/books/page-sort.test.ts app/stores/ui.pages.test.ts",
-    "test:theme": "node --import tsx --test app/utils/customTheme.test.ts app/stores/userSettings.customTheme.test.ts",
+    "test:theme": "node --import tsx --test app/utils/customTheme.test.ts app/utils/themePreference.test.ts app/stores/userSettings.customTheme.test.ts",
     "test:epub": "pnpm --filter @delb/epub test",
     "test:cover-transaction": "node --import tsx --test server/utils/books/cover-update-transaction.test.ts",
     "lint": "eslint . --ext .vue,.js,.ts,.jsx,.tsx",

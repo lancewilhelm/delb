@@ -1,5 +1,6 @@
 import fuzzysort from 'fuzzysort';
 import themesList from '~/assets/json/themes.json';
+import { normalizeCustomTheme } from '~/utils/customTheme';
 
 interface Theme {
   name: string;
@@ -38,11 +39,20 @@ export function useCommandPalette() {
   const inputRef = ref<HTMLInputElement | null>(null);
   const optionsRef = ref<HTMLDivElement | null>(null);
   const hoveredTheme = ref<string | null>(null);
+  const appearance = useThemeAppearance();
 
   const sortedThemesList = [...themesList].sort((a: Theme, b: Theme) =>
     a.name.localeCompare(b.name),
   );
-  const allThemes = computed<Theme[]>(() => sortedThemesList);
+  const allThemes = computed<Theme[]>(() =>
+    [
+      ...sortedThemesList,
+      {
+        name: 'custom',
+        ...normalizeCustomTheme(userSettingsStore.activeSettings.customTheme),
+      },
+    ].sort((a, b) => a.name.localeCompare(b.name)),
+  );
 
   const uiStore = useUiStore();
   const userSettingsStore = useUserSettingsStore();
@@ -76,7 +86,7 @@ export function useCommandPalette() {
         const randomTheme =
           allThemes.value[Math.floor(Math.random() * allThemes.value.length)];
         if (!randomTheme) return;
-        userSettingsStore.updateSettings({ theme: randomTheme.name });
+        appearance.selectFixed(randomTheme.name);
         closePalette();
       },
     },
@@ -327,30 +337,36 @@ export function useCommandPalette() {
 
   function selectTheme(theme?: Theme) {
     if (!theme) return;
-    userSettingsStore.updateSettings({ theme: theme.name });
+    appearance.selectFixed(theme.name);
     closePalette();
   }
 
+  let previewGeneration = 0;
   function previewTheme(theme?: string) {
+    previewGeneration++;
     if (!theme) {
       hoveredTheme.value = null;
-      loadTheme(
-        userSettingsStore.activeSettings.theme,
-        userSettingsStore.activeSettings.customTheme,
-      );
+      appearance.preview.value = null;
     } else {
       hoveredTheme.value = theme;
-      loadTheme(theme, userSettingsStore.activeSettings.customTheme);
+      appearance.preview.value = theme;
     }
   }
-  const debouncedPreviewTheme = debounce((theme?: string) => {
-    if (
-      uiStore.commandPaletteVisible &&
-      ['theme', 'favorite themes'].includes(selectedOption.value?.label ?? '')
-    ) {
-      previewTheme(theme);
-    }
-  }, 300);
+  const queuePreview = debounce(
+    (theme: string | undefined, generation: number) => {
+      if (
+        generation === previewGeneration &&
+        uiStore.commandPaletteVisible &&
+        ['theme', 'favorite themes'].includes(selectedOption.value?.label ?? '')
+      ) {
+        previewTheme(theme);
+      }
+    },
+    300,
+  );
+  function debouncedPreviewTheme(theme?: string) {
+    queuePreview(theme, ++previewGeneration);
+  }
 
   function handleInputKeydown(event: KeyboardEvent) {
     if (
@@ -454,13 +470,15 @@ export function useCommandPalette() {
       selectedOption.value?.label !== 'favorite themes'
     )
       return;
-    const currentTheme = userSettingsStore.activeSettings.theme;
+    const currentTheme = appearance.resolved.value;
     const idx = filteredThemes.value.findIndex((t) => t.name === currentTheme);
     if (idx !== -1) {
       highlightedIndex.value = idx;
       nextTick(scrollToHighlighted);
     }
   }
+
+  onBeforeUnmount(() => previewTheme());
 
   // --- Listeners & Watchers
   watch(
@@ -488,6 +506,7 @@ export function useCommandPalette() {
     () => selectedOption.value?.label,
     (label) => {
       if (label === 'theme') scrollToCurrentThemeIfOpen();
+      if (label !== 'theme' && label !== 'favorite themes') previewGeneration++;
       if (
         label !== 'theme' &&
         label !== 'favorite themes' &&
@@ -537,11 +556,11 @@ export function useCommandPalette() {
 function addCurrentThemeToFavorites() {
   const userSettingsStore = useUserSettingsStore();
   const settings = userSettingsStore.activeSettings;
-  if (!settings.theme) return;
-  if (settings.favoriteThemes?.includes(settings.theme)) return;
+  const theme = useThemeAppearance().resolved.value;
+  if (settings.favoriteThemes?.includes(theme)) return;
 
   userSettingsStore.updateSettings({
-    favoriteThemes: [...(settings.favoriteThemes || []), settings.theme],
+    favoriteThemes: [...(settings.favoriteThemes || []), theme],
   });
 }
 

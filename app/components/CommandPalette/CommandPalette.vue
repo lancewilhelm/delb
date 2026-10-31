@@ -1,5 +1,6 @@
 <script setup lang="ts">
 const userSettingsStore = useUserSettingsStore();
+const appearance = useThemeAppearance();
 const uiStore = useUiStore();
 const dialogRef = ref<HTMLElement | null>(null);
 let previousFocus: HTMLElement | null = null;
@@ -165,7 +166,7 @@ watch(
             :aria-selected="highlightedIndex === i"
             :theme="theme"
             :highlighted="highlightedIndex === i"
-            :selected="userSettingsStore.activeSettings.theme === theme.name"
+            :selected="appearance.resolved.value === theme.name"
             @select="selectTheme"
             @preview="debouncedPreviewTheme"
             @add-favorite="
