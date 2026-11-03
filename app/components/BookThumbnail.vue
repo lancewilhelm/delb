@@ -1,28 +1,17 @@
 <script setup lang="ts">
 import { buildBookCoverUrl } from '~/utils/covers';
+import {
+  defaultBookFields,
+  type BookFieldPreference,
+  type BookViewBook,
+} from '~/utils/bookFields';
 defineOptions({ name: 'BookThumbnail' });
-
-type BookThumb = {
-  id: string;
-  title: string;
-
-  coverImagePath?: string | null;
-  updatedAt?: string | number | Date;
-
-  // Optional: used for subtitle display
-  authors?: { id: string; name: string }[];
-  authorNames?: string[];
-  author?: string;
-
-  // Optional: used by other views (not displayed by default)
-  publisher?: { id: string; name: string } | null;
-  series?: { id: string; name: string } | null;
-  seriesIndex?: number | null;
-};
 
 const props = withDefaults(
   defineProps<{
-    book: BookThumb;
+    book: BookViewBook;
+    fields?: BookFieldPreference[];
+    measureMetadata?: boolean;
     /** Show the author line (if present in `book`). Default: true */
     showAuthor?: boolean;
     /** Show the series line (if present in `book`). Default: true */
@@ -42,7 +31,8 @@ const props = withDefaults(
     selected?: boolean;
   }>(),
   {
-    to: undefined,
+    fields: () => defaultBookFields(),
+    measureMetadata: false,
     showAuthor: true,
     showSeries: true,
     class: '',
@@ -245,23 +235,6 @@ async function getContextMenuItems(): Promise<CoverMenuItem[]> {
   return items;
 }
 
-const authorLabel = computed(() => {
-  const b = props.book;
-
-  if (Array.isArray(b.authors) && b.authors.length > 0) {
-    return b.authors
-      .map((a) => a.name)
-      .filter(Boolean)
-      .join(', ');
-  }
-
-  if (Array.isArray(b.authorNames) && b.authorNames.length > 0) {
-    return b.authorNames.filter(Boolean).join(', ');
-  }
-
-  return b.author ?? '';
-});
-
 const emit = defineEmits<{
   /** Fired when in selection mode and the user toggles selection for this book. */
   (e: 'toggle-select', bookId: string, meta?: { shiftKey?: boolean }): void;
@@ -280,13 +253,8 @@ function onToggleSelect(e: MouseEvent) {
   emit('toggle-select', props.book.id, { shiftKey: e.shiftKey });
 }
 
-const userSettingsStore = useUserSettingsStore();
-
-const showAnyMetadata = computed(
-  () =>
-    userSettingsStore.activeSettings.bookGrid.showTitle ||
-    userSettingsStore.activeSettings.bookGrid.showAuthors ||
-    userSettingsStore.activeSettings.bookGrid.showSeries,
+const visibleFields = computed(() =>
+  props.fields.filter((field) => field.visible),
 );
 </script>
 
@@ -333,60 +301,17 @@ const showAnyMetadata = computed(
         </button>
       </div>
 
-      <div v-if="showAnyMetadata" class="flex flex-col">
-        <!-- Title -->
-        <HoverScrollText
-          v-if="userSettingsStore.activeSettings.bookGrid.showTitle"
-        >
-          <span class="cursor-pointer hover:underline" @click="onOpenBook">
-            {{ props.book.title }}
-          </span>
-        </HoverScrollText>
-
-        <!-- Authors -->
-        <HoverScrollText
-          v-if="
-            userSettingsStore.activeSettings.bookGrid.showAuthors && authorLabel
-          "
-          class="opacity-70 cursor-pointer"
-        >
-          <span v-if="props.selectable" @click="onOpenBook">
-            {{ authorLabel }}
-          </span>
-
-          <template v-else>
-            <span v-for="(a, index) in book.authors" :key="a.id">
-              <span
-                class="cursor-pointer hover:underline"
-                @click="navigateTo(`/authors/${a.id}`)"
-              >
-                {{ a.name }}
-              </span>
-              <span v-if="book.authors && index < book.authors.length - 1"
-                >,
-              </span>
-            </span>
-          </template>
-        </HoverScrollText>
-
-        <!-- Series -->
-        <HoverScrollText
-          v-if="
-            userSettingsStore.activeSettings.bookGrid.showSeries &&
-            props.book.series
-          "
-          class="italic opacity-70 text-sm cursor-pointer"
-        >
-          <div
-            class="flex gap-1 hover:underline"
-            @click="navigateTo(`/series/${props.book.series.id}`)"
-          >
-            {{ props.book.series.name }}
-            <span v-if="props.book.seriesIndex"
-              >#{{ props.book.seriesIndex }}</span
-            >
-          </div>
-        </HoverScrollText>
+      <div v-if="visibleFields.length" class="flex flex-col min-w-0">
+        <BooksMetadataField
+          v-for="field in visibleFields"
+          :key="field.id"
+          :book="book"
+          :field="field.id"
+          mode="grid"
+          :measurement="measureMetadata"
+          :selectable="selectable"
+          @open="onOpenBook"
+        />
       </div>
     </div>
   </div>

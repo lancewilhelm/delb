@@ -182,35 +182,14 @@ export function useCommandPalette() {
             suffix: 'px',
           },
         },
-        {
-          label: 'book title',
-          icon: 'lucide:book-a',
-          toggle: {
-            model: userSettingsStore.settingRef<boolean>('bookGrid.showTitle'),
-          },
-        },
-        {
-          label: 'book authors',
-          icon: 'lucide:user',
-          toggle: {
-            model: userSettingsStore.settingRef<boolean>(
-              'bookGrid.showAuthors',
-            ),
-          },
-        },
-        {
-          label: 'book series',
-          icon: 'lucide:layers',
-          toggle: {
-            model: userSettingsStore.settingRef<boolean>('bookGrid.showSeries'),
-          },
-        },
+        ...useBookViewFields('grid').paletteOptions,
       ],
     },
     {
       label: 'book list',
       icon: 'lucide:list',
       options: [
+        ...useBookViewFields('list').paletteOptions,
         {
           label: 'row height',
           icon: 'lucide:rows',

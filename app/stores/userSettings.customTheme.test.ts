@@ -1,3 +1,4 @@
+import { defaultBookFields, normalizeBookFields } from '../utils/bookFields';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -18,6 +19,7 @@ function createStore() {
     new URL('./userSettings.ts', import.meta.url),
     'utf8',
   )
+    .replace(/import [\s\S]*?from '~\/utils\/bookFields';/, '')
     .replace(/import [\s\S]*?from '~\/utils\/customTheme';/, '')
     .replace(/import [\s\S]*?from '~\/utils\/themePreference';/, '');
   const code = transformSync(source, { loader: 'ts', format: 'cjs' }).code;
@@ -31,6 +33,8 @@ function createStore() {
     defineStore,
     computed,
     ref,
+    defaultBookFields,
+    normalizeBookFields,
     normalizeCustomTheme,
     defaultThemePreference,
     normalizeThemePreference,
@@ -129,4 +133,100 @@ test('legacy mobile overrides retain their independent theme', () => {
   assert.equal(store.activeSettings.customTheme?.bgColor, '#112233');
   mobile.value = false;
   assert.equal(store.activeSettings.themePreference.fixed, 'paper');
+});
+
+test('book views retain independent selection, order, mobile settings and saved legacy choices', async () => {
+  const { store, mobile } = createStore();
+  store.applyRemoteSettings({
+    bookGrid: { showTitle: false, showAuthors: true, showSeries: false },
+  } as unknown as Partial<UserSettings>);
+  assert.deepEqual(
+    Array.from(
+      store.activeSettings.bookGrid.fields.filter((f) => f.visible),
+      (f) => f.id,
+    ),
+    ['authors'],
+  );
+  const fields =
+    store.settingRef<UserSettings['bookGrid']['fields']>('bookGrid.fields');
+  fields.value = [
+    { id: 'tags', visible: true },
+    ...fields.value.filter((f) => f.id !== 'tags'),
+  ];
+  assert.equal(store.activeSettings.bookGrid.fields[0]?.id, 'tags');
+  assert.equal(store.activeSettings.bookList.fields[0]?.id, 'title');
+  store.setMobileEnabled(true);
+  mobile.value = true;
+  fields.value = fields.value.map((f) => ({ ...f, visible: false }));
+  assert.equal(
+    store.activeSettings.bookGrid.fields.some((f) => f.visible),
+    false,
+  );
+  mobile.value = false;
+  assert.equal(
+    store.activeSettings.bookGrid.fields.find((f) => f.id === 'tags')?.visible,
+    true,
+  );
+  const restored = createStore();
+  restored.store.applyRemoteSettings(
+    JSON.parse(JSON.stringify(store.settings)),
+  );
+  assert.equal(restored.store.activeSettings.bookGrid.fields[0]?.id, 'tags');
+  restored.mobile.value = true;
+  assert.equal(
+    restored.store.activeSettings.bookGrid.fields.some((f) => f.visible),
+    false,
+  );
+});
+
+test('legacy mobile layout overrides inherit field choices except explicit visibility overrides', () => {
+  const { store, mobile } = createStore();
+  store.applyRemoteSettings({
+    bookGrid: { showTitle: false, showAuthors: true, showSeries: false },
+    mobile: {
+      enabled: true,
+      searchButton: true,
+      overrides: { bookGrid: { gap: 18, showSeries: true } },
+    },
+  } as unknown as Partial<UserSettings>);
+  mobile.value = true;
+  assert.deepEqual(
+    Array.from(
+      store.activeSettings.bookGrid.fields.filter((f) => f.visible),
+      (f) => f.id,
+    ),
+    ['authors', 'series'],
+  );
+  assert.equal(store.activeSettings.bookGrid.gap, 18);
+});
+
+test('legacy mobile layout-only overrides retain the desktop field order and cover-only list', () => {
+  const { store, mobile } = createStore();
+  store.applyRemoteSettings({
+    bookGrid: {
+      fields: [
+        { id: 'tags', visible: true },
+        { id: 'title', visible: false },
+      ],
+    },
+    bookList: { fields: [] },
+    mobile: {
+      enabled: true,
+      searchButton: true,
+      overrides: { bookGrid: { gap: 18 }, bookList: { rowHeightPx: 100 } },
+    },
+  } as unknown as Partial<UserSettings>);
+  mobile.value = true;
+  assert.deepEqual(
+    Array.from(
+      store.activeSettings.bookGrid.fields.filter((f) => f.visible),
+      (f) => f.id,
+    ),
+    ['tags'],
+  );
+  assert.equal(store.activeSettings.bookGrid.fields[0]?.id, 'tags');
+  assert.equal(
+    store.activeSettings.bookList.fields.some((f) => f.visible),
+    false,
+  );
 });

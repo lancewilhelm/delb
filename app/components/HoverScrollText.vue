@@ -87,6 +87,9 @@ const handleMouseLeave = () => {
   }
 };
 
+useResizeObserver(outerContainer, checkOverflow);
+useResizeObserver(innerContainer, checkOverflow);
+
 onMounted(() => {
   checkOverflow();
   window.addEventListener('resize', checkOverflow);

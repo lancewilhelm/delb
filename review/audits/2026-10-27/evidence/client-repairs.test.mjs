@@ -1,3 +1,7 @@
+import {
+  defaultBookFields,
+  normalizeBookFields,
+} from '../../../../app/utils/bookFields.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -22,6 +26,7 @@ for (const name of ['Grid', 'List']) {
     const c = {
       props: { collectionId: 'old', endpoint: '/books' },
       books: { value: [] },
+      measuredRowHeights: new Map(),
       nextCursor: { value: null },
       errorMessage: { value: null },
       lastRangeAnchorId: { value: null },
@@ -103,6 +108,8 @@ test('settings pull keeps local edits while adopting unchanged remote fields', a
           })(),
     useDebounceFn: () => () => {},
     normalizeCustomTheme: (x) => x,
+    defaultBookFields,
+    normalizeBookFields,
     defaultThemePreference,
     normalizeThemePreference,
     console,

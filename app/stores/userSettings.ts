@@ -1,3 +1,8 @@
+import {
+  defaultBookFields,
+  normalizeBookFields,
+  type BookFieldPreference,
+} from '~/utils/bookFields';
 import { normalizeCustomTheme, type CustomTheme } from '~/utils/customTheme';
 import {
   defaultThemePreference,
@@ -58,15 +63,14 @@ export interface BaseUserSettings {
     dynamicCoverSizing: boolean;
     coverWidthPresetPx: number;
     gap: number;
-    showTitle: boolean;
-    showAuthors: boolean;
-    showSeries: boolean;
+    fields: BookFieldPreference[];
   };
 
   /**
    * List appearance options (book list view).
    */
   bookList: {
+    fields: BookFieldPreference[];
     rowHeightPx: number;
   };
 
@@ -135,11 +139,10 @@ function getBaseDefaults(): BaseUserSettings {
       dynamicCoverSizing: true,
       coverWidthPresetPx: 172,
       gap: 12,
-      showTitle: true,
-      showAuthors: true,
-      showSeries: true,
+      fields: defaultBookFields(),
     },
     bookList: {
+      fields: defaultBookFields(),
       rowHeightPx: 84,
     },
     metadataSearch: {
@@ -254,13 +257,35 @@ function normalizeReaderSettings(settings: BaseUserSettings): BaseUserSettings {
   };
 }
 
-function migrateProfile(value: unknown): Record<string, unknown> {
+function migrateProfile(
+  value: unknown,
+  inherited?: Record<string, unknown>,
+): Record<string, unknown> {
   if (!isPlainObject(value)) return {};
   const { theme, ...profile } = value;
   if (typeof theme === 'string' && theme) {
     profile.themePreference = normalizeThemePreference(undefined, theme);
   } else if ('themePreference' in profile) {
     profile.themePreference = normalizeThemePreference(profile.themePreference);
+  }
+  for (const key of ['bookGrid', 'bookList']) {
+    const view = profile[key];
+    if (isPlainObject(view)) {
+      const { showTitle, showAuthors, showSeries, ...rest } = view;
+      const inheritedView = inherited?.[key];
+      profile[key] = {
+        ...rest,
+        fields: normalizeBookFields(
+          view.fields,
+          key === 'bookGrid'
+            ? { showTitle, showAuthors, showSeries }
+            : undefined,
+          isPlainObject(inheritedView)
+            ? normalizeBookFields(inheritedView.fields, inheritedView)
+            : undefined,
+        ),
+      };
+    }
   }
   return profile;
 }
@@ -273,7 +298,7 @@ function migrateIncoming(value: unknown): Partial<UserSettings> {
     if (isPlainObject(mobile.settings))
       mobile.settings = migrateProfile(mobile.settings);
     if (isPlainObject(mobile.overrides))
-      mobile.overrides = migrateProfile(mobile.overrides);
+      mobile.overrides = migrateProfile(mobile.overrides, profile);
     profile.mobile = mobile;
   }
   return profile as Partial<UserSettings>;

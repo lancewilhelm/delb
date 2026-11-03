@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import {
+  bookColumnStyle,
+  bookFieldDefinition,
+  type BookViewBook,
+} from '~/utils/bookFields';
+import { bookListOffsets, bookListWindow } from '~/utils/bookListLayout';
 /* eslint-disable vue/require-default-prop */
 defineOptions({ name: 'BooksInfiniteList' });
 
@@ -8,22 +14,7 @@ type FetchErrorLike = {
   message?: string;
 };
 
-type Book = {
-  id: string;
-  title: string;
-
-  authors?: { id: string; name: string }[];
-  authorNames?: string[];
-  author?: string;
-
-  publisher?: { id: string; name: string } | null;
-  series?: { id: string; name: string } | null;
-  seriesIndex?: number | null;
-
-  coverImagePath?: string | null;
-  createdAt: string | number | Date;
-  updatedAt?: string | number | Date;
-};
+type Book = BookViewBook;
 
 type BooksListResponse = {
   data?: {
@@ -146,11 +137,15 @@ const listRowGapPx = 0;
 const rowPaddingY = 6;
 const rowPaddingX = 10;
 const listColumnGapPx = 16;
-const columnMinWidths = {
-  title: 350,
-  authors: 250,
-  series: 150,
-};
+const visibleFields = computed(() =>
+  userSettingsStore.activeSettings.bookList.fields.filter(
+    (field) => field.visible,
+  ),
+);
+const measuredRowHeights = reactive(new Map<string, number>());
+function measureRow(id: string, height: number) {
+  measuredRowHeights.set(id, height);
+}
 
 const headerCoverHeightPx = computed(() =>
   Math.max(24, listRowHeightPx.value - rowPaddingY * 2),
@@ -168,25 +163,12 @@ const headerCoverStyle = computed<Record<string, string>>(() => ({
   width: `${headerCoverWidthPx.value}px`,
 }));
 
-const headerColumnStyles = computed(() => ({
-  title: {
-    flex: `2 1 ${columnMinWidths.title}px`,
-    minWidth: `${columnMinWidths.title}px`,
-  },
-  authors: {
-    flex: `1.5 1 ${columnMinWidths.authors}px`,
-    minWidth: `${columnMinWidths.authors}px`,
-  },
-  series: {
-    flex: `1 1 ${columnMinWidths.series}px`,
-    minWidth: `${columnMinWidths.series}px`,
-  },
-}));
-
 const listContentMinWidthPx = computed(() => {
-  const columnsTotal =
-    columnMinWidths.title + columnMinWidths.authors + columnMinWidths.series;
-  const gapTotal = listColumnGapPx * 3;
+  const columnsTotal = visibleFields.value.reduce(
+    (sum, field) => sum + bookFieldDefinition(field.id).width,
+    0,
+  );
+  const gapTotal = listColumnGapPx * visibleFields.value.length;
   return headerCoverWidthPx.value + columnsTotal + gapTotal + rowPaddingX * 2;
 });
 
@@ -202,6 +184,22 @@ const containerSize = ref({ width: 0, height: 0 });
 
 let resizeObserver: ResizeObserver | null = null;
 const layoutKey = ref<string | null>(null);
+
+const measurementGeneration = ref(0);
+watch(
+  () =>
+    JSON.stringify([
+      userSettingsStore.activeSettings.bookList.fields,
+      listRowHeightPx.value,
+      containerSize.value.width,
+      userSettingsStore.activeSettings.fontFamily,
+    ]),
+  () => {
+    measuredRowHeights.clear();
+    measurementGeneration.value += 1;
+  },
+  { flush: 'sync' },
+);
 
 function updateContainerSize() {
   const container = scrollContainerRef.value;
@@ -299,39 +297,21 @@ const limit = computed(() => {
   return clampInt(rows, { min: 1, max: 200, fallback: 48 });
 });
 
-const listMetrics = computed(() => {
-  const h = containerSize.value.height;
-  const row = listRowHeightPx.value;
-  const gap = listRowGapPx;
-  const rowHeight = row + gap;
-
-  const totalRows = books.value.length;
-  const totalHeight = totalRows > 0 ? totalRows * rowHeight - gap : 0;
-
-  const overscan = Math.max(0, props.bufferRows);
-  const viewportTop = scrollTop.value;
-  const viewportBottom = viewportTop + h;
-
-  const startRow = totalRows
-    ? Math.max(0, Math.floor(viewportTop / rowHeight) - overscan)
-    : 0;
-
-  const endRow = totalRows
-    ? Math.min(totalRows, Math.ceil(viewportBottom / rowHeight) + overscan)
-    : 0;
-
-  const startIndex = startRow;
-  const endIndex = Math.min(books.value.length, endRow);
-
-  return {
-    rowHeight,
-    totalRows,
-    totalHeight,
-    startIndex,
-    endIndex,
-    offsetY: startRow * rowHeight,
-  };
-});
+const rowOffsets = computed(() =>
+  bookListOffsets(
+    books.value.map((book) => book.id),
+    measuredRowHeights,
+    Math.max(listRowHeightPx.value + 1, visibleFields.value.length ? 85 : 0),
+  ),
+);
+const listMetrics = computed(() =>
+  bookListWindow(
+    rowOffsets.value,
+    scrollTop.value,
+    containerSize.value.height,
+    Math.max(0, props.bufferRows),
+  ),
+);
 
 const listSpacerStyle = computed<Record<string, string>>(() => ({
   position: 'relative',
@@ -393,6 +373,7 @@ function reset() {
   requestGeneration += 1;
   loading.value = false;
   books.value = [];
+  measuredRowHeights.clear();
   nextCursor.value = null;
   errorMessage.value = null;
   lastRangeAnchorId.value = null;
@@ -595,22 +576,12 @@ onBeforeUnmount(() => {
               :style="headerCoverStyle"
             />
             <div
+              v-for="field in visibleFields"
+              :key="field.id"
               class="text-xs uppercase tracking-wide opacity-70"
-              :style="headerColumnStyles.title"
+              :style="bookColumnStyle(field.id)"
             >
-              Title
-            </div>
-            <div
-              class="text-xs uppercase tracking-wide opacity-70"
-              :style="headerColumnStyles.authors"
-            >
-              Authors
-            </div>
-            <div
-              class="text-xs uppercase tracking-wide opacity-70"
-              :style="headerColumnStyles.series"
-            >
-              Series
+              {{ bookFieldDefinition(field.id).label }}
             </div>
           </div>
         </div>
@@ -619,14 +590,15 @@ onBeforeUnmount(() => {
           <div class="w-full" :style="listOffsetStyle">
             <BooksListRow
               v-for="b in visibleBooks"
-              :key="b.id"
+              :key="`${measurementGeneration}-${b.id}`"
               :book="b"
               :row-height-px="listRowHeightPx"
-              :column-min-widths="columnMinWidths"
+              :fields="userSettingsStore.activeSettings.bookList.fields"
               :layout-min-width="listContentMinWidthPx"
               :selectable="props.selectionEnabled && selectionStore.selectMode"
               :selected="selectionStore.isSelected(b.id)"
               @toggle-select="onBookToggleSelect"
+              @measure="measureRow"
             />
           </div>
         </div>

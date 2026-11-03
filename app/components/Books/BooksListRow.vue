@@ -1,28 +1,17 @@
 <script setup lang="ts">
 import { buildBookCoverUrl } from '~/utils/covers';
+import {
+  bookColumnStyle,
+  type BookFieldPreference,
+  type BookViewBook,
+} from '~/utils/bookFields';
 defineOptions({ name: 'BooksListRow' });
-
-type Book = {
-  id: string;
-  title: string;
-
-  authors?: { id: string; name: string }[];
-  authorNames?: string[];
-  author?: string;
-
-  publisher?: { id: string; name: string } | null;
-  series?: { id: string; name: string } | null;
-  seriesIndex?: number | null;
-
-  coverImagePath?: string | null;
-  updatedAt?: string | number | Date;
-};
 
 const props = withDefaults(
   defineProps<{
-    book: Book;
+    book: BookViewBook;
+    fields: BookFieldPreference[];
     rowHeightPx: number;
-    columnMinWidths?: { title: number; authors: number; series: number };
     layoutMinWidth?: number;
     selectable?: boolean;
     selected?: boolean;
@@ -30,13 +19,13 @@ const props = withDefaults(
   {
     selectable: false,
     selected: false,
-    columnMinWidths: () => ({ title: 0, authors: 0, series: 0 }),
     layoutMinWidth: 0,
   },
 );
 
 const emit = defineEmits<{
   (e: 'toggle-select', bookId: string, meta?: { shiftKey?: boolean }): void;
+  (e: 'measure', bookId: string, height: number): void;
 }>();
 
 const rowPaddingY = 6;
@@ -49,7 +38,8 @@ const safeRowHeightPx = computed(() => {
 });
 
 const rowStyle = computed<Record<string, string>>(() => ({
-  height: `${safeRowHeightPx.value}px`,
+  minHeight: `${safeRowHeightPx.value}px`,
+  minWidth: props.layoutMinWidth ? `${props.layoutMinWidth}px` : 'auto',
   padding: `${rowPaddingY}px ${rowPaddingX}px`,
 }));
 
@@ -66,56 +56,14 @@ const coverStyle = computed<Record<string, string>>(() => ({
   height: `${coverHeightPx.value}px`,
 }));
 
-const columnStyles = computed(() => {
-  const widths = props.columnMinWidths ?? { title: 0, authors: 0, series: 0 };
-  return {
-    title: {
-      flex: `2 1 ${widths.title}px`,
-      minWidth: `${widths.title}px`,
-    },
-    authors: {
-      flex: `1.5 1 ${widths.authors}px`,
-      minWidth: `${widths.authors}px`,
-    },
-    series: {
-      flex: `1 1 ${widths.series}px`,
-      minWidth: `${widths.series}px`,
-    },
-  };
+const rowRef = ref<HTMLElement | null>(null);
+useResizeObserver(rowRef, () => {
+  const height = rowRef.value?.getBoundingClientRect().height;
+  if (height) emit('measure', props.book.id, height);
 });
-
-const rowLayoutStyle = computed<Record<string, string>>(() => ({
-  minWidth: props.layoutMinWidth ? `${props.layoutMinWidth}px` : 'auto',
-}));
-
-const authorLabel = computed(() => {
-  const b = props.book;
-
-  if (Array.isArray(b.authors) && b.authors.length > 0) {
-    return b.authors
-      .map((a) => a.name)
-      .filter(Boolean)
-      .join(', ');
-  }
-
-  if (Array.isArray(b.authorNames) && b.authorNames.length > 0) {
-    return b.authorNames.filter(Boolean).join(', ');
-  }
-
-  return b.author ?? '';
-});
-
-const hasLinkedAuthors = computed(
-  () => Array.isArray(props.book.authors) && props.book.authors.length > 0,
+const visibleFields = computed(() =>
+  props.fields.filter((field) => field.visible),
 );
-
-const seriesLabel = computed(() => {
-  if (!props.book.series?.name) return '';
-  if (props.book.seriesIndex) {
-    return `${props.book.series.name} #${props.book.seriesIndex}`;
-  }
-  return props.book.series.name;
-});
 
 const coverCacheKey = computed(() => {
   const raw = props.book.updatedAt;
@@ -321,6 +269,7 @@ function onRowClick(e?: MouseEvent) {
 
 <template>
   <div
+    ref="rowRef"
     class="w-full border-b border-(--sub-color)/50 transition"
     :class="[
       props.selectable ? 'cursor-pointer hover:bg-(--sub-color)/10' : '',
@@ -328,7 +277,7 @@ function onRowClick(e?: MouseEvent) {
     ]"
     :style="rowStyle"
   >
-    <div class="flex items-center gap-4 w-full h-full min-w-0" :style="rowLayoutStyle">
+    <div class="flex items-center gap-4 w-full min-w-0">
       <div class="shrink-0 relative" :style="coverStyle">
         <BookCover
           :src="coverSrc"
@@ -352,58 +301,19 @@ function onRowClick(e?: MouseEvent) {
         </div>
       </div>
 
-      <div :style="columnStyles.title" class="min-w-0 flex items-center">
-        <HoverScrollText>
-          <span
-            class="text-sm sm:text-base hover:underline cursor-pointer"
-            @click.stop="onRowClick"
-          >
-            {{ props.book.title }}
-          </span>
-        </HoverScrollText>
-      </div>
-
-      <div :style="columnStyles.authors" class="min-w-0 flex items-center">
-        <HoverScrollText class="text-sm sm:text-base opacity-80">
-          <span v-if="props.selectable" @click.stop="onRowClick">
-            {{ authorLabel }}
-          </span>
-          <template v-else-if="hasLinkedAuthors">
-            <span v-for="(a, index) in props.book.authors" :key="a.id">
-              <span
-                class="cursor-pointer hover:underline"
-                @click.stop="navigateTo(`/authors/${a.id}`)"
-              >
-                {{ a.name }}
-              </span>
-              <span
-                v-if="
-                  props.book.authors && index < props.book.authors.length - 1
-                "
-                >,
-              </span>
-            </span>
-          </template>
-          <template v-else>
-            <span>{{ authorLabel }}</span>
-          </template>
-        </HoverScrollText>
-      </div>
-
-      <div :style="columnStyles.series" class="min-w-0 flex items-center">
-        <HoverScrollText class="text-sm sm:text-base opacity-70">
-          <span v-if="props.selectable" @click.stop="onRowClick">
-            {{ seriesLabel }}
-          </span>
-          <span
-            v-else-if="props.book.series"
-            class="cursor-pointer hover:underline"
-            @click.stop="navigateTo(`/series/${props.book.series.id}`)"
-          >
-            {{ seriesLabel }}
-          </span>
-          <span v-else>{{ seriesLabel }}</span>
-        </HoverScrollText>
+      <div
+        v-for="field in visibleFields"
+        :key="field.id"
+        :style="bookColumnStyle(field.id)"
+        class="min-w-0"
+      >
+        <BooksMetadataField
+          :book="book"
+          :field="field.id"
+          mode="list"
+          :selectable="selectable"
+          @open="onRowClick"
+        />
       </div>
     </div>
   </div>

@@ -1,3 +1,4 @@
+import { enrichBookViewPage } from '~~/server/utils/books/view-metadata';
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
@@ -518,7 +519,7 @@ export default defineEventHandler(async (event) => {
     return {
       success: true,
       data: {
-        books: page,
+        books: await enrichBookViewPage(cloudDb, page, userId),
         nextCursor,
       },
     };
