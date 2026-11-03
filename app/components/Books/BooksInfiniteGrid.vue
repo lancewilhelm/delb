@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { BookViewBook } from '~/utils/bookFields';
 /* eslint-disable vue/require-default-prop */
 defineOptions({ name: 'BooksInfiniteGrid' });
 
@@ -8,21 +9,7 @@ type FetchErrorLike = {
   message?: string;
 };
 
-type Book = {
-  id: string;
-  title: string;
-
-  authors?: { id: string; name: string }[];
-  authorNames?: string[];
-  author?: string;
-
-  publisher?: { id: string; name: string } | null;
-  series?: { id: string; name: string } | null;
-
-  coverImagePath?: string | null;
-  createdAt: string | number | Date;
-  updatedAt?: string | number | Date;
-};
+type Book = BookViewBook;
 
 type BooksListResponse = {
   data?: {
@@ -439,9 +426,7 @@ watch(
 
 watch(
   () => [
-    userSettingsStore.activeSettings.bookGrid?.showTitle,
-    userSettingsStore.activeSettings.bookGrid?.showAuthors,
-    userSettingsStore.activeSettings.bookGrid?.showSeries,
+    JSON.stringify(userSettingsStore.activeSettings.bookGrid.fields),
     userSettingsStore.activeSettings.bookGrid?.coverWidthPresetPx,
     userSettingsStore.activeSettings.bookGrid?.dynamicCoverSizing,
     userSettingsStore.activeSettings.bookGrid?.gap,
@@ -719,12 +704,18 @@ onBeforeUnmount(() => {
             :style="rowSizerStyle"
             aria-hidden="true"
           >
-            <BookThumbnail :book="rowSizerBook" :lock-aspect-ratio="true" />
+            <BookThumbnail
+              :book="rowSizerBook"
+              :fields="userSettingsStore.activeSettings.bookGrid.fields"
+              :measure-metadata="true"
+              :lock-aspect-ratio="true"
+            />
           </div>
           <div class="w-full" :style="[gridStyle, gridOffsetStyle]">
             <div v-for="b in visibleBooks" :key="b.id" :style="gridItemStyle">
               <BookThumbnail
                 :book="b"
+                :fields="userSettingsStore.activeSettings.bookGrid.fields"
                 :lock-aspect-ratio="true"
                 :selectable="
                   props.selectionEnabled && selectionStore.selectMode

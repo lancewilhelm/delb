@@ -56,5 +56,6 @@ function setMode(mode: 'grid' | 'list') {
       <Icon name="lucide:list" class="text-base" />
       <!-- <span class="hidden sm:inline">List</span> -->
     </button>
+    <BooksViewSettings :mode="effectiveMode" />
   </div>
 </template>

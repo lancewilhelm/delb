@@ -1,3 +1,8 @@
+import {
+  defaultBookFields,
+  normalizeBookFields,
+  type BookFieldPreference,
+} from '~/utils/bookFields';
 import { normalizeCustomTheme, type CustomTheme } from '~/utils/customTheme';
 import {
   defaultThemePreference,
@@ -58,15 +63,14 @@ export interface BaseUserSettings {
     dynamicCoverSizing: boolean;
     coverWidthPresetPx: number;
     gap: number;
-    showTitle: boolean;
-    showAuthors: boolean;
-    showSeries: boolean;
+    fields: BookFieldPreference[];
   };
 
   /**
    * List appearance options (book list view).
    */
   bookList: {
+    fields: BookFieldPreference[];
     rowHeightPx: number;
   };
 
@@ -135,11 +139,10 @@ function getBaseDefaults(): BaseUserSettings {
       dynamicCoverSizing: true,
       coverWidthPresetPx: 172,
       gap: 12,
-      showTitle: true,
-      showAuthors: true,
-      showSeries: true,
+      fields: defaultBookFields(),
     },
     bookList: {
+      fields: defaultBookFields(),
       rowHeightPx: 84,
     },
     metadataSearch: {
@@ -261,6 +264,21 @@ function migrateProfile(value: unknown): Record<string, unknown> {
     profile.themePreference = normalizeThemePreference(undefined, theme);
   } else if ('themePreference' in profile) {
     profile.themePreference = normalizeThemePreference(profile.themePreference);
+  }
+  for (const key of ['bookGrid', 'bookList']) {
+    const view = profile[key];
+    if (isPlainObject(view)) {
+      const { showTitle, showAuthors, showSeries, ...rest } = view;
+      profile[key] = {
+        ...rest,
+        fields: normalizeBookFields(
+          view.fields,
+          key === 'bookGrid'
+            ? { showTitle, showAuthors, showSeries }
+            : undefined,
+        ),
+      };
+    }
   }
   return profile;
 }

@@ -1,3 +1,4 @@
+import { enrichBookViewPage } from '~~/server/utils/books/view-metadata';
 import { visibleEntity } from '~~/server/utils/books/visibility';
 import { and, eq, inArray } from 'drizzle-orm';
 import {
@@ -255,7 +256,14 @@ export default defineEventHandler(async (event) => {
     const last = out[out.length - 1];
     const nextCursor = nextBookCursor(sort, hasMore, last);
 
-    return { success: true, data: { author, books: out, nextCursor } };
+    return {
+      success: true,
+      data: {
+        author,
+        books: await enrichBookViewPage(cloudDb, out, userId),
+        nextCursor,
+      },
+    };
   } catch (error: unknown) {
     // Preserve explicit HTTP errors (401/400/404) thrown above
     if (

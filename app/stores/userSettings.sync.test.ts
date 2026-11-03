@@ -1,3 +1,4 @@
+import { defaultBookFields, normalizeBookFields } from '../utils/bookFields';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -28,6 +29,7 @@ function createStore(
     new URL('./userSettings.ts', import.meta.url),
     'utf8',
   )
+    .replace(/import [\s\S]*?from '~\/utils\/bookFields';/, '')
     .replace(/import [\s\S]*?from '~\/utils\/customTheme';/, '')
     .replace(/import [\s\S]*?from '~\/utils\/themePreference';/, '');
   const code = transformSync(source, { loader: 'ts', format: 'cjs' }).code;
@@ -39,6 +41,8 @@ function createStore(
     defineStore,
     computed,
     ref,
+    defaultBookFields,
+    normalizeBookFields,
     normalizeCustomTheme,
     defaultThemePreference,
     normalizeThemePreference,

@@ -74,6 +74,23 @@ async function loadSource(relative) {
                   loader: 'ts',
                   resolveDir: root,
                 };
+              if (name.endsWith('/books/view-metadata'))
+                return {
+                  contents: (
+                    await readFile(
+                      path.join(
+                        sourceRoot,
+                        'server/utils/books/view-metadata.ts',
+                      ),
+                      'utf8',
+                    )
+                  ).replace(
+                    "'../../../app/utils/db/schema'",
+                    "'~/utils/db/schema'",
+                  ),
+                  loader: 'ts',
+                  resolveDir: root,
+                };
               if (name.endsWith('/auth'))
                 return {
                   contents:
@@ -90,7 +107,7 @@ async function loadSource(relative) {
                 };
               if (name.endsWith('/db/schema'))
                 return {
-                  contents: `export const USER_BOOK_STATUSES = ['reading']; export const ${['authors', 'bookAuthors', 'bookFiles', 'books', 'collectionBooks', 'collectionMembers', 'publishers', 'series', 'userBookStatus'].map((name) => `${name} = new Proxy({}, {get: (_, key) => String(key)})`).join(', ')};`,
+                  contents: `export const USER_BOOK_STATUSES = ['reading']; export const ${['authors', 'bookAuthors', 'bookFiles', 'books', 'bookTags', 'tags', 'bookIdentifiers', 'bookRatings', 'collectionBooks', 'collectionMembers', 'publishers', 'series', 'userBookStatus'].map((name) => `${name} = new Proxy({}, {get: (_, key) => String(key)})`).join(', ')};`,
                 };
               if (name.endsWith('/books/cover-url'))
                 return {

@@ -68,17 +68,6 @@ const gridCoverSizeValue = userSettingsStore.settingRef<number>(
 
 const gridCoverGapValue = userSettingsStore.settingRef<number>('bookGrid.gap');
 
-const gridCoverShowTitle =
-  userSettingsStore.settingRef<boolean>('bookGrid.showTitle');
-
-const gridCoverShowAuthors = userSettingsStore.settingRef<boolean>(
-  'bookGrid.showAuthors',
-);
-
-const gridCoverShowSeries = userSettingsStore.settingRef<boolean>(
-  'bookGrid.showSeries',
-);
-
 // ------------------------------
 // Book list appearance controls
 // ------------------------------
@@ -275,21 +264,7 @@ function handleSortChange(target: string) {
         :value-input="true"
         :suffix="'px'"
       />
-      <SettingsUIToggle
-        v-model="gridCoverShowTitle"
-        title="Show Book Title"
-        description="Show the book title under the cover"
-      />
-      <SettingsUIToggle
-        v-model="gridCoverShowAuthors"
-        title="Show Book Authors"
-        description="Show the book authors under the cover"
-      />
-      <SettingsUIToggle
-        v-model="gridCoverShowSeries"
-        title="Show Book Series"
-        description="Show the book series under the cover"
-      />
+      <BooksViewFieldsSettings mode="grid" />
     </SettingsUIGroup>
 
     <SettingsUIGroup
@@ -300,12 +275,13 @@ function handleSortChange(target: string) {
       <SettingsUISlider
         v-model="listRowHeightValue"
         title="Row height"
-        description="Sets the height for each row in list view (default: 84px)"
+        description="Sets the minimum height for each row in list view (default: 84px)"
         :min="56"
         :max="160"
         :value-input="true"
         :suffix="'px'"
       />
+      <BooksViewFieldsSettings mode="list" />
     </SettingsUIGroup>
 
     <SettingsUIGroup
