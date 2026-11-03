@@ -12,6 +12,7 @@ import {
 } from '~/utils/db/schema';
 import { logger } from '~/utils/logger';
 import { auth } from '~/utils/auth';
+import { bookDownloadDisposition } from '~~/server/utils/books/download-disposition';
 
 /**
  * GET /api/books/:id/download
@@ -175,17 +176,12 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Provide a friendly filename
-  const safe = (s: string) =>
-    s
-      .replace(/[\\/:*?"<>|]+/g, '_')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-  const filename = `${safe(book.title)}.${format}`;
-
   setHeader(event, 'Content-Type', contentTypeByFormat[format as never]);
-  setHeader(event, 'Content-Disposition', `attachment; filename="${filename}"`);
+  setHeader(
+    event,
+    'Content-Disposition',
+    bookDownloadDisposition(book.title, format),
+  );
   // For privacy, avoid caching by intermediaries.
   setHeader(event, 'Cache-Control', 'private, no-store');
 

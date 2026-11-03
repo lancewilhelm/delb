@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { readDownloadFilename } from '~/utils/downloadFilename';
 import { buildBookCoverUrl } from '~/utils/covers';
 import {
   bookColumnStyle,
@@ -160,13 +161,8 @@ async function downloadBookFile(file?: BookFile | null) {
   const blob = await res.blob();
 
   const contentDisposition = res.headers.get('content-disposition') || '';
-  const match =
-    /filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;]+)/i.exec(
-      contentDisposition,
-    );
-  const fromHeader = match?.[1] || match?.[2] || match?.[3];
   const filename =
-    (fromHeader ? decodeURIComponent(fromHeader.trim()) : null) ||
+    readDownloadFilename(contentDisposition) ||
     guessDownloadFilename(props.book.title, file ?? null);
 
   const blobUrl = URL.createObjectURL(blob);
