@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { readDownloadFilename } from '~/utils/downloadFilename';
 import { sanitizeDescriptionHtml } from '~/utils/descriptionHtml';
 definePageMeta({
   auth: {
@@ -1024,13 +1025,8 @@ async function downloadBookFile(file?: BookFile | null) {
 
     // Try to honor server-provided filename when available
     const contentDisposition = res.headers.get('content-disposition') || '';
-    const match =
-      /filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;]+)/i.exec(
-        contentDisposition,
-      );
-    const fromHeader = match?.[1] || match?.[2] || match?.[3];
     const filename =
-      (fromHeader ? decodeURIComponent(fromHeader.trim()) : null) ||
+      readDownloadFilename(contentDisposition) ||
       guessDownloadFilename(book.value, file ?? null);
 
     const blobUrl = URL.createObjectURL(blob);
