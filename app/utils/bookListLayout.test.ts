@@ -26,6 +26,6 @@ test('wrapped rows keep distinct offsets and remain reachable at the bottom', ()
     offsetY: 141,
     totalHeight: 290,
   });
-  assert.equal(bookListOffsets(['unmeasured'], new Map(), 56)[1], 85);
-  assert.equal(bookListOffsets(['cover'], new Map(), 160)[1], 160);
+  assert.equal(bookListOffsets(['unmeasured'], new Map(), 85)[1], 85);
+  assert.equal(bookListOffsets(['cover'], new Map(), 57)[1], 57);
 });

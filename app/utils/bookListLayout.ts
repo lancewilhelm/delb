@@ -2,12 +2,12 @@
 export function bookListOffsets(
   ids: string[],
   measured: ReadonlyMap<string, number>,
-  minimum: number,
+  estimatedHeight: number,
 ): number[] {
   const offsets = [0];
   let total = 0;
   for (const id of ids) {
-    total += measured.get(id) ?? Math.max(minimum, 85);
+    total += measured.get(id) ?? estimatedHeight;
     offsets.push(total);
   }
   return offsets;

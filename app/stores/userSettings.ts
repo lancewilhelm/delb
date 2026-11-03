@@ -257,7 +257,10 @@ function normalizeReaderSettings(settings: BaseUserSettings): BaseUserSettings {
   };
 }
 
-function migrateProfile(value: unknown): Record<string, unknown> {
+function migrateProfile(
+  value: unknown,
+  inherited?: Record<string, unknown>,
+): Record<string, unknown> {
   if (!isPlainObject(value)) return {};
   const { theme, ...profile } = value;
   if (typeof theme === 'string' && theme) {
@@ -269,12 +272,16 @@ function migrateProfile(value: unknown): Record<string, unknown> {
     const view = profile[key];
     if (isPlainObject(view)) {
       const { showTitle, showAuthors, showSeries, ...rest } = view;
+      const inheritedView = inherited?.[key];
       profile[key] = {
         ...rest,
         fields: normalizeBookFields(
           view.fields,
           key === 'bookGrid'
             ? { showTitle, showAuthors, showSeries }
+            : undefined,
+          isPlainObject(inheritedView)
+            ? normalizeBookFields(inheritedView.fields, inheritedView)
             : undefined,
         ),
       };
@@ -291,7 +298,7 @@ function migrateIncoming(value: unknown): Partial<UserSettings> {
     if (isPlainObject(mobile.settings))
       mobile.settings = migrateProfile(mobile.settings);
     if (isPlainObject(mobile.overrides))
-      mobile.overrides = migrateProfile(mobile.overrides);
+      mobile.overrides = migrateProfile(mobile.overrides, profile);
     profile.mobile = mobile;
   }
   return profile as Partial<UserSettings>;

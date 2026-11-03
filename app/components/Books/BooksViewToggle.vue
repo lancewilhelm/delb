@@ -27,6 +27,7 @@ function setMode(mode: 'grid' | 'list') {
   >
     <button
       v-tooltip="'Grid View'"
+      aria-label="Grid View"
       type="button"
       class="flex items-center gap-1 px-2 py-1 rounded text-sm transition text-(--main-color)"
       :class="
@@ -43,6 +44,7 @@ function setMode(mode: 'grid' | 'list') {
 
     <button
       v-tooltip="'List View'"
+      aria-label="List View"
       type="button"
       class="flex items-center gap-1 px-2 py-1 rounded text-sm transition text-(--main-color)"
       :class="

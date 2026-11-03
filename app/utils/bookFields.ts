@@ -58,8 +58,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function normalizeBookFields(
   value: unknown,
   legacy?: unknown,
+  inherited?: BookFieldPreference[],
 ): BookFieldPreference[] {
-  const defaults = defaultBookFields();
+  const defaults = inherited
+    ? inherited.map((field) => ({ ...field }))
+    : defaultBookFields();
   if (!Array.isArray(value)) {
     if (isRecord(legacy)) {
       for (const field of defaults) {

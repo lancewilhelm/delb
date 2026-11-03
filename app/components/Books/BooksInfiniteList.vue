@@ -185,6 +185,22 @@ const containerSize = ref({ width: 0, height: 0 });
 let resizeObserver: ResizeObserver | null = null;
 const layoutKey = ref<string | null>(null);
 
+const measurementGeneration = ref(0);
+watch(
+  () =>
+    JSON.stringify([
+      userSettingsStore.activeSettings.bookList.fields,
+      listRowHeightPx.value,
+      containerSize.value.width,
+      userSettingsStore.activeSettings.fontFamily,
+    ]),
+  () => {
+    measuredRowHeights.clear();
+    measurementGeneration.value += 1;
+  },
+  { flush: 'sync' },
+);
+
 function updateContainerSize() {
   const container = scrollContainerRef.value;
   if (!container) return;
@@ -285,7 +301,7 @@ const rowOffsets = computed(() =>
   bookListOffsets(
     books.value.map((book) => book.id),
     measuredRowHeights,
-    listRowHeightPx.value,
+    Math.max(listRowHeightPx.value + 1, visibleFields.value.length ? 85 : 0),
   ),
 );
 const listMetrics = computed(() =>
@@ -574,7 +590,7 @@ onBeforeUnmount(() => {
           <div class="w-full" :style="listOffsetStyle">
             <BooksListRow
               v-for="b in visibleBooks"
-              :key="b.id"
+              :key="`${measurementGeneration}-${b.id}`"
               :book="b"
               :row-height-px="listRowHeightPx"
               :fields="userSettingsStore.activeSettings.bookList.fields"

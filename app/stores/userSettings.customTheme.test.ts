@@ -178,3 +178,55 @@ test('book views retain independent selection, order, mobile settings and saved 
     false,
   );
 });
+
+test('legacy mobile layout overrides inherit field choices except explicit visibility overrides', () => {
+  const { store, mobile } = createStore();
+  store.applyRemoteSettings({
+    bookGrid: { showTitle: false, showAuthors: true, showSeries: false },
+    mobile: {
+      enabled: true,
+      searchButton: true,
+      overrides: { bookGrid: { gap: 18, showSeries: true } },
+    },
+  } as unknown as Partial<UserSettings>);
+  mobile.value = true;
+  assert.deepEqual(
+    Array.from(
+      store.activeSettings.bookGrid.fields.filter((f) => f.visible),
+      (f) => f.id,
+    ),
+    ['authors', 'series'],
+  );
+  assert.equal(store.activeSettings.bookGrid.gap, 18);
+});
+
+test('legacy mobile layout-only overrides retain the desktop field order and cover-only list', () => {
+  const { store, mobile } = createStore();
+  store.applyRemoteSettings({
+    bookGrid: {
+      fields: [
+        { id: 'tags', visible: true },
+        { id: 'title', visible: false },
+      ],
+    },
+    bookList: { fields: [] },
+    mobile: {
+      enabled: true,
+      searchButton: true,
+      overrides: { bookGrid: { gap: 18 }, bookList: { rowHeightPx: 100 } },
+    },
+  } as unknown as Partial<UserSettings>);
+  mobile.value = true;
+  assert.deepEqual(
+    Array.from(
+      store.activeSettings.bookGrid.fields.filter((f) => f.visible),
+      (f) => f.id,
+    ),
+    ['tags'],
+  );
+  assert.equal(store.activeSettings.bookGrid.fields[0]?.id, 'tags');
+  assert.equal(
+    store.activeSettings.bookList.fields.some((f) => f.visible),
+    false,
+  );
+});
