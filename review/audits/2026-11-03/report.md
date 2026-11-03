@@ -90,5 +90,18 @@ advisory scan, external identity-provider check, real hardware/storage-failure
 test, or production load benchmark was performed. Existing deployment headers
 and reverse-proxy policy were not changed or assessed live.
 
-Independent diff review and exact remote commit/CI results are recorded in the
-draft PR and task outcome. The draft remains subject to user review.
+## Independent review and publishing
+
+Two independent code-review seats reviewed `1895d22...295ab81`. Standards review
+reported zero findings. Spec/behavior review reported zero implementation
+findings, independently reran all 23 focused tests successfully, and confirmed
+the disclosed browser-validation gap. `git diff --check` passed.
+
+Publishing is blocked. Automatic approval review rejected
+`git push --set-upstream origin review/reliability-2026-11-03` targeting
+`git@github.com:lancewilhelm/delb.git`, stating that no trusted user message
+authorized publishing repository changes to that external destination. The
+containing command was rejected before execution; it was not retried or
+substituted through a connector. No remote branch, draft PR or new CI revision
+was created, so exact remote commit/CI verification is unrun. The completed
+local commits and patch remain available pending explicit publishing approval.
