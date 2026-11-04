@@ -1,6 +1,6 @@
 # EPUB reader reference
 
-The [reader page](../app/pages/books/[id]/read.vue) is a full-screen EPUB.js interface. The [user guide](using/reading.md) covers navigation and progress tasks.
+The [reader page](../../../app/pages/books/[id]/read.vue) is a full-screen EPUB.js interface. The [user guide](../../using/reading.md) covers navigation and progress tasks.
 
 ## File access and controls
 
@@ -38,7 +38,7 @@ On open, the reader restores the saved CFI. With progress sync enabled, it also 
 
 ## Sources and evidence
 
-- [Position handler](../server/api/books/[id]/reading-position.put.ts) and [persistence helper](../server/utils/books/save-position.ts).
-- [Progress-sync handler](../server/api/books/[id]/progress-sync.put.ts) and [status transitions](../server/utils/books/status-transition.ts).
-- [Fullscreen listener lifecycle](reader-fullscreen-fix.md).
-- [Documentation verification](developing/documentation-status.md) for exercised controls and evidence limits.
+- [Position handler](../../../server/api/books/[id]/reading-position.put.ts) and [persistence helper](../../../server/utils/books/save-position.ts).
+- [Progress-sync handler](../../../server/api/books/[id]/progress-sync.put.ts) and [status transitions](../../../server/utils/books/status-transition.ts).
+- [Historical fullscreen investigation](../../archive/reader-fullscreen-fix.md).
+- [Documentation verification](../documentation-status.md) for exercised controls and evidence limits.

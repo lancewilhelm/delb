@@ -2,6 +2,8 @@
 
 Read the [architecture](architecture.md), [data model](data-model.md), and [core request flows](core-workflows.md) before changing a workflow. Use the [glossary](../../GLOSSARY.md) for product terminology.
 
+Use the [feature reference](reference/README.md) for contracts and the [UI component reference](ui/README.md) for presentation details. Past design discussions and investigations live in the [archive](../archive/README.md).
+
 ## Set up a local checkout
 
 Use a Node version allowed by [`package.json`](../../package.json), such as Node 22.22.3, and the pinned pnpm version, currently 12.10.1.

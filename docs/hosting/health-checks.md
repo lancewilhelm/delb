@@ -1,6 +1,6 @@
 # Library health checks
 
-Delb implements on-demand administrative checks at `POST /api/settings/admin/health`. The [admin library UI](../app/components/Settings/SettingsAdminLibrary.vue) exposes them in Settings. System admin/owner authorization is required.
+Delb implements on-demand administrative checks at `POST /api/settings/admin/health`. The [admin library UI](../../app/components/Settings/SettingsAdminLibrary.vue) exposes them in Settings. System admin/owner authorization is required.
 
 The checks report findings. They do not automatically repair or delete the affected records/files.
 
@@ -36,4 +36,4 @@ Preserve a matching database/library backup before manual repair. Follow [storag
 
 Ingestion handlers perform their own input and duplicate checks. This reference does not claim that every import automatically runs the complete admin health suite. Automatic repair, duplicate merging, and deployment-specific restore drills require separate work and verification.
 
-The [health handler](../server/api/settings/admin/health.post.ts) is the source for current limits, result IDs, and response fields. The [documentation record](developing/documentation-status.md) distinguishes source inspection from demo execution.
+The [health handler](../../server/api/settings/admin/health.post.ts) is the source for current limits, result IDs, and response fields. The [documentation record](../developing/documentation-status.md) distinguishes source inspection from demo execution.

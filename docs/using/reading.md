@@ -24,7 +24,7 @@ The in-app reader requires an EPUB. For PDF, MOBI, or AZW3, use **Download book*
 
 Setting Reading fills a missing start date. Finished fills a finish date and creates a 100% progress entry. DNF records a stop date without creating a progress entry. Returning to To be read clears the reading dates. Clearing status removes the status record.
 
-Changes affect your account's status, not the status of other collection members. See [status and date rules](../reading-status-progress.md) for the complete transitions.
+Changes affect your account's status, not the status of other collection members. See [status and date rules](../developing/reference/reading-status-progress.md) for the complete transitions.
 
 ## Log progress
 
@@ -38,4 +38,4 @@ To connect reader activity with the history, enable **Progress sync** for this b
 
 If another reader opens the shared book, their saved position and history are independent of yours. If saving fails, keep the page open long enough to inspect the error before assuming another device has the new position.
 
-See [reader request flows](../developing/core-workflows.md#reading-and-personal-data) and the [EPUB reference](../epub-reader.md) for persistence and request ordering.
+See [reader request flows](../developing/core-workflows.md#reading-and-personal-data) and the [EPUB reference](../developing/reference/epub-reader.md) for persistence and request ordering.

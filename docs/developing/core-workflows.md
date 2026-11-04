@@ -65,7 +65,7 @@ The [single-book collection handler](../../server/api/books/[id]/collections/ind
 
 Ownership transfer establishes one owner and demotes the old owner to editor. Leave removes a non-owner membership. Collection deletion removes collection links, not book records. Book deletion is separate and invokes [book deletion](../../server/utils/books/delete-book.ts), including creator/admin authorization and storage coordination.
 
-The [collection settings dialog](../../app/components/Collections/EditCollectionModal.vue) handles member loading, immediate access saves, errors, focus, and separate confirmation states for consequential actions. Read the [permissions reference](../collections-sharing-rbac.md) for the role matrix.
+The [collection settings dialog](../../app/components/Collections/EditCollectionModal.vue) handles member loading, immediate access saves, errors, focus, and separate confirmation states for consequential actions. Read the [permissions reference](reference/collections.md) for the role matrix.
 
 ## Reading and personal data
 
@@ -79,8 +79,8 @@ Progress-history sync is opt-in per user/book. Position updates can append reade
 
 ## Settings and background work
 
-[Settings persistence](../settings.md) explains acknowledgement revisions, stale responses, retries, and server-rendered theme selection. UI persistence does not grant access to global settings.
+[Settings persistence](reference/settings.md) explains acknowledgement revisions, stale responses, retries, and server-rendered theme selection. UI persistence does not grant access to global settings.
 
-The Dropbox watcher waits for [storage recovery](../storage-recovery.md), polls local input, claims supported files, and ingests them into configured targets. Failed files and error sidecars remain available for investigation. [Calibre import](../calibre-import.md) is an administrator-triggered request flow rather than the Dropbox watcher.
+The Dropbox watcher waits for [storage recovery](../hosting/storage-recovery.md), polls local input, claims supported files, and ingests them into configured targets. Failed files and error sidecars remain available for investigation. [Calibre import](../hosting/calibre-import.md) is an administrator-triggered request flow rather than the Dropbox watcher.
 
-External metadata and image requests stay in server handlers. The [metadata reference](../metadata-fetcher.md) describes token availability, result mapping, and cover normalization. The [hosting guide](../hosting/README.md) connects the operational configuration.
+External metadata and image requests stay in server handlers. The [metadata reference](reference/metadata.md) describes token availability, result mapping, and cover normalization. The [hosting guide](../hosting/README.md) connects the operational configuration.

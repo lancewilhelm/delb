@@ -61,6 +61,6 @@ Single-book mutation takes `addCollectionIds` and `removeCollectionIds`. Bulk mu
 
 ## Sources and related guides
 
-The [collection APIs](../server/api/collections), [book collection handler](../server/api/books/[id]/collections/index.put.ts), [collection store](../app/stores/collections.ts), and [settings dialog](../app/components/Collections/EditCollectionModal.vue) define the current contract.
+The [collection APIs](../../../server/api/collections), [book collection handler](../../../server/api/books/[id]/collections/index.put.ts), [collection store](../../../app/stores/collections.ts), and [settings dialog](../../../app/components/Collections/EditCollectionModal.vue) define the current contract.
 
-For procedures, use [Organize and share collections](using/collections.md). For implementation context, read [core request flows](developing/core-workflows.md#collections-and-sharing).
+For procedures, use [Organize and share collections](../../using/collections.md). For implementation context, read [core request flows](../core-workflows.md#collections-and-sharing).

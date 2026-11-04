@@ -1,6 +1,6 @@
 # Delb's data model
 
-The [Drizzle schema](../../app/utils/db/schema.ts) describes Delb's own database. [SQL migrations](../../.drizzle/migrations) define upgrades. The separate [Calibre schema reference](../calibre-database-schema.md) describes an import source, not Delb's tables.
+The [Drizzle schema](../../app/utils/db/schema.ts) describes Delb's own database. [SQL migrations](../../.drizzle/migrations) define upgrades. The separate [Calibre schema reference](reference/calibre-schema.md) describes an import source, not Delb's tables.
 
 ## Shared catalog and collection access
 
@@ -58,7 +58,7 @@ Better Auth uses `users`, `sessions`, `accounts`, and `verifications`. System ro
 
 `storage_operations` stores durable operation decisions alongside the database mutation. Filesystem journals preserve the associated staged/original paths. Operation IDs connect the database decision to recovery work. These records and `.delb-*` directories are part of consistency handling, not disposable caches.
 
-Read [storage recovery](../storage-recovery.md) before changing file deletion or cleanup. Back up the database and library together.
+Read [storage recovery](../hosting/storage-recovery.md) before changing file deletion or cleanup. Back up the database and library together.
 
 ## Useful constraints
 

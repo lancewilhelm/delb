@@ -46,7 +46,7 @@ The [route middleware](../../app/middleware/auth.global.ts) sends a fresh instal
 
 A collection membership makes books visible. A collection owner or editor can manage membership in that collection. A book's creator or a system administrator controls privileged metadata/file mutations. Personal status, ratings, position, and progress belong to the current reader.
 
-These checks are related but distinct. Sharing a collection does not create a private copy of a book, grant every metadata edit, or share the owner's reading history. Read the [data model](data-model.md) and [access reference](../collections-sharing-rbac.md) before changing those rules.
+These checks are related but distinct. Sharing a collection does not create a private copy of a book, grant every metadata edit, or share the owner's reading history. Read the [data model](data-model.md) and [access reference](reference/collections.md) before changing those rules.
 
 ## Startup and storage consistency
 
@@ -54,7 +54,7 @@ The [recovery promise](../../server/utils/books/storage/recovery-ready.ts) recon
 
 File-backed mutations use operation journals and database commit decisions. Per-book SQLite locks coordinate writers. Database transactions decide whether staged changes committed; filesystem recovery finishes or restores the corresponding bytes. This coordinates two persistence systems without claiming one atomic transaction covers both.
 
-A busy storage lock can delay recovery and retry. An unrecoverable error prevents the recovery promise from resolving successfully. See [storage recovery](../storage-recovery.md) for retained evidence, operator actions, and filesystem limits.
+A busy storage lock can delay recovery and retry. An unrecoverable error prevents the recovery promise from resolving successfully. See [storage recovery](../hosting/storage-recovery.md) for retained evidence, operator actions, and filesystem limits.
 
 ## Feature map
 
@@ -63,14 +63,14 @@ A busy storage lock can delay recovery and retry. An unrecoverable error prevent
 | Accounts and dashboard         | Registration, login, totals, continue reading                   | [Auth](../../app/utils/auth.ts), [dashboard API](../../server/api/dashboard/index.get.ts), [account guide](../using/get-started.md)                                |
 | Add and edit books             | Upload, manual entry, metadata imports, duplicates, replacement | [Add modal](../../app/components/Books/BookAddModal.vue), [editor](../../app/components/Books/BookEditor.vue), [request flows](core-workflows.md#add-a-book)       |
 | Browse and search              | Collection scope, entities, filters, sorting, grid/list fields  | [Books page](../../app/pages/books/index.vue), [entity queries](../../server/utils/books/entity-list-query.ts), [search API](../../server/api/search/index.get.ts) |
-| Collections and sharing        | Membership, roles, transfer, leave, deletion                    | [Collection store](../../app/stores/collections.ts), [collection APIs](../../server/api/collections), [access reference](../collections-sharing-rbac.md)           |
+| Collections and sharing        | Membership, roles, transfer, leave, deletion                    | [Collection store](../../app/stores/collections.ts), [collection APIs](../../server/api/collections), [access reference](reference/collections.md)                 |
 | Reading data                   | EPUB location, progress history, status, dates, ratings         | [Reader](../../app/pages/books/[id]/read.vue), [book APIs](../../server/api/books), [reading guide](../using/reading.md)                                           |
-| Settings and appearance        | Desktop/mobile profiles, fixed/system themes, custom colors     | [User settings](../../app/stores/userSettings.ts), [settings explanation](../settings.md)                                                                          |
-| Metadata providers             | Google Books, Hardcover, server-side cover fetch                | [Metadata APIs](../../server/api/books/metadata), [metadata reference](../metadata-fetcher.md)                                                                     |
+| Settings and appearance        | Desktop/mobile profiles, fixed/system themes, custom colors     | [User settings](../../app/stores/userSettings.ts), [settings explanation](reference/settings.md)                                                                   |
+| Metadata providers             | Google Books, Hardcover, server-side cover fetch                | [Metadata APIs](../../server/api/books/metadata), [metadata reference](reference/metadata.md)                                                                      |
 | Dropbox ingestion              | Poll local input, claim files, ingest, retain failures          | [Dropbox utilities](../../server/utils/books/dropbox), [hosting guide](../hosting/README.md#ingestion-and-administration)                                          |
-| Calibre import                 | Read metadata DB and copy supported formats into Delb           | [Import handler](../../server/api/settings/admin/calibre.post.ts), [import guide](../calibre-import.md)                                                            |
-| Administration and maintenance | Accounts, registration, tokens, quick/deep health checks        | [Settings components](../../app/components/Settings), [settings APIs](../../server/api/settings), [health reference](../health-checks.md)                          |
-| Storage and packaging          | Covers, archives, migrations, recovery, container startup       | [Storage recovery](../storage-recovery.md), [Docker](../docker.md), [EPUB package](../../packages/epub/README.md)                                                  |
+| Calibre import                 | Read metadata DB and copy supported formats into Delb           | [Import handler](../../server/api/settings/admin/calibre.post.ts), [import guide](../hosting/calibre-import.md)                                                    |
+| Administration and maintenance | Accounts, registration, tokens, quick/deep health checks        | [Settings components](../../app/components/Settings), [settings APIs](../../server/api/settings), [health reference](../hosting/health-checks.md)                  |
+| Storage and packaging          | Covers, archives, migrations, recovery, container startup       | [Storage recovery](../hosting/storage-recovery.md), [Docker](../hosting/docker.md), [EPUB package](../../packages/epub/README.md)                                  |
 
 Tag management is a global catalog operation. System admins and owners can delete or merge tags through the [tag APIs](../../server/api/tags) and [transactional mutation utility](../../server/utils/tags/mutate.ts). The change affects linked books across collections and preserves the books themselves. Bulk personal-status changes use the [bulk status endpoint](../../server/api/books/bulk/status.post.ts) with explicit visible book IDs.
 

@@ -6,6 +6,12 @@ The first documentation release describes application revision `58198ba` on `mai
 
 The docs provide separate user, operator, and contributor paths. The complete system map is in [architecture](architecture.md#feature-map). Detailed first-release guides cover account creation, adding books, browsing, collections/sharing, and reading/progress. Other feature guides remain linked for later expansion.
 
+## Document organization
+
+The documentation root contains the home page. User procedures live in `using/`; operator guides live in `hosting/`; architecture and contributor setup live in `developing/`. Current feature contracts and UI notes have separate `developing/reference/` and `developing/ui/` indexes.
+
+The [archive](../archive/README.md) preserves prior design, repair, issue, and icon-generation notes. The duplicate series-cover note is consolidated into [browse cards](ui/browse-cards.md#series-list-cards-covers). Archiving preserves the historical claims rather than declaring every reported defect resolved.
+
 ## Evidence levels
 
 - **Source inspected** means the implementation path was read. It is not a claim that the feature passed in a running app.
@@ -36,13 +42,13 @@ The offline demo reported unavailable external font providers and fallback icon 
 
 ## Reconciled documentation drift
 
-| Earlier description                                            | Current source evidence                                                                                                                                           | Documentation treatment                                                                             |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Appearance uses `activeSettings.theme` and a single theme name | [Theme preference](../../app/utils/themePreference.ts) has fixed/system modes and light/dark slots                                                                | Updated [settings explanation](../settings.md)                                                      |
-| Metadata backend mapping is marked pending                     | [Create handler](../../server/api/books/metadata-import/create.post.ts) resolves authors, tags, publisher/series, and covers                                      | Updated [metadata reference](../metadata-fetcher.md); live provider claims remain separate          |
-| Collection editor book membership is described as future work  | [Single-book](../../server/api/books/[id]/collections/index.put.ts) and [bulk](../../server/api/collections/[id]/books/bulk.post.ts) handlers enforce edit rights | Updated [layout](../ui-layout-philosophy.md) and [access reference](../collections-sharing-rbac.md) |
-| Health checks are described as planned                         | [Admin handler](../../server/api/settings/admin/health.post.ts) implements quick/deep checks                                                                      | Updated [health reference](../health-checks.md) and README navigation                               |
-| Reader font/theme controls are listed as future work           | [Reader page](../../app/pages/books/[id]/read.vue) contains current controls                                                                                      | Updated [reader reference](../epub-reader.md)                                                       |
+| Earlier description                                            | Current source evidence                                                                                                                                           | Documentation treatment                                                                        |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Appearance uses `activeSettings.theme` and a single theme name | [Theme preference](../../app/utils/themePreference.ts) has fixed/system modes and light/dark slots                                                                | Updated [settings explanation](reference/settings.md)                                          |
+| Metadata backend mapping is marked pending                     | [Create handler](../../server/api/books/metadata-import/create.post.ts) resolves authors, tags, publisher/series, and covers                                      | Updated [metadata reference](reference/metadata.md); live provider claims remain separate      |
+| Collection editor book membership is described as future work  | [Single-book](../../server/api/books/[id]/collections/index.put.ts) and [bulk](../../server/api/collections/[id]/books/bulk.post.ts) handlers enforce edit rights | Updated [layout](reference/library-layout.md) and [access reference](reference/collections.md) |
+| Health checks are described as planned                         | [Admin handler](../../server/api/settings/admin/health.post.ts) implements quick/deep checks                                                                      | Updated [health reference](../hosting/health-checks.md) and README navigation                  |
+| Reader font/theme controls are listed as future work           | [Reader page](../../app/pages/books/[id]/read.vue) contains current controls                                                                                      | Updated [reader reference](reference/epub-reader.md)                                           |
 
 ## Product questions and evidence limits
 

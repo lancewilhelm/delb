@@ -38,4 +38,4 @@ Changes apply immediately and save through your account settings. Grid and list 
 
 Open book details to read a full description or other truncated values. If a separate mobile profile is enabled, mobile field choices can differ from desktop choices.
 
-Continue with [collections](collections.md). See [browse and search request flows](../developing/core-workflows.md#browse-and-search), [view preferences](../book-view-settings.md), and [settings synchronization](../settings.md).
+Continue with [collections](collections.md). See [browse and search request flows](../developing/core-workflows.md#browse-and-search), [view preferences](../developing/reference/library-layout.md#navigation-and-book-views), and [settings synchronization](../developing/reference/settings.md).

@@ -22,3 +22,10 @@ Interaction details:
   - `View` → `/books/:id`
   - `Download` (only shown when the book has files; multiple files show per-format choices)
 - The context menu lazily queries `GET /api/books/:id/files` (`server/api/books/[id]/files.get.ts`).
+
+## Series list cards (covers)
+
+Series rows order covers by series index. The API returns book records with nullable cover thumbnail URLs, and the page chooses how many covers to display.
+
+- API: `server/api/series/index.get.ts`.
+- UI: `app/pages/series/index.vue`.

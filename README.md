@@ -28,7 +28,7 @@ Non-Personal collections can be shared with roles:
 
 Only one `owner` is allowed per collection. Non-owners may leave a shared collection.
 
-See `docs/ui-layout-philosophy.md` for the complete philosophy and UI implications.
+See `docs/developing/reference/library-layout.md` for the complete philosophy and UI implications.
 
 ## Calibre import (migration)
 
@@ -47,8 +47,8 @@ Delb can **migrate** an existing Calibre library into its own managed `library/`
 
 See:
 
-- `docs/calibre-import.md` for the import process + caveats
-- `docs/calibre-database-schema.md` for Calibre schema reference
+- `docs/hosting/calibre-import.md` for the import process + caveats
+- `docs/developing/reference/calibre-schema.md` for Calibre schema reference
 
 ## Features
 
@@ -139,12 +139,11 @@ delb/
 
 ## Documentation
 
-- [Documentation home](docs/README.md) - User guides, hosting, architecture, data model, and core request flows
-- [Known Issues](docs/known-issues.md) - Known bugs and workarounds
-- [Tooltip Guide](docs/tooltip.md) - Component documentation
-- [Calibre Import](docs/calibre-import.md) - Migration process + caveats
-- [Calibre Database Schema](docs/calibre-database-schema.md) - Reference schema
-- [Health Checks](docs/health-checks.md) - Implemented quick/deep library and database checks
+Start at the [documentation home](docs/README.md), then follow the path for your task:
+
+- [Use Delb](docs/README.md#use-delb) for the core library guides.
+- [Host Delb](docs/hosting/README.md) for deployment and operations.
+- [Develop Delb](docs/developing/README.md) for architecture, contracts, and local setup.
 
 ## Development
 
@@ -185,7 +184,7 @@ The database stores relative paths and metadata for each book. Delb manages the
 on-disk library layout and will move/rename folders when author/title metadata
 changes so the filesystem stays human-readable.
 
-See [storage recovery](docs/storage-recovery.md) for interrupted operations, filesystem requirements, upload limits and upgrade backups.
+See [storage recovery](docs/hosting/storage-recovery.md) for interrupted operations, filesystem requirements, upload limits and upgrade backups.
 
 Delb also supports **reference-only books** (no associated file in `library/`). This allows using Delb as a “physical library” catalog in addition to a file-backed ebook library.
 

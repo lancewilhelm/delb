@@ -1,6 +1,6 @@
 # Host Delb
 
-Delb needs a persistent database and a writable managed library. A container restart must preserve both. Start with [Docker deployment](../docker.md) for the image build, runtime mounts, permissions, and startup migrations.
+Delb needs a persistent database and a writable managed library. A container restart must preserve both. Start with [Docker deployment](docker.md) for the image build, runtime mounts, permissions, and startup migrations.
 
 ## Deployment configuration
 
@@ -17,7 +17,7 @@ Delb needs a persistent database and a writable managed library. A container res
 
 Store the authentication secret through your deployment's secret configuration. Keep it stable across restarts. Configure the public origin to match the address used in the browser.
 
-The image runs as UID/GID 1001 by default. Ensure the mounted writable directories permit that user to write, or choose a matching runtime user. Library storage also needs working SQLite locking semantics. See [filesystem requirements](../storage-recovery.md#ownership-and-filesystem-requirements).
+The image runs as UID/GID 1001 by default. Ensure the mounted writable directories permit that user to write, or choose a matching runtime user. Library storage also needs working SQLite locking semantics. See [filesystem requirements](storage-recovery.md#ownership-and-filesystem-requirements).
 
 ## Initialize an installation
 
@@ -41,16 +41,16 @@ For development or a disposable local demonstration, use the [contributor guide]
 
 To restore, stop all writers and restore the matching database and library backup with the matching application version and configuration. Do not combine an older database with newer library contents or assume an older binary understands newer migrations.
 
-See [storage recovery](../storage-recovery.md) for interrupted operations and timestamp migration caveats. A restore procedure must be rehearsed on your own deployment before it counts as verified recovery for that environment.
+See [storage recovery](storage-recovery.md) for interrupted operations and timestamp migration caveats. A restore procedure must be rehearsed on your own deployment before it counts as verified recovery for that environment.
 
 ## Ingestion and administration
 
-- Use [Calibre import](../calibre-import.md) to migrate an existing Calibre library. Keep the source read-only and retain a source backup.
+- Use [Calibre import](calibre-import.md) to migrate an existing Calibre library. Keep the source read-only and retain a source backup.
 - Configure **Settings → Admin → Dropbox** for a local ingestion directory, allowed extensions, and target collections. This is a filesystem inbox, not the Dropbox cloud service. Ingestion requires a suitable configured user/target context.
-- Configure Hardcover through the admin metadata settings. The server stores the token and clients receive an availability flag. See [metadata providers](../metadata-fetcher.md).
-- Run [health checks](../health-checks.md) from the admin library controls. Quick checks inspect database conditions; deep checks also inspect bounded filesystem/duplicate conditions.
+- Configure Hardcover through the admin metadata settings. The server stores the token and clients receive an availability flag. See [metadata providers](../developing/reference/metadata.md).
+- Run [health checks](health-checks.md) from the admin library controls. Quick checks inspect database conditions; deep checks also inspect bounded filesystem/duplicate conditions.
 
-Use [known issues](../known-issues.md) and server logs when investigating failures. Do not delete `.delb-*` journals or lock databases to suppress an error. Follow the [storage recovery instructions](../storage-recovery.md).
+Use server logs when investigating failures. Older investigations are retained in the [historical archive](../archive/README.md). Do not delete `.delb-*` journals or lock databases to suppress an error. Follow the [storage recovery instructions](storage-recovery.md).
 
 ## Deployment evidence
 

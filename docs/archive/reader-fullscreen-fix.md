@@ -1,5 +1,7 @@
 # Fullscreen reader listener lifecycle
 
+> Historical investigation. The tests and limits below describe this repair. See the [EPUB reader reference](../developing/reference/epub-reader.md) for current behavior.
+
 The reader previously called `rendition.start()` whenever its fullscreen control was toggled. In epubjs 0.3.93, another start call registers another set of manager section, resize, orientation and scroll handlers. Repeated toggles can therefore multiply event processing.
 
 The candidate changes only this control: it updates fullscreen state, then awaits the existing layout refresh. That helper waits for the DOM update and animation frame before measuring, resizing and reporting the existing rendition. It preserves the rendition instead of reinitializing it.

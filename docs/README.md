@@ -29,22 +29,37 @@ Start with the [contributor guide](developing/README.md), then read:
 
 ## Feature reference
 
-| Topic                                          | Reference                                                                                             |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Collection permissions and endpoints           | [Collections and access control](collections-sharing-rbac.md)                                         |
-| Reading status, dates, and progress rules      | [Reading status and progress](reading-status-progress.md)                                             |
-| EPUB position persistence and reader endpoints | [EPUB reader](epub-reader.md)                                                                         |
-| Settings, appearance, and synchronization      | [Settings](settings.md)                                                                               |
-| Grid and list field behavior                   | [Book view settings](book-view-settings.md)                                                           |
-| Navigation and layout behavior                 | [UI layout](ui-layout-philosophy.md)                                                                  |
-| Search                                         | [Global search](global-search.md)                                                                     |
-| External metadata and covers                   | [Metadata fetcher](metadata-fetcher.md)                                                               |
-| Calibre migration                              | [Calibre import](calibre-import.md), [Calibre's schema](calibre-database-schema.md)                   |
-| Library integrity checks                       | [Health checks](health-checks.md)                                                                     |
-| Managed files and interrupted operations       | [Storage recovery](storage-recovery.md)                                                               |
-| Container deployment                           | [Docker](docker.md)                                                                                   |
-| EPUB package                                   | [Independent EPUB cover package](../packages/epub/README.md)                                          |
-| Component details                              | [Tooltips](tooltip.md), [browse cards](browse-cards.md), [series cards](series.md), [icons](icons.md) |
-| Recorded defects                               | [Known issues](known-issues.md)                                                                       |
+Browse the [feature contracts](developing/reference/README.md) or [UI component references](developing/ui/README.md).
+
+| Topic                                          | Reference                                                                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Collection permissions and endpoints           | [Collections and access control](developing/reference/collections.md)                                   |
+| Reading status, dates, and progress rules      | [Reading status and progress](developing/reference/reading-status-progress.md)                          |
+| EPUB position persistence and reader endpoints | [EPUB reader](developing/reference/epub-reader.md)                                                      |
+| Settings, appearance, and synchronization      | [Settings](developing/reference/settings.md)                                                            |
+| Grid and list field behavior                   | [Book view preferences](using/find-books.md#change-the-grid-or-list)                                    |
+| Navigation and layout behavior                 | [UI layout](developing/reference/library-layout.md)                                                     |
+| Search                                         | [Global search](developing/reference/global-search.md)                                                  |
+| External metadata and covers                   | [Metadata fetcher](developing/reference/metadata.md)                                                    |
+| Calibre migration                              | [Calibre import](hosting/calibre-import.md), [Calibre's schema](developing/reference/calibre-schema.md) |
+| Library integrity checks                       | [Health checks](hosting/health-checks.md)                                                               |
+| Managed files and interrupted operations       | [Storage recovery](hosting/storage-recovery.md)                                                         |
+| Container deployment                           | [Docker](hosting/docker.md)                                                                             |
+| EPUB package                                   | [Independent EPUB cover package](../packages/epub/README.md)                                            |
+| Component details                              | [UI component reference](developing/ui/README.md)                                                       |
 
 The architecture and core guides describe the implementation at the revision recorded in [documentation status](developing/documentation-status.md). Historical review records and future-work sections are identified separately from current behavior.
+
+## Historical records
+
+Past design discussions, repair investigations, and obsolete asset instructions live in the [archive](archive/README.md). They preserve context and evidence without presenting old commands or defect status as current guidance.
+
+## Folder layout
+
+The documentation folders are:
+
+- `using/` contains user task guides.
+- `hosting/` contains deployment, import, health, and recovery guides.
+- `developing/` contains architecture and contributor setup, with `reference/` for feature contracts and `ui/` for component details.
+- `images/` contains screenshots and their provenance.
+- `archive/` contains historical records.

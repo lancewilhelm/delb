@@ -45,6 +45,6 @@ For an upload, review the candidates and choose the offered skip, upload-anyway,
 
 Adding an existing book to a collection shares the same catalog record. It does not create independent metadata or transfer creator permissions.
 
-If collections fail to load or a selected target is no longer editable, correct the target selection before retrying. For storage errors after an interrupted operation, use the [storage recovery guide](../storage-recovery.md).
+If collections fail to load or a selected target is no longer editable, correct the target selection before retrying. For storage errors after an interrupted operation, use the [storage recovery guide](../hosting/storage-recovery.md).
 
-Continue with [finding books](find-books.md). See [ingestion request flows](../developing/core-workflows.md#add-a-book) and the [metadata reference](../metadata-fetcher.md) for backend behavior.
+Continue with [finding books](find-books.md). See [ingestion request flows](../developing/core-workflows.md#add-a-book) and the [metadata reference](../developing/reference/metadata.md) for backend behavior.

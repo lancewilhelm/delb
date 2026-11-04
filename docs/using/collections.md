@@ -42,8 +42,8 @@ Open **Collection settings** for the collection, then choose the appropriate act
 
 Personal collections cannot be shared, transferred, left, or deleted.
 
-If you keep a shared book in another collection you can access, removing access to the original shared collection does not revoke that other link. Delb evaluates visibility through any accessible collection. See the [current access rules](../collections-sharing-rbac.md#visibility-after-re-sharing).
+If you keep a shared book in another collection you can access, removing access to the original shared collection does not revoke that other link. Delb evaluates visibility through any accessible collection. See the [current access rules](../developing/reference/collections.md#visibility-after-re-sharing).
 
 Book deletion is a separate action with creator or system administrator authorization. Deleting a book affects every collection containing that book.
 
-Continue with [reading and progress](reading.md). See the [permissions reference](../collections-sharing-rbac.md) and [collection request flows](../developing/core-workflows.md#collections-and-sharing).
+Continue with [reading and progress](reading.md). See the [permissions reference](../developing/reference/collections.md) and [collection request flows](../developing/core-workflows.md#collections-and-sharing).

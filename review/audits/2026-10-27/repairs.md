@@ -84,4 +84,4 @@ Storage operations use `storage_operations(id, book_id, kind, created_at)` as a 
 | R01     | Mitigated; automated transport                     | Reject SVG/spoof; decode/re-encode allowed raster, CSP and nosniff.                                                                       |
 | R02     | Mitigated; real HTTP and archive tests             | Oversize/stalled HTTP rejected before EOF; ZIP entry/inflated sizes, pixel and byte bounds checked.                                       |
 
-Detailed coverage, runnable checks and remaining limits are in [repair-verification.md](repair-verification.md). Storage operations and deployment cautions are in [storage-recovery.md](../../../docs/storage-recovery.md).
+Detailed coverage, runnable checks and remaining limits are in [repair-verification.md](repair-verification.md). Storage operations and deployment cautions are in [storage-recovery.md](../../../docs/hosting/storage-recovery.md).
