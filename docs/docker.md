@@ -45,7 +45,9 @@ verifies its size and SHA-256 digest, and only then replaces the original. The
 same journal and rollback behavior remain in effect.
 
 Configuring the share split level so each author/book directory stays together
-can reduce cross-disk I/O, but is not required for cover uploads to be safe.
+can reduce cross-disk I/O. Verify SQLite locking and recovery behavior on the
+actual library filesystem. Injected-fault checks do not certify a real Unraid
+share or power-loss durability. See [storage recovery](storage-recovery.md).
 
 ## Migrations
 

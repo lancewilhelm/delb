@@ -1,150 +1,44 @@
-# EPUB Reader
+# EPUB reader reference
 
-This document covers the initial EPUB reader implementation and how reading position is stored.
+The [reader page](../app/pages/books/[id]/read.vue) is a full-screen EPUB.js interface. The [user guide](using/reading.md) covers navigation and progress tasks.
 
-## Overview
+## File access and controls
 
-The EPUB reader is a full-screen experience powered by `epubjs`. It is accessible from the book detail page when an EPUB file is available.
+The book detail page offers Read when the file list contains an EPUB. The reader requests `GET /api/books/:id/download?format=epub`, optionally identifying a file with `fileId`. The download handler checks session and collection visibility, then streams the stored file from the managed library.
 
-Key features:
+The reader has pages/scroll modes, previous/next navigation, table of contents, left/right keyboard navigation, Escape to return, and font/appearance controls. Reader settings persist through account settings.
 
-- Full-screen reader layout
-- Previous/Next navigation
-- Keyboard navigation (Left/Right arrows)
-- Escape key to return to book details
-- Table of contents sidebar (EPUB navigation)
-- Reading position stored per user in the database
+The current rendition disables scripted EPUB content with `allowScriptedContent: false`. This limits book scripts; it is not a claim that all EPUB input is trusted or that every publisher's interactive book remains compatible.
 
-## Reader Route
+## Position and progress records
 
-The reader lives at:
+| Table                        | Fields used by the reader                                                                                  |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `user_book_reading_position` | User/book, serialized location, optional percentage, client session ID, client sequence, updated timestamp |
+| `user_book_preferences`      | User/book progress-sync toggle, disabled by default                                                        |
+| `user_book_progress_log`     | Historical percentage, optional page/location, source, occurrence date                                     |
 
-- `app/pages/books/[id]/read.vue`
+A saved location is usually an EPUB CFI. It is not a page number. Position and progress history remain separate records.
 
-This page:
+## Endpoints
 
-- Loads the EPUB from the download endpoint using `format=epub` (and `fileId` when available)
-- Restores the last saved reading position (if any)
-- Saves position automatically when the reader relocates
+| Request                               | Contract                                                    |
+| ------------------------------------- | ----------------------------------------------------------- |
+| `GET /api/books/:id/reading-position` | Current user's saved location/progress                      |
+| `PUT /api/books/:id/reading-position` | Save location/progress; null or empty location clears it    |
+| `PUT /api/books/:id/progress-sync`    | Enable/disable reader-to-history logging for this user/book |
+| `GET /api/books/:id/progress-logs`    | Current user's history                                      |
+| `POST /api/books/:id/progress-logs`   | Add a manual percentage/page entry                          |
 
-## Read Button Visibility
+Position writes accept `location`, optional `progress`, and optional `clientSessionId`/`clientSequence`. When either ordering field is supplied, both are required: the session ID has UUID format and the sequence is a positive safe integer. Clear requests omit the ordering fields. The persistence helper rejects older sequence writes within the same session. Different sessions are not globally ordered by that counter.
 
-The **Read** button appears on a book detail page only if the book has an EPUB file:
+The reader debounces and queues position writes. On successful saves, enabled progress sync can append reader-sourced history entries subject to the handler's change/time thresholds. Manual logs and Finished status create their own history.
 
-- Source: `app/pages/books/[id]/index.vue`
-- Logic: looks for `book.files` with `format === 'epub'`
+On open, the reader restores the saved CFI. With progress sync enabled, it also fetches the latest progress log. After generating EPUB locations, it can translate that logged percentage into a CFI and restore there if the user has not already navigated. A manual log does not directly write a position record, but it can therefore influence the next reader restoration.
 
-## Reading Position Storage
+## Sources and evidence
 
-Reading position is stored per user and per book.
-
-### Table: `user_book_reading_position`
-
-Fields:
-
-- `userId` (string, required)
-- `bookId` (string, required)
-- `location` (string, required)
-- `progress` (number, optional)
-- `updatedAt` (timestamp)
-
-Notes:
-
-- `location` stores the EPUB.js CFI (or other serialized location)
-- `progress` is a percentage (0..100) when available
-
-### Table: `user_book_progress_log`
-
-Progress logs are stored separately so manual updates or reader updates can be charted over time.
-
-Fields:
-
-- `id` (string, required)
-- `userId` (string, required)
-- `bookId` (string, required)
-- `progressPercent` (number, required)
-- `pageNumber` (number, optional)
-- `location` (string, optional)
-- `source` (string, required: `reader`, `manual`, or `status-finished`)
-- `occurredAt` (timestamp)
-- `createdAt` (timestamp)
-
-Notes:
-
-- When progress sync is enabled, reader saves may append `source=reader` logs.
-- Finished status writes a `source=status-finished` 100% log.
-
-### Table: `user_book_preferences`
-
-Per-user, per-book settings.
-
-Fields:
-
-- `userId` (string, required)
-- `bookId` (string, required)
-- `progressSyncEnabled` (boolean, default `false`)
-- `updatedAt` (timestamp)
-
-## API Endpoints
-
-### Download book file (used by reader)
-
-`GET /api/books/:id/download`
-
-Query params:
-
-- `format`: when set to `epub`, forces an EPUB response (reader requirement)
-- `fileId`: optionally downloads a specific stored file for the book (used to disambiguate when multiple files exist)
-
-### Get reading position
-
-`GET /api/books/:id/reading-position`
-
-Response:
-
-- `{ success: true, data: { location: string | null, progress: number | null } }`
-
-### Update reading position
-
-`PUT /api/books/:id/reading-position`
-
-Request:
-
-- `{ location: string | null, progress?: number | null }`
-
-Behavior:
-
-- If `location` is null/empty, the position is cleared.
-- Otherwise, it upserts the record.
-- If progress sync is enabled for the book, a progress log may be appended.
-
-### Progress logs
-
-`GET /api/books/:id/progress-logs`
-
-Returns the user's progress log entries for the book.
-
-`POST /api/books/:id/progress-logs`
-
-Adds a manual progress log entry (percent or page number).
-
-### Progress sync toggle
-
-`PUT /api/books/:id/progress-sync`
-
-Enables or disables reader↔log syncing for the current user and book.
-
-## File References
-
-- Schema: `app/utils/db/schema.ts`
-- Reader UI: `app/pages/books/[id]/read.vue`
-- Book detail "Read" action: `app/pages/books/[id]/index.vue`
-- API: `server/api/books/[id]/reading-position.get.ts`, `server/api/books/[id]/reading-position.put.ts`, `server/api/books/[id]/progress-logs.get.ts`, `server/api/books/[id]/progress-logs.post.ts`, `server/api/books/[id]/progress-sync.put.ts`
-
-## Future Enhancements
-
-Potential upgrades:
-
-- Persisting position on `beforeunload`
-- Font size / theme controls
-- Highlights, notes, and bookmarks
+- [Position handler](../server/api/books/[id]/reading-position.put.ts) and [persistence helper](../server/utils/books/save-position.ts).
+- [Progress-sync handler](../server/api/books/[id]/progress-sync.put.ts) and [status transitions](../server/utils/books/status-transition.ts).
+- [Fullscreen listener lifecycle](reader-fullscreen-fix.md).
+- [Documentation verification](developing/documentation-status.md) for exercised controls and evidence limits.

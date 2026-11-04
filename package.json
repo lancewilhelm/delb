@@ -9,6 +9,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "prepare:nuxt": "nuxt prepare",
+    "docs:check": "node scripts/check-docs.mjs",
     "typecheck": "pnpm --filter @delb/epub typecheck && nuxt typecheck",
     "test:page-sort": "node --import tsx --test server/utils/books/page-sort.test.ts app/stores/ui.pages.test.ts",
     "test:theme": "node --import tsx --test app/utils/customTheme.test.ts app/utils/themePreference.test.ts app/stores/userSettings.customTheme.test.ts",

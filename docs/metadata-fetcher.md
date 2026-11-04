@@ -1,249 +1,61 @@
-# Metadata Fetcher
+# Metadata providers and imports
 
-The metadata fetcher feature allows book owners and administrators to search for and import book metadata from external sources.
+Delb searches Google Books and Hardcover through server endpoints. The Add book dialog imports complete records; the book editor can apply selected fields. See [Add books](using/add-books.md) for user steps.
 
-Currently supported sources:
+## Provider availability
 
-- Google Books (public API)
-- Hardcover (GraphQL API; requires an admin-configured token stored server-side)
+| Provider     | Search endpoint                                  | Configuration                       |
+| ------------ | ------------------------------------------------ | ----------------------------------- |
+| Google Books | `GET /api/books/metadata/search?q=...`           | Public API through the server proxy |
+| Hardcover    | `GET /api/books/metadata/hardcover/search?q=...` | Admin-configured server-side token  |
 
-## Overview
+The search modal can enable multiple providers and remembers choices in account settings. Hardcover is unavailable to the client when the server's capability flag says no token is configured. Tokens remain on the server and are not returned as account settings.
 
-When editing a book, book owners and administrators can search for and import metadata from external sources. The interface allows selective import of individual fields (title, authors, description, publisher, published date, language, tags/categories, and cover image) via checkboxes, giving users full control over what metadata to update.
+## Creation and selective editing
 
-Cover images shown in the metadata search results display a small resolution badge (e.g. `1200×1800`) so you can quickly gauge cover quality before importing.
+`POST /api/books/metadata-import/create` accepts a provider item or query and target collection IDs. The handler checks the session and target edit roles, resolves a record, detects possible duplicates, and creates or links catalog data.
 
-In addition, the **Add book** modal supports importing a _full_ book record from metadata (no per-field selection). This is designed for fast entry workflows like barcode/ISBN scanning. It also includes a **Manual entry** option that opens a blank edit screen; the record is created when you save.
+The current backend maps title, authors, description, identifiers, language, publication data, page count, categories/tags, publisher, and available series information. It resolves related entity rows, writes author/tag/identifier links, and can fetch a cover. These paths are implemented; older phase notes incorrectly marked backend mapping as pending.
 
-## Provider Selection
+The editor's metadata modal returns the selected fields to [BookEditor](../app/components/Books/BookEditor.vue). Applying fields to the form is distinct from persisting the edited book through Save. Review the form before saving changes to shared metadata.
 
-### Multi-provider search (modal toggles)
+Metadata-only creation does not download an ebook. Canonical directory/cover work can occur without a `book_files` entry. Some filesystem and remote-cover steps are best-effort after database work, so a catalog entry can exist without a fetched cover.
 
-The metadata search modal supports enabling one or more providers at the same time (currently Google Books and Hardcover). Provider selection is controlled by toggles under the search bar.
+## Duplicate decisions
 
-This selection is remembered per-user.
+| Action                      | Result                                                              |
+| --------------------------- | ------------------------------------------------------------------- |
+| Cancel                      | Leave the pending import unapplied                                  |
+| Add existing to collections | Link a visible candidate into missing editable targets              |
+| Replace selected            | System admin/owner replaces the selected existing record's metadata |
+| Add new entry               | Create a separate catalog entry                                     |
 
-### Hardcover availability
+A replacement preserves the book ID and associated personal reading identity. Updating shared metadata affects every collection containing the record. The Add book dialog presents the candidate review and action-specific feedback.
 
-Hardcover is only selectable when the server has a configured Hardcover token. If not configured, the Hardcover toggle is shown as disabled (“not configured”).
+## Field mapping
 
-## How to Use
+| Provider record                                              | Delb records                                         |
+| ------------------------------------------------------------ | ---------------------------------------------------- |
+| Title, description, language, publication fields, page count | `books`                                              |
+| Authors                                                      | `authors` and ordered `book_authors` links           |
+| Categories                                                   | `tags` and `book_tags` links                         |
+| Publisher and available series                               | Related shared entities and book foreign keys        |
+| ISBN and other identifiers                                   | `book_identifiers`                                   |
+| Remote image                                                 | Managed cover/thumbnail files and book cover pointer |
 
-1. Navigate to the edit page for a book (`/books/[id]/edit`)
-2. Scroll to the bottom of the metadata form
-3. Click the "Search for Metadata (Google Books)" button
-4. A modal will open with the book's current title pre-filled as the search query
-5. Modify the search query if needed and click "Search" (or press Enter)
-6. Browse the results - each result shows available metadata fields
-7. Check the boxes next to the fields you want to import
-8. Click "Import Selected Fields" to apply the changes
+Hardcover results are mapped into the shape consumed by the shared import flow. Provider coverage depends on the returned record; missing fields are not evidence of a failed import.
 
-Tip: The cover preview on the edit page uses the full-resolution stored cover when available, and shows its resolution in the corner.
+## Cover delivery
 
-Note: when the modal is opened with a pre-filled query, it auto-runs the search; closing the modal clears the prior results so the next open reflects the current query.
+External images pass through [server image handling](../server/utils/books/external-image.ts). The current contract accepts decoded JPEG, PNG, and WebP input, normalizes output to PNG for metadata delivery, and bounds input/output size, pixels, redirects, and elapsed time. Active SVG input is rejected.
 
-## Add Book Modal (Full Import)
+Cover storage and ebook embedding are separate operations. A stored cover can be delivered through the authorized book-cover endpoint; supported EPUB cover updates use the independent [EPUB package](../packages/epub/README.md) and Delb's storage coordination.
 
-From the Add Book modal ("By metadata" tab), you can either:
+## Sources and evidence
 
-- **Add top result** (single step): intended for barcode/ISBN scanning where you want the top match immediately.
-- **Search results** (choose from a list): browse a list of matches and import the entire selected book.
+- [Search modal](../app/components/BookMetadataSearchModal.vue), [Add book dialog](../app/components/Books/BookAddModal.vue), and [editor](../app/components/Books/BookEditor.vue).
+- [Metadata creation](../server/api/books/metadata-import/create.post.ts) and [metadata proxy endpoints](../server/api/books/metadata).
+- [Hardcover secret handling](../server/utils/secrets/hardcover.ts).
+- [Core request flows](developing/core-workflows.md#add-a-book) and [verification record](developing/documentation-status.md).
 
-### Possible duplicates (Add Book modal)
-
-When a possible duplicate is detected while importing a book from metadata, the UI offers:
-
-- **Cancel** (do nothing)
-- **Add existing to collections** (adds the existing candidate book to any selected collections it isn’t already in)
-- **Replace selected** (admin-only; overwrites the selected existing book’s canonical metadata with the incoming metadata, then adds it to missing selected collections)
-- **Add new entry** (creates a new book entry without affecting the existing one)
-
-## Current Implementation Status
-
-### Phase 1: Search and Selective Import UI (Completed)
-
-- ✅ Google Books API integration via server proxy
-- ✅ Search modal with auto-search capability
-- ✅ Display search results with thumbnails, authors, publisher, published date, and ISBN
-- ✅ Checkbox-based field selection for each result
-- ✅ Import button with visual feedback when fields are selected
-- ✅ Support for importing: title, authors, description, publisher, published date, language, tags/categories, and cover
-
-### Hardcover (Provider Setup + Server Proxy)
-
-- ✅ Server-side Hardcover GraphQL search endpoint
-- ✅ Admin UI for configuring Hardcover token (stored server-side; never returned to clients)
-- ✅ Metadata search modal provider toggle (disabled unless token is configured)
-- ✅ Multi-provider search (search Google Books and Hardcover together)
-
-### Phase 2: Backend Import Logic (In Progress)
-
-- ⏳ Map Google Books data to internal book schema
-- ⏳ Handle authors array → authorChips conversion
-- ⏳ Handle categories → tagChips conversion
-- ⏳ Cover image download and upload from Google Books URLs
-- ⏳ Publisher and series name resolution/creation
-- ⏳ Update form fields with selected metadata
-
-## Technical Details
-
-### Components
-
-**`BookMetadataSearchModal.vue`**
-
-- Modal component for searching and displaying metadata results
-- Auto-searches when opened with an initial query
-- Handles search state, loading, and error messages
-- Displays results with expandable import options
-- Checkbox selection for individual metadata fields
-- Per-result import buttons that are enabled only when fields are selected
-- Tracks field selection state for each search result independently
-
-**API Endpoint: `/api/books/metadata/search`**
-
-- Server-side proxy to Google Books API
-- GET endpoint accepting `q` query parameter
-- Returns raw Google Books API response
-- Maximum 20 results per search
-
-**API Endpoint: `/api/books/metadata/hardcover/search`**
-
-- Server-side proxy to Hardcover GraphQL API
-- GET endpoint accepting `q` query parameter
-- Requires a Hardcover token configured by an admin (stored server-side)
-- Returns mapped results (best-effort) derived from Hardcover’s `search.results` payload
-
-### Google Books API Response Structure
-
-The API returns results with the following structure (relevant fields):
-
-```typescript
-interface GoogleBooksResponse {
-  kind: string;
-  totalItems: number;
-  items?: GoogleBookItem[];
-}
-
-interface GoogleBookItem {
-  id: string;
-  volumeInfo: {
-    title?: string;
-    authors?: string[];
-    publisher?: string;
-    publishedDate?: string;
-    description?: string;
-    industryIdentifiers?: Array<{
-      type: string; // 'ISBN_13' or 'ISBN_10'
-      identifier: string;
-    }>;
-    pageCount?: number;
-    categories?: string[];
-    imageLinks?: {
-      smallThumbnail?: string;
-      thumbnail?: string;
-    };
-    language?: string;
-  };
-}
-```
-
-### Field Mapping
-
-The following Google Books API fields map to the internal schema:
-
-| Google Books Field                | Internal Schema Field                 | Type               |
-| --------------------------------- | ------------------------------------- | ------------------ |
-| `volumeInfo.title`                | `books.title`                         | Direct             |
-| `volumeInfo.authors[]`            | `authors.name` (via `bookAuthors`)    | Many-to-many       |
-| `volumeInfo.description`          | `books.description`                   | Direct             |
-| `volumeInfo.publisher`            | `publishers.name` (via `publisherId`) | Foreign key        |
-| `volumeInfo.publishedDate`        | `books.published`                     | Direct (string)    |
-| `volumeInfo.language`             | `books.language`                      | Direct             |
-| `volumeInfo.categories[]`         | `tags.name` (via `bookTags`)          | Many-to-many       |
-| `volumeInfo.imageLinks.thumbnail` | `books.coverImagePath`                | Download & convert |
-
-### Storage Behavior (Metadata-only Books)
-
-Books created via metadata import may exist before any format file is uploaded. Delb still treats these as first-class books:
-
-- A canonical book folder is created under `library/<author(s)>/<title (id8)>/` during metadata import (even if no cover was imported).
-- Uploading/replacing a cover via `/api/books/:id/cover` works even when the book has no rows in `book_files`; the cover and thumbnail are stored in that canonical folder.
-
-### Security Considerations
-
-- Metadata endpoints are server-side to avoid CORS issues and to keep provider details off the client.
-- Google Books does not require an API key for basic usage.
-- Hardcover requires a bearer token.
-- External cover preview/import fetches are guarded:
-  - authenticated session required
-  - `http`/`https` URLs only
-  - private/loopback/link-local/multicast targets are blocked
-  - redirect limits are enforced
-  - request timeout is enforced
-  - max payload size is enforced
-  - non-image responses are rejected
-
-#### Hardcover token storage (server-side only)
-
-Delb stores the Hardcover token server-side and never returns it to clients. The client only receives a non-secret capability flag indicating whether Hardcover is available, which is used to enable/disable the Hardcover provider toggle in the metadata search modal.
-
-## Cover Delivery Contract
-
-Canonical cover reads are now served by book ID:
-
-- `GET /api/books/:id/cover?variant=thumb|source&v=<optional>`
-- default variant is `thumb`
-- requires authenticated session and membership visibility to the book
-- returns `ETag` and supports conditional requests (`If-None-Match` => `304`)
-- cache policy is `Cache-Control: private, max-age=0, must-revalidate`
-
-`books.coverImagePath` remains an internal storage pointer and should not be treated as a public URL.
-
-## Future Enhancements
-
-1. **Multiple Data Sources**: Add support for OpenLibrary, Amazon, or other book APIs
-2. **Batch Import**: Search and import metadata for multiple books at once
-3. **Auto-fetch on Upload**: Automatically search for metadata when uploading new books
-4. **Confidence Scoring**: Show match confidence based on ISBN, title, and author similarity
-5. **Manual Field Selection**: Allow users to cherry-pick which fields to import
-6. **History/Undo**: Track metadata changes and allow reverting imports
-
-## Testing
-
-To test the metadata fetcher:
-
-### Google Books
-
-1. Start the development server: `pnpm run dev`
-2. Log in as an admin user
-3. Navigate to any book's edit page
-4. Click the "Search for Metadata" button at the bottom
-5. Try searching for:
-   - The current book title (auto-filled)
-   - An ISBN (e.g., "9780593820247")
-   - An author name (e.g., "Matt Dinniman")
-   - A different book title (e.g., "Dungeon Crawler Carl")
-6. Verify that results display correctly with thumbnails and metadata
-
-### Hardcover (token + endpoint)
-
-1. Log in as an admin user
-2. Go to Admin Settings → Metadata
-3. Paste your Hardcover token (raw token or `Bearer <token>`) and click “save”
-4. In a browser (while logged in), request:
-   - `/api/books/metadata/hardcover/search?q=The%20Hobbit`
-5. Verify you receive a successful response containing a `data.results` array
-
-If the endpoint returns an error indicating the token is not configured, confirm the token was saved and that the server is reading it from server-side storage.
-
-## Related Files
-
-- `/app/pages/books/[id]/edit.vue` - Edit book page with metadata search button
-- `/app/components/BookMetadataSearchModal.vue` - Search modal component
-- `/server/api/books/metadata/search.get.ts` - API endpoint for Google Books search
-- `/server/api/books/metadata/hardcover/search.get.ts` - API endpoint for Hardcover search (GraphQL proxy)
-- `/app/components/Books/BookAddModal.vue` - Add Book modal (full metadata import + duplicate resolution)
-- `/server/api/books/metadata-import/create.post.ts` - Creates a book from metadata (top result or selected result) + duplicate resolution
-- `/server/api/settings/admin/hardcover-token.put.ts` - Admin-only endpoint to set/clear Hardcover token (server-side)
-- `/app/components/Settings/SettingsAdminMetadata.vue` - Admin UI for metadata provider settings + Hardcover token (server-side)
-- `/app/components/BookMetadataSearchModal.vue` - Multi-provider search toggles (remembered per-user)
+The synthetic demo blocks outbound requests. Source inspection and supplied-record imports do not establish successful live Google Books/Hardcover searches or cover downloads.

@@ -1,233 +1,66 @@
-# Collections sharing & RBAC (v1)
+# Collections and access control
 
-> Note: This doc describes the **sharing model** and **permissions**. Bulk book editing endpoints are included below because they are tightly coupled to RBAC and scope guardrails.
+Collections define book visibility and collaboration. System roles, collection roles, and book-creator permissions answer different questions.
 
-This document describes Delb’s **minimal** collection sharing model and role-based access control (RBAC) for collections.
+## Visibility
 
-It builds on the “Personal-first” model described in `docs/ui-layout-philosophy.md`.
+A book is visible when it belongs to at least one collection where the current user is a member. All combines those accessible collections. Sharing a collection exposes the existing catalog records and files, while each reader keeps personal status, ratings, positions, and progress.
 
----
+The Personal collection cannot be shared, transferred, left, or deleted. It can be renamed. The Add book UI always includes it. Creation endpoints also use Personal as the fallback when the caller supplies no targets; an explicit API target list is a separate contract.
 
-## Important open question: “re-sharing” books into your own collections
+## Collection roles
 
-Delb’s core model is:
+The following rules apply to non-Personal collections:
 
-- **Collections are the visibility boundary.**
-- Books are “visible” to a user if they exist in **at least one** collection the user is a member of.
+| Capability                                           | Owner | Editor | Viewer |
+| ---------------------------------------------------- | ----- | ------ | ------ |
+| View books in the collection                         | Yes   | Yes    | Yes    |
+| Rename the collection                                | Yes   | Yes    | No     |
+| Add/remove book links in editable targets            | Yes   | Yes    | No     |
+| List, add, update, or remove other non-owner members | Yes   | Yes    | No     |
+| Transfer ownership                                   | Yes   | No     | No     |
+| Delete the collection                                | Yes   | No     | No     |
+| Leave the collection                                 | No    | Yes    | Yes    |
 
-However, the UI/UX goal is also:
+Member upsert uses an existing account's email address. It accepts editor or viewer roles and cannot change the caller's own role. The owner role changes through ownership transfer. Removing the owner through member deletion is forbidden.
 
-- A user who can see a book (because it exists in a shared collection) should be able to add that book to **other collections they can edit** (including their own collections).
+Transfer makes the recipient the sole owner and the previous owner an editor. Collection deletion removes collection/membership/book-link rows, not the books or their files. An owner must transfer or delete instead of leaving.
 
-This introduces an RBAC/UX edge case that is **not fully specified yet**:
+## Book operations
 
-### Edge case: access revoked from the original shared collection
+Collection edit rights do not automatically grant shared metadata editing. Book update, cover replacement, and deletion use creator or system admin/owner authorization in their respective handlers. Book deletion affects the shared catalog record and every collection link.
 
-Scenario:
+A viewer who can see a book can use the single-book collection endpoint to add it to another collection they own or edit. Targets still require edit rights. The API reports forbidden targets and ignores Personal removals.
 
-1. User **A** shares collection **C_shared** with user **B** (B can view or edit it).
-2. Book **X** is in **C_shared**, so **B** can see book **X**.
-3. While B still has access, B adds book **X** to another collection they can edit (e.g. **C_b_personal** or another shared collection **C_other**).
-4. Later, A removes B from **C_shared**.
+Bulk collection operations additionally require owner/editor membership in the source collection. They resolve explicit IDs or all-with-exclusions inside that collection. There is no scope-wide bulk collection operation for All.
 
-Question:
+## Visibility after re-sharing
 
-- Should B still be able to access book **X** via **C_b_personal** / **C_other**?
+If reader B adds a shared book to another collection B can access, removing B from the original collection leaves access through the other link. Current reads evaluate any accessible collection; they do not track the original source of each access grant.
 
-There are two defensible policies:
+Earlier design notes left the long-term re-sharing policy open. This reference states implemented behavior. Changing it to revoke derived access requires a separate product decision and implementation.
 
-**Policy 1 (sticky re-share):**  
-If B successfully adds X to a collection B can edit at the time of the action, then X remains visible via that other collection even after access to the original source collection is revoked.
+## Endpoints
 
-**Policy 2 (non-sticky / provenance-bounded):**  
-Visibility is strictly bounded to the original sharing boundary; if access to the collection that “introduced” the book is revoked, any derived links should be removed or become invalid.
+| Endpoint                                       | Responsibility                                      |
+| ---------------------------------------------- | --------------------------------------------------- |
+| `GET /api/collections`                         | Accessible collections and roles                    |
+| `POST /api/collections`                        | Create a collection                                 |
+| `PUT /api/collections/:id`                     | Rename an editable collection                       |
+| `GET /api/collections/:id/members`             | Owner/editor member listing                         |
+| `PUT /api/collections/:id/members`             | Add/update an existing user as editor/viewer        |
+| `DELETE /api/collections/:id/members/:userId`  | Remove another non-owner member                     |
+| `POST /api/collections/:id/leave`              | Non-owner self-removal                              |
+| `POST /api/collections/:id/transfer-ownership` | Owner transfer by email                             |
+| `DELETE /api/collections/:id`                  | Owner deletion of a non-Personal collection         |
+| `GET /api/books/:id/collections`               | Current book memberships visible to the caller      |
+| `PUT /api/books/:id/collections`               | Single-book adds/removals with target authorization |
+| `POST /api/collections/:id/books/bulk`         | Source-scoped bulk membership changes               |
 
-v1 stance:
+Single-book mutation takes `addCollectionIds` and `removeCollectionIds`. Bulk mutation takes `bookIds` or `allInCollection` with `excludedBookIds`, plus `addToCollectionIds` and `removeFromCollectionIds`. Inspect returned forbidden/ignored targets instead of treating a successful HTTP response as proof every requested target changed.
 
-- Delb currently leans toward a “visibility via any accessible collection” rule, which implies **Policy 1**.
-- If/when this becomes a problem, we may need to introduce provenance tracking (e.g. “book access grants” or “link source collection”) to support Policy 2, or introduce explicit ownership constraints.
+## Sources and related guides
 
-Until this is formalized, treat this as a known RBAC edge case to revisit when:
+The [collection APIs](../server/api/collections), [book collection handler](../server/api/books/[id]/collections/index.put.ts), [collection store](../app/stores/collections.ts), and [settings dialog](../app/components/Collections/EditCollectionModal.vue) define the current contract.
 
-- you add stricter ownership semantics,
-- you add book-level sharing permissions,
-- or you introduce “unlink from source” / “revoke derived access” features.
-
----
-
-## Quick mental model
-
-- A **collection** is a _sharing boundary_ and a _visibility boundary_.
-- Sharing grants access to the **collection**, not ownership of the underlying books.
-- A user’s **Personal** collection is special:
-  - always exists per user
-  - **not shareable**
-  - **non-deletable**
-  - users may rename it
-
----
-
-## Roles
-
-Collections support exactly these roles:
-
-- `owner`
-- `editor`
-- `viewer`
-
-### Single-owner invariant (important)
-
-Collections are intended to have **exactly one `owner`**.
-
-When ownership is transferred, the recipient becomes the **sole** owner and the previous owner becomes an `editor`.
-
-> Note: Some early/legacy data could theoretically contain multiple owners. The ownership transfer flow is implemented to correct this by ensuring the result is one owner.
-
----
-
-## Permissions (v1)
-
-| Capability                     | owner | editor | viewer |
-| ------------------------------ | ----: | -----: | -----: |
-| View collection                |    ✅ |     ✅ |     ✅ |
-| Rename collection              |    ✅ |     ✅ |     ❌ |
-| List members                   |    ✅ |     ✅ |     ❌ |
-| Add members (by email)         |    ✅ |     ✅ |     ❌ |
-| Remove members                 |    ✅ |     ✅ |     ❌ |
-| Delete collection              |    ✅ |     ❌ |     ❌ |
-| Transfer ownership             |    ✅ |     ❌ |     ❌ |
-| Leave collection (remove self) |    ❌ |     ✅ |     ✅ |
-
-### Notes
-
-- Only the **owner** can delete a collection.
-- **Owners cannot leave** a collection. They must either delete it or transfer ownership.
-- Member management and deletion are performed from the **Edit Collection** modal.
-
----
-
-## Member management
-
-### Add / update member (by email)
-
-Members are added using their **email address**. If the user already belongs to the collection, the role is updated.
-
-High-level rules:
-
-- Personal collections cannot be shared.
-- Only `owner` and `editor` can add/update members.
-- Add/update member role is limited to `editor` or `viewer`.
-- `owner` is not assignable through member upsert; ownership changes only through transfer ownership.
-- You cannot change your own role through the “add/update member” action.
-
----
-
-## Leaving a collection (self-removal)
-
-A user may remove themselves from a collection if they are **not** the owner.
-
-- `editor` and `viewer` can leave.
-- `owner` cannot leave.
-
-Because leaving is effectively irreversible from the member’s perspective (they lose access until re-added), the UI requires a **confirmation** step before leaving.
-
----
-
-## Ownership transfer
-
-Ownership transfer is **owner-only** and is designed to enforce “one owner per collection”.
-
-### Behavior
-
-- Ownership is transferred by providing the **new owner’s email**.
-- The new owner becomes the **sole** `owner`.
-- The previous owner becomes an `editor`.
-
-Because ownership transfer is irreversible from the original owner’s perspective (you lose delete/ownership privileges), the UI requires a **confirmation** step before transferring.
-
----
-
-## Deletion
-
-- Only the `owner` can delete a collection.
-- Personal collections cannot be deleted.
-- Deleting a collection removes:
-  - the collection record
-  - all membership records
-  - all collection-book link records
-- Books themselves are not deleted; only the container and its links are removed.
-
----
-
-## API surface (for reference)
-
-These endpoints exist to support the v1 model:
-
-- `GET /api/collections/:id/members`  
-  Returns members for the collection (includes email).
-
-- `PUT /api/collections/:id/members`  
-  Add/update a member by email with a role.
-
-- `DELETE /api/collections/:id/members/:userId`  
-  Remove a member (owner/editor). Prevents removing the owner and prevents removing yourself here (use leave flow).
-
-- `POST /api/collections/:id/leave`  
-  Current user leaves the collection (non-owner only).
-
-- `POST /api/collections/:id/transfer-ownership`  
-  Owner transfers ownership (by email). Enforces sole-owner result.
-
-- `DELETE /api/collections/:id`  
-  Owner deletes the collection (non-personal only).
-
-### Bulk book actions (collection-scoped)
-
-- `POST /api/collections/:id/books/bulk`  
-  Apply bulk add/remove operations to books within the context of a **specific collection**.
-
-#### Key guardrails and RBAC
-
-- Caller must be an `owner` or `editor` of the **scope collection** (`:id`) to perform any bulk operation.
-- For `addToCollectionIds` / `removeFromCollectionIds`, the caller must also be an `owner` or `editor` of each **target collection** being mutated.
-- **Personal collections** are **non-removable** in bulk operations (attempts are ignored and reported as such).
-- This endpoint is intentionally **collection-scoped**. There is no “bulk across All view” server semantic.
-
-#### Request shape
-
-The endpoint supports two selection models:
-
-1. Explicit IDs (client enumerates selected books):
-
-- `allInCollection: false`
-- `bookIds: string[]`
-
-2. Scope-wide selection (do not enumerate IDs):
-
-- `allInCollection: true`
-- `excludedBookIds: string[]` (optional)
-
-Along with one or both operations:
-
-- `addToCollectionIds: string[]` (optional)
-- `removeFromCollectionIds: string[]` (optional)
-
-#### Response shape (high level)
-
-- `booksResolved`: how many book ids the server applied the operation to (after exclusions / scope resolution)
-- `added`: list of `{ collectionId, bookId }` pairs that were added
-- `removed`: list of `{ collectionId, bookId }` pairs that were removed
-- `forbidden`: collection ids the caller attempted to mutate without sufficient role
-- `ignoredPersonalRemovals`: collection ids that were requested for removal but were personal (non-removable)
-
----
-
-## UI location
-
-All of the following actions happen inside the **Edit Collection** modal:
-
-- rename collection
-- manage members
-- leave collection (non-owner)
-- transfer ownership (owner-only)
-- delete collection (owner-only, non-personal)
+For procedures, use [Organize and share collections](using/collections.md). For implementation context, read [core request flows](developing/core-workflows.md#collections-and-sharing).

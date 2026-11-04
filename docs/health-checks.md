@@ -1,156 +1,39 @@
-# Health Checks (Library + Database)
+# Library health checks
 
-This document defines the **minimal, high-signal health checks** Delb should provide to prevent user-facing breakage and avoid **orphaned books** in the database.
+Delb implements on-demand administrative checks at `POST /api/settings/admin/health`. The [admin library UI](../app/components/Settings/SettingsAdminLibrary.vue) exposes them in Settings. System admin/owner authorization is required.
 
-Scope notes:
+The checks report findings. They do not automatically repair or delete the affected records/files.
 
-- Delb supports **file-backed books** _and_ **reference-only books** (metadata in DB with **no associated file**). Do not treat “missing book file” as an error unless the DB claims a file exists.
-- Metadata parsing/validation is intentionally out of scope for the initial checks.
+## Modes and results
 
-## Where these checks run
+| Mode    | Checks                                                                                                                       |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `quick` | Books without a collection, empty titles, cross-book duplicate identifiers, users missing a Personal collection              |
+| `deep`  | Quick checks plus bounded fuzzy title/author comparisons, file existence, cover-path existence, and missing thumbnail checks |
 
-- Admin UI: `Settings → Admin → Library → Health` (on-demand)
-- Post-ingest verification: run a small subset immediately after an upload/import completes
+Each result includes an ID, name, `ok`, `warn`, or `error` status, a message, and optional remediation guidance, metadata, and sample rows. The response uses `sample`, not the earlier proposed `sampleIds` contract.
 
-Each check should return:
+Deep requests have bounded sampling and comparison/stat limits. A clean bounded result does not prove an unlimited scan of every file or book completed.
 
-- `status`: `ok | warn | error`
-- `message`: human readable summary
-- `sampleIds`: optional list of affected IDs (bounded)
-- `howToFix`: short remediation guidance
+## Reference-only books
 
-## Minimal checks (v1)
+A book with no associated file can be a valid physical-library entry. Missing-file checks inspect claimed file records. A missing ebook file is different from an intentional metadata-only book.
 
-### 1) Orphaned books (not in any collection)
+## Interpret findings
 
-**Why it matters:** Orphaned books often cannot be found/browsed and feel “lost” to users.
+| Finding                             | Next investigation                                                                            |
+| ----------------------------------- | --------------------------------------------------------------------------------------------- |
+| Orphaned book                       | Check collection links and authorized import targets before reconnecting or removing a record |
+| Empty title                         | Inspect and correct the metadata                                                              |
+| Duplicate identifier or fuzzy match | Compare the books; similarity is not proof they are the same edition                          |
+| Missing Personal collection         | Inspect account initialization and existing memberships                                       |
+| Missing file or cover               | Compare the database pointer with the managed library and retained operation journals         |
+| Missing thumbnail                   | Check the source cover and prior cover operation before regeneration                          |
 
-**Definition:** A book is “orphaned” if it has **no rows** in `collection_books`.
+Preserve a matching database/library backup before manual repair. Follow [storage recovery](storage-recovery.md) when operations or retained journals are involved.
 
-**Query shape:**
+## Ingestion checks and future work
 
-```sql
-select b.id, b.title
-from books b
-left join collection_books cb on cb.book_id = b.id
-where cb.book_id is null;
-```
+Ingestion handlers perform their own input and duplicate checks. This reference does not claim that every import automatically runs the complete admin health suite. Automatic repair, duplicate merging, and deployment-specific restore drills require separate work and verification.
 
-**Severity:** `warn` (upgrade to `error` later if ingest always assigns a collection)
-
-**How to fix:** Add the book to at least one collection (typically the uploader’s Personal collection) or delete the orphan row.
-
-### 2) Empty titles
-
-**Why it matters:** Empty titles break list/detail UI and search relevance.
-
-`books.title` is `NOT NULL`, but it can still be `''` if bad data slips in.
-
-**Query shape:**
-
-```sql
-select id
-from books
-where trim(title) = '';
-```
-
-**Severity:** `error`
-
-**How to fix:** Edit the book title or delete the record.
-
-### 3) Duplicate identifiers (cross-book)
-
-**Why it matters:** Duplicated identifiers are a strong signal of duplicates and can confuse dedupe and metadata operations.
-
-**Definition:** two or more different books share the same `(type, value)` in `book_identifiers`.
-
-**Query shape:**
-
-```sql
-select type, value, count(distinct book_id) as book_count
-from book_identifiers
-group by type, value
-having book_count > 1;
-```
-
-**Severity:** `warn`
-
-**How to fix:** Decide whether the records are duplicates; keep both if intentional, otherwise merge/delete one and fix the identifiers.
-
-### 3b) Possible duplicates (fuzzy title/author) (deep)
-
-**Why it matters:** Users can accidentally add the same book twice; this check surfaces likely duplicates even when identifiers are missing.
-
-**Definition:** A “possible duplicate pair” is two books whose title+author similarity meets the same threshold used by ingest-time duplicate detection.
-
-**Severity:** `warn`
-
-**How to fix:** Review each pair and decide whether to keep both, or de-duplicate (merge tooling is planned).
-
-### 4) Book file pointers that don’t exist on disk (deep)
-
-**Why it matters:** A user clicking “download/read” will fail if a `book_files.relative_path` is missing.
-
-**Definition:** any row in `book_files` whose resolved file path does not exist.
-
-**DB query (to enumerate candidates):**
-
-```sql
-select id, book_id, format, relative_path
-from book_files;
-```
-
-**Filesystem rule:** resolve `relative_path` under the configured library root and `stat()` the file.
-
-**Severity:** `error`
-
-**How to fix:** Restore the file, update the pointer, or delete the `book_files` row (and possibly the book if it is meant to be file-backed).
-
-### 5) Cover/thumbnail invariants (deep)
-
-Delb stores a lightweight thumbnail alongside each book folder:
-
-- Full-size cover (optional): `cover.webp`
-- Thumbnail (optional, but preferred): `thumb.webp`
-
-Delb typically stores `books.cover_image_path` pointing at the **thumbnail** (e.g. `library/.../thumb.webp`) for fast list/grid rendering.
-
-**Minimal invariant:** If a cover exists, a thumbnail should exist.
-
-**Checks:**
-
-1. `books.cover_image_path` is set but the referenced file does not exist on disk.
-   - **Severity:** `warn` (or `error` if UI relies on it everywhere)
-2. `cover.webp` exists in a book directory but `thumb.webp` does not.
-   - **Severity:** `warn`
-
-**How to fix:** Regenerate `thumb.webp` (future action), or clear `cover_image_path` if no cover should be shown.
-
-## Post-ingest verification (minimal)
-
-Immediately after ingest completes (upload, Dropbox ingest, Calibre import), verify:
-
-- The new `books.id` is present in at least one collection via `collection_books` (or warn if the ingest flow defers collection assignment).
-- Every created `book_files` row points to an existing file on disk.
-- If a cover/thumbnail was created or updated, ensure the thumbnail file exists.
-
-## Ingest-time duplicate detection (minimal)
-
-On upload/import, detect possible duplicates and ask the user what to do.
-
-Inputs:
-
-- Strong match: exact `(type, value)` matches in `book_identifiers`
-- Weak match: fuzzy match on `books.title` + primary author name(s) (app-level logic)
-
-Output:
-
-- Provide a small ranked list of candidate books (IDs + title + authors + identifiers present).
-- Prompt user decision: cancel, continue as new, or (later) merge/replace.
-
-## Future actions (not required for v1 checks)
-
-These are remediation actions that pair naturally with the checks above and likely belong on the book edit page:
-
-- **Regenerate thumbnail**: create `thumb.webp` from the best available source (existing `cover.webp`, embedded EPUB cover, or remote metadata cover).
-- **Extract cover from EPUB**: derive `cover.webp` (and `thumb.webp`) from a selected EPUB file in `book_files`.
+The [health handler](../server/api/settings/admin/health.post.ts) is the source for current limits, result IDs, and response fields. The [documentation record](developing/documentation-status.md) distinguishes source inspection from demo execution.

@@ -75,7 +75,7 @@ For external "fetch cover by URL" flows, Delb proxies through server-side guards
 ## Tech Stack
 
 - **Framework**: Nuxt 4 (Vue 3)
-- **Styling**: Tailwind CSS v4 with UnoCSS
+- **Styling**: Tailwind CSS v4
 - **Database**: SQLite with Drizzle ORM
 - **Authentication**: Better Auth with session management
 - **File Storage**: Local filesystem (`library/` directory)
@@ -113,8 +113,8 @@ The application will be available at `http://localhost:3000`.
 1. On first run, create the initial account through the registration page.
 2. Delb promotes exactly one first user to system `owner` using a race-safe server-side claim.
 3. After that, registration follows global `allowRegistration` settings and new self-registrations are normal `user` accounts.
-4. Additional users can be invited or created by admins with appropriate roles.
-5. Admins/owners can edit a book at `/books/{id}/edit` (an **Edit** button appears on the book page for admins), including:
+4. Admins can create additional user accounts with appropriate roles.
+5. Book creators and system admins/owners can edit a visible book at `/books/{id}/edit`, including:
    - Metadata fields (title, description, published, language, series/publisher IDs)
    - Authors (single field; can be comma-separated for multiple authors)
    - Cover image upload (stored as `cover.webp` alongside the book file)
@@ -126,7 +126,7 @@ delb/
 ├── app/              # Nuxt application code
 │   ├── components/   # Vue components
 │   ├── composables/  # Vue composables
-│   ├── pages/        # Route pages (book detail at /book/[id])
+│   ├── pages/        # Route pages (book detail at /books/[id])
 │   └── utils/        # Utilities and database schema
 ├── library/          # Book storage directory (gitignored)
 ├── data/             # SQLite database location (gitignored)
@@ -139,11 +139,12 @@ delb/
 
 ## Documentation
 
+- [Documentation home](docs/README.md) - User guides, hosting, architecture, data model, and core request flows
 - [Known Issues](docs/known-issues.md) - Known bugs and workarounds
 - [Tooltip Guide](docs/tooltip.md) - Component documentation
 - [Calibre Import](docs/calibre-import.md) - Migration process + caveats
 - [Calibre Database Schema](docs/calibre-database-schema.md) - Reference schema
-- [Health Checks](docs/health-checks.md) - Planned library/database integrity checks
+- [Health Checks](docs/health-checks.md) - Implemented quick/deep library and database checks
 
 ## Development
 
@@ -175,7 +176,7 @@ entries use the canonical structure:
 ```
 library/
 └── {author}/
-    └── {title}/
+    └── {title} ({book-id-prefix})/
         ├── {book-file}.epub|pdf|mobi|azw3
         └── cover.webp
 ```

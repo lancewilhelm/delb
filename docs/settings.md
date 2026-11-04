@@ -1,162 +1,60 @@
-# Settings Persistence & SSR Preload
+# Settings, appearance, and synchronization
 
-This document explains how user/global settings are persisted, how they are loaded during SSR, and how the theme is applied without a flash of unstyled content (FOUC).
+Delb keeps account and global settings in the database and persists supported client state in localStorage. Server rendering loads the account settings before applying the theme. Client persistence improves continuity between visits; server rows remain the account-level source of truth.
 
-## Goals
+## Settings ownership
 
-- Keep settings in **localStorage** for client-side persistence.
-- Maintain **SSR theme correctness** to avoid FOUC.
-- Treat the server as the **source of truth** for user/global settings.
+| State                      | Owner and persistence                                                     |
+| -------------------------- | ------------------------------------------------------------------------- |
+| User settings              | Account JSON in `user_settings`; client store persists locally            |
+| Global settings            | Installation JSON in `global_settings`; writes require system admin/owner |
+| Provider secrets           | Server-side `global_secrets`; clients receive capability flags            |
+| UI state and Books filters | Pinia stores with their own persistence choices                           |
 
----
+The [user settings store](../app/stores/userSettings.ts) includes a desktop profile and optional mobile overrides. `activeSettings` selects the effective profile. [Device detection](../app/composables/useIsMobileDevice.ts) determines whether the mobile profile applies.
 
-## Storage Strategy
+## Server rendering and sign-in
 
-### Client-side persistence
+1. The [auth plugin](../app/plugins/auth.server.ts) loads the session.
+2. [Settings preload](../app/plugins/00-settings-ssr.server.ts) calls `GET /api/settings` with the request cookie and applies the returned settings and capabilities.
+3. The server theme/font plugins add the selected resources to the HTML.
+4. The browser hydrates the stores. The [sync plugin](../app/plugins/sync.client.ts) pulls settings when signed in, including after login and registration.
 
-Settings are persisted locally via Pinia persisted state with storage set to **localStorage** in `nuxt.config.ts`:
+This gives server rendering access to database-backed settings without reading browser localStorage. Failed preload can still fall back to defaults; the mechanism does not prove every deployment is free of appearance flashes.
 
-- `piniaPluginPersistedstate.storage = 'localStorage'`
-- Stores using `persist: true` will now persist to localStorage.
+## Fixed and system appearance
 
-This applies to:
+The current account field is `themePreference`, defined in [themePreference.ts](../app/utils/themePreference.ts):
 
-- `userSettings`
-- `globalSettings`
-- `ui`
+```json
+{
+  "mode": "system",
+  "fixed": "guage_light",
+  "light": "guage_light",
+  "dark": "guage_dark"
+}
+```
 
-### Server-side source of truth
+Fixed mode uses `fixed`. System mode chooses `light` or `dark` from the operating-system preference. The defaults use system mode with the Guage light/dark pair. A legacy `theme` value migrates to a fixed preference when the store normalizes it.
 
-Settings are stored in the DB and fetched through:
+The [server theme plugin](../app/plugins/init-theme.server.ts) emits either a fixed stylesheet or separate light/dark resources with media queries. The [client plugin](../app/plugins/init-theme.client.ts) watches the OS preference, resolved theme, preview, and custom palette.
 
-- `GET /api/settings` → returns `userSettings`, `globalSettings`, and capabilities
-- `PUT /api/settings/user` → persists user settings
-- `PUT /api/settings/global` → persists global settings (admin-only)
+[useThemeAppearance](../app/composables/useThemeAppearance.ts) selects a fixed theme, assigns a light/dark slot, or returns to system mode. Theme previews do not become saved selections until a selection action updates the settings.
 
----
+Custom colors live in `customTheme`. A theme slot or fixed choice can select `custom`; the palette then supplies CSS roles through [custom theme utilities](../app/utils/customTheme.ts). `theme: 'custom'` is the legacy shape, not the current settings contract.
 
-## SSR Preload (No FOUC)
+## Write acknowledgements and concurrent changes
 
-To avoid theme flashes, settings are pulled **server-side** before rendering.
+`PUT /api/settings/user` receives the settings document and its `updatedAt` revision. [The handler](../server/api/settings/user.put.ts) accepts a newer revision, or acknowledges an identical repeat of the stored revision/content. It returns the stored row and whether the write was accepted.
 
-### Flow
+The client tracks acknowledged revisions. A rejected write rebases the pending local changes onto the returned server row and retries with a later revision. Stale pulls and delayed responses must not overwrite acknowledged or pending changes. User settings timestamps use millisecond storage; global settings use their separate server contract.
 
-1. **SSR plugin** runs on the server and calls `GET /api/settings`.
-2. The response is applied to:
-   - `userSettingsStore.applyRemoteSettings(...)`
-   - `globalSettingsStore.applyRemoteSettings(...)`
-   - `globalSettingsStore.capabilities`
-3. The theme plugin reads from `userSettingsStore.activeSettings.theme` and injects the proper theme stylesheet into `<head>`.
+Synchronization is request-driven. The current implementation does not claim a live cross-device subscription. Other devices pull on the supported initialization/sign-in paths.
 
-This ensures that the theme is already in place **before HTML is delivered**.
+## Sign-out and permissions
 
-### SSR plugin file
+The [auth composable](../app/composables/useAuth.ts) resets account/UI state and clears the known persisted account, collection, UI, and filter keys when signing out. Server sessions and each endpoint's permission checks remain authoritative.
 
-- `app/plugins/00-settings-ssr.server.ts`
+Collection membership controls cover/file visibility. Settings persistence does not grant access to another user's books or expose provider tokens.
 
----
-
-## Theme Initialization
-
-### Server
-
-- `app/plugins/init-theme.server.ts`
-- Uses `userSettingsStore.activeSettings.theme` to set:
-  ```html
-  <link id="currentTheme" rel="stylesheet" href="/css/themes/<theme>.css" />
-  ```
-
-### Client
-
-- `app/plugins/init-theme.client.ts`
-- Watches `userSettingsStore.activeSettings.theme` and loads the theme with `loadTheme(...)`.
-
----
-
-## Client Sync
-
-- `app/plugins/sync.client.ts` pulls settings:
-  - once when the app has a session (initial load), and
-  - again on the transition to logged-in (e.g. after `/login` or `/register`).
-- This ensures settings (including theme) apply without requiring a full reload.
-
-Additionally, the `/login` and `/register` flows explicitly pull settings after `fetchSession()` to avoid showing the default theme during the post-login navigation.
-
----
-
-## Why localStorage + SSR preload works
-
-- **localStorage** is not available during SSR
-- Therefore SSR must **fetch settings from the DB**
-- Once SSR hydrates the store, the theme can be applied without a flash
-
----
-
-## Sign-out Behavior
-
-On logout:
-
-- Stores are reset (`$reset`)
-- Persisted localStorage keys are cleared:
-  - `delb.userSettings`
-  - `delb.globalSettings`
-  - `delb.ui`
-
----
-
-## Summary
-
-| Concern               | Strategy                                |
-| --------------------- | --------------------------------------- |
-| Persistence           | localStorage (Pinia persisted state)    |
-| SSR theme correctness | SSR preload via `/api/settings`         |
-| Avoid FOUC            | Apply theme on SSR using hydrated store |
-| Source of truth       | DB via `/api/settings`                  |
-
-## Cover Access Security (Related)
-
-Cover delivery is intentionally not configurable from user/global settings.
-
-- Canonical endpoint: `GET /api/books/:id/cover?variant=thumb|source`
-- Access model: authenticated session + collection membership visibility
-- Caching: private revalidation (`ETag`, `Cache-Control: private, max-age=0, must-revalidate`)
-
-For metadata "cover from URL" flows, Delb also enforces server-side URL/network/payload safeguards before returning bytes to the browser.
-
-## Initial Owner Assignment
-
-Delb ensures only one first user is promoted to system `owner` under concurrent registrations.
-
-- First-user owner promotion is handled server-side with an atomic claim.
-- Registration does not use a bootstrap token flow.
-- Outside first-user promotion, registration behavior follows global settings (`allowRegistration`).
-
----
-
-## Notes
-
-- Mobile settings are stored as full copies when enabled.
-- This simplifies mobile handling and keeps edits straightforward.
-- Overrides/diffs are no longer used for mobile settings.
-
-## Custom Theme
-
-Appearance → Themes → Custom Theme provides one saved palette per settings
-profile. The six editable colors are background, text, main, secondary, alternate
-background, and error. On first opening, the editor captures the active preset's
-computed colors. The Custom chip activates that palette; editing it while a preset
-is selected leaves the preset active. The picker supports touch/pointer dragging,
-keyboard arrows, hue/saturation/brightness sliders, and opaque hex input.
-
-`BaseUserSettings.customTheme` stores the six colors as normalized six-digit hex
-values, and `theme: 'custom'` selects it. Missing or invalid stored colors fall back
-to Delb's default light palette. Separate mobile settings keep their own palette.
-Changes update local settings immediately and use the existing 400 ms debounced
-server sync; no additional endpoint or database migration is required.
-
-For Custom, SSR emits a validated `#currentTheme` style instead of a stylesheet
-link. The client watches both selection and palette changes to update that style
-live. Preset selection replaces it after the stylesheet loads. Theme loading
-cancels earlier pending requests so they cannot overwrite a later selection.
-Command-palette preset previews restore the saved Custom palette when dismissed.
-Caret and legacy error variants derive from Main and Error respectively.
+See [book view settings](book-view-settings.md), [system architecture](developing/architecture.md), and [the verification record](developing/documentation-status.md).

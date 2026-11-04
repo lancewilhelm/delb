@@ -1,412 +1,46 @@
-# Delb UI layout philosophy (collections, views, filters)
+# Library navigation and layout
 
-This document defines the **final, recommended UI layout paradigm** for Delb. It is designed to be internally consistent with Delb’s data model:
+Delb separates collection scope, library navigation, and book presentation. This page describes the current layout. Earlier layout proposals have been replaced by the implementation-backed explanation below.
 
-- **Collections** (scope boundary + sharing boundary)
-- **Views** (representation modes: books vs authors vs series vs publishers)
-- **Filters** (refinements: shelves/tags/ratings/etc)
+## Collection scope
 
-The goal is to keep the mental model clean, prevent concepts from “showing up in two places”, and scale well from single-user to multi-user/shared collections.
+The header collection picker chooses All or a specific accessible collection. All combines books visible through collection membership. Personal is a default collection, not a second global catalog.
 
-## Per-user book ratings (API + storage)
+A book can belong to several collections while retaining one shared metadata record. Each reader has separate ratings, status, reading position, and progress history. See [Delb's data model](developing/data-model.md).
 
-Ratings are **per user**, not shared just because a book is shared in a collection.
+## Navigation and book views
 
-### Storage scale
+The navigation exposes Dashboard, Books, Authors, Series, Publishers, and Tags. These are ways to browse the selected scope. Within supported book listings, grid and list are separate book views with independent visible fields and ordering.
 
-- Stored in `book_ratings.rating` as an integer **half-star scale**
-  - `1..10` maps to `0.5..5.0` stars (example: `7` => `3.5` stars)
-- A rating is **unique per (user, book)**.
+Books, author, publisher, and tag book listings use the shared grid/list field preferences. Series retains a separate presentation. The view-settings button sits beside the grid/list switch. Changes apply immediately through account settings, including the mobile profile when enabled.
 
-### Endpoints
+Grid cards keep selected values on one line and omit missing metadata. List cells wrap to at most three lines and use a dash for missing values. Covers remain fixed first. See [accepted book view behavior](book-view-settings.md) and [the user guide](using/find-books.md).
 
-- `GET /api/books/:id`
-  - Returns the book detail payload and includes **`book.userRating`**:
-    - `number` (integer `1..10`) when the current user has rated the book
-    - `null` when the current user has not rated the book
+Grid/list components virtualize rendered items while the server paginates records with stable sort keys and cursors. Those are different limits. Virtualization does not mean the client downloads the entire library.
 
-- `POST /api/books/:id/rating`
-  - Sets or clears the authenticated user’s rating for that book
-  - Body: `{ rating: number | null }`
-    - Send `null` (or `0`) to clear the rating
-    - Send either:
-      - stars (`0.5..5.0` in 0.5 increments), or
-      - half-star integer (`1..10`)
-  - Response: `{ success: true, data: { rating: number | null } }` where `rating` is the stored `1..10` integer or `null`
+## Filters and search
 
----
+The Books page exposes a filter dropdown for personal reading status, date added, and file presence. Dashboard status counts navigate to the corresponding Books filters.
 
-## The collections paradigm (Personal-first)
+Global search searches accessible books and entities, including stored ISBNs. It is separate from the command palette and does not inherit every page filter. [Global search](global-search.md) names the relevant source files.
 
-Delb uses a **Personal-first** model that mirrors how modern photo apps work (e.g. “library + albums”):
+The Sidebar component contains disabled shelf, tag multi-select, and rating placeholders marked coming soon. They are not active filtering capabilities.
 
-- A **book always belongs to a user’s library** (their Personal collection).
-- Additional collections act like **albums**:
-  - a book can be included in multiple collections
-  - collections can be used for sharing and collaboration
-  - removing a book from a collection does _not_ delete the book from the owner’s Personal library
+## Selection and collection changes
 
-This design prevents “orphaned” books that exist in the database but cannot be reached in the UI. It also makes it easy to share books without transferring ownership.
+Books selection supports explicit IDs and all-in-scope with exclusions. Collection bulk actions require a concrete editable source collection and editable target collections. Personal links cannot be removed. Single-book detail controls allow membership changes in editable targets after visibility checks.
 
----
+Owner/editor rights govern collection membership changes. They do not by themselves grant permission to edit a book's shared metadata or delete its record. See [access control](collections-sharing-rbac.md).
 
-## Personal collection (default library)
+## Add and edit books
 
-Every user has exactly one **Personal** collection:
+The header Add book dialog offers Upload files, By metadata, and Manual entry. Personal stays included while users select other targets. Uploads and metadata imports create records through different backend paths. Manual entry opens a blank editor and creates the record when the user selects Create.
 
-- It is created automatically (users do not need to create a collection before uploading/importing).
-- It is visible in the collection picker like any other collection.
-- It is the **default upload/import target** for that user.
-- It is **non-deletable**.
-- It is **not shareable**.
-- Users may rename it, but it remains the user’s default Personal collection.
+Shared metadata changes affect the existing book across collections. A separate personal rating uses `book_ratings.rating`, with integers 1 through 10 representing half-star steps from 0.5 to 5 stars. Rating reads and writes select the current user.
 
-### Ownership rule (important)
+## Sources
 
-Books are **owned by the uploader**.
-
-- A shared collection can contain books from multiple users.
-- Sharing a collection grants access to the _collection_, not ownership of the underlying books.
-- Deleting a shared collection should never delete books from users’ Personal collections.
-
-#### Minimal sharing / RBAC (v1)
-
-Collections (other than Personal) can be shared with members using roles:
-
-- `owner` — can rename, manage members/roles, and delete the collection
-- `editor` — can rename (and in the future: add/remove books)
-- `viewer` — read-only access
-
-Notes:
-
-- The Personal collection is **not shareable**.
-- Member management is performed within the “Edit collection” modal.
-
-#### Collection deletion (v1)
-
-- Only `owner` can delete a collection.
-- **Personal collections cannot be deleted.**
-- Deleting a collection removes the collection and its membership/link records. It does **not** delete books.
-
-Future direction:
-
-- Book deletion should be restricted to the uploader/owner (with admin override).
-
----
-
-## Upload & import behavior
-
-### Unified “Add book” modal (single collection selector)
-
-Delb uses a single **Add book** modal that supports three flows:
-
-- **Upload files** (EPUB/PDF/MOBI/AZW3)
-- **Add by metadata** (search + create book record)
-- **Manual entry** (opens a blank editor; record is created on Save)
-
-Both flows share the same **collection selection** UI and rules:
-
-- Delb will **always** add new books to your Personal collection.
-- You may optionally add the same book/upload to additional collections.
-- In the UI this should be reflected by showing the Personal collection as **checked and not removable** (so you cannot uncheck it).
-
-### Uploads
-
-When uploading books:
-
-- Delb will **always** add uploaded books to your Personal collection.
-- You may optionally add the same upload to additional collections.
-
-In the UI this should be reflected by showing the Personal collection as **checked and not removable** (so you cannot uncheck it).
-
-### Calibre import
-
-When importing from Calibre:
-
-- Imported books are **always** added to the importer’s Personal collection.
-- You may optionally add imported books to additional collections.
-
-This keeps import semantics consistent with upload semantics and ensures all books remain reachable in the UI.
-
----
-
-## Core concepts & vocabulary
-
-### Library
-
-“The library” is the overall catalog a user interacts with in Delb. It contains many books and metadata, across one or more collections.
-
-In Delb, a user's Personal collection serves as their default “library home” for uploads/imports. Other collections act like albums: they can include books from one or more users without changing ownership of the underlying book.
-
-### Collection = scope boundary
-
-A **collection** defines _which items exist in scope_, and who can see/edit them (sharing/collaboration).
-
-Examples:
-
-- `Personal` (default per-user collection; non-deletable, not shareable)
-- `Family`
-- `Book Club`
-- `Work`
-
-Collections (other than Personal) are **shareable** and can have **members** with roles.
-
-### View = representation mode
-
-A **view** defines _what kind of thing you’re looking at_ in the main content area.
-
-Views (v1 UI):
-
-- `Books`
-- `Authors` (placeholder)
-- `Series` (placeholder)
-- `Publishers` (placeholder)
-
-### Sorting (Books view)
-
-Sorting controls the **ordering** of the current result set within the active _collection scope_ and does **not** change which items exist in scope.
-
-Current supported Books sort options (v1):
-
-- `dateAdded` (default) — date added to library (newest first by default)
-- `alphabetical` — title A–Z by default
-- `publishedDate` — published date (newest first by default)
-
-Server-side sorting is supported via the books list endpoint:
-
-- `GET /api/books?sort=<dateAdded|alphabetical|publishedDate>&sortDir=<asc|desc>`
-  - Defaults: `sort=dateAdded`, `sortDir=desc`
-  - Cursor pagination is sort-dependent; changing sort resets paging.
-
-### Paginated, virtualized book grids
-
-Book grids use cursor pagination on the API and virtualized rendering in the client. Pagination keeps payloads and memory bounded, while virtualization keeps DOM size stable as users scroll through large libraries.
-
-Implementation notes:
-
-- The grid stabilizes row height using a hidden row sizer so virtualization does not shift when rows have missing metadata.
-- The grid uses content width (excluding padding) and fixes item height to keep scroll math aligned.
-- See `app/components/Books/BooksInfiniteGrid.vue` and `app/components/BookThumbnail.vue`.
-
-### Paginated, virtualized book lists
-
-Book lists use the same cursor pagination strategy but render a single-column, virtualized list. Row height is fixed to a user setting (Settings → Appearance → Book List) to keep scroll math aligned and predictable.
-
-Implementation notes:
-
-- Row height is configured via `bookList.rowHeightPx` in user settings.
-- List view renders cover, title, authors, and series columns in each row.
-- See `app/components/Books/BooksInfiniteList.vue` and `app/components/Books/BookListRow.vue`.
-
-### Multi-select behavior (Books grid)
-
-Selection mode is a header-driven toggle. When active, the grid turns each book into a selectable card.
-
-Key behaviors:
-
-- **Select all** uses a scope-wide selection model (all in scope, with explicit exclusions), so it does not require all books to be loaded.
-- **Shift-click** selects or deselects a contiguous range within the currently loaded books list, based on the sorted order returned by the API.
-- Implementation references: `app/stores/bookSelection.ts`, `app/components/Books/BooksInfiniteGrid.vue`, `app/components/BookThumbnail.vue`, `app/pages/books/index.vue`.
-
-### Filters = refinement
-
-Filters narrow the result set _within the current scope + view_. Filters are always optional and stackable.
-
-Examples:
-
-- shelves (Reading / To Read / Read)
-- tags (Fantasy, Sci-Fi, etc.)
-- ratings (★★★★☆)
-- later: language, format, year, publisher facets, etc.
-
----
-
-## ✅ Final recommended layout
-
-### 1) Header = Scope + Mode (global)
-
-The header is global and should be the only place that controls:
-
-- what exists in scope (collection)
-- how you are looking at it (view)
-
-Nothing else should compete with it.
-
-#### Left / center: View selector (dropdown)
-
-`Books ▾ | Authors | Series | Publishers`
-
-- This changes the representation in the main content.
-- It does **not** change which items exist in scope.
-
-#### Right: Collection switcher (dropdown)
-
-`Personal ▾`
-
-- Contains:
-  - `All` (special scope across all collections you can access)
-  - Your Personal collection (default, non-deletable, not shareable)
-  - Any shared collections you are a member of
-  - Create/manage actions (create now, manage later)
-- This defines _which books exist in scope_.
-
-##### Hard rule
-
-> **Exactly one collection context at a time**  
-> (Where `All` is a special single context meaning “all collections I can access”.)
-
----
-
-### 2) Sidebar = Filters (stackable, optional)
-
-The sidebar is **not navigation to entities**.
-It is **pure refinement** of the current scope + view.
-
-It should always answer:
-
-> “How do I narrow the current result set?”
-
-The sidebar can be:
-
-- resizable
-- collapsible
-- optional (if user wants more space)
-
-#### Sidebar structure (top → bottom)
-
-##### Status (per-user state)
-
-Single-select (radio buttons, pills, or a dropdown):
-
-- To be read
-- Reading
-- Finished
-- DNF
-
-Allowed special behavior:
-
-- counts per status (within current scope)
-- quick transitions (later)
-- defaults (later)
-
-Notes:
-
-- Status is user-scoped metadata on a book (not a container like Collections).
-- Status is mutually exclusive and optional (a book may have no status).
-- Internal keys (for API/DB): `to_be_read`, `reading`, `finished`, `dnf`.
-
-##### Tags (classification)
-
-Multi-select:
-
-- Fantasy
-- LitRPG
-- Sci‑Fi
-- …
-
-##### Ratings
-
-Multi-select (or min rating / exact rating, depending on UX choice later):
-
-- ★★★★★
-- ★★★★☆
-- …
-
-##### (Later) Other facets
-
-- Language
-- Format
-- Publisher
-- Year
-- etc.
-
-> Sidebar content can change based on current view  
-> (e.g. a future `Authors` view may present different facets than `Books`).
-
----
-
-### 3) Main content = Result set
-
-The main content always represents:
-
-> **“Items in this collection, shown as this view, filtered by these facets.”**
-
-Examples:
-
-- `Personal + Books + Reading + Fantasy`
-- `Book Club + Authors + ★★★★☆`
-- `All + Series + To Read`
-
-This keeps the system unambiguous and avoids duplicated controls.
-
----
-
-### 4) Collections in the sidebar? (optional, advanced)
-
-Collections should not be the primary facet in the sidebar (because scope belongs in the header).
-However, you may optionally include **collection shortcuts** for convenience, as long as they are clearly secondary and mirror the header selector.
-
-Example:
-
-```
-▸ Collections (shortcuts)
-  Personal
-  Book Club
-  Work
-```
-
-Rules if present:
-
-- collapsed by default
-- mirrors header selection (never diverges)
-- never the primary way to switch scopes
-
-If you omit sidebar collection shortcuts entirely, that is also correct.
-
----
-
-## Why this layout works
-
-This layout cleanly maps UI design to the data model:
-
-- Collections = **scope**
-- Views = **representation**
-- Shelves = **user state**
-- Tags = **metadata**
-- Filters compose cleanly
-- No concept appears in two roles
-- Scales from personal usage to shared/collaborative collections
-
-This pattern matches proven UX architectures used by:
-
-- Calibre (when structured cleanly)
-- music library apps
-- IDEs
-- data exploration tools
-
----
-
-## The “sanity” rule
-
-If you’re ever unsure where something belongs, ask:
-
-> **Does this change what exists, or how I’m looking at it?**
-
-- What exists → **Header (collection)**
-- How I’m looking → **Header (view selector)**
-- Narrowing → **Sidebar (filters)**
-
----
-
-## Implementation notes (v1 placeholders)
-
-For v1 UI implementation:
-
-- `Books` view is real.
-- Books view filters are implemented as a header dropdown (added date, status, file presence) in:
-  - `app/pages/books/index.vue`
-  - `app/stores/booksIndexFilters.ts`
-  - `server/api/books/index.get.ts`
-- `Authors`, `Series`, `Publishers` are placeholders that can render “Coming soon”.
-- Sidebar sections can be present as placeholders even if filtering is not implemented yet.
-- Collection switcher and view selector should be functional controls in the header.
+- [Header](../app/components/AppHeader.vue) and [collection picker](../app/components/CollectionPickerDropdown.vue).
+- [Books page](../app/pages/books/index.vue), [filter store](../app/stores/booksIndexFilters.ts), and [selection store](../app/stores/bookSelection.ts).
+- [Shared grid](../app/components/Books/BooksInfiniteGrid.vue), [list](../app/components/Books/BooksInfiniteList.vue), and [view settings](../app/components/Books/BooksViewSettings.vue).
+- [Core request flows](developing/core-workflows.md) for the backend connections.
