@@ -1,5 +1,7 @@
 # Icons (favicon + PWA)
 
+> Historical asset note. The `pnpm icons:generate` command named below is absent from the current package scripts. Inspect [current assets](../../public) and [Nuxt head configuration](../../nuxt.config.ts) before changing icons.
+
 This repo uses a **dynamic favicon** at runtime, but PWA and platform installers (iOS/Android/Windows) rely on **static icon files** referenced from the web manifest and `<head>`.
 
 ## Source of truth

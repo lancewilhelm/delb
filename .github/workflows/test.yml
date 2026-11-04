@@ -21,6 +21,7 @@ jobs:
           java-version: '21'
       - run: pnpm install --frozen-lockfile
       - run: pnpm prepare:nuxt
+      - run: pnpm docs:check
       - run: pnpm test
       - run: pnpm typecheck
       - run: pnpm lint

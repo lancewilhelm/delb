@@ -1,7 +1,9 @@
 # Book view settings
 
+> Historical record. This page preserves the design and delivery evidence for issue #20. Current user instructions are in [Browse and find books](../using/find-books.md#change-the-grid-or-list).
+
 Design discussion for [issue #20](https://github.com/lancewilhelm/delb/issues/20).
-Status: owner confirmed the completed design on 2026-11-02. Implemented on the issue branch for pull-request review.
+Status: owner confirmed the completed design on 2026-11-02. Implemented and merged in [PR #25](https://github.com/lancewilhelm/delb/pull/25).
 
 ## Accepted decisions
 

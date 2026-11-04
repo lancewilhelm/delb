@@ -1,5 +1,7 @@
 # Known Issues
 
+> Historical investigations. Dates, reproduction steps, and defect status below describe earlier versions. See [documentation verification](../developing/documentation-status.md) for the current checked behavior.
+
 This document tracks known bugs, quirks, and workarounds in the project.
 
 ---
