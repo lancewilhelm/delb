@@ -22,6 +22,18 @@ Your Personal collection starts empty. Delb includes it when you add books throu
 
 **All** includes books in shared collections where you are a member. It does not expose every book stored on the installation.
 
+## Choose a dashboard shelf
+
+1. Select **Delb** to open the dashboard.
+2. Choose **Continue reading** or **Recently read** above the books.
+3. Select **Show more** when more books are available.
+
+Continue reading shows your saved progress. Recently read shows finished books with a date read, newest first. The counts above the tabs always describe your selected collection.
+
+See the [dashboard reference](../developing/reference/dashboard.md) for shelf order and data rules.
+
+![Dashboard with collection counts above the reading shelf tabs](../images/dashboard.png)
+
 ## Sign in again
 
 Open `/login`, enter your email and password, and select **Login**. Delb restores your account settings after sign-in.
