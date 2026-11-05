@@ -48,7 +48,7 @@ onBeforeUnmount(() => controller.abort());
       :disabled="saving"
       @click.stop="toggleFavorite"
     >
-      <Icon name="lucide:star" :class="{ 'fill-current': favorite }" />
+      <Icon name="lucide:star" mode="svg" />
     </button>
     <span v-if="errorMessage" class="favorite-error" role="alert">{{
       errorMessage
@@ -67,8 +67,13 @@ onBeforeUnmount(() => controller.abort());
   color: var(--main-color);
   border: 0;
   padding: 3px;
+  min-width: 24px;
+  min-height: 24px;
   line-height: 1;
   opacity: 0.65;
+}
+.favorite-control button[aria-pressed='true'] :deep(path) {
+  fill: currentColor;
 }
 .favorite-control button[aria-pressed='true'],
 .favorite-control button:hover {

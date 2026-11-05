@@ -338,6 +338,19 @@ test('shelf changes reject stale scope responses and loading more can retry with
       view.text().includes('Next page favorite'),
   );
   assert.equal(view.button('Show more'), undefined);
+  view
+    .all()
+    .find(
+      (element) =>
+        element.tag === 'span' && element.text === 'New scope favorite',
+    )
+    .props.onStatusChange();
+  await flush();
+  assert.equal(requests[5].query.offset, 0);
+  requests[5].resolve(result('Refreshed after status change', 'favorites'));
+  await flush();
+  assert.ok(view.text().includes('Refreshed after status change'));
+  assert.ok(!view.text().includes('New scope favorite'));
   requests[0].resolve(result('Stale initial reading', 'reading'));
   await flush();
   assert.ok(!view.text().includes('Stale initial reading'));
