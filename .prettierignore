@@ -1,3 +1,8 @@
 # Ignore artifacts:
 build
 coverage
+
+# Conversion feasibility downloads and generated reports:
+review/book-conversion/.cache
+review/book-conversion/output
+review/book-conversion/evidence.json
