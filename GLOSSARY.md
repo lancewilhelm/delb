@@ -1,6 +1,8 @@
 # Delb
 
-Delb organizes books and their metadata in a personal library.
+Delb organizes books and their metadata in a library of shared and private collections.
+
+Collection terminology describes the [proposed collection model](docs/adr/0004-exclusive-collections-and-shared-default.md). The [collections reference](docs/developing/reference/collections.md) describes the current implementation.
 
 ## Language
 
@@ -8,16 +10,25 @@ Delb organizes books and their metadata in a personal library.
 The books a reader can access through their collection memberships. The All selection includes every accessible collection.
 
 **Collection**:
-A named group of books with its own members and access roles. A book can belong to several collections.
+A named group of books with its own members and access roles. Each book entry belongs to exactly one collection, while separate entries for the same title can exist in different collections.
 
-**Personal collection**:
-A reader's default collection. It can be renamed but cannot be shared, transferred, left, or deleted.
+**Default collection**:
+The shared collection selected for automatic enrollment of new readers and as the fallback destination when an added book has no explicit collection target. Its default designation does not grant access to users who are not members.
+
+**Book entry**:
+A book in Delb's catalog with its own metadata, files, and reader-specific reading data. Separate entries can represent the same title.
+
+**Book move**:
+A change to a book entry's sole collection that preserves its identity and reading data. Access follows membership in the destination collection.
+
+**Personal collection (legacy)**:
+A reader's protected default collection in Delb's existing model. It can be renamed but cannot be shared, transferred, left, or deleted.
 
 **Collection owner**:
-The member who controls a collection's ownership and deletion. This role is separate from the system owner and a book's creator.
+The single required member who controls a collection's ownership and deletion. This role is separate from the system owner and a book's creator.
 
 **Book creator**:
-The user recorded as having created a book entry. Sharing that entry does not transfer creator privileges.
+The user recorded as having created a book entry. Creator provenance does not grant book-management privileges independently of collection roles.
 
 **Reference-only book**:
 A catalog entry without a downloadable ebook file. It can represent a physical book and can still have a cover and reading history.
