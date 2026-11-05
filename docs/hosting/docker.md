@@ -4,7 +4,17 @@ Delb’s Docker image runs the Nuxt server and maintains a persistent SQLite DB.
 
 ## Build
 
-`docker build -t delb .`
+```sh
+docker build --build-arg NUXT_PUBLIC_APP_VERSION="$(git rev-parse --short=7 HEAD)" -t delb .
+```
+
+Settings > General > About shows the short commit ID of the build. Published
+images receive this value automatically. Local Docker builds need the build
+argument because the image excludes Git metadata. Without it, the version is
+`unknown`.
+
+You can supply a release label with the same build argument or override it with
+`NUXT_PUBLIC_APP_VERSION` when starting the container.
 
 ## Run
 
