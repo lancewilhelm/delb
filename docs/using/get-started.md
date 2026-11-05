@@ -34,6 +34,8 @@ To save a favorite, open a book and select its star. Select the filled star agai
 
 See the [dashboard reference](../developing/reference/dashboard.md) for shelf order and data rules.
 
+![Dashboard with collection counts above the reading shelf tabs](../images/dashboard.png)
+
 ## Sign in again
 
 Open `/login`, enter your email and password, and select **Login**. Delb restores your account settings after sign-in.
