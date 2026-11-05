@@ -167,12 +167,17 @@ onMounted(async () => {
             :tag="loadedTag"
             @changed="onTagChanged"
           />
-          <div class="text-sm sm:text-md opacity-70 italic text-(--contrast-sub-color)">
+          <div
+            class="text-sm sm:text-md opacity-70 italic text-(--contrast-sub-color)"
+          >
             {{ bookCount }} book{{ bookCount === 1 ? '' : 's' }}
           </div>
         </div>
 
-        <div v-if="errorMessage" class="text-sm text-red-600 mt-2">
+        <div
+          v-if="errorMessage"
+          class="text-sm [--contrast-status-color:var(--color-red-600)] mt-2 contrast-status"
+        >
           {{ errorMessage }}
         </div>
       </div>

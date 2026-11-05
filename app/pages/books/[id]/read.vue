@@ -1145,7 +1145,7 @@ watch(
                       class="sr-only peer"
                     />
                     <span
-                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-(--sub-alt-color) text-(--contrast-text-color) peer-checked:bg-(--main-color) peer-checked:text-(--bg-color)"
+                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-(--sub-alt-color) text-(--contrast-text-color) peer-checked:bg-(--main-color) peer-checked:text-(--contrast-inverse-color)"
                     >
                       Pages
                     </span>
@@ -1158,7 +1158,7 @@ watch(
                       class="sr-only peer"
                     />
                     <span
-                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-(--sub-alt-color) text-(--contrast-text-color) peer-checked:bg-(--main-color) peer-checked:text-(--bg-color)"
+                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-(--sub-alt-color) text-(--contrast-text-color) peer-checked:bg-(--main-color) peer-checked:text-(--contrast-inverse-color)"
                     >
                       Scroll
                     </span>
@@ -1178,7 +1178,10 @@ watch(
             >*</span
           >
         </span>
-        <span v-if="saveErrorMessage" class="text-(--contrast-error-color) text-xs">
+        <span
+          v-if="saveErrorMessage"
+          class="text-(--contrast-error-color) text-xs"
+        >
           {{ saveErrorMessage }}
         </span>
       </div>
@@ -1237,9 +1240,8 @@ watch(
               type="button"
               class="w-full rounded-md px-2 py-1.5 text-left text-sm hover:bg-(--sub-color)/10"
               :class="{
-                'bg-(--sub-color)/10 text-(--contrast-main-color)': isActiveTocHref(
-                  item.href,
-                ),
+                'bg-(--sub-color)/10 text-(--contrast-main-color)':
+                  isActiveTocHref(item.href),
               }"
               :style="{ paddingLeft: `${8 + item.depth * 14}px` }"
               @click="goToTocHref(item.href)"
@@ -1285,7 +1287,9 @@ watch(
           v-else-if="errorMessage"
           class="flex items-center justify-center w-full h-full"
         >
-          <div class="text-sm text-(--contrast-error-color)">{{ errorMessage }}</div>
+          <div class="text-sm text-(--contrast-error-color)">
+            {{ errorMessage }}
+          </div>
         </div>
       </div>
 

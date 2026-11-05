@@ -133,7 +133,7 @@ async function clearToken() {
             <div class="flex items-center gap-2 shrink-0">
               <button
                 type="button"
-                class="px-3 py-2 rounded-lg bg-(--main-color) text-(--bg-color) disabled:opacity-50 disabled:cursor-not-allowed"
+                class="px-3 py-2 rounded-lg bg-(--main-color) text-(--contrast-inverse-color) disabled:opacity-50 disabled:cursor-not-allowed"
                 :disabled="!isAdmin || saveState.saving"
                 @click="saveToken"
               >
@@ -151,7 +151,10 @@ async function clearToken() {
             </div>
           </div>
 
-          <div v-if="saveState.error" class="text-sm text-(--contrast-error-color)">
+          <div
+            v-if="saveState.error"
+            class="text-sm text-(--contrast-error-color)"
+          >
             {{ saveState.error }}
           </div>
           <div v-else-if="saveState.ok" class="text-sm opacity-80">

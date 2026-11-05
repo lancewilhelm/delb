@@ -85,8 +85,7 @@ type ImportSummary = {
 };
 
 type ApiResponse =
-  | { success: true; data: ImportSummary }
-  | { success: false; message?: string };
+  { success: true; data: ImportSummary } | { success: false; message?: string };
 
 type CollectionOption = { id: string; name: string; isPersonal?: boolean };
 
@@ -101,8 +100,7 @@ const errorMessage = ref<string | null>(null);
 const importDryRun = ref(false);
 
 type HealthApiResponse =
-  | { success: true; data: HealthReport }
-  | { success: false; message?: string };
+  { success: true; data: HealthReport } | { success: false; message?: string };
 
 const healthBusy = ref(false);
 const healthReport = ref<HealthReport | null>(null);
@@ -163,8 +161,8 @@ function statusClass(status: HealthStatus): string {
   return status === 'error'
     ? 'text-(--contrast-error-color)'
     : status === 'warn'
-      ? 'text-yellow-600 dark:text-yellow-400'
-      : 'text-green-600 dark:text-green-400';
+      ? '[--contrast-status-color:var(--color-yellow-600)] dark:[--contrast-status-color:var(--color-yellow-400)] contrast-status'
+      : '[--contrast-status-color:var(--color-green-600)] dark:[--contrast-status-color:var(--color-green-400)] contrast-status';
 }
 
 async function runHealthChecks(mode: HealthMode) {
@@ -391,7 +389,10 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
           </button>
         </div>
 
-        <div v-if="healthErrorMessage" class="text-sm text-(--contrast-error-color)">
+        <div
+          v-if="healthErrorMessage"
+          class="text-sm text-(--contrast-error-color)"
+        >
           {{ healthErrorMessage }}
         </div>
 
@@ -606,7 +607,9 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
           </div>
 
           <div v-if="lastResult.results.warnings?.length" class="mt-2">
-            <div class="font-semibold text-(--contrast-error-color)">warnings</div>
+            <div class="font-semibold text-(--contrast-error-color)">
+              warnings
+            </div>
             <ul class="list-disc ml-5">
               <li
                 v-for="(w, i) in lastResult.results.warnings"

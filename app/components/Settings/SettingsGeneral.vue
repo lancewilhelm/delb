@@ -123,7 +123,10 @@ async function handleUpdateProfile() {
           v-if="changePasswordSuccess"
           class="flex items-center gap-2 italic text-(--contrast-main-color)"
         >
-          <Icon name="lucide:check" class="w-4 h-4 text-(--contrast-main-color)" />
+          <Icon
+            name="lucide:check"
+            class="w-4 h-4 text-(--contrast-main-color)"
+          />
           password updated
         </div>
       </div>
@@ -146,7 +149,7 @@ async function handleUpdateProfile() {
         />
         <div class="flex items-center gap-2">
           <button
-            class="flex items-center gap-2 bg-(--main-color) text-(--bg-color) p-2 rounded-lg px-4 cursor-pointer"
+            class="flex items-center gap-2 bg-(--main-color) text-(--contrast-inverse-color) p-2 rounded-lg px-4 cursor-pointer"
             :class="[
               profileDirty ? 'opacity-100' : 'opacity-60 cursor-not-allowed',
             ]"
@@ -159,7 +162,10 @@ async function handleUpdateProfile() {
             v-if="profileUpdateSuccess"
             class="flex items-center gap-2 italic text-(--contrast-main-color)"
           >
-            <Icon name="lucide:check" class="w-4 h-4 text-(--contrast-main-color)" />
+            <Icon
+              name="lucide:check"
+              class="w-4 h-4 text-(--contrast-main-color)"
+            />
             profile updated
           </div>
         </div>
@@ -182,7 +188,10 @@ async function handleUpdateProfile() {
         to="https://github.com/lancewilhelm/delb"
         class="flex items-center gap-1"
       >
-        <Icon name="simple-icons:github" class="w-4 h-4 text-(--contrast-main-color)" />
+        <Icon
+          name="simple-icons:github"
+          class="w-4 h-4 text-(--contrast-main-color)"
+        />
         <span class="text-(--contrast-main-color)"
           ><span class="logo">Delb</span> on GitHub</span
         >
@@ -224,7 +233,7 @@ async function handleUpdateProfile() {
           @keyup.enter="handleUpdatePassword"
         />
         <button
-          class="flex items-center gap-2 mt-2 bg-(--main-color) text-(--bg-color) p-2 rounded-lg px-4 cursor-pointer"
+          class="flex items-center gap-2 mt-2 bg-(--main-color) text-(--contrast-inverse-color) p-2 rounded-lg px-4 cursor-pointer"
           @click="handleUpdatePassword"
         >
           update password

@@ -1126,7 +1126,9 @@ function startManualEntry() {
           <div v-if="duplicateReview" class="space-y-2">
             <div class="text-sm font-semibold">Incoming</div>
 
-            <div class="flex gap-3 p-3 rounded border border-(--contrast-border-color)/30">
+            <div
+              class="flex gap-3 p-3 rounded border border-(--contrast-border-color)/30"
+            >
               <div class="shrink-0">
                 <img
                   v-if="incomingCoverUrl()"
@@ -1212,12 +1214,7 @@ function startManualEntry() {
               <div class="shrink-0">
                 <img
                   v-if="c.book.coverImagePath"
-                  :src="
-                    coverThumbUrl(
-                      c.book.id,
-                      c.book.updatedAt ?? undefined,
-                    )
-                  "
+                  :src="coverThumbUrl(c.book.id, c.book.updatedAt ?? undefined)"
                   class="w-16 h-24 object-cover rounded border border-(--contrast-border-color)/30"
                   alt=""
                 />
@@ -1492,7 +1489,10 @@ function startManualEntry() {
       <div v-if="errorMessage" class="text-sm text-(--contrast-error-color)">
         {{ errorMessage }}
       </div>
-      <div v-else-if="successMessage" class="text-sm text-green-400">
+      <div
+        v-else-if="successMessage"
+        class="text-sm [--contrast-status-color:var(--color-green-400)] contrast-status"
+      >
         {{ successMessage }}
       </div>
     </div>

@@ -156,7 +156,10 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div v-if="errorMessage" class="text-sm text-red-600 mt-2">
+        <div
+          v-if="errorMessage"
+          class="text-sm [--contrast-status-color:var(--color-red-600)] mt-2 contrast-status"
+        >
           {{ errorMessage }}
         </div>
       </div>

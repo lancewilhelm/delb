@@ -752,7 +752,9 @@ onMounted(async () => {
             <div class="flex items-center gap-1 self-center">
               <BooksViewToggle />
 
-              <span class="border-r border-(--contrast-border-color) mx-1 h-6" />
+              <span
+                class="border-r border-(--contrast-border-color) mx-1 h-6"
+              />
 
               <!-- Select / Actions (Books view only) -->
               <div class="flex items-center gap-2">
@@ -782,7 +784,9 @@ onMounted(async () => {
                     class="absolute right-0 mt-1 w-64 border border-(--contrast-border-color) bg-(--bg-color) rounded-md shadow-lg z-50 overflow-hidden"
                     role="menu"
                   >
-                    <div class="px-2 py-1 border-b border-(--contrast-border-color)">
+                    <div
+                      class="px-2 py-1 border-b border-(--contrast-border-color)"
+                    >
                       <div class="text-xs opacity-70">Actions</div>
                     </div>
 
@@ -902,7 +906,9 @@ onMounted(async () => {
                     {{ collectionsSaveError }}
                   </div>
 
-                  <div class="border border-(--contrast-border-color) rounded-lg p-3">
+                  <div
+                    class="border border-(--contrast-border-color) rounded-lg p-3"
+                  >
                     <div class="text-sm font-semibold mb-2">
                       Your editable collections
                     </div>
@@ -988,7 +994,7 @@ onMounted(async () => {
                     </button>
 
                     <button
-                      class="px-3 py-2 bg-(--main-color) text-(--bg-color) disabled:opacity-60 disabled:cursor-not-allowed"
+                      class="px-3 py-2 bg-(--main-color) text-(--contrast-inverse-color) disabled:opacity-60 disabled:cursor-not-allowed"
                       type="button"
                       :disabled="collectionsSaving || !collectionsDirty"
                       @click="saveCollections"
@@ -1051,7 +1057,10 @@ onMounted(async () => {
                       </label>
                     </div>
 
-                    <p v-if="statusError" class="text-sm text-(--contrast-error-color)">
+                    <p
+                      v-if="statusError"
+                      class="text-sm text-(--contrast-error-color)"
+                    >
                       {{ statusError }}
                     </p>
                   </div>
@@ -1067,7 +1076,7 @@ onMounted(async () => {
                     </button>
 
                     <button
-                      class="px-3 py-2 bg-(--main-color) text-(--bg-color) disabled:opacity-60 disabled:cursor-not-allowed"
+                      class="px-3 py-2 bg-(--main-color) text-(--contrast-inverse-color) disabled:opacity-60 disabled:cursor-not-allowed"
                       type="button"
                       :disabled="statusSubmitting"
                       @click="applyBulkStatus"
@@ -1095,11 +1104,15 @@ onMounted(async () => {
                   <Icon
                     name="lucide:funnel"
                     class="text-(--contrast-main-color) opacity-80 shrink-0 text-xl sm:text-lg"
-                    :class="isFiltersApplied ? 'text-(--bg-color)!' : ''"
+                    :class="
+                      isFiltersApplied ? 'text-(--contrast-inverse-color)!' : ''
+                    "
                   />
                   <span
                     class="hidden lg:block text-sm opacity-80"
-                    :class="isFiltersApplied ? 'text-(--bg-color)' : ''"
+                    :class="
+                      isFiltersApplied ? 'text-(--contrast-inverse-color)' : ''
+                    "
                     >Filters</span
                   >
                   <!-- <Icon
@@ -1155,7 +1168,9 @@ onMounted(async () => {
                       Shows books added within the selected date range.
                     </div>
 
-                    <div class="pt-2 border-t border-(--contrast-border-color)"></div>
+                    <div
+                      class="pt-2 border-t border-(--contrast-border-color)"
+                    ></div>
 
                     <div class="text-sm font-medium opacity-90">Status</div>
 
@@ -1199,7 +1214,9 @@ onMounted(async () => {
                       </label>
                     </div>
 
-                    <div class="pt-2 border-t border-(--contrast-border-color)"></div>
+                    <div
+                      class="pt-2 border-t border-(--contrast-border-color)"
+                    ></div>
 
                     <div class="text-sm font-medium opacity-90">Files</div>
 

@@ -320,7 +320,11 @@ async function submit() {
             </button>
           </div>
         </div>
-        <p v-if="error" role="alert" class="text-sm text-(--contrast-error-color) mt-3">
+        <p
+          v-if="error"
+          role="alert"
+          class="text-sm text-(--contrast-error-color) mt-3"
+        >
           {{ error }}
         </p>
         <div class="flex justify-end gap-2 mt-5">
@@ -334,7 +338,7 @@ async function submit() {
           </button>
           <button
             type="button"
-            class="px-3 py-2 rounded-md bg-(--main-color) text-(--bg-color)"
+            class="px-3 py-2 rounded-md bg-(--main-color) text-(--contrast-inverse-color)"
             :disabled="pending || (state.kind === 'merge' && !state.target)"
             @click="submit"
           >

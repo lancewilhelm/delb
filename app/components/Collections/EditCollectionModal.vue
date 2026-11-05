@@ -757,7 +757,7 @@ function close() {
               </button>
               <button
                 type="submit"
-                class="px-3 py-2 rounded-md bg-(--main-color) text-(--bg-color)"
+                class="px-3 py-2 rounded-md bg-(--main-color) text-(--contrast-inverse-color)"
                 :disabled="
                   busy || !name.trim() || name.trim() === collection?.name
                 "
@@ -830,7 +830,7 @@ function close() {
                 </select>
                 <button
                   type="submit"
-                  class="ml-auto px-3 py-2 rounded-md bg-(--main-color) text-(--bg-color)"
+                  class="ml-auto px-3 py-2 rounded-md bg-(--main-color) text-(--contrast-inverse-color)"
                   :disabled="
                     busy ||
                     membersLoading ||

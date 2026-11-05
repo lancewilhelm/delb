@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
+import themes from '../assets/json/themes.json';
 import {
   appearanceContrastTarget,
   appearanceContrastVariables,
@@ -29,6 +31,17 @@ test('contrast target follows the palette background rather than the OS mode', (
     assert.equal(appearanceContrastTarget(background), 'black');
   for (const background of ['#000000', '#1b1b1b', '#003344', '#252525'])
     assert.equal(appearanceContrastTarget(background), 'white');
+});
+
+test('inverse error text uses each preset’s authored error background', () => {
+  for (const theme of themes) {
+    const css = readFileSync(
+      new URL(`../../public/css/themes/${theme.name}.css`, import.meta.url),
+      'utf8',
+    );
+    const authored = /--error-color:\s*([^;]+);/.exec(css)?.[1]?.trim();
+    assert.equal(theme.errorColor, authored, theme.name);
+  }
 });
 
 test('saved contrast values are finite integers inside the supported range', () => {

@@ -379,7 +379,10 @@ async function addToTargetCollection() {
       </div>
     </div>
 
-    <p v-if="removeError" class="text-sm text-red-600 mt-2">
+    <p
+      v-if="removeError"
+      class="text-sm [--contrast-status-color:var(--color-red-600)] mt-2 contrast-status"
+    >
       {{ removeError }}
     </p>
 
@@ -419,7 +422,10 @@ async function addToTargetCollection() {
             You don’t have any editable (non-personal) collections.
           </p>
 
-          <p v-if="pickerError" class="text-sm text-red-600">
+          <p
+            v-if="pickerError"
+            class="text-sm [--contrast-status-color:var(--color-red-600)] contrast-status"
+          >
             {{ pickerError }}
           </p>
         </div>
@@ -435,7 +441,7 @@ async function addToTargetCollection() {
           </button>
 
           <button
-            class="px-3 py-2 bg-(--main-color) text-(--bg-color) disabled:opacity-60 disabled:cursor-not-allowed"
+            class="px-3 py-2 bg-(--main-color) text-(--contrast-inverse-color) disabled:opacity-60 disabled:cursor-not-allowed"
             type="button"
             :disabled="pickerSubmitting || !targetCollectionId"
             @click="addToTargetCollection"
@@ -444,7 +450,10 @@ async function addToTargetCollection() {
           </button>
         </div>
 
-        <p v-if="addError" class="text-sm text-red-600">
+        <p
+          v-if="addError"
+          class="text-sm [--contrast-status-color:var(--color-red-600)] contrast-status"
+        >
           {{ addError }}
         </p>
 

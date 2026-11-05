@@ -289,7 +289,7 @@ function onRowClick(e?: MouseEvent) {
           class="absolute top-1 right-1 w-5 h-5 rounded-full border flex items-center justify-center text-xs"
           :class="
             props.selected
-              ? 'bg-(--main-color) border-(--main-color) text-(--bg-color)'
+              ? 'bg-(--main-color) border-(--main-color) text-(--contrast-inverse-color)'
               : 'bg-(--bg-color)/80 border-(--contrast-border-color) text-(--contrast-text-color)'
           "
         >

@@ -328,9 +328,7 @@ async function saveTbrRank(next: string) {
   statusMetaErrorMessage.value = null;
 
   try {
-    const trimmed = (
-      typeof next === 'string' ? next : next ?? ''
-    )
+    const trimmed = (typeof next === 'string' ? next : (next ?? ''))
       .toString()
       .trim();
     const payload: { tbrRank?: number | null } = {};
@@ -832,8 +830,6 @@ async function onRatingClick(e: MouseEvent, starIndex: number) {
   await setRating(next);
 }
 
-
-
 const safeDescriptionHtml = computed(() => {
   const desc = book.value?.description;
   if (!desc) return '';
@@ -1248,7 +1244,10 @@ const { copy } = useClipboard();
 
       <div v-if="loading" class="text-sm opacity-80">Loading...</div>
 
-      <div v-else-if="errorMessage" class="text-sm text-(--contrast-error-color)">
+      <div
+        v-else-if="errorMessage"
+        class="text-sm text-(--contrast-error-color)"
+      >
         {{ errorMessage }}
       </div>
 
@@ -1311,7 +1310,9 @@ const { copy } = useClipboard();
                   class="absolute right-0 mt-1 w-44 bg-(--bg-color) border border-(--contrast-border-color) rounded-md shadow-lg z-150 overflow-hidden"
                   role="menu"
                 >
-                  <div class="px-3 py-2 border-b border-(--contrast-border-color)">
+                  <div
+                    class="px-3 py-2 border-b border-(--contrast-border-color)"
+                  >
                     <div class="text-xs opacity-70">Download as</div>
                   </div>
 
@@ -1544,7 +1545,9 @@ const { copy } = useClipboard();
                       :disabled="progressLogSaving"
                     >
                       <option value="percent">Percent</option>
-                      <option value="page" :disabled="!book?.pages">Page</option>
+                      <option value="page" :disabled="!book?.pages">
+                        Page
+                      </option>
                     </select>
 
                     <input
@@ -1678,7 +1681,9 @@ const { copy } = useClipboard();
             </div>
 
             <!-- Title -->
-            <div class="text-4xl leading-tight font-serif text-(--contrast-main-color)">
+            <div
+              class="text-4xl leading-tight font-serif text-(--contrast-main-color)"
+            >
               {{ book.title }}
             </div>
 
@@ -1709,8 +1714,12 @@ const { copy } = useClipboard();
                   ]"
                 >
                   <ClientOnly>
-                    <!-- eslint-disable-next-line vue/no-v-html -->
-                    <div class="book-description-content" v-html="safeDescriptionHtml" />
+                    <!-- eslint-disable vue/no-v-html -->
+                    <div
+                      class="book-description-content"
+                      v-html="safeDescriptionHtml"
+                    />
+                    <!-- eslint-enable vue/no-v-html -->
                     <template #fallback>
                       <span class="book-description-content">{{
                         book.description
@@ -2004,7 +2013,7 @@ const { copy } = useClipboard();
                 </button>
 
                 <button
-                  class="px-3 py-2 rounded-md bg-(--error-color) text-(--bg-color) hover:opacity-90 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                  class="px-3 py-2 rounded-md bg-(--error-color) text-(--contrast-error-inverse-color) hover:opacity-90 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                   type="button"
                   :disabled="deleting"
                   @click="deleteBook"
@@ -2022,7 +2031,6 @@ const { copy } = useClipboard();
             </div>
           </ModalWindow>
         </div>
-
       </div>
 
       <div v-else class="text-sm opacity-80">No book loaded.</div>
@@ -2073,7 +2081,10 @@ const { copy } = useClipboard();
             />
           </div>
 
-          <div v-if="collectionsSaveError" class="text-sm text-(--contrast-error-color)">
+          <div
+            v-if="collectionsSaveError"
+            class="text-sm text-(--contrast-error-color)"
+          >
             {{ collectionsSaveError }}
           </div>
 
@@ -2218,7 +2229,8 @@ const { copy } = useClipboard();
 }
 
 .book-description :deep(.book-description-content blockquote) {
-  border-left: 3px solid color-mix(in srgb, var(--main-color) 40%, var(--contrast-border-color));
+  border-left: 3px solid
+    color-mix(in srgb, var(--main-color) 40%, var(--contrast-border-color));
   opacity: 0.85;
   padding-left: 0.9rem;
 }

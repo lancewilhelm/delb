@@ -34,7 +34,7 @@ const path = computed(() => String(route.fullPath || ''));
         <div class="flex flex-wrap gap-2 pt-2">
           <NuxtLink
             to="/"
-            class="px-3 py-2 rounded-md bg-(--main-color) text-(--bg-color) hover:opacity-90 text-sm"
+            class="px-3 py-2 rounded-md bg-(--main-color) text-(--contrast-inverse-color) hover:opacity-90 text-sm"
           >
             Go home
           </NuxtLink>

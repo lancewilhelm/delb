@@ -385,7 +385,7 @@ function handleSortChange(target: string) {
             :class="[
               'scale-150',
               sortedByName
-                ? 'text-(--bg-color)!'
+                ? 'text-(--contrast-inverse-color)!'
                 : 'text-(--contrast-text-color)!',
             ]"
           />
@@ -395,7 +395,7 @@ function handleSortChange(target: string) {
             :class="[
               'scale-150',
               sortedByName
-                ? 'text-(--bg-color)!'
+                ? 'text-(--contrast-inverse-color)!'
                 : 'text-(--contrast-text-color)!',
             ]"
           />
@@ -413,7 +413,7 @@ function handleSortChange(target: string) {
             :class="[
               'scale-150',
               !sortedByName
-                ? 'text-(--bg-color)'
+                ? 'text-(--contrast-inverse-color)'
                 : 'text-(--contrast-text-color)',
             ]"
           />
@@ -423,7 +423,7 @@ function handleSortChange(target: string) {
             :class="[
               'scale-150',
               !sortedByName
-                ? 'text-(--bg-color)'
+                ? 'text-(--contrast-inverse-color)'
                 : 'text-(--contrast-text-color)',
             ]"
           />

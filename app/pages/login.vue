@@ -88,7 +88,9 @@ async function handleSubmit() {
   <div
     class="login-container w-full h-full flex flex-col items-center justify-center"
   >
-    <div class="text-7xl font-medium mb-6 text-(--contrast-main-color) logo">Delb</div>
+    <div class="text-7xl font-medium mb-6 text-(--contrast-main-color) logo">
+      Delb
+    </div>
     <form
       class="flex flex-col gap-2 items-center login-form"
       @submit.prevent="handleSubmit"
@@ -108,7 +110,7 @@ async function handleSubmit() {
         class="border border-(--contrast-border-color) px-2 py-1 rounded text-[12pt] w-62.5"
       />
       <button
-        class="bg-(--main-color) text-(--bg-color) rounded px-2 py-1 cursor-pointer hover:opacity-80 active:opacity-60 disabled:opacity-60 disabled:cursor-not-allowed"
+        class="bg-(--main-color) text-(--contrast-inverse-color) rounded px-2 py-1 cursor-pointer hover:opacity-80 active:opacity-60 disabled:opacity-60 disabled:cursor-not-allowed"
         :disabled="isSubmitting"
       >
         Login

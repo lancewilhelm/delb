@@ -276,7 +276,10 @@ onBeforeUnmount(() => {
                 }
               "
             >
-              <Icon name="lucide:settings" class="text-(--contrast-main-color)" />
+              <Icon
+                name="lucide:settings"
+                class="text-(--contrast-main-color)"
+              />
             </button>
 
             <span class="text-[11px] opacity-60 shrink-0">{{ c.role }}</span>
@@ -356,7 +359,7 @@ onBeforeUnmount(() => {
 
           <button
             v-tooltip="'Create this collection'"
-            class="px-3 py-2 bg-(--main-color) text-(--bg-color)"
+            class="px-3 py-2 bg-(--main-color) text-(--contrast-inverse-color)"
             :disabled="creating || !newCollectionName.trim()"
             @click="createCollection"
           >

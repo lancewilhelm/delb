@@ -42,7 +42,7 @@ The offline demo reported unavailable external font providers and fallback icon 
 
 ## Interface contrast verification (2026-11-04)
 
-The contrast change passed all 242 tests, typechecking, the production build, and the documentation link check. Lint passed with the existing `BookDescriptionEditor.vue` prop warning.
+The contrast change passed all 243 tests, typechecking, the production build, and the documentation link check. Lint passed with the existing `BookDescriptionEditor.vue` prop warning.
 
 Headless Chromium exercised the production build with a disposable synthetic account. Light and dark themes matched their original text and border colors at 100%. Checks at 50%, 150%, and 200% confirmed background blending, text boosting in OKLab, and the separate quarter-strength border boost. Body and header backgrounds stayed unchanged, with no opacity or filter applied to the page. Saved contrast appeared in SSR HTML and survived reload. Reset, keyboard adjustment, and custom light/dark background target changes passed without page errors.
 

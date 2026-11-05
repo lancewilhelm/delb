@@ -147,7 +147,7 @@ async function handleSubmit() {
         ]"
       />
       <button
-        class="bg-(--main-color) text-(--bg-color) rounded px-2 py-1 hover:opacity-80 active:opacity-60 disabled:opacity-60 disabled:cursor-not-allowed"
+        class="bg-(--main-color) text-(--contrast-inverse-color) rounded px-2 py-1 hover:opacity-80 active:opacity-60 disabled:opacity-60 disabled:cursor-not-allowed"
         :disabled="isSubmitting"
       >
         Register

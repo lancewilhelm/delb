@@ -14,6 +14,9 @@
   --contrast-error-color: var(--error-color);
   --contrast-border-color: var(--sub-color);
   --contrast-sub-alt-border-color: var(--sub-alt-color);
+  --contrast-main-border-color: var(--main-color);
+  --contrast-inverse-color: var(--bg-color);
+  --contrast-error-inverse-color: var(--bg-color);
 }
 
 @supports (color: color-mix(in oklab, black, white)) {
@@ -72,6 +75,53 @@
       ),
       var(--text-color) var(--appearance-contrast-border-boost)
     );
+    --contrast-main-border-color: color-mix(
+      in srgb,
+      color-mix(
+        in srgb,
+        var(--main-color) var(--appearance-contrast-base),
+        transparent
+      ),
+      var(--text-color) var(--appearance-contrast-border-boost)
+    );
+    --contrast-inverse-color: color-mix(
+      in oklab,
+      color-mix(
+        in oklab,
+        var(--bg-color) var(--appearance-contrast-base),
+        var(--main-color)
+      ),
+      var(--appearance-contrast-inverse-target) var(--appearance-contrast-boost)
+    );
+    --contrast-error-inverse-color: color-mix(
+      in oklab,
+      color-mix(
+        in oklab,
+        var(--bg-color) var(--appearance-contrast-base),
+        var(--error-color)
+      ),
+      var(--appearance-contrast-error-inverse-target)
+        var(--appearance-contrast-boost)
+    );
+  }
+}
+
+@layer components {
+  .contrast-status {
+    color: var(--contrast-status-color);
+  }
+  @supports (color: color-mix(in oklab, black, white)) {
+    .contrast-status {
+      color: color-mix(
+        in oklab,
+        color-mix(
+          in oklab,
+          var(--contrast-status-color) var(--appearance-contrast-base),
+          var(--bg-color)
+        ),
+        var(--appearance-contrast-target) var(--appearance-contrast-boost)
+      );
+    }
   }
 }
 

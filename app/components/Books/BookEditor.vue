@@ -1733,7 +1733,7 @@ watch(
             </button>
 
             <button
-              class="px-3 py-2 rounded-md bg-(--main-color) text-(--bg-color) hover:bg-(--main-color)/90! text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              class="px-3 py-2 rounded-md bg-(--main-color) text-(--contrast-inverse-color) hover:bg-(--main-color)/90! text-sm disabled:opacity-60 disabled:cursor-not-allowed"
               type="button"
               :disabled="saveDisabled"
               @click="save"
@@ -1747,7 +1747,10 @@ watch(
 
       <div v-if="loading" class="text-sm opacity-80">Loading...</div>
 
-      <div v-else-if="errorMessage" class="text-sm text-(--contrast-error-color) mb-4">
+      <div
+        v-else-if="errorMessage"
+        class="text-sm text-(--contrast-error-color) mb-4"
+      >
         {{ errorMessage }}
       </div>
 
@@ -1873,7 +1876,10 @@ watch(
 
         <!-- Right column: metadata fields -->
         <div class="min-w-0 flex flex-col gap-4 grow max-w-3xl">
-          <div v-if="successMessage" class="text-sm text-green-600">
+          <div
+            v-if="successMessage"
+            class="text-sm [--contrast-status-color:var(--color-green-600)] contrast-status"
+          >
             {{ successMessage }}
           </div>
 

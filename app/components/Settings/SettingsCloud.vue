@@ -25,7 +25,7 @@ async function nukeData() {
       description="delete all data from local and cloud storage. settings will not be affected."
     >
       <button
-        class="bg-(--error-color)! text-(--bg-color)! font-bold py-2 px-4 rounded cursor-pointer"
+        class="bg-(--error-color)! text-(--contrast-error-inverse-color)! font-bold py-2 px-4 rounded cursor-pointer"
         @click="showNukeConfirm = true"
       >
         Nuke Data

@@ -288,7 +288,7 @@ const visibleFields = computed(() =>
             class="absolute top-2 right-2 w-6 h-6 rounded-full border flex items-center justify-center"
             :class="
               props.selected
-                ? 'bg-(--main-color) border-(--main-color) text-(--bg-color)'
+                ? 'bg-(--main-color) border-(--main-color) text-(--contrast-inverse-color)'
                 : 'bg-(--bg-color)/80 border-(--contrast-border-color) text-(--contrast-text-color)'
             "
           >

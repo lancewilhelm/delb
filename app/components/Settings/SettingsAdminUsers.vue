@@ -309,7 +309,9 @@ async function setUserPassword() {
               </th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-(--contrast-border-color) text-(--contrast-text-color)">
+          <tbody
+            class="divide-y divide-(--contrast-border-color) text-(--contrast-text-color)"
+          >
             <template v-if="sortedUsers.length > 0">
               <tr v-for="u in sortedUsers" :key="u.id" class="h-10">
                 <td class="px-6 py-1 whitespace-nowrap text-sm">
@@ -336,9 +338,11 @@ async function setUserPassword() {
                       />
                     </button>
                     <button
-                      class="flex items-center p-2 rounded-lg text-(--bg-color)"
+                      class="flex items-center p-2 rounded-lg"
                       :class="[
-                        u.banned ? 'bg-(--main-color)!' : 'bg-(--error-color)!',
+                        u.banned
+                          ? 'bg-(--main-color)! text-(--contrast-inverse-color)'
+                          : 'bg-(--error-color)! text-(--contrast-error-inverse-color)',
                       ]"
                       @click="
                         () => {
@@ -355,16 +359,12 @@ async function setUserPassword() {
                       <Icon
                         v-if="!u.banned"
                         name="lucide:pause"
-                        class="text-(--bg-color) scale-125"
+                        class="scale-125"
                       />
-                      <Icon
-                        v-else
-                        name="lucide:play"
-                        class="text-(--bg-color) scale-125"
-                      />
+                      <Icon v-else name="lucide:play" class="scale-125" />
                     </button>
                     <button
-                      class="flex items-center bg-(--error-color)! p-2 rounded-lg text-(--bg-color)"
+                      class="flex items-center bg-(--error-color)! p-2 rounded-lg text-(--contrast-error-inverse-color)"
                       @click="
                         () => {
                           deleteUserModalVisible = true;
@@ -376,10 +376,7 @@ async function setUserPassword() {
                         }
                       "
                     >
-                      <Icon
-                        name="lucide:trash-2"
-                        class="text-(--bg-color) scale-125"
-                      />
+                      <Icon name="lucide:trash-2" class="scale-125" />
                     </button>
                   </div>
                 </td>
@@ -395,7 +392,7 @@ async function setUserPassword() {
       </div>
       <div class="w-full flex justify-center">
         <button
-          class="flex items-center gap-2 mt-4 bg-(--main-color)! text-(--bg-color)! p-2 rounded-lg px-4 cursor-pointer"
+          class="flex items-center gap-2 mt-4 bg-(--main-color)! text-(--contrast-inverse-color)! p-2 rounded-lg px-4 cursor-pointer"
           @click="
             () => {
               createUserModalVisible = true;
@@ -405,7 +402,10 @@ async function setUserPassword() {
             }
           "
         >
-          <Icon name="lucide:user-plus" class="text-(--bg-color) scale-125" />
+          <Icon
+            name="lucide:user-plus"
+            class="text-(--contrast-inverse-color) scale-125"
+          />
           add user
         </button>
       </div>
@@ -458,7 +458,7 @@ async function setUserPassword() {
           </select>
         </div>
         <button
-          class="bg-(--main-color) text-(--bg-color) p-2 rounded-lg"
+          class="bg-(--main-color) text-(--contrast-inverse-color) p-2 rounded-lg"
           @click="createUser"
         >
           create
@@ -494,7 +494,7 @@ async function setUserPassword() {
         />
         <button
           :class="[
-            'flex items-center gap-2 mt-2 bg-(--main-color) text-(--bg-color) p-2 rounded-lg px-4',
+            'flex items-center gap-2 mt-2 bg-(--main-color) text-(--contrast-inverse-color) p-2 rounded-lg px-4',
             deleteUserEmailConfirmation === deleteUserEmail
               ? 'opacity-100 cursor-pointer'
               : 'opacity-50 cursor-default',
@@ -522,13 +522,13 @@ async function setUserPassword() {
         </div>
         <div class="flex gap-2">
           <button
-            class="flex items-center gap-2 mt-2 bg-(--error-color) text-(--bg-color) p-2 rounded-lg px-4"
+            class="flex items-center gap-2 mt-2 bg-(--error-color) text-(--contrast-error-inverse-color) p-2 rounded-lg px-4"
             @click="banUser"
           >
             ban
           </button>
           <button
-            class="flex items-center gap-2 mt-2 bg-(--main-color) text-(--bg-color) p-2 rounded-lg px-4"
+            class="flex items-center gap-2 mt-2 bg-(--main-color) text-(--contrast-inverse-color) p-2 rounded-lg px-4"
             @click="banUserModalVisible = false"
           >
             cancel
@@ -540,7 +540,9 @@ async function setUserPassword() {
     <!-- Edit User Modal -->
     <ModalWindow :open="editUserModalVisible" @close="closeEditUser">
       <div class="flex flex-col gap-4 items-center">
-        <div class="text-(--contrast-main-color) text-lg self-start">edit user</div>
+        <div class="text-(--contrast-main-color) text-lg self-start">
+          edit user
+        </div>
 
         <div class="flex flex-col gap-2 w-62.5">
           <input
@@ -571,7 +573,9 @@ async function setUserPassword() {
         </div>
 
         <div class="w-full border-t border-(--contrast-border-color) pt-4">
-          <div class="text-(--contrast-text-color) text-sm mb-2">password reset</div>
+          <div class="text-(--contrast-text-color) text-sm mb-2">
+            password reset
+          </div>
           <div class="flex flex-col gap-2 w-62.5">
             <input
               v-model="editUserNewPassword"
@@ -607,7 +611,7 @@ async function setUserPassword() {
               </button>
             </div>
             <button
-              class="bg-(--error-color) text-(--bg-color) p-2 rounded-lg"
+              class="bg-(--error-color) text-(--contrast-error-inverse-color) p-2 rounded-lg"
               :disabled="!editUserNewPassword || editUserPasswordSaving"
               @click="setUserPassword"
             >
@@ -629,7 +633,7 @@ async function setUserPassword() {
             cancel
           </button>
           <button
-            class="bg-(--main-color) text-(--bg-color) p-2 rounded-lg"
+            class="bg-(--main-color) text-(--contrast-inverse-color) p-2 rounded-lg"
             :disabled="editUserSaving"
             @click="saveUserEdits"
           >

@@ -676,7 +676,7 @@ function getThumbnail(item: GoogleBookItem): string {
         />
         <button
           type="button"
-          class="px-4 py-2 bg-(--main-color) text-(--bg-color) rounded-md hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+          class="px-4 py-2 bg-(--main-color) text-(--contrast-inverse-color) rounded-md hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
           :disabled="searching"
           @click="performSearch"
         >
@@ -837,7 +837,7 @@ function getThumbnail(item: GoogleBookItem): string {
                     <button
                       v-if="result.googleItem"
                       type="button"
-                      class="px-4 py-2 rounded-md bg-(--main-color) text-(--bg-color) hover:opacity-90 text-sm disabled:opacity-40 disabled:cursor-not-allowed transition"
+                      class="px-4 py-2 rounded-md bg-(--main-color) text-(--contrast-inverse-color) hover:opacity-90 text-sm disabled:opacity-40 disabled:cursor-not-allowed transition"
                       @click="importMetadata(result)"
                     >
                       Import book
@@ -1192,7 +1192,7 @@ function getThumbnail(item: GoogleBookItem): string {
                       </button>
                       <button
                         type="button"
-                        class="flex-4 px-4 py-2 rounded-md bg-(--main-color) text-(--bg-color) hover:opacity-90 text-sm disabled:opacity-40 disabled:cursor-not-allowed transition"
+                        class="flex-4 px-4 py-2 rounded-md bg-(--main-color) text-(--contrast-inverse-color) hover:opacity-90 text-sm disabled:opacity-40 disabled:cursor-not-allowed transition"
                         :disabled="!hasAnyFieldSelected(resultKey(result))"
                         @click="importMetadata(result)"
                       >

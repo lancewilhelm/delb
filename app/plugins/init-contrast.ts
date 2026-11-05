@@ -11,12 +11,11 @@ export default defineNuxtPlugin(() => {
   const appearance = useThemeAppearance();
 
   function targetRule(theme: string) {
-    const background =
+    const palette =
       theme === 'custom'
-        ? normalizeCustomTheme(store.activeSettings.customTheme).bgColor
-        : (themes.find(({ name }) => name === theme)?.bgColor ??
-          defaultCustomTheme.bgColor);
-    return `:root{--appearance-contrast-target:${appearanceContrastTarget(background)}}`;
+        ? normalizeCustomTheme(store.activeSettings.customTheme)
+        : (themes.find(({ name }) => name === theme) ?? defaultCustomTheme);
+    return `:root{--appearance-contrast-target:${appearanceContrastTarget(palette.bgColor)};--appearance-contrast-inverse-target:${appearanceContrastTarget(palette.mainColor)};--appearance-contrast-error-inverse-target:${appearanceContrastTarget(palette.errorColor)}}`;
   }
 
   useHead(() => {

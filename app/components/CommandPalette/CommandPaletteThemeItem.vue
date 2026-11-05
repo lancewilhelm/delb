@@ -53,7 +53,7 @@ defineExpose({ el: root });
     class="h-9 cursor-pointer px-3 py-1 flex items-center justify-between gap-2 hover:bg-(--sub-alt-color) command-palette-theme-item"
     :class="[
       highlighted ? 'bg-(--sub-color) text-(--contrast-text-color)' : '',
-      isCurrentTheme ? 'bg-(--main-color) text-(--bg-color)' : '',
+      isCurrentTheme ? 'bg-(--main-color) text-(--contrast-inverse-color)' : '',
     ]"
     @click="handleClick"
     @mouseenter.stop="handleMouseOver"

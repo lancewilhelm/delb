@@ -214,7 +214,7 @@ const targetUserId = computed({
           />
           <button
             type="button"
-            class="px-3 py-2 rounded-lg bg-(--main-color) text-(--bg-color) disabled:opacity-50 disabled:cursor-not-allowed"
+            class="px-3 py-2 rounded-lg bg-(--main-color) text-(--contrast-inverse-color) disabled:opacity-50 disabled:cursor-not-allowed"
             :disabled="!isAdmin"
             @click="saveExtensions"
           >
@@ -295,7 +295,7 @@ const targetUserId = computed({
           <div class="flex gap-2 mt-2">
             <button
               type="button"
-              class="px-3 py-2 rounded-lg bg-(--main-color) text-(--bg-color) disabled:opacity-50 disabled:cursor-not-allowed"
+              class="px-3 py-2 rounded-lg bg-(--main-color) text-(--contrast-inverse-color) disabled:opacity-50 disabled:cursor-not-allowed"
               :disabled="!isAdmin"
               @click="saveAdditionalCollections"
             >

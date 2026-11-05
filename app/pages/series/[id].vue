@@ -79,8 +79,6 @@ function coverThumbUrl(bookId: string, updatedAt?: string | number | Date) {
   return `${base}&v=${encodeURIComponent(String(ts))}`;
 }
 
-
-
 async function refresh() {
   if (!seriesId.value) return;
 
@@ -173,7 +171,9 @@ watch(
           <div class="text-2xl sm:text-3xl font-serif truncate">
             {{ seriesName }}
           </div>
-          <div class="text-sm sm:text-md opacity-70 italic text-(--contrast-sub-color)">
+          <div
+            class="text-sm sm:text-md opacity-70 italic text-(--contrast-sub-color)"
+          >
             {{ bookCount }} book{{ bookCount === 1 ? '' : 's' }}
           </div>
         </div>
@@ -181,7 +181,10 @@ watch(
 
       <div v-if="loading" class="text-sm opacity-80">Loading...</div>
 
-      <div v-else-if="errorMessage" class="text-sm text-red-600">
+      <div
+        v-else-if="errorMessage"
+        class="text-sm [--contrast-status-color:var(--color-red-600)] contrast-status"
+      >
         {{ errorMessage }}
       </div>
 
@@ -197,7 +200,9 @@ watch(
             :book="b"
             class="grid grid-cols-[30px_auto_4fr] gap-4"
           >
-            <div class="text-xl sm:text-2xl self-center text-(--contrast-sub-color)">
+            <div
+              class="text-xl sm:text-2xl self-center text-(--contrast-sub-color)"
+            >
               {{ b.seriesIndex }}
             </div>
             <BookCover
