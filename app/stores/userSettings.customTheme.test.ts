@@ -284,3 +284,34 @@ test('legacy mobile layout-only overrides retain the desktop field order and cov
     false,
   );
 });
+
+test('cover status badges default off and retain independent desktop and mobile choices', () => {
+  const { store, mobile } = createStore();
+  assert.equal(store.activeSettings.coverStyle.showReadingStatus, false);
+  const badges = store.settingRef<boolean>('coverStyle.showReadingStatus');
+  badges.value = true;
+  store.setMobileEnabled(true);
+  mobile.value = true;
+  assert.equal(badges.value, true);
+  badges.value = false;
+  mobile.value = false;
+  assert.equal(badges.value, true);
+  const restored = createStore();
+  restored.store.applyRemoteSettings(
+    JSON.parse(JSON.stringify(store.settings)),
+  );
+  assert.equal(
+    restored.store.activeSettings.coverStyle.showReadingStatus,
+    true,
+  );
+  restored.mobile.value = true;
+  assert.equal(
+    restored.store.activeSettings.coverStyle.showReadingStatus,
+    false,
+  );
+  restored.store.$reset();
+  assert.equal(
+    restored.store.activeSettings.coverStyle.showReadingStatus,
+    false,
+  );
+});

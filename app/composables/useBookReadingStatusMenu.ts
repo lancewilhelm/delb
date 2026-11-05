@@ -1,3 +1,4 @@
+import type { BookStatusChange } from '~/utils/bookReadingStatus';
 import type { CoverMenuItem } from '~/utils/coverMenu';
 import type { UserBookStatusValue } from '~/utils/db/schema';
 
@@ -18,11 +19,12 @@ export function useBookReadingStatusMenu({
   onChanged,
 }: {
   bookId: () => string;
-  onChanged: () => void;
+  onChanged: (change: BookStatusChange) => void;
 }) {
   async function getReadingStatusMenuItem(): Promise<CoverMenuItem> {
     // Resolve on every open so a change from another view/device is reflected.
-    const endpoint = `/api/books/${encodeURIComponent(bookId())}/status`;
+    const id = bookId();
+    const endpoint = `/api/books/${encodeURIComponent(id)}/status`;
     try {
       const response = await $fetch<StatusResponse>(endpoint);
       if (!response.success) throw new Error(response.message);
@@ -41,12 +43,12 @@ export function useBookReadingStatusMenu({
                 body: { status: value },
               });
               if (!saved.success) throw new Error(saved.message);
+              onChanged({ bookId: id, status: saved.data.status });
             } catch {
               throw new Error(
                 'Failed to save reading status. Please try again.',
               );
             }
-            onChanged();
           },
         })),
       };

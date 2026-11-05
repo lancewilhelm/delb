@@ -196,57 +196,295 @@ try {
     await call('Page.navigate', { url: base + route });
     await until('document.readyState === "complete"');
   }
-  await navigate('/books');
-  await openStatus(title);
-  assert.equal(
-    await evaluate(`(${item('No status')}).getAttribute('aria-checked')`),
-    'true',
-  );
-  assert.ok(await evaluate(item('View')));
-  assert.equal(await evaluate(item('Download')), undefined);
-  await writeFile(
-    'review/demo/book-status-menu.png',
-    Buffer.from(
-      (await call('Page.captureScreenshot', { format: 'png' })).data,
-      'base64',
-    ),
-  );
-  await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape' });
-  pass(
-    'reference-only grid cover offers all statuses, marks No status, and preserves View',
-  );
-  for (const [label, expected] of [
-    ['To be read', 'to_be_read'],
-    ['Reading', 'reading'],
-    ['Finished', 'finished'],
-    ['DNF', 'dnf'],
-    ['No status', null],
-  ]) {
-    await choose(title, label, expected, cookie, id);
-    const status = (await api(`/api/books/${id}/status`, cookie)).data;
-    if (expected === 'reading') assert.ok(status.startedAt);
-    if (expected === 'finished')
-      assert.ok(status.startedAt && status.finishedAt);
-    if (expected === 'dnf')
-      assert.ok(status.startedAt && status.dnfAt && !status.finishedAt);
+  if (!process.argv.includes('--scroll-only')) {
+    await navigate('/books');
+    await openStatus(title);
+    assert.equal(
+      await evaluate(`(${item('No status')}).getAttribute('aria-checked')`),
+      'true',
+    );
+    assert.ok(await evaluate(item('View')));
+    assert.equal(await evaluate(item('Download')), undefined);
+    await writeFile(
+      'review/demo/book-status-menu.png',
+      Buffer.from(
+        (await call('Page.captureScreenshot', { format: 'png' })).data,
+        'base64',
+      ),
+    );
+    await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape' });
+    pass(
+      'reference-only grid cover offers all statuses, marks No status, and preserves View',
+    );
+    for (const [label, expected] of [
+      ['To be read', 'to_be_read'],
+      ['Reading', 'reading'],
+      ['Finished', 'finished'],
+      ['DNF', 'dnf'],
+      ['No status', null],
+    ]) {
+      await choose(title, label, expected, cookie, id);
+      const status = (await api(`/api/books/${id}/status`, cookie)).data;
+      if (expected === 'reading') assert.ok(status.startedAt);
+      if (expected === 'finished')
+        assert.ok(status.startedAt && status.finishedAt);
+      if (expected === 'dnf')
+        assert.ok(status.startedAt && status.dnfAt && !status.finishedAt);
+    }
+    pass(
+      'all five grid status choices persist and current-choice marks refresh',
+    );
+    await click('document.querySelector(\'[aria-label="List View"]\')');
+    await until(
+      "document.querySelector('[aria-label=\"List View\"]').getAttribute('aria-pressed')==='true'",
+    );
+    await choose(title, 'Reading', 'reading', cookie, id);
+    pass('list cover changes status through the same API');
+    await api(`/api/books/${id}/status`, cookie, { status: 'to_be_read' });
+    await navigate('/books?status=to_be_read');
+    await openStatus(title);
+    await click(item('Finished'));
+    await until(`!(${cover(title)})`);
+    assert.equal(
+      (await api(`/api/books/${id}/status`, cookie)).data.status,
+      'finished',
+    );
+    pass('changing status removes the book from a mismatched filtered list');
+    await navigate('/');
+    await until(
+      "[...document.querySelectorAll('a')].some(el=>el.textContent.includes('All books'))",
+    );
+    await click(
+      "[...document.querySelectorAll('a')].find(el=>el.textContent.includes('All books'))",
+    );
+    await openStatus(title);
+    await call('Fetch.enable', {
+      patterns: [
+        { urlPattern: `*/api/books/${id}/status`, requestStage: 'Request' },
+      ],
+    });
+    await click(item('Reading'));
+    const request = await waitFor(() => paused.shift(), 'pending status save');
+    assert.equal(request.request.method, 'POST');
+    assert.ok(
+      await evaluate(
+        "[...document.querySelectorAll('[role=status]')].some(el=>el.textContent.includes('Saving'))",
+      ),
+    );
+    assert.equal(
+      await evaluate(`(${item('Reading')}).getAttribute('aria-disabled')`),
+      'true',
+    );
+    await call('Fetch.fulfillRequest', {
+      requestId: request.requestId,
+      responseCode: 500,
+      responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+      body: Buffer.from(
+        '{"success":false,"message":"Synthetic failure"}',
+      ).toString('base64'),
+    });
+    await until(
+      "document.querySelector('[role=alert]')?.textContent.includes('Failed to save reading status')",
+    );
+    assert.equal(
+      (await api(`/api/books/${id}/status`, cookie)).data.status,
+      'finished',
+    );
+    await call('Fetch.disable');
+    await click(item('Reading'));
+    await until("!document.querySelector('[role=menu]')");
+    assert.equal(
+      (await api(`/api/books/${id}/status`, cookie)).data.status,
+      'reading',
+    );
+    pass(
+      'pending save disables duplicate choices; failed save stays visible and retry persists',
+    );
+    await navigate('/');
+    await openStatus(title);
+    await click(item('Finished'));
+    await until(`!(${cover(title)})`);
+    pass('dashboard Continue reading refreshes after status change');
+    const epub = await readFile('review/demo/ordinary.epub');
+    const form = new FormData();
+    form.append(
+      'file',
+      new Blob([epub], { type: 'application/epub+zip' }),
+      'ordinary.epub',
+    );
+    const upload = await fetch(base + '/api/books/upload', {
+      method: 'POST',
+      headers: { Origin: base, Cookie: cookie },
+      body: form,
+    });
+    assert.equal(upload.status, 200);
+    const uploaded = (await upload.json()).data.results.find(
+      (result) => result.success,
+    ).book;
+    await navigate('/books');
+    await openStatus(uploaded.title);
+    assert.ok(await evaluate(item('Download')));
+    await call('Browser.setDownloadBehavior', {
+      behavior: 'allow',
+      downloadPath: path.join(profile, 'downloads'),
+    });
+    await click(item('Download'));
+    await until("!document.querySelector('[role=menu]')");
+    const filename = await waitFor(async () => {
+      try {
+        return (await readdir(path.join(profile, 'downloads'))).find((name) =>
+          name.endsWith('.epub'),
+        );
+      } catch {
+        return null;
+      }
+    }, 'EPUB download');
+    assert.deepEqual(
+      await readFile(path.join(profile, 'downloads', filename)),
+      epub,
+    );
+    pass('existing Download action still downloads unchanged EPUB bytes');
+    await call('Fetch.enable', {
+      patterns: [
+        {
+          urlPattern: `*/api/books/${uploaded.id}/status`,
+          requestStage: 'Request',
+        },
+      ],
+    });
+    await click(cover(uploaded.title), 'right');
+    const unavailable = await waitFor(() => paused.shift(), 'status read');
+    await call('Fetch.fulfillRequest', {
+      requestId: unavailable.requestId,
+      responseCode: 401,
+      responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+      body: Buffer.from(
+        '{"success":false,"message":"Synthetic unauthorized response"}',
+      ).toString('base64'),
+    });
+    await until(item('Reading status unavailable'));
+    assert.equal(
+      await evaluate(
+        `(${item('Reading status unavailable')}).getAttribute('aria-disabled')`,
+      ),
+      'true',
+    );
+    assert.ok(await evaluate(item('View')));
+    assert.ok(await evaluate(item('Download')));
+    await call('Fetch.disable');
+    await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape' });
+    pass(
+      'failed status read disables that submenu while preserving View and Download',
+    );
+    await click(
+      "[...document.querySelectorAll('button')].find(el=>el.textContent.trim()==='Select')",
+    );
+    await until(
+      "document.querySelector('button[aria-label=\"Select book\"]') || document.body.textContent.includes('selected')",
+    );
+    await click(cover(uploaded.title), 'right');
+    assert.equal(
+      await evaluate("!!document.querySelector('[role=menu]')"),
+      false,
+    );
+    pass('bulk selection mode keeps cover context menus disabled');
+    await click(
+      "[...document.querySelectorAll('button')].find(el=>el.textContent.trim()==='Done')",
+    );
   }
-  pass('all five grid status choices persist and current-choice marks refresh');
-  await click('document.querySelector(\'[aria-label="List View"]\')');
-  await until(
-    "document.querySelector('[aria-label=\"List View\"]').getAttribute('aria-pressed')==='true'",
-  );
-  await choose(title, 'Reading', 'reading', cookie, id);
-  pass('list cover changes status through the same API');
-  await api(`/api/books/${id}/status`, cookie, { status: 'to_be_read' });
-  await navigate('/books?status=to_be_read');
-  await openStatus(title);
-  await click(item('Finished'));
-  await until(`!(${cover(title)})`);
+  for (let index = 0; index < 180; index++) {
+    await api('/api/books', cookie, {
+      title: `Scroll fixture ${String(index).padStart(3, '0')}`,
+      authors: ['Scroll Author'],
+    });
+  }
+  const scroller = `[...document.querySelectorAll('div')].find(el=>getComputedStyle(el).overflowY==='auto'&&el.clientHeight>200&&el.querySelector('.cover'))`;
+  const listRequests = [];
+  ws.addEventListener('message', (event) => {
+    const message = JSON.parse(event.data);
+    if (
+      message.method === 'Network.requestWillBeSent' &&
+      new URL(message.params.request.url).pathname === '/api/books'
+    )
+      listRequests.push(message.params.request.url);
+  });
+  for (const [mode, filter] of [
+    ['Grid', null],
+    ['List', null],
+    ['Grid', 'none'],
+    ['List', 'none'],
+  ]) {
+    await navigate('/');
+    await until(
+      "[...document.querySelectorAll('a')].some(el=>el.textContent.includes('All books'))",
+    );
+    await click(
+      "[...document.querySelectorAll('a')].find(el=>el.textContent.includes('All books'))",
+    );
+    if (filter) await navigate('/books?status=' + filter);
+    await until(`!!(${scroller})`);
+    await click(`document.querySelector('[aria-label="${mode} View"]')`);
+    await delay(250);
+    for (let step = 0; step < 3; step++) {
+      await evaluate(`(${scroller}).scrollTop=(${scroller}).scrollHeight`);
+      await delay(300);
+    }
+    await evaluate(
+      `(${scroller}).scrollTop=Math.min(2200,(${scroller}).scrollHeight-(${scroller}).clientHeight-150)`,
+    );
+    await delay(150);
+    const target = await evaluate(
+      `(()=>{const root=${scroller};const r=root.getBoundingClientRect();return [...root.querySelectorAll('.cover')].find(el=>!el.closest('[aria-hidden=true]')&&el.getBoundingClientRect().top>r.top+30&&el.getBoundingClientRect().bottom<r.bottom)?.textContent.trim()})()`,
+    );
+    assert.ok(target, mode + ' deep-scroll target');
+    const before = await evaluate(`(${scroller}).scrollTop`);
+    assert.ok(before > 1000, mode + ' starts deep in the books');
+    listRequests.length = 0;
+    await openStatus(target);
+    await click(item('Finished'));
+    await until("!document.querySelector('[role=menu]')");
+    await delay(250);
+    const after = await evaluate(`(${scroller}).scrollTop`);
+    assert.ok(
+      Math.abs(after - before) < 2,
+      `${mode} status update moved scroll from ${before} to ${after}`,
+    );
+    assert.equal(
+      listRequests.length,
+      0,
+      mode + ' status save must not reload book pages',
+    );
+    if (filter)
+      assert.equal(
+        await evaluate(cover(target)),
+        undefined,
+        'mismatched book removed locally',
+      );
+    pass(
+      mode +
+        (filter ? ' filtered' : '') +
+        ' status update preserves deep scroll and loaded pages',
+    );
+    await evaluate(`(${scroller}).scrollTop=(${scroller}).scrollHeight`);
+    await waitFor(
+      () => listRequests.some((url) => new URL(url).searchParams.has('cursor')),
+      'next page still loads from its cursor',
+    );
+  }
+  await navigate('/settings/appearance');
+  const badgeToggle = `document.querySelector('button[aria-label="Reading status badges"]')`;
+  await until(badgeToggle);
   assert.equal(
-    (await api(`/api/books/${id}/status`, cookie)).data.status,
-    'finished',
+    await evaluate(`(${badgeToggle}).getAttribute('aria-checked')`),
+    'false',
   );
-  pass('changing status removes the book from a mismatched filtered list');
+  await click(badgeToggle);
+  await waitFor(
+    async () =>
+      (await api('/api/settings', cookie)).data.userSettings?.settings
+        .coverStyle.showReadingStatus === true,
+    'badge preference saved',
+  );
   await navigate('/');
   await until(
     "[...document.querySelectorAll('a')].some(el=>el.textContent.includes('All books'))",
@@ -254,137 +492,68 @@ try {
   await click(
     "[...document.querySelectorAll('a')].find(el=>el.textContent.includes('All books'))",
   );
-  await openStatus(title);
-  await call('Fetch.enable', {
-    patterns: [
-      { urlPattern: `*/api/books/${id}/status`, requestStage: 'Request' },
-    ],
-  });
-  await click(item('Reading'));
-  const request = await waitFor(() => paused.shift(), 'pending status save');
-  assert.equal(request.request.method, 'POST');
-  assert.ok(
-    await evaluate(
-      "[...document.querySelectorAll('[role=status]')].some(el=>el.textContent.includes('Saving'))",
-    ),
+  await until(`!!(${scroller})?.querySelector('.cover')`);
+  const badgeTitle = await evaluate(
+    `(${scroller}).querySelector('.cover').textContent.trim()`,
   );
-  assert.equal(
-    await evaluate(`(${item('Reading')}).getAttribute('aria-disabled')`),
-    'true',
-  );
-  await call('Fetch.fulfillRequest', {
-    requestId: request.requestId,
-    responseCode: 500,
-    responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
-    body: Buffer.from(
-      '{"success":false,"message":"Synthetic failure"}',
-    ).toString('base64'),
-  });
-  await until(
-    "document.querySelector('[role=alert]')?.textContent.includes('Failed to save reading status')",
-  );
-  assert.equal(
-    (await api(`/api/books/${id}/status`, cookie)).data.status,
-    'finished',
-  );
-  await call('Fetch.disable');
-  await click(item('Reading'));
-  await until("!document.querySelector('[role=menu]')");
-  assert.equal(
-    (await api(`/api/books/${id}/status`, cookie)).data.status,
-    'reading',
-  );
-  pass(
-    'pending save disables duplicate choices; failed save stays visible and retry persists',
-  );
-  await navigate('/');
-  await openStatus(title);
-  await click(item('Finished'));
-  await until(`!(${cover(title)})`);
-  pass('dashboard Continue reading refreshes after status change');
-  const epub = await readFile('review/demo/ordinary.epub');
-  const form = new FormData();
-  form.append(
-    'file',
-    new Blob([epub], { type: 'application/epub+zip' }),
-    'ordinary.epub',
-  );
-  const upload = await fetch(base + '/api/books/upload', {
-    method: 'POST',
-    headers: { Origin: base, Cookie: cookie },
-    body: form,
-  });
-  assert.equal(upload.status, 200);
-  const uploaded = (await upload.json()).data.results.find(
-    (result) => result.success,
-  ).book;
-  await navigate('/books');
-  await openStatus(uploaded.title);
-  assert.ok(await evaluate(item('Download')));
-  await call('Browser.setDownloadBehavior', {
-    behavior: 'allow',
-    downloadPath: path.join(profile, 'downloads'),
-  });
-  await click(item('Download'));
-  await until("!document.querySelector('[role=menu]')");
-  const filename = await waitFor(async () => {
-    try {
-      return (await readdir(path.join(profile, 'downloads'))).find((name) =>
-        name.endsWith('.epub'),
+  const badge = `(${cover(badgeTitle)}).parentElement.querySelector('[role=img]')`;
+  for (const [label, value] of [
+    ['To be read', 'to_be_read'],
+    ['Reading', 'reading'],
+    ['Finished', 'finished'],
+    ['DNF', 'dnf'],
+    ['No status', null],
+  ]) {
+    const entry = (await api('/api/books?limit=200', cookie)).data.books.find(
+      (book) => book.title === badgeTitle,
+    );
+    await choose(badgeTitle, label, value, cookie, entry.id);
+    if (value) {
+      assert.equal(
+        await evaluate(`(${badge}).getAttribute('aria-label')`),
+        'Reading status: ' + label,
       );
-    } catch {
-      return null;
-    }
-  }, 'EPUB download');
-  assert.deepEqual(
-    await readFile(path.join(profile, 'downloads', filename)),
-    epub,
+      assert.equal(
+        await evaluate(
+          `(()=>{const badge=${badge};const probe=document.createElement('span');probe.style.color='var(--main-color)';document.body.appendChild(probe);const matches=getComputedStyle(badge).color===getComputedStyle(probe).color;probe.remove();return matches})()`,
+        ),
+        true,
+      );
+      if (value === 'finished')
+        await writeFile(
+          'review/demo/book-status-badges.png',
+          Buffer.from(
+            (await call('Page.captureScreenshot', { format: 'png' })).data,
+            'base64',
+          ),
+        );
+    } else assert.equal(await evaluate(badge), null);
+  }
+  pass(
+    'badge preference defaults off, persists, and all status icons update in theme accent color',
   );
-  pass('existing Download action still downloads unchanged EPUB bytes');
-  await call('Fetch.enable', {
-    patterns: [
-      {
-        urlPattern: `*/api/books/${uploaded.id}/status`,
-        requestStage: 'Request',
-      },
-    ],
-  });
-  await click(cover(uploaded.title), 'right');
-  const unavailable = await waitFor(() => paused.shift(), 'status read');
-  await call('Fetch.fulfillRequest', {
-    requestId: unavailable.requestId,
-    responseCode: 401,
-    responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
-    body: Buffer.from(
-      '{"success":false,"message":"Synthetic unauthorized response"}',
-    ).toString('base64'),
-  });
-  await until(item('Reading status unavailable'));
+  await navigate('/settings/appearance');
+  await until(badgeToggle);
   assert.equal(
-    await evaluate(
-      `(${item('Reading status unavailable')}).getAttribute('aria-disabled')`,
-    ),
+    await evaluate(`(${badgeToggle}).getAttribute('aria-checked')`),
     'true',
   );
-  assert.ok(await evaluate(item('View')));
-  assert.ok(await evaluate(item('Download')));
-  await call('Fetch.disable');
-  await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape' });
-  pass(
-    'failed status read disables that submenu while preserving View and Download',
+  await click(badgeToggle);
+  await waitFor(
+    async () =>
+      (await api('/api/settings', cookie)).data.userSettings?.settings
+        .coverStyle.showReadingStatus === false,
+    'badge preference disabled',
   );
-  await click(
-    "[...document.querySelectorAll('button')].find(el=>el.textContent.trim()==='Select')",
-  );
-  await until(
-    "document.querySelector('button[aria-label=\"Select book\"]') || document.body.textContent.includes('selected')",
-  );
-  await click(cover(uploaded.title), 'right');
+  await navigate('/books');
+  await until(`!!(${scroller})?.querySelector('.cover')`);
   assert.equal(
-    await evaluate("!!document.querySelector('[role=menu]')"),
-    false,
+    await evaluate(
+      `document.querySelectorAll('[aria-label^="Reading status: "]').length`,
+    ),
+    0,
   );
-  pass('bulk selection mode keeps cover context menus disabled');
+  pass('badge toggle remains off after reload');
   await writeFile(
     'review/demo/book-status-results.json',
     JSON.stringify(results, null, 2) + '\n',

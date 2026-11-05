@@ -31,6 +31,8 @@ Unauthenticated requests return 401. Invalid query values return 400. An inacces
 
 The selected tab is stored in the dashboard's `shelf` URL parameter. Shelf and collection changes cancel the previous client request. A late response cannot replace the current selection. A failed later page keeps the books already displayed and offers Retry.
 
+Status changes update the loaded shelf and count strip in place. A book that no longer belongs on the selected shelf is removed without resetting the other loaded books or scroll position. Removing a book adjusts the next-page offset; an in-flight later page restarts at that offset so no book is skipped. Optional reading-status badges derive their status from the selected shelf.
+
 ## Sources and verification
 
 - [Dashboard query](../../../server/utils/books/dashboard.ts)

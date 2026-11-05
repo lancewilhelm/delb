@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { BookStatusChange } from '~/utils/bookReadingStatus';
 import type {
   DashboardBook,
   DashboardCounts,
@@ -52,7 +53,8 @@ const shelfInfo = computed(
     shelves.find((shelf) => shelf.key === selectedShelf.value) ?? shelves[0]!,
 );
 const counts = ref<DashboardCounts | null>(null);
-const shelfBooks = ref<DashboardBook[]>([]);
+type ShelfBook = DashboardBook & { status: 'reading' | 'finished' };
+const shelfBooks = ref<ShelfBook[]>([]);
 const nextOffset = ref<number | null>(null);
 const loading = ref(true);
 const loadingMore = ref(false);
@@ -62,6 +64,28 @@ let requestNumber = 0;
 let controller: AbortController | undefined;
 let loadedScope: string | undefined;
 let disposed = false;
+
+function onBookStatusChanged(change: BookStatusChange) {
+  const index = shelfBooks.value.findIndex((book) => book.id === change.bookId);
+  const book = shelfBooks.value[index];
+  if (!book || book.status === change.status) return;
+
+  shelfBooks.value.splice(index, 1);
+  if (counts.value) {
+    counts.value[book.status] = Math.max(0, counts.value[book.status] - 1);
+    counts.value[change.status ?? 'none'] += 1;
+  }
+  if (nextOffset.value !== null)
+    nextOffset.value = Math.max(0, nextOffset.value - 1);
+
+  // An in-flight page used the old offset and may contain stale counts.
+  if (loadingMore.value) {
+    ++requestNumber;
+    controller?.abort();
+    loadingMore.value = false;
+    void loadDashboard(true);
+  }
+}
 
 const stats = computed(
   () =>
@@ -108,9 +132,13 @@ async function loadDashboard(append = false) {
     );
     if (request !== requestNumber) return;
     counts.value = response.data.counts;
-    shelfBooks.value = append
-      ? [...shelfBooks.value, ...response.data.shelf.books]
-      : response.data.shelf.books;
+    const status =
+      response.data.shelf.kind === 'recent' ? 'finished' : 'reading';
+    const page: ShelfBook[] = response.data.shelf.books.map((book) => ({
+      ...book,
+      status,
+    }));
+    shelfBooks.value = append ? [...shelfBooks.value, ...page] : page;
     nextOffset.value = response.data.shelf.nextOffset;
     loadedScope = scope.value;
   } catch {
@@ -258,7 +286,7 @@ onBeforeUnmount(() => {
               <BookThumbnail
                 :book="book"
                 :lock-aspect-ratio="true"
-                @status-change="loadDashboard()"
+                @status-change="onBookStatusChanged"
               />
               <div class="dashboard-book-meta">
                 <span v-if="selectedShelf === 'recent' && book.finishedDate"

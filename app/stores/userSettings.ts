@@ -52,6 +52,7 @@ export interface BaseUserSettings {
     glossySpine: boolean;
     roundedRight: boolean;
     grayscale: boolean;
+    showReadingStatus: boolean;
     authorsMaxCovers: number;
     seriesMaxCovers: number;
     publishersMaxCovers: number;
@@ -136,6 +137,7 @@ function getBaseDefaults(): BaseUserSettings {
       glossySpine: true,
       roundedRight: false,
       grayscale: false,
+      showReadingStatus: false,
       authorsMaxCovers: 8,
       seriesMaxCovers: 8,
       publishersMaxCovers: 8,

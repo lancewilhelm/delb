@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import {
+  applyBookStatusChange,
+  type BookStatusChange,
+} from '~/utils/bookReadingStatus';
+import {
   bookColumnStyle,
   bookFieldDefinition,
   type BookViewBook,
@@ -367,6 +371,18 @@ function setupObserver() {
   io.observe(sentinel);
 }
 
+function onBookStatusChanged(change: BookStatusChange) {
+  applyBookStatusChange({
+    books: books.value,
+    change,
+    endpoint: props.endpoint,
+  });
+  if (props.selectionEnabled) {
+    selectionStore.setKnownBookIdsInScope(books.value.map((book) => book.id));
+  }
+  if (!books.value.length && hasMore.value) void loadNextPage();
+}
+
 let requestGeneration = 0;
 
 function reset() {
@@ -558,7 +574,10 @@ onBeforeUnmount(() => {
         Loading...
       </div>
 
-      <div v-else-if="books.length === 0" class="text-sm opacity-80">
+      <div
+        v-else-if="books.length === 0 && !hasMore"
+        class="text-sm opacity-80"
+      >
         No books yet. Use Upload in the header to add one.
       </div>
 
@@ -598,14 +617,17 @@ onBeforeUnmount(() => {
               :selectable="props.selectionEnabled && selectionStore.selectMode"
               :selected="selectionStore.isSelected(b.id)"
               @toggle-select="onBookToggleSelect"
-              @status-change="loadFirstPage"
+              @status-change="onBookStatusChanged"
               @measure="measureRow"
             />
           </div>
         </div>
       </div>
 
-      <div v-if="books.length > 0" class="mt-4 flex flex-col items-center">
+      <div
+        v-if="books.length > 0 || hasMore"
+        class="mt-4 flex flex-col items-center"
+      >
         <div ref="sentinelRef" class="h-1 w-full" />
         <div class="text-sm opacity-70">
           <span v-if="loading">Loading…</span>

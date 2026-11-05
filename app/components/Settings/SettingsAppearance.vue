@@ -45,6 +45,10 @@ const coverStyleGrayscale = userSettingsStore.settingRef<boolean>(
   'coverStyle.grayscale',
 );
 
+const coverReadingStatus = userSettingsStore.settingRef<boolean>(
+  'coverStyle.showReadingStatus',
+);
+
 const authorsMaxCovers = userSettingsStore.settingRef<number>(
   'coverStyle.authorsMaxCovers',
 );
@@ -219,6 +223,11 @@ function handleSortChange(target: string) {
         v-model="coverStyleGrayscale"
         title="Grayscale"
         description="Applies a grayscale filter to the cover"
+      />
+      <SettingsUIToggle
+        v-model="coverReadingStatus"
+        title="Reading status badges"
+        description="Show a small reading-status icon in the top-right corner of book covers."
       />
       <SettingsUIInput
         v-model="authorsMaxCovers"

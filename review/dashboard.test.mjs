@@ -221,7 +221,11 @@ function mountedComponent(filename, globals, rootProps = {}) {
   app.component('BookThumbnail', {
     props: ['book'],
     render() {
-      return vue.h('span', this.book.title);
+      return vue.h(
+        'span',
+        { 'data-status': this.book.status },
+        this.book.title,
+      );
     },
   });
   app.component('NuxtLink', {
@@ -341,16 +345,141 @@ test('shelf changes reject stale scope responses and loading more can retry with
       (element) =>
         element.tag === 'span' && element.text === 'New scope finished book',
     )
-    .props.onStatusChange();
+    .props.onStatusChange({
+      bookId: 'New scope finished book',
+      status: 'reading',
+    });
   await flush();
-  assert.equal(requests[5].query.offset, 0);
-  requests[5].resolve(result('Refreshed after status change', 'recent'));
-  await flush();
-  assert.ok(view.text().includes('Refreshed after status change'));
+  assert.equal(
+    requests.length,
+    5,
+    'status changes retain the loaded shelf without a new request',
+  );
+  assert.ok(view.text().includes('Next page finished book'));
   assert.ok(!view.text().includes('New scope finished book'));
+  const countValues = view
+    .all()
+    .filter((element) => element.props.class === 'dashboard-count-value')
+    .map((element) => element.text);
+  assert.equal(countValues[1], '2');
+  assert.equal(countValues[3], '18');
   requests[0].resolve(result('Stale initial reading', 'reading'));
   await flush();
   assert.ok(!view.text().includes('Stale initial reading'));
+});
+
+test('status changes preserve both shelves and adjust a pending page without skipping books', async (t) => {
+  for (const shelf of ['reading', 'recent']) {
+    const status = shelf === 'reading' ? 'reading' : 'finished';
+    const requests = [];
+    const view = mountedComponent('../app/pages/index.vue', {
+      definePageMeta() {},
+      useHead() {},
+      useAuth: () => ({ user: vue.ref({ name: 'Reader' }) }),
+      useCollectionsStore: () => ({
+        collections: [{}],
+        activeSelection: { kind: 'all' },
+      }),
+      useBooksIndexFiltersStore: () => ({ clearAll() {} }),
+      useRoute: () => ({ query: { shelf } }),
+      useRouter: () => ({ replace() {} }),
+      $fetch: (_url, options) =>
+        new Promise((resolve) => requests.push({ ...options, resolve })),
+    });
+    t.after(() => view.app.unmount());
+    const counts = {
+      total: 20,
+      none: 0,
+      to_be_read: 0,
+      reading: 0,
+      finished: 0,
+      dnf: 0,
+      [status]: 20,
+    };
+    const response = (ids, nextOffset, saved = false) => ({
+      success: true,
+      data: {
+        counts: saved ? { ...counts, [status]: 19, none: 1 } : counts,
+        shelf: {
+          kind: shelf,
+          nextOffset,
+          books: ids.map((id) => ({
+            id,
+            title: id,
+            updatedAt: '2026-11-04',
+            progress: 10,
+            finishedDate: shelf === 'recent' ? '2026-11-04' : null,
+          })),
+        },
+      },
+    });
+    requests[0].resolve(
+      response(
+        Array.from({ length: 12 }, (_, i) => `book-${i}`),
+        12,
+      ),
+    );
+    await flush();
+    const firstBook = view
+      .all()
+      .find((element) => element.tag === 'span' && element.text === 'book-0');
+    assert.equal(
+      firstBook.props['data-status'],
+      status,
+      'shelf status reaches cover badges',
+    );
+    firstBook.props.onStatusChange({ bookId: 'book-0', status });
+    await flush();
+    assert.equal(
+      requests.length,
+      1,
+      'keeping the current status does not reload the shelf',
+    );
+    view.button('Show more').props.onClick();
+    await flush();
+    assert.equal(requests[1].query.offset, 12);
+    firstBook.props.onStatusChange({ bookId: 'book-0', status: null });
+    await flush();
+    assert.equal(
+      requests[1].signal.aborted,
+      true,
+      'pending page used the old offset',
+    );
+    assert.equal(
+      requests[2].query.offset,
+      11,
+      'removed row is subtracted from the next offset',
+    );
+    assert.ok(!view.text().includes('book-0'));
+    assert.ok(
+      view.text().includes('book-11'),
+      'other loaded books remain visible',
+    );
+    requests[1].resolve(response(['stale-page'], null));
+    await flush();
+    assert.ok(!view.text().includes('stale-page'));
+    requests[2].resolve(
+      response(
+        Array.from({ length: 8 }, (_, i) => `book-${i + 12}`),
+        null,
+        true,
+      ),
+    );
+    await flush();
+    assert.equal(
+      view.all().filter((element) => element.props['data-status'] === status)
+        .length,
+      19,
+    );
+    assert.equal(view.button('Show more'), undefined);
+    const countValues = view
+      .all()
+      .filter((element) => element.props.class === 'dashboard-count-value')
+      .map((element) => element.text);
+    assert.equal(countValues[status === 'reading' ? 1 : 3], '19');
+    assert.equal(countValues[5], '1');
+    view.app.unmount();
+  }
 });
 
 test('Recently read preserves calendar dates across browser timezones', async (t) => {

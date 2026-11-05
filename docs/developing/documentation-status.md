@@ -52,7 +52,9 @@ Store tests cover independent desktop/mobile values and unchanged saved palettes
 
 Issue #31 adds status changes to grid, list, and dashboard cover menus. `node review/book-status-browser.mjs` exercises the real local API and synthetic database. It checks all status choices, current-choice marks, date transitions, filtered-result removal, failed saves and retry, dashboard refresh, existing EPUB downloads, unavailable status reads, and bulk selection mode. Browser request interception supplies the failure cases. The check uses its own headless Chromium profile and no real library data.
 
-The change passed the full 237-test suite, typecheck, production build, documentation links, and lint. Lint retains one existing `BookDescriptionEditor.vue` warning. Physical touch devices, assistive technology, and other browser engines were not exercised.
+The initial change passed the full 237-test suite, typecheck, production build, documentation links, and lint. Lint retains one existing `BookDescriptionEditor.vue` warning. Physical touch devices, assistive technology, and other browser engines were not exercised.
+
+The scroll-preservation follow-up first reproduced a status save moving the grid from scroll position 2200 to 0. After the fix, the same browser harness passed deep-scroll checks in grid and list views, both unfiltered and status-filtered, without refetching book pages. Continued cursor pagination also passed. Badge checks covered the default-off toggle, persistence, live status updates, theme accent color, and clearing the badge. The settings-store test covered independent desktop and mobile choices. The follow-up passed 243 tests, typecheck, lint with the same existing warning, production build, and documentation links.
 
 ## Reconciled documentation drift
 
