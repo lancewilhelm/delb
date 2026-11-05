@@ -45,7 +45,7 @@ Custom colors live in `customTheme`. A theme slot or fixed choice can select `cu
 
 ## Menu and dialog opacity
 
-**Settings → Appearance → Glass opacity** controls floating menus and dialogs from 40–100% in 5-point slider steps. The default and reset value is 80%. Text and controls stay opaque. The main page, header, sidebar, and reader surfaces retain their existing backgrounds.
+**Settings → Appearance → Glass opacity** controls floating menus and dialogs from 40–100% in 5-point slider steps. The default and reset value is 80%. Text and controls stay opaque. The main page, header, sidebar, and reading content retain their existing backgrounds.
 
 `glassOpacity` belongs to each user settings profile, so enabled mobile overrides can keep a separate value. Changes apply locally immediately and use the existing debounced settings sync. Non-numeric saved values use the default; finite numbers are rounded and clamped to the supported range.
 

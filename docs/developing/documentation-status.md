@@ -40,6 +40,14 @@ Only documentation, its link checker, the package command, and the CI check chan
 
 The offline demo reported unavailable external font providers and fallback icon requests. Core actions above completed, but these screenshots are not production styling evidence. See [screenshot provenance](../images/README.md).
 
+## Glass opacity verification (2026-11-04)
+
+The menu and dialog opacity change passed all 237 tests, typechecking, the production build, and the documentation link check. Lint passed with the existing `BookDescriptionEditor.vue` prop warning.
+
+Headless Chromium exercised the production build with a disposable synthetic account. Menus rendered at 40%, 80%, and 100% background opacity while text stayed opaque and the header retained its styling. At 100%, backdrop blur was disabled. Saved settings survived reload and appeared in the server-rendered HTML. Reset, keyboard adjustment, command palette, and global search checks passed without page errors.
+
+Store tests cover independent desktop/mobile settings and invalid saved values. This evidence does not cover physical mobile devices, other browser engines, or live providers. The offline demo used fallback icons where external icon providers were unavailable.
+
 ## Reconciled documentation drift
 
 | Earlier description                                            | Current source evidence                                                                                                                                           | Documentation treatment                                                                        |

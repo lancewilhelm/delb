@@ -1040,7 +1040,7 @@ watch(
           <div
             v-if="isSettingsOpen"
             ref="settingsMenuRef"
-            class="absolute right-0 mt-2 w-72 rounded-md border border-(--sub-color) bg-(--bg-color) p-3 shadow-lg"
+            class="absolute right-0 mt-2 w-72 rounded-md border border-(--sub-color) surface-glass p-3 shadow-lg"
             @click.stop
           >
             <div class="space-y-3">

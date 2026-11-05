@@ -36,4 +36,6 @@ If a form reports an error, correct the named field and submit again. A failed r
 
 Changes save automatically. Select **Reset glass opacity to 80%** to restore the default. If separate mobile settings are enabled, the slider changes the active device profile.
 
+See the [appearance settings reference](../developing/reference/settings.md#menu-and-dialog-opacity) for supported values and persistence behavior.
+
 Continue with [adding books](add-books.md). For the implementation behind registration and Personal collections, read [account initialization](../developing/core-workflows.md#account-initialization).
