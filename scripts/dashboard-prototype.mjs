@@ -71,9 +71,9 @@ const App = defineComponent({
   setup() {
     const params = new URLSearchParams(location.search);
     const initial = params.get('variant') ?? document.documentElement.dataset.variant;
-    const variant = ref(['A', 'B', 'C'].includes(initial) ? initial : 'A');
+    const variant = ref(['A', 'B', 'C', 'D', 'E', 'F'].includes(initial) ? initial : 'A');
     const scenario = ref(document.documentElement.dataset.scenario ?? 'normal');
-    const light = ref(false);
+    const light = ref(document.documentElement.dataset.appearance === 'light');
     const notice = ref('');
     function select(next) {
       variant.value = next;
@@ -99,7 +99,7 @@ const App = defineComponent({
         h('button', { type: 'button', onClick: () => { light.value = !light.value; }, 'aria-pressed': light.value }, light.value ? 'Dark preview' : 'Light preview'),
       ]),
       notice.value ? h('p', { class: 'sample-notice', role: 'status' }, notice.value) : null,
-      h(Layouts, { variant: variant.value, displayName: 'Lance', collectionName: 'Personal', counts: sampleCounts.value, books: sampleBooks.value }),
+      h(Layouts, { variant: variant.value, displayName: 'Lance', collectionName: 'Personal', counts: sampleCounts.value, books: sampleBooks.value, initialShelf: document.documentElement.dataset.shelf ?? 'reading' }),
       h(Switcher, { current: variant.value, includeCurrent: false, onSelect: select }),
     ]);
   },
@@ -154,7 +154,7 @@ body > #app { background: transparent; }
 button, select { font: inherit; }
 button { cursor: pointer; }
 .sample-root { --bg-color: var(--background, #1b1b1b); --text-color: var(--foreground, #dddddd); --main-color: var(--foreground, #dddddd); --sub-color: var(--border, #555555); --sub-alt-color: var(--secondary, #252525); color: var(--text-color); }
-.sample-light { --text-color: #1b1b1b; --main-color: #1b1b1b; --sub-color: #999; --sub-alt-color: #e7e7e7; --bg-color: #f2f2f2; }
+.sample-light { color-scheme: light; --text-color: #1b1b1b; --main-color: #1b1b1b; --sub-color: #999; --sub-alt-color: #e7e7e7; --bg-color: #f2f2f2; }
 .sample-light .dashboard-study, .sample-light .sample-nav, .sample-light .sample-tools, .sample-light .sample-notice { background: #f2f2f2; }
 .sample-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; gap: 20px; background: var(--sub-alt-color); border-radius: var(--radius, 8px); }
 .sample-brand { display: flex; align-items: center; gap: 10px; font-size: 13px; }
@@ -180,5 +180,18 @@ ${styles.join('\n')}
 
 await mkdir(new URL('../.prototype/', import.meta.url), { recursive: true });
 await writeFile(new URL('../.prototype/dashboard.html', import.meta.url), html);
-console.log('Standalone sample: .prototype/dashboard.html');
-console.log('Real library: pnpm dev, then http://localhost:3000/?variant=A');
+await writeFile(
+  new URL('../.prototype/dashboard-round-2.html', import.meta.url),
+  html
+    .replace('data-variant="A"', 'data-variant="D"')
+    .replace(
+      '<title>Delb dashboard layout study</title>',
+      '<title>Delb dashboard layout study · round 2</title>',
+    ),
+);
+console.log(
+  'Standalone samples: .prototype/dashboard.html and .prototype/dashboard-round-2.html',
+);
+console.log(
+  'Real reading books: pnpm dev, then http://localhost:3000/?variant=D',
+);

@@ -1,5 +1,7 @@
 # Dashboard layout study
 
+Round 2 adds the top count strip and three shelf controls in `dashboard-round-2.html`. See [the round 2 notes](round-2.md). A–C below remain the original study.
+
 Question: which minimal arrangement makes the existing dashboard feel aligned and balanced, while keeping its content and visual language?
 
 Three alternatives share the existing greeting, collection context, six counts, reading covers, and progress. The study changes their arrangement:

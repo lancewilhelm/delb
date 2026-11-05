@@ -8,6 +8,7 @@ const props = withDefaults(
   },
 );
 const emit = defineEmits<{ select: [variant: string] }>();
+const secondRound = computed(() => ['D', 'E', 'F'].includes(props.current));
 const variants = computed(() => [
   ...(props.includeCurrent
     ? [
@@ -18,21 +19,41 @@ const variants = computed(() => [
         },
       ]
     : []),
-  {
-    key: 'A',
-    name: 'Quiet alignment',
-    detail: 'Same hierarchy · one shared width',
-  },
-  {
-    key: 'B',
-    name: 'Balanced columns',
-    detail: 'Library counts beside your reading',
-  },
-  {
-    key: 'C',
-    name: 'Reading first',
-    detail: 'Books first · a quieter count strip',
-  },
+  ...(secondRound.value
+    ? [
+        {
+          key: 'D',
+          name: 'Open tabs',
+          detail: 'Counts above · visible shelf choices',
+        },
+        {
+          key: 'E',
+          name: 'Quiet dropdown',
+          detail: 'Counts above · one simple shelf picker',
+        },
+        {
+          key: 'F',
+          name: 'Compact switch',
+          detail: 'Counts above · grouped shelf buttons',
+        },
+      ]
+    : [
+        {
+          key: 'A',
+          name: 'Quiet alignment',
+          detail: 'Same hierarchy · one shared width',
+        },
+        {
+          key: 'B',
+          name: 'Balanced columns',
+          detail: 'Library counts beside your reading',
+        },
+        {
+          key: 'C',
+          name: 'Reading first',
+          detail: 'Books first · a quieter count strip',
+        },
+      ]),
 ]);
 const selected = computed(
   () =>

@@ -20,7 +20,9 @@ const router = useRouter();
 const isDashboardPrototype = computed(
   () =>
     import.meta.dev &&
-    ['current', 'A', 'B', 'C'].includes(String(route.query.variant)),
+    ['current', 'A', 'B', 'C', 'D', 'E', 'F'].includes(
+      String(route.query.variant),
+    ),
 );
 
 function selectDashboardPrototype(variant: string) {

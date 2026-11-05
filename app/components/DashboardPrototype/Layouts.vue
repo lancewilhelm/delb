@@ -1,10 +1,12 @@
 <script setup lang="ts">
-// Throwaway study: three close alternatives on /?variant=A, B, or C.
+// Throwaway study: first round A–C; second round D–F.
 import Stats from './Stats.vue';
 import Reading from './Reading.vue';
+import Shelf from './Shelf.vue';
 
 defineProps<{
   variant: string;
+  initialShelf?: 'reading' | 'recent' | 'favorites';
   displayName: string;
   collectionName: string;
   counts: {
@@ -26,7 +28,23 @@ defineProps<{
 
 <template>
   <main class="dashboard-study" :class="`dashboard-study-${variant}`">
-    <template v-if="variant === 'A'">
+    <template v-if="['D', 'E', 'F'].includes(variant)">
+      <header class="study-greeting compact">
+        <h1>Hello, {{ displayName }}.</h1>
+        <p>
+          Collection: <span>{{ collectionName }}</span>
+        </p>
+      </header>
+      <Stats :counts="counts" mode="rail" class="study-stats-top" />
+      <Shelf
+        :variant="variant"
+        :books="books"
+        :initial-shelf="initialShelf"
+        :empty="counts?.total === 0"
+      />
+    </template>
+
+    <template v-else-if="variant === 'A'">
       <header class="study-greeting centered">
         <h1>Hello, {{ displayName }}.</h1>
         <p>
@@ -132,6 +150,20 @@ defineProps<{
 .dashboard-study-C {
   width: min(100%, 1000px);
   gap: 36px;
+}
+
+.dashboard-study-D,
+.dashboard-study-E,
+.dashboard-study-F {
+  width: min(100%, 1000px);
+  gap: 32px;
+}
+
+.study-stats-rail.study-stats-top {
+  border-top: 0;
+  border-bottom: 1px solid var(--sub-color);
+  padding-top: 0;
+  padding-bottom: 28px;
 }
 
 .study-greeting.compact {
