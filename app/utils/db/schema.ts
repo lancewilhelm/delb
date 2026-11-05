@@ -473,6 +473,8 @@ export const userBookPreferences = sqliteTable(
       .notNull()
       .references(() => books.id, { onDelete: 'cascade' }),
 
+    favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false),
+
     progressSyncEnabled: integer('progress_sync_enabled', { mode: 'boolean' })
       .notNull()
       .$defaultFn(() => false),
