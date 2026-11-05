@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { BookStatusChange } from '~/utils/bookReadingStatus';
 definePageMeta({
   auth: {
     only: 'user',
@@ -43,6 +44,7 @@ type DashboardReadingBook = {
   title: string;
   coverImagePath?: string | null;
   progress?: number | null;
+  status?: string | null;
 };
 
 const loading = ref(false);
@@ -54,6 +56,19 @@ const displayName = computed(() => {
   const n = (user.value?.name ?? '').toString().trim();
   return n || 'there';
 });
+
+function onBookStatusChanged(change: BookStatusChange) {
+  if (change.status === 'reading') return;
+  const index = readingBooks.value.findIndex(
+    (book) => book.id === change.bookId,
+  );
+  if (index < 0) return;
+  readingBooks.value.splice(index, 1);
+  if (counts.value) {
+    counts.value.reading = Math.max(0, counts.value.reading - 1);
+    counts.value[change.status ?? 'none'] += 1;
+  }
+}
 
 async function refreshDashboard() {
   loading.value = true;
@@ -74,7 +89,10 @@ async function refreshDashboard() {
     });
 
     counts.value = res?.data?.counts ?? null;
-    readingBooks.value = res?.data?.reading?.books ?? [];
+    readingBooks.value = (res?.data?.reading?.books ?? []).map((book) => ({
+      ...book,
+      status: 'reading',
+    }));
   } catch (err) {
     const e = err as FetchErrorLike;
     errorMessage.value =
@@ -268,7 +286,7 @@ onMounted(async () => {
                   <BookThumbnail
                     :book="b"
                     :lock-aspect-ratio="true"
-                    @status-change="refreshDashboard"
+                    @status-change="onBookStatusChanged"
                   />
                   <div class="text-xs opacity-70 mt-1">
                     <span v-if="typeof b.progress === 'number'">

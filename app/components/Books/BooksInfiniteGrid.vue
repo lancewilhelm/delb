@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import {
+  applyBookStatusChange,
+  type BookStatusChange,
+} from '~/utils/bookReadingStatus';
 import type { BookViewBook } from '~/utils/bookFields';
 /* eslint-disable vue/require-default-prop */
 defineOptions({ name: 'BooksInfiniteGrid' });
@@ -486,6 +490,18 @@ function setupObserver() {
   io.observe(sentinel);
 }
 
+function onBookStatusChanged(change: BookStatusChange) {
+  applyBookStatusChange({
+    books: books.value,
+    change,
+    endpoint: props.endpoint,
+  });
+  if (props.selectionEnabled) {
+    selectionStore.setKnownBookIdsInScope(books.value.map((book) => book.id));
+  }
+  if (!books.value.length && hasMore.value) void loadNextPage();
+}
+
 let requestGeneration = 0;
 
 function reset() {
@@ -692,7 +708,10 @@ onBeforeUnmount(() => {
         Loading...
       </div>
 
-      <div v-else-if="books.length === 0" class="text-sm opacity-80">
+      <div
+        v-else-if="books.length === 0 && !hasMore"
+        class="text-sm opacity-80"
+      >
         No books yet. Use Upload in the header to add one.
       </div>
 
@@ -722,7 +741,7 @@ onBeforeUnmount(() => {
                 "
                 :selected="selectionStore.isSelected(b.id)"
                 @toggle-select="onBookToggleSelect"
-                @status-change="loadFirstPage"
+                @status-change="onBookStatusChanged"
               />
             </div>
           </div>
@@ -730,7 +749,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div
-        v-if="books.length > 0"
+        v-if="books.length > 0 || hasMore"
         class="mt-6 flex flex-col items-center gap-2"
       >
         <div ref="sentinelRef" class="h-1 w-full" />

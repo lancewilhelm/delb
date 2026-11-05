@@ -25,6 +25,10 @@ function toggle() {
       {{ description }}
     </div>
     <button
+      type="button"
+      role="switch"
+      :aria-label="title"
+      :aria-checked="Boolean(model)"
       :class="[
         'flex col-start-2 row-span-2 w-15 border-2! border-(--sub-alt-color)! bg-(--bg-color)! rounded-full! p-0! group-hover:outline-1 outline-offset-2',
         model ? 'justify-end! bg-(--main-color)!' : 'justify-start!',

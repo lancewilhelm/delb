@@ -26,7 +26,9 @@ Setting Reading fills a missing start date. Finished fills a finish date and cre
 
 To change status while browsing, right-click a book cover and open **Reading status**. Choose a status or **No status** to clear it. A check marks your current choice. This works in grid and list views, including books without ebook files. Exit bulk selection mode to use the cover menu.
 
-The menu closes after a successful save, and the book view refreshes. A book leaves a filtered view if its new status no longer matches. If saving fails, the menu shows an error and lets you retry.
+The menu closes after a successful save. The book's status updates in place, preserving your scroll position and loaded pages. A book leaves a filtered view if its new status no longer matches. Other loaded books stay in place. If saving fails, the menu shows an error and lets you retry.
+
+To show status icons on covers, enable **Reading status badges** under **Settings → Appearance → Cover Style**. Badges start disabled. A bookmark means To be read, an open book means Reading, a check means Finished, and a circle-slash means DNF. Books with no status have no badge. Badges use your theme's accent color.
 
 Changes affect your account's status, not the status of other collection members. See [status and date rules](../developing/reference/reading-status-progress.md) for the complete transitions.
 

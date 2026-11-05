@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { BookStatusChange } from '~/utils/bookReadingStatus';
 import type { CoverMenuItem } from '~/utils/coverMenu';
 import { readDownloadFilename } from '~/utils/downloadFilename';
 import { buildBookCoverUrl } from '~/utils/covers';
@@ -142,7 +143,7 @@ const fileCacheLoaded = ref(false);
 
 const { getReadingStatusMenuItem } = useBookReadingStatusMenu({
   bookId: () => props.book.id,
-  onChanged: () => emit('status-change'),
+  onChanged: (change) => emit('status-change', change),
 });
 
 async function getContextMenuItems(): Promise<CoverMenuItem[]> {
@@ -219,7 +220,7 @@ async function getContextMenuItems(): Promise<CoverMenuItem[]> {
 }
 
 const emit = defineEmits<{
-  (e: 'status-change'): void;
+  (e: 'status-change', change: BookStatusChange): void;
   /** Fired when in selection mode and the user toggles selection for this book. */
   (e: 'toggle-select', bookId: string, meta?: { shiftKey?: boolean }): void;
 }>();
@@ -254,6 +255,10 @@ const visibleFields = computed(() =>
           :class="lockAspectRatio ? 'aspect-2/3' : ''"
           :context-menu-items="props.selectable ? [] : getContextMenuItems"
           @click="onOpenBook"
+        />
+        <BooksBookStatusBadge
+          v-if="!props.selectable"
+          :status="props.book.status"
         />
 
         <!-- Selection overlay -->

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { BookStatusChange } from '~/utils/bookReadingStatus';
 import type { CoverMenuItem } from '~/utils/coverMenu';
 import { readDownloadFilename } from '~/utils/downloadFilename';
 import { buildBookCoverUrl } from '~/utils/covers';
@@ -26,7 +27,7 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  (e: 'status-change'): void;
+  (e: 'status-change', change: BookStatusChange): void;
   (e: 'toggle-select', bookId: string, meta?: { shiftKey?: boolean }): void;
   (e: 'measure', bookId: string, height: number): void;
 }>();
@@ -166,7 +167,7 @@ const fileCacheLoaded = ref(false);
 
 const { getReadingStatusMenuItem } = useBookReadingStatusMenu({
   bookId: () => props.book.id,
-  onChanged: () => emit('status-change'),
+  onChanged: (change) => emit('status-change', change),
 });
 
 async function getContextMenuItems(): Promise<CoverMenuItem[]> {
@@ -270,6 +271,10 @@ function onRowClick(e?: MouseEvent) {
           class="cursor-pointer h-full w-full"
           :context-menu-items="props.selectable ? [] : getContextMenuItems"
           @click.stop="onRowClick"
+        />
+        <BooksBookStatusBadge
+          v-if="!props.selectable"
+          :status="props.book.status"
         />
 
         <div
