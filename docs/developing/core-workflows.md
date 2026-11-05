@@ -51,7 +51,7 @@ The header's [collection store](../../app/stores/collections.ts) holds either Al
 
 The dashboard's **All books** link calls the [Books filter store](../../app/stores/booksIndexFilters.ts) to clear its persisted status, date-added, and file-presence filters before navigation. The collection selection, sort settings, and view preferences remain unchanged. Dashboard status links retain their status query parameters.
 
-The [dashboard query](../../server/utils/books/dashboard.ts) counts books in the active collection and pages the selected reading shelf. Recently read uses the reader's finish dates. Favorites joins the reader's own preference flags. Membership checks apply to both counts and shelf results. [The dashboard reference](reference/dashboard.md) describes the request and order rules.
+The [dashboard query](../../server/utils/books/dashboard.ts) counts books in the active collection and pages the selected reading shelf. Continue reading uses the reader's saved progress. Recently read uses the reader's finish dates. Membership checks apply to both counts and shelf results. [The dashboard reference](reference/dashboard.md) describes the request and order rules.
 
 [Book listing](../../server/api/books/index.get.ts) first resolves the authenticated reader's collection memberships. A selected collection must belong to that set. Status filters join the reader's personal status records. Stable sort keys and cursors keep pagination consistent for a chosen ordering. The response enriches the page with the metadata selected by book views.
 
