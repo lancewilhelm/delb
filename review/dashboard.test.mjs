@@ -80,11 +80,13 @@ async function dashboard() {
     inlineTemplate: true,
   });
   const { default: page } = evaluate(
-    `import { ref, computed, watch, onMounted } from 'vue';\n${compiled.content}`,
+    `import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';\n${compiled.content}`,
     {
       definePageMeta: () => undefined,
       useHead: () => undefined,
       useAuth: () => ({ user: vue.ref({ name: 'Reader' }) }),
+      useRoute: () => ({ query: {} }),
+      useRouter: () => ({ replace: () => undefined }),
       useCollectionsStore: () => collections,
       useBooksIndexFiltersStore: () => filters,
     },
@@ -153,6 +155,384 @@ test('dashboard All books clears every persisted filter and preserves browsing p
     false,
     'cleared filters remain persisted',
   );
+});
+
+function mountedComponent(filename, globals, rootProps = {}) {
+  const node = (tag, text = '') => ({
+    tag,
+    text,
+    children: [],
+    props: {},
+    parent: null,
+  });
+  const renderer = vue.createRenderer({
+    createElement: node,
+    createText: (text) => node('#text', text),
+    createComment: (text) => node('#comment', text),
+    setText: (element, text) => {
+      element.text = text;
+    },
+    setElementText: (element, text) => {
+      element.text = text;
+      element.children = [];
+    },
+    parentNode: (element) => element.parent,
+    nextSibling: (element) =>
+      element.parent?.children[element.parent.children.indexOf(element) + 1] ??
+      null,
+    patchProp: (element, key, _previous, value) => {
+      element.props[key] = value;
+    },
+    insert(element, parent, anchor) {
+      if (element.parent)
+        element.parent.children.splice(
+          element.parent.children.indexOf(element),
+          1,
+        );
+      const index = anchor
+        ? parent.children.indexOf(anchor)
+        : parent.children.length;
+      parent.children.splice(index, 0, element);
+      element.parent = parent;
+    },
+    remove(element) {
+      element.parent?.children.splice(
+        element.parent.children.indexOf(element),
+        1,
+      );
+      element.parent = null;
+    },
+  });
+  const { descriptor } = parse(
+    readFileSync(new URL(filename, import.meta.url), 'utf8'),
+  );
+  const compiled = compileScript(descriptor, {
+    id: 'interaction-test',
+    inlineTemplate: true,
+  });
+  const { default: component } = evaluate(
+    `import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';\n${compiled.content}`,
+    globals,
+  );
+  const app = renderer.createApp({ render: () => vue.h(component, rootProps) });
+  app.directive('tooltip', {});
+  for (const name of ['AppHeader', 'ViewSelectorDropdown', 'Icon'])
+    app.component(name, { render: () => null });
+  app.component('BookThumbnail', {
+    props: ['book'],
+    render() {
+      return vue.h(
+        'span',
+        { 'data-status': this.book.status },
+        this.book.title,
+      );
+    },
+  });
+  app.component('NuxtLink', {
+    props: ['to'],
+    setup:
+      (props, { attrs, slots }) =>
+      () =>
+        vue.h('a', { ...attrs, href: props.to }, slots.default?.()),
+  });
+  const root = node('root');
+  app.mount(root);
+  const all = (element = root) => [element, ...element.children.flatMap(all)];
+  const text = () =>
+    all()
+      .map((element) => element.text)
+      .join(' ');
+  const button = (label) =>
+    all().find(
+      (element) => element.tag === 'button' && element.text.trim() === label,
+    );
+  return { app, all, text, button };
+}
+
+async function flush() {
+  for (let index = 0; index < 4; index++) await vue.nextTick();
+}
+
+test('shelf changes reject stale scope responses and loading more can retry without losing books', async (t) => {
+  const route = vue.reactive({ query: {} });
+  const collections = vue.reactive({
+    collections: [{}],
+    activeSelection: { kind: 'all' },
+    activeCollection: null,
+  });
+  const requests = [];
+  const view = mountedComponent('../app/pages/index.vue', {
+    definePageMeta() {},
+    useHead() {},
+    useAuth: () => ({ user: vue.ref({ name: 'Reader' }) }),
+    useCollectionsStore: () => collections,
+    useBooksIndexFiltersStore: () => ({ clearAll() {} }),
+    useRoute: () => route,
+    useRouter: () => ({
+      replace: ({ query }) => {
+        route.query = query;
+      },
+    }),
+    $fetch: (_url, options) =>
+      new Promise((resolve, reject) =>
+        requests.push({ ...options, resolve, reject }),
+      ),
+  });
+  t.after(() => view.app.unmount());
+  const result = (title, kind, nextOffset = null) => ({
+    success: true,
+    data: {
+      counts: {
+        total: 20,
+        reading: 1,
+        finished: 19,
+        none: 0,
+        to_be_read: 0,
+        dnf: 0,
+      },
+      shelf: {
+        kind,
+        nextOffset,
+        books: [
+          {
+            id: title,
+            title,
+            updatedAt: '2026-01-01',
+            progress: 10,
+            finishedDate: null,
+          },
+        ],
+      },
+    },
+  });
+  assert.equal(requests.length, 1);
+  assert.ok(view.text().includes('Loading…'));
+  view.button('Recently read').props.onClick();
+  await flush();
+  assert.equal(requests[0].signal.aborted, true);
+  collections.activeSelection = {
+    kind: 'collection',
+    collectionId: 'new-scope',
+  };
+  await flush();
+  assert.equal(requests[2].query.collectionId, 'new-scope');
+  requests[1].resolve(result('Old scope finished book', 'recent'));
+  await flush();
+  assert.ok(!view.text().includes('Old scope finished book'));
+  requests[2].resolve(result('New scope finished book', 'recent', 12));
+  await flush();
+  assert.ok(view.text().includes('New scope finished book'));
+  view.button('Show more').props.onClick();
+  await flush();
+  assert.equal(requests[3].query.offset, 12);
+  requests[3].reject(new Error('offline'));
+  await flush();
+  assert.ok(view.text().includes('New scope finished book'));
+  assert.ok(view.text().includes('Could not load this shelf'));
+  view.button('Retry').props.onClick();
+  await flush();
+  assert.equal(requests[4].query.offset, 12);
+  requests[4].resolve(result('Next page finished book', 'recent'));
+  await flush();
+  assert.ok(
+    view.text().includes('New scope finished book') &&
+      view.text().includes('Next page finished book'),
+  );
+  assert.equal(view.button('Show more'), undefined);
+  view
+    .all()
+    .find(
+      (element) =>
+        element.tag === 'span' && element.text === 'New scope finished book',
+    )
+    .props.onStatusChange({
+      bookId: 'New scope finished book',
+      status: 'reading',
+    });
+  await flush();
+  assert.equal(
+    requests.length,
+    5,
+    'status changes retain the loaded shelf without a new request',
+  );
+  assert.ok(view.text().includes('Next page finished book'));
+  assert.ok(!view.text().includes('New scope finished book'));
+  const countValues = view
+    .all()
+    .filter((element) => element.props.class === 'dashboard-count-value')
+    .map((element) => element.text);
+  assert.equal(countValues[1], '2');
+  assert.equal(countValues[3], '18');
+  requests[0].resolve(result('Stale initial reading', 'reading'));
+  await flush();
+  assert.ok(!view.text().includes('Stale initial reading'));
+});
+
+test('status changes preserve both shelves and adjust a pending page without skipping books', async (t) => {
+  for (const shelf of ['reading', 'recent']) {
+    const status = shelf === 'reading' ? 'reading' : 'finished';
+    const requests = [];
+    const view = mountedComponent('../app/pages/index.vue', {
+      definePageMeta() {},
+      useHead() {},
+      useAuth: () => ({ user: vue.ref({ name: 'Reader' }) }),
+      useCollectionsStore: () => ({
+        collections: [{}],
+        activeSelection: { kind: 'all' },
+      }),
+      useBooksIndexFiltersStore: () => ({ clearAll() {} }),
+      useRoute: () => ({ query: { shelf } }),
+      useRouter: () => ({ replace() {} }),
+      $fetch: (_url, options) =>
+        new Promise((resolve) => requests.push({ ...options, resolve })),
+    });
+    t.after(() => view.app.unmount());
+    const counts = {
+      total: 20,
+      none: 0,
+      to_be_read: 0,
+      reading: 0,
+      finished: 0,
+      dnf: 0,
+      [status]: 20,
+    };
+    const response = (ids, nextOffset, saved = false) => ({
+      success: true,
+      data: {
+        counts: saved ? { ...counts, [status]: 19, none: 1 } : counts,
+        shelf: {
+          kind: shelf,
+          nextOffset,
+          books: ids.map((id) => ({
+            id,
+            title: id,
+            updatedAt: '2026-11-04',
+            progress: 10,
+            finishedDate: shelf === 'recent' ? '2026-11-04' : null,
+          })),
+        },
+      },
+    });
+    requests[0].resolve(
+      response(
+        Array.from({ length: 12 }, (_, i) => `book-${i}`),
+        12,
+      ),
+    );
+    await flush();
+    const firstBook = view
+      .all()
+      .find((element) => element.tag === 'span' && element.text === 'book-0');
+    assert.equal(
+      firstBook.props['data-status'],
+      status,
+      'shelf status reaches cover badges',
+    );
+    firstBook.props.onStatusChange({ bookId: 'book-0', status });
+    await flush();
+    assert.equal(
+      requests.length,
+      1,
+      'keeping the current status does not reload the shelf',
+    );
+    view.button('Show more').props.onClick();
+    await flush();
+    assert.equal(requests[1].query.offset, 12);
+    firstBook.props.onStatusChange({ bookId: 'book-0', status: null });
+    await flush();
+    assert.equal(
+      requests[1].signal.aborted,
+      true,
+      'pending page used the old offset',
+    );
+    assert.equal(
+      requests[2].query.offset,
+      11,
+      'removed row is subtracted from the next offset',
+    );
+    assert.ok(!view.text().includes('book-0'));
+    assert.ok(
+      view.text().includes('book-11'),
+      'other loaded books remain visible',
+    );
+    requests[1].resolve(response(['stale-page'], null));
+    await flush();
+    assert.ok(!view.text().includes('stale-page'));
+    requests[2].resolve(
+      response(
+        Array.from({ length: 8 }, (_, i) => `book-${i + 12}`),
+        null,
+        true,
+      ),
+    );
+    await flush();
+    assert.equal(
+      view.all().filter((element) => element.props['data-status'] === status)
+        .length,
+      19,
+    );
+    assert.equal(view.button('Show more'), undefined);
+    const countValues = view
+      .all()
+      .filter((element) => element.props.class === 'dashboard-count-value')
+      .map((element) => element.text);
+    assert.equal(countValues[status === 'reading' ? 1 : 3], '19');
+    assert.equal(countValues[5], '1');
+    view.app.unmount();
+  }
+});
+
+test('Recently read preserves calendar dates across browser timezones', async (t) => {
+  const previousTimezone = process.env.TZ;
+  t.after(() => {
+    if (previousTimezone === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTimezone;
+  });
+  for (const timezone of ['America/New_York', 'Pacific/Kiritimati']) {
+    process.env.TZ = timezone;
+    const view = mountedComponent('../app/pages/index.vue', {
+      definePageMeta() {},
+      useHead() {},
+      useAuth: () => ({ user: vue.ref({ name: 'Reader' }) }),
+      useCollectionsStore: () => ({
+        collections: [{}],
+        activeSelection: { kind: 'all' },
+      }),
+      useBooksIndexFiltersStore: () => ({ clearAll() {} }),
+      useRoute: () => ({ query: { shelf: 'recent' } }),
+      useRouter: () => ({ replace() {} }),
+      $fetch: async () => ({
+        success: true,
+        data: {
+          counts: {
+            total: 1,
+            reading: 0,
+            finished: 1,
+            none: 0,
+            to_be_read: 0,
+            dnf: 0,
+          },
+          shelf: {
+            kind: 'recent',
+            nextOffset: null,
+            books: [
+              {
+                id: 'date',
+                title: 'Date test',
+                updatedAt: '2026-11-02',
+                finishedDate: '2026-11-02',
+                progress: null,
+              },
+            ],
+          },
+        },
+      }),
+    });
+    t.after(() => view.app.unmount());
+    await flush();
+    assert.match(view.text(), /Read Nov 2, 2026/);
+    view.app.unmount();
+  }
 });
 
 test('other dashboard status links keep their targets and do not clear filters', async () => {

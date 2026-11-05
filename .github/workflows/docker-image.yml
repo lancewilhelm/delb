@@ -44,17 +44,10 @@ jobs:
           fi
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
 
-      - name: Get release version from git
+      - name: Get build commit
         id: get_version
         run: |
-          if git describe --tags --abbrev=0 >/dev/null 2>&1; then
-            VERSION=$(git describe --tags --dirty --always)
-          elif git rev-parse --short HEAD >/dev/null 2>&1; then
-            VERSION=$(git rev-parse --short HEAD)
-          else
-            VERSION="manual"
-          fi
-          echo "NUXT_PUBLIC_APP_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -64,4 +57,4 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |
-            NUXT_PUBLIC_APP_VERSION=${{ env.NUXT_PUBLIC_APP_VERSION }}
+            NUXT_PUBLIC_APP_VERSION=${{ steps.get_version.outputs.version }}
