@@ -743,7 +743,7 @@ onMounted(async () => {
       <!-- Main content (fixed header + scrollable content area) -->
       <div class="flex-1 overflow-hidden flex flex-col min-h-0">
         <!-- Header (non-scrolling): view selector stays fixed -->
-        <div class="px-2 shrink-0 border-b border-(--sub-color)">
+        <div class="px-2 shrink-0 border-b border-(--contrast-border-color)">
           <div class="flex items-center justify-between gap-4">
             <!-- View selector (mode) lives here (top-left) -->
             <ViewSelectorDropdown />
@@ -752,7 +752,7 @@ onMounted(async () => {
             <div class="flex items-center gap-1 self-center">
               <BooksViewToggle />
 
-              <span class="border-r border-(--sub-color) mx-1 h-6" />
+              <span class="border-r border-(--contrast-border-color) mx-1 h-6" />
 
               <!-- Select / Actions (Books view only) -->
               <div class="flex items-center gap-2">
@@ -768,7 +768,7 @@ onMounted(async () => {
                   >
                     <Icon
                       name="lucide:ellipsis"
-                      class="text-(--main-color) opacity-80 shrink-0 text-xl sm:text-lg"
+                      class="text-(--contrast-main-color) opacity-80 shrink-0 text-xl sm:text-lg"
                     />
                     <span class="hidden lg:block text-sm opacity-80"
                       >Actions</span
@@ -779,10 +779,10 @@ onMounted(async () => {
                   <div
                     v-if="actionsOpen"
                     ref="actionsPanelRef"
-                    class="absolute right-0 mt-1 w-64 border border-(--sub-color) bg-(--bg-color) rounded-md shadow-lg z-50 overflow-hidden"
+                    class="absolute right-0 mt-1 w-64 border border-(--contrast-border-color) bg-(--bg-color) rounded-md shadow-lg z-50 overflow-hidden"
                     role="menu"
                   >
-                    <div class="px-2 py-1 border-b border-(--sub-color)">
+                    <div class="px-2 py-1 border-b border-(--contrast-border-color)">
                       <div class="text-xs opacity-70">Actions</div>
                     </div>
 
@@ -832,7 +832,7 @@ onMounted(async () => {
                         ? 'lucide:x-square'
                         : 'lucide:list-checks'
                     "
-                    class="text-(--main-color) opacity-80 shrink-0 text-xl sm:text-lg"
+                    class="text-(--contrast-main-color) opacity-80 shrink-0 text-xl sm:text-lg"
                   />
                   <span class="hidden lg:block text-sm opacity-80">
                     <span v-if="selectionStore.allSelectedInScope"
@@ -854,7 +854,7 @@ onMounted(async () => {
                         ? 'lucide:check-square'
                         : 'lucide:circle-check-big'
                     "
-                    class="text-(--main-color) opacity-80 shrink-0 text-xl sm:text-lg"
+                    class="text-(--contrast-main-color) opacity-80 shrink-0 text-xl sm:text-lg"
                   />
                   <span class="hidden lg:block text-sm opacity-80">
                     <span v-if="selectionStore.selectMode">Done</span>
@@ -865,7 +865,7 @@ onMounted(async () => {
 
               <p
                 v-if="collectionsSaveError"
-                class="text-sm text-(--error-color)"
+                class="text-sm text-(--contrast-error-color)"
               >
                 {{ collectionsSaveError }}
               </p>
@@ -897,12 +897,12 @@ onMounted(async () => {
 
                   <div
                     v-if="collectionsSaveError"
-                    class="text-sm text-(--error-color)"
+                    class="text-sm text-(--contrast-error-color)"
                   >
                     {{ collectionsSaveError }}
                   </div>
 
-                  <div class="border border-(--sub-color) rounded-lg p-3">
+                  <div class="border border-(--contrast-border-color) rounded-lg p-3">
                     <div class="text-sm font-semibold mb-2">
                       Your editable collections
                     </div>
@@ -948,7 +948,7 @@ onMounted(async () => {
                             @change="onToggleDesiredMembership(c.id)"
                           />
                           <span
-                            class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                            class="h-4 w-4 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                           ></span>
 
                           <div class="min-w-0 flex items-center gap-2">
@@ -1038,7 +1038,7 @@ onMounted(async () => {
                           :disabled="statusSubmitting"
                         />
                         <span
-                          class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                          class="h-4 w-4 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                           :class="
                             statusSubmitting
                               ? 'peer-checked:bg-(--sub-color) cursor-default!'
@@ -1051,7 +1051,7 @@ onMounted(async () => {
                       </label>
                     </div>
 
-                    <p v-if="statusError" class="text-sm text-(--error-color)">
+                    <p v-if="statusError" class="text-sm text-(--contrast-error-color)">
                       {{ statusError }}
                     </p>
                   </div>
@@ -1094,7 +1094,7 @@ onMounted(async () => {
                 >
                   <Icon
                     name="lucide:funnel"
-                    class="text-(--main-color) opacity-80 shrink-0 text-xl sm:text-lg"
+                    class="text-(--contrast-main-color) opacity-80 shrink-0 text-xl sm:text-lg"
                     :class="isFiltersApplied ? 'text-(--bg-color)!' : ''"
                   />
                   <span
@@ -1104,18 +1104,18 @@ onMounted(async () => {
                   >
                   <!-- <Icon
                     name="lucide:chevron-down"
-                    class="hidden! lg:block! text-(--main-color) opacity-80 shrink-0"
+                    class="hidden! lg:block! text-(--contrast-main-color) opacity-80 shrink-0"
                   /> -->
                 </button>
 
                 <div
                   v-if="filtersOpen"
                   ref="filterPanelRef"
-                  class="absolute right-0 mt-1 w-80 border border-(--sub-color) bg-(--bg-color) rounded-md shadow-lg z-50 overflow-hidden"
+                  class="absolute right-0 mt-1 w-80 border border-(--contrast-border-color) bg-(--bg-color) rounded-md shadow-lg z-50 overflow-hidden"
                   role="menu"
                 >
                   <div
-                    class="px-3 py-2 border-b border-(--sub-color) flex items-center justify-between gap-3"
+                    class="px-3 py-2 border-b border-(--contrast-border-color) flex items-center justify-between gap-3"
                   >
                     <div class="text-xs opacity-70">Filters</div>
 
@@ -1136,7 +1136,7 @@ onMounted(async () => {
                         <div class="text-xs opacity-70">Start</div>
                         <input
                           v-model="addedStart"
-                          class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                          class="w-full px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
                           type="date"
                         />
                       </label>
@@ -1145,7 +1145,7 @@ onMounted(async () => {
                         <div class="text-xs opacity-70">End</div>
                         <input
                           v-model="addedEnd"
-                          class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                          class="w-full px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
                           type="date"
                         />
                       </label>
@@ -1155,7 +1155,7 @@ onMounted(async () => {
                       Shows books added within the selected date range.
                     </div>
 
-                    <div class="pt-2 border-t border-(--sub-color)"></div>
+                    <div class="pt-2 border-t border-(--contrast-border-color)"></div>
 
                     <div class="text-sm font-medium opacity-90">Status</div>
 
@@ -1171,7 +1171,7 @@ onMounted(async () => {
                           @change="toggleNoStatus"
                         />
                         <span
-                          class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                          class="h-4 w-4 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                         ></span>
                         <div class="min-w-0">
                           <div class="text-sm">No status</div>
@@ -1191,7 +1191,7 @@ onMounted(async () => {
                           @change="toggleStatusSelected(opt.value)"
                         />
                         <span
-                          class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                          class="h-4 w-4 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                         ></span>
                         <div class="min-w-0">
                           <div class="text-sm">{{ opt.label }}</div>
@@ -1199,7 +1199,7 @@ onMounted(async () => {
                       </label>
                     </div>
 
-                    <div class="pt-2 border-t border-(--sub-color)"></div>
+                    <div class="pt-2 border-t border-(--contrast-border-color)"></div>
 
                     <div class="text-sm font-medium opacity-90">Files</div>
 
@@ -1213,7 +1213,7 @@ onMounted(async () => {
                           class="peer sr-only"
                         />
                         <span
-                          class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                          class="h-4 w-4 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                         ></span>
                         <div class="min-w-0">
                           <div class="text-sm">Any</div>
@@ -1229,7 +1229,7 @@ onMounted(async () => {
                           class="peer sr-only"
                         />
                         <span
-                          class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                          class="h-4 w-4 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                         ></span>
                         <div class="min-w-0">
                           <div class="text-sm">Has files</div>
@@ -1245,7 +1245,7 @@ onMounted(async () => {
                           class="peer sr-only"
                         />
                         <span
-                          class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                          class="h-4 w-4 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                         ></span>
                         <div class="min-w-0">
                           <div class="text-sm">No files</div>

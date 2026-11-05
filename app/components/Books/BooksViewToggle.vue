@@ -21,7 +21,7 @@ function setMode(mode: 'grid' | 'list') {
 
 <template>
   <div
-    class="flex items-center gap-1 border-(--sub-color) rounded-md p-0.5 bg-(--bg-color)"
+    class="flex items-center gap-1 border-(--contrast-border-color) rounded-md p-0.5 bg-(--bg-color)"
     role="group"
     aria-label="Books view mode"
   >
@@ -29,7 +29,7 @@ function setMode(mode: 'grid' | 'list') {
       v-tooltip="'Grid View'"
       aria-label="Grid View"
       type="button"
-      class="flex items-center gap-1 px-2 py-1 rounded text-sm transition text-(--main-color)"
+      class="flex items-center gap-1 px-2 py-1 rounded text-sm transition text-(--contrast-main-color)"
       :class="
         effectiveMode === 'grid'
           ? 'bg-(--sub-color)/25'
@@ -46,7 +46,7 @@ function setMode(mode: 'grid' | 'list') {
       v-tooltip="'List View'"
       aria-label="List View"
       type="button"
-      class="flex items-center gap-1 px-2 py-1 rounded text-sm transition text-(--main-color)"
+      class="flex items-center gap-1 px-2 py-1 rounded text-sm transition text-(--contrast-main-color)"
       :class="
         effectiveMode === 'list'
           ? 'bg-(--sub-color)/25'

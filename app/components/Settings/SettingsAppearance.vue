@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import themesList from '~/assets/json/themes.json';
 import { normalizeCustomTheme } from '~/utils/customTheme';
+import {
+  DEFAULT_APPEARANCE_CONTRAST,
+  MIN_APPEARANCE_CONTRAST,
+  MAX_APPEARANCE_CONTRAST,
+} from '~/utils/appearanceContrast';
 
 interface Theme {
   name: string;
@@ -13,6 +18,7 @@ interface Theme {
 const userSettingsStore = useUserSettingsStore();
 const appearance = useThemeAppearance();
 const isMobileDevice = useIsMobileDevice();
+const contrast = userSettingsStore.settingRef<number>('appearanceContrast');
 
 // ------------------------------
 // Mobile settings
@@ -189,10 +195,34 @@ function handleSortChange(target: string) {
       />
       <div
         v-if="separateMobileSettings && isMobileDevice"
-        class="text-sm italic text-(--sub-color)"
+        class="text-sm italic text-(--contrast-sub-color)"
       >
         You are currently editing mobile-specific settings.
       </div>
+    </SettingsUIGroup>
+    <SettingsUIGroup
+      title="Contrast"
+      icon="lucide:contrast"
+      description="adjust text and border contrast across the interface"
+    >
+      <SettingsUISlider
+        v-model="contrast"
+        title="Contrast"
+        description="Below 100% softens text and borders. Above 100% strengthens text and gradually emphasizes borders."
+        :min="MIN_APPEARANCE_CONTRAST"
+        :max="MAX_APPEARANCE_CONTRAST"
+        :step="5"
+        :display-value="true"
+        suffix="%"
+      />
+      <button
+        v-if="contrast !== DEFAULT_APPEARANCE_CONTRAST"
+        type="button"
+        class="self-start rounded-lg px-3 py-1 bg-(--sub-alt-color)!"
+        @click="contrast = DEFAULT_APPEARANCE_CONTRAST"
+      >
+        Reset contrast to {{ DEFAULT_APPEARANCE_CONTRAST }}%
+      </button>
     </SettingsUIGroup>
     <SettingsUIGroup
       title="Cover Style"
@@ -336,7 +366,7 @@ function handleSortChange(target: string) {
         >
           Follow system appearance
         </button>
-        <span class="text-(--sub-color)"
+        <span class="text-(--contrast-sub-color)"
           >Right-click or press and hold a theme to set its system slot. On a
           keyboard, use Shift+F10.</span
         >
@@ -354,7 +384,9 @@ function handleSortChange(target: string) {
             name="lucide:arrow-down-a-z"
             :class="[
               'scale-150',
-              sortedByName ? 'text-(--bg-color)!' : 'text-(--text-color)!',
+              sortedByName
+                ? 'text-(--bg-color)!'
+                : 'text-(--contrast-text-color)!',
             ]"
           />
           <Icon
@@ -362,7 +394,9 @@ function handleSortChange(target: string) {
             name="lucide:arrow-down-z-a"
             :class="[
               'scale-150',
-              sortedByName ? 'text-(--bg-color)!' : 'text-(--text-color)!',
+              sortedByName
+                ? 'text-(--bg-color)!'
+                : 'text-(--contrast-text-color)!',
             ]"
           />
         </button>
@@ -378,7 +412,9 @@ function handleSortChange(target: string) {
             name="lucide:arrow-down-narrow-wide"
             :class="[
               'scale-150',
-              !sortedByName ? 'text-(--bg-color)' : 'text-(--text-color)',
+              !sortedByName
+                ? 'text-(--bg-color)'
+                : 'text-(--contrast-text-color)',
             ]"
           />
           <Icon
@@ -386,7 +422,9 @@ function handleSortChange(target: string) {
             name="lucide:arrow-down-wide-narrow"
             :class="[
               'scale-150',
-              !sortedByName ? 'text-(--bg-color)' : 'text-(--text-color)',
+              !sortedByName
+                ? 'text-(--bg-color)'
+                : 'text-(--contrast-text-color)',
             ]"
           />
         </button>

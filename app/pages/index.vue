@@ -114,7 +114,7 @@ onMounted(async () => {
 
     <div class="flex w-full h-full overflow-hidden">
       <div class="flex-1 overflow-hidden flex flex-col min-h-0">
-        <div class="px-4 shrink-0 border-b border-(--sub-color)">
+        <div class="px-4 shrink-0 border-b border-(--contrast-border-color)">
           <div class="flex items-center justify-center">
             <ViewSelectorDropdown />
           </div>
@@ -124,7 +124,7 @@ onMounted(async () => {
           class="flex-1 min-h-0 overflow-auto p-4 space-y-8 flex items-center justify-center max-w-225 self-center"
         >
           <div v-if="loading" class="text-sm opacity-80">Loading…</div>
-          <div v-else-if="errorMessage" class="text-sm text-(--error-color)">
+          <div v-else-if="errorMessage" class="text-sm text-(--contrast-error-color)">
             {{ errorMessage }}
           </div>
 
@@ -159,12 +159,12 @@ onMounted(async () => {
             <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
               <NuxtLink
                 to="/books"
-                class="border border-(--sub-color) rounded-lg p-4 hover:bg-(--sub-color)/10 transition"
+                class="border border-(--contrast-border-color) rounded-lg p-4 hover:bg-(--sub-color)/10 transition"
                 @click="booksFiltersStore.clearAll()"
               >
                 <Icon
                   name="lucide:library"
-                  class="float-right text-(--main-color) opacity-60"
+                  class="float-right text-(--contrast-main-color) opacity-60"
                 />
                 <div class="text-xs opacity-70">All books</div>
                 <div class="text-2xl font-semibold">
@@ -174,11 +174,11 @@ onMounted(async () => {
 
               <NuxtLink
                 to="/books?status=reading"
-                class="border border-(--sub-color) rounded-lg p-4 hover:bg-(--sub-color)/10 transition"
+                class="border border-(--contrast-border-color) rounded-lg p-4 hover:bg-(--sub-color)/10 transition"
               >
                 <Icon
                   name="lucide:book-open"
-                  class="float-right text-(--main-color) opacity-60"
+                  class="float-right text-(--contrast-main-color) opacity-60"
                 />
                 <div class="text-xs opacity-70">Reading</div>
                 <div class="text-2xl font-semibold">
@@ -188,11 +188,11 @@ onMounted(async () => {
 
               <NuxtLink
                 to="/books?status=to_be_read"
-                class="border border-(--sub-color) rounded-lg p-4 hover:bg-(--sub-color)/10 transition"
+                class="border border-(--contrast-border-color) rounded-lg p-4 hover:bg-(--sub-color)/10 transition"
               >
                 <Icon
                   name="lucide:bookmark"
-                  class="float-right text-(--main-color) opacity-60"
+                  class="float-right text-(--contrast-main-color) opacity-60"
                 />
                 <div class="text-xs opacity-70">To be read</div>
                 <div class="text-2xl font-semibold">
@@ -202,11 +202,11 @@ onMounted(async () => {
 
               <NuxtLink
                 to="/books?status=finished"
-                class="border border-(--sub-color) rounded-lg p-4 hover:bg-(--sub-color)/10 transition"
+                class="border border-(--contrast-border-color) rounded-lg p-4 hover:bg-(--sub-color)/10 transition"
               >
                 <Icon
                   name="lucide:check"
-                  class="float-right text-(--main-color) opacity-60"
+                  class="float-right text-(--contrast-main-color) opacity-60"
                 />
                 <div class="text-xs opacity-70">Finished</div>
                 <div class="text-2xl font-semibold">
@@ -216,11 +216,11 @@ onMounted(async () => {
 
               <NuxtLink
                 to="/books?status=dnf"
-                class="border border-(--sub-color) rounded-lg p-4 hover:bg-(--sub-color)/10 transition"
+                class="border border-(--contrast-border-color) rounded-lg p-4 hover:bg-(--sub-color)/10 transition"
               >
                 <Icon
                   name="lucide:ban"
-                  class="float-right text-(--main-color) opacity-60"
+                  class="float-right text-(--contrast-main-color) opacity-60"
                 />
                 <div class="text-xs opacity-70">DNF</div>
                 <div class="text-2xl font-semibold">
@@ -230,11 +230,11 @@ onMounted(async () => {
 
               <NuxtLink
                 to="/books?status=none"
-                class="border border-(--sub-color) rounded-lg p-4 hover:bg-(--sub-color)/10 transition"
+                class="border border-(--contrast-border-color) rounded-lg p-4 hover:bg-(--sub-color)/10 transition"
               >
                 <Icon
                   name="lucide:circle-dashed"
-                  class="float-right text-(--main-color) opacity-60"
+                  class="float-right text-(--contrast-main-color) opacity-60"
                 />
                 <div class="text-xs opacity-70">No status</div>
                 <div class="text-2xl font-semibold">

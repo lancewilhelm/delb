@@ -1696,14 +1696,14 @@ watch(
     <AppHeader class="w-full" />
 
     <!-- View selector -->
-    <div class="px-2 shrink-0 border-b border-(--sub-color)">
+    <div class="px-2 shrink-0 border-b border-(--contrast-border-color)">
       <ViewSelectorDropdown />
     </div>
 
     <!-- Content -->
     <div class="w-full h-full p-4 overflow-auto">
       <div
-        class="flex items-center justify-between gap-2 mb-4 text-(--main-color)"
+        class="flex items-center justify-between gap-2 mb-4 text-(--contrast-main-color)"
       >
         <!-- Back button -->
         <icon
@@ -1724,7 +1724,7 @@ watch(
 
           <div class="flex gap-2 shrink-0">
             <button
-              class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
+              class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm"
               type="button"
               :disabled="saving"
               @click="resetForm"
@@ -1747,7 +1747,7 @@ watch(
 
       <div v-if="loading" class="text-sm opacity-80">Loading...</div>
 
-      <div v-else-if="errorMessage" class="text-sm text-(--error-color) mb-4">
+      <div v-else-if="errorMessage" class="text-sm text-(--contrast-error-color) mb-4">
         {{ errorMessage }}
       </div>
 
@@ -1781,7 +1781,7 @@ watch(
           <div class="flex flex-wrap gap-1 pt-2 justify-center">
             <button
               v-tooltip="'Upload cover from computer'"
-              class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
+              class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
               type="button"
               :disabled="saving || coverUrlLoading"
               @click="pickCoverFile"
@@ -1793,7 +1793,7 @@ watch(
             <button
               v-if="selectedCoverFile || coverResetPending"
               v-tooltip="'Reset cover to original'"
-              class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2!"
+              class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm gap-2!"
               type="button"
               :disabled="saving"
               @click="resetCoverPreview"
@@ -1804,7 +1804,7 @@ watch(
 
             <button
               v-tooltip="'Clear current cover'"
-              class="px-3 py-2 rounded-md border border-(--error-color) text-(--error-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed!"
+              class="px-3 py-2 rounded-md border border-(--error-color) text-(--contrast-error-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed!"
               type="button"
               :disabled="
                 saving || coverUploading || coverUrlLoading || !coverThumbUrl
@@ -1823,14 +1823,14 @@ watch(
             <div class="flex gap-2">
               <input
                 v-model="coverUrlInput"
-                class="min-w-0 flex-1 px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                class="min-w-0 flex-1 px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
                 type="url"
                 placeholder="https://example.com/cover.jpg"
                 :disabled="saving || coverUploading"
                 @keydown.enter.prevent="previewCoverFromUrl"
               />
               <button
-                class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
+                class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
                 type="button"
                 :disabled="
                   saving ||
@@ -1887,14 +1887,14 @@ watch(
                   :class="
                     titleMissing ||
                     form.title.trim() !== (book.title ?? '').trim()
-                      ? 'text-(--error-color)'
+                      ? 'text-(--contrast-error-color)'
                       : ''
                   "
                   >Title</label
                 >
                 <span
                   v-if="titleMissing"
-                  class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-(--error-color) text-(--error-color)"
+                  class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-(--error-color) text-(--contrast-error-color)"
                 >
                   Required
                 </span>
@@ -1902,13 +1902,13 @@ watch(
                   v-if="form.title.trim() !== (book.title ?? '').trim()"
                   v-tooltip="'Reset title'"
                   name="ri:reset-left-line"
-                  class="text-(--error-color) cursor-pointer text-sm"
+                  class="text-(--contrast-error-color) cursor-pointer text-sm"
                   @click="form.title = (book.title ?? '').trim()"
                 />
               </div>
               <input
                 v-model="form.title"
-                class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                class="w-full px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
                 type="text"
                 placeholder="Title"
               />
@@ -1929,14 +1929,14 @@ watch(
                         .map((a) => a.name)
                         .join(', ')
                         .trim()
-                      ? 'text-(--error-color)'
+                      ? 'text-(--contrast-error-color)'
                       : ''
                   "
                   >Authors</label
                 >
                 <span
                   v-if="authorsMissing"
-                  class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-(--error-color) text-(--error-color)"
+                  class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-(--error-color) text-(--contrast-error-color)"
                 >
                   Required
                 </span>
@@ -1953,7 +1953,7 @@ watch(
                   "
                   v-tooltip="'Reset authors'"
                   name="ri:reset-left-line"
-                  class="text-(--error-color) cursor-pointer text-sm"
+                  class="text-(--contrast-error-color) cursor-pointer text-sm"
                   @click="
                     authorChips = (book.authors ?? []).map((a) => ({
                       id: a.id,
@@ -1980,7 +1980,7 @@ watch(
               <div class="relative">
                 <input
                   v-model="authorInput"
-                  class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                  class="w-full px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
                   type="text"
                   placeholder="Type an author name… (comma to create chips)"
                   @keydown.enter.prevent="
@@ -2010,7 +2010,7 @@ watch(
                     authorSuggestOpen &&
                     (authorSearching || authorSuggestions.length)
                   "
-                  class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
+                  class="absolute z-50 mt-1 w-full rounded-md border border-(--contrast-border-color) bg-(--bg-color) shadow-lg overflow-hidden"
                 >
                   <div
                     v-if="authorSearching"
@@ -2043,7 +2043,7 @@ watch(
                   class="text-sm opacity-70"
                   :class="
                     form.description.trim() !== (book.description ?? '').trim()
-                      ? 'text-(--error-color)'
+                      ? 'text-(--contrast-error-color)'
                       : ''
                   "
                   >Description</label
@@ -2054,7 +2054,7 @@ watch(
                   "
                   v-tooltip="'Reset description'"
                   name="ri:reset-left-line"
-                  class="text-(--error-color) cursor-pointer text-sm"
+                  class="text-(--contrast-error-color) cursor-pointer text-sm"
                   @click="form.description = (book.description ?? '').trim()"
                 />
               </div>
@@ -2073,7 +2073,7 @@ watch(
                     class="text-sm opacity-70"
                     :class="
                       form.series.trim() !== (book.series?.name ?? '').trim()
-                        ? 'text-(--error-color)'
+                        ? 'text-(--contrast-error-color)'
                         : ''
                     "
                     >Series</label
@@ -2084,7 +2084,7 @@ watch(
                     "
                     v-tooltip="'Reset series'"
                     name="ri:reset-left-line"
-                    class="text-(--error-color) cursor-pointer text-sm"
+                    class="text-(--contrast-error-color) cursor-pointer text-sm"
                     @click="
                       form.series = (book.series?.name ?? '').trim();
                       seriesInput = form.series;
@@ -2095,7 +2095,7 @@ watch(
                 <div class="relative">
                   <input
                     v-model="form.series"
-                    class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                    class="w-full px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
                     type="text"
                     placeholder="Series name"
                     @input="seriesInput = form.series"
@@ -2124,7 +2124,7 @@ watch(
                       seriesSuggestOpen &&
                       (seriesSearching || seriesSuggestions.length)
                     "
-                    class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
+                    class="absolute z-50 mt-1 w-full rounded-md border border-(--contrast-border-color) bg-(--bg-color) shadow-lg overflow-hidden"
                   >
                     <div
                       v-if="seriesSearching"
@@ -2156,7 +2156,7 @@ watch(
                     :class="
                       form.seriesIndex.trim() !==
                       ((book.series?.index ?? '') + '').trim()
-                        ? 'text-(--error-color)'
+                        ? 'text-(--contrast-error-color)'
                         : ''
                     "
                   >
@@ -2170,7 +2170,7 @@ watch(
                     "
                     v-tooltip="'Reset series index'"
                     name="ri:reset-left-line"
-                    class="text-(--error-color) cursor-pointer text-sm"
+                    class="text-(--contrast-error-color) cursor-pointer text-sm"
                     @click="
                       form.seriesIndex = (
                         (book.series?.index ?? '') + ''
@@ -2180,7 +2180,7 @@ watch(
                 </div>
                 <input
                   v-model="form.seriesIndex"
-                  class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                  class="w-full px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
                   type="text"
                   inputmode="decimal"
                   placeholder="(blank to clear)"
@@ -2202,7 +2202,7 @@ watch(
                       .map((t) => t.name)
                       .join(', ')
                       .trim()
-                      ? 'text-(--error-color)'
+                      ? 'text-(--contrast-error-color)'
                       : ''
                   "
                   >Tags</label
@@ -2220,7 +2220,7 @@ watch(
                   "
                   v-tooltip="'Reset tags'"
                   name="ri:reset-left-line"
-                  class="text-(--error-color) cursor-pointer text-sm"
+                  class="text-(--contrast-error-color) cursor-pointer text-sm"
                   @click="
                     tagChips = (book.tags ?? []).map((t) => ({
                       id: t.id,
@@ -2247,7 +2247,7 @@ watch(
               <div class="relative">
                 <input
                   v-model="tagInput"
-                  class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                  class="w-full px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
                   type="text"
                   placeholder="Type tags… (comma to create chips)"
                   @keydown.enter.prevent="
@@ -2273,7 +2273,7 @@ watch(
                   v-if="
                     tagSuggestOpen && (tagSearching || tagSuggestions.length)
                   "
-                  class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
+                  class="absolute z-50 mt-1 w-full rounded-md border border-(--contrast-border-color) bg-(--bg-color) shadow-lg overflow-hidden"
                 >
                   <div v-if="tagSearching" class="px-3 py-2 text-sm opacity-70">
                     Searching…
@@ -2305,7 +2305,7 @@ watch(
                     :class="
                       form.publisher.trim() !==
                       (book.publisher?.name ?? '').trim()
-                        ? 'text-(--error-color)'
+                        ? 'text-(--contrast-error-color)'
                         : ''
                     "
                     >Publisher</label
@@ -2317,7 +2317,7 @@ watch(
                     "
                     v-tooltip="'Reset publisher'"
                     name="ri:reset-left-line"
-                    class="text-(--error-color) cursor-pointer text-sm"
+                    class="text-(--contrast-error-color) cursor-pointer text-sm"
                     @click="
                       form.publisher = (book.publisher?.name ?? '').trim();
                       publisherInput = form.publisher;
@@ -2328,7 +2328,7 @@ watch(
                 <div class="relative">
                   <input
                     v-model="form.publisher"
-                    class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                    class="w-full px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
                     type="text"
                     placeholder="Publisher name"
                     @input="publisherInput = form.publisher"
@@ -2357,7 +2357,7 @@ watch(
                       publisherSuggestOpen &&
                       (publisherSearching || publisherSuggestions.length)
                     "
-                    class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
+                    class="absolute z-50 mt-1 w-full rounded-md border border-(--contrast-border-color) bg-(--bg-color) shadow-lg overflow-hidden"
                   >
                     <div
                       v-if="publisherSearching"
@@ -2389,7 +2389,7 @@ watch(
                     :class="
                       form.published.trim() !==
                       (formatDateOnly(book.published ?? '') || '').trim()
-                        ? 'text-(--error-color)'
+                        ? 'text-(--contrast-error-color)'
                         : ''
                     "
                     >Published</label
@@ -2401,7 +2401,7 @@ watch(
                     "
                     v-tooltip="'Reset published date'"
                     name="ri:reset-left-line"
-                    class="text-(--error-color) cursor-pointer text-sm"
+                    class="text-(--contrast-error-color) cursor-pointer text-sm"
                     @click="
                       form.published = (
                         formatDateOnly(book.published ?? '') || ''
@@ -2411,7 +2411,7 @@ watch(
                 </div>
                 <input
                   v-model="form.published"
-                  class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                  class="w-full px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
                   type="date"
                   placeholder="YYYY-MM-DD"
                 />
@@ -2428,7 +2428,7 @@ watch(
                     (
                       serializeIdentifierRows(book.identifiers ?? []) || ''
                     ).trim()
-                      ? 'text-(--error-color)'
+                      ? 'text-(--contrast-error-color)'
                       : ''
                   "
                   >Identifiers</label
@@ -2442,7 +2442,7 @@ watch(
                   "
                   v-tooltip="'Reset identifiers'"
                   name="ri:reset-left-line"
-                  class="text-(--error-color) cursor-pointer text-sm"
+                  class="text-(--contrast-error-color) cursor-pointer text-sm"
                   @click="
                     form.identifiers = (
                       serializeIdentifierRows(book.identifiers ?? []) || ''
@@ -2463,18 +2463,18 @@ watch(
                   class="flex items-center gap-2"
                 >
                   <div
-                    class="px-2 py-1 rounded border border-(--sub-color) text-xs font-mono opacity-80"
+                    class="px-2 py-1 rounded border border-(--contrast-border-color) text-xs font-mono opacity-80"
                   >
                     {{ row.type }}
                   </div>
                   <div
-                    class="flex-1 min-w-0 px-2 py-1 rounded border border-(--sub-color) text-xs font-mono opacity-90 truncate"
+                    class="flex-1 min-w-0 px-2 py-1 rounded border border-(--contrast-border-color) text-xs font-mono opacity-90 truncate"
                   >
                     {{ row.value }}
                   </div>
                   <button
                     type="button"
-                    class="px-2 py-1 rounded border border-(--sub-color) hover:bg-(--sub-color)/10 text-xs"
+                    class="px-2 py-1 rounded border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-xs"
                     title="Remove"
                     @click="
                       (() => {
@@ -2492,13 +2492,13 @@ watch(
               <div class="flex gap-2">
                 <input
                   v-model="identifierTypeInput"
-                  class="w-28 px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm font-mono"
+                  class="w-28 px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm font-mono"
                   type="text"
                   placeholder="type"
                 />
                 <input
                   v-model="identifierValueInput"
-                  class="flex-1 min-w-0 px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm font-mono"
+                  class="flex-1 min-w-0 px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm font-mono"
                   type="text"
                   placeholder="value"
                   @keydown.enter.prevent="
@@ -2515,7 +2515,7 @@ watch(
                 />
                 <button
                   type="button"
-                  class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
+                  class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm"
                   @click="
                     (() => {
                       const t = normalizeIdentifierType(identifierTypeInput);
@@ -2540,7 +2540,7 @@ watch(
                   class="text-sm opacity-70"
                   :class="
                     form.pages.trim() !== ((book.pages ?? '') + '').trim()
-                      ? 'text-(--error-color)'
+                      ? 'text-(--contrast-error-color)'
                       : ''
                   "
                   >Pages</label
@@ -2549,13 +2549,13 @@ watch(
                   v-if="form.pages.trim() !== ((book.pages ?? '') + '').trim()"
                   v-tooltip="'Reset pages'"
                   name="ri:reset-left-line"
-                  class="text-(--error-color) cursor-pointer text-sm"
+                  class="text-(--contrast-error-color) cursor-pointer text-sm"
                   @click="form.pages = ((book.pages ?? '') + '').trim()"
                 />
               </div>
               <input
                 :value="form.pages"
-                class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                class="w-full px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
                 type="number"
                 min="0"
                 step="1"
@@ -2582,7 +2582,7 @@ watch(
                   class="text-sm opacity-70"
                   :class="
                     form.language.trim() !== (book.language ?? '').trim()
-                      ? 'text-(--error-color)'
+                      ? 'text-(--contrast-error-color)'
                       : ''
                   "
                   >Language</label
@@ -2591,13 +2591,13 @@ watch(
                   v-if="form.language.trim() !== (book.language ?? '').trim()"
                   v-tooltip="'Reset language'"
                   name="ri:reset-left-line"
-                  class="text-(--error-color) cursor-pointer text-sm"
+                  class="text-(--contrast-error-color) cursor-pointer text-sm"
                   @click="form.language = (book.language ?? '').trim()"
                 />
               </div>
               <input
                 v-model="form.language"
-                class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+                class="w-full px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
                 type="text"
                 placeholder="e.g. en"
               />
@@ -2608,7 +2608,7 @@ watch(
               <!-- Metadata Search Button -->
               <button
                 type="button"
-                class="w-full border border-(--sub-color) p-2 gap-2"
+                class="w-full border border-(--contrast-border-color) p-2 gap-2"
                 @click="openMetadataSearch"
               >
                 <Icon name="lucide:search" class="text-xl" />
@@ -2618,7 +2618,7 @@ watch(
               <!-- Auto-feetch Metadata Button -->
               <button
                 type="button"
-                class="w-full border border-(--sub-color) p-2 gap-2 flex-col"
+                class="w-full border border-(--contrast-border-color) p-2 gap-2 flex-col"
                 :disabled="autoFetchingMetadata"
                 @click="handleAutoFetchMetadata"
               >

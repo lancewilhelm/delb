@@ -41,7 +41,7 @@ const path = computed(() => String(route.fullPath || ''));
 
           <button
             type="button"
-            class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
+            class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm"
             @click="$router.back()"
           >
             Go back

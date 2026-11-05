@@ -23,7 +23,7 @@ withDefaults(
     <Transition name="fade">
       <div
         v-if="message"
-        class="absolute top-0 px-4 py-3 rounded border border-(--error-color) bg-(--error-color)/10 text-(--error-color) max-w-[320px] text-center text-sm"
+        class="absolute top-0 px-4 py-3 rounded border border-(--error-color) bg-(--error-color)/10 text-(--contrast-error-color) max-w-[320px] text-center text-sm"
         role="alert"
       >
         {{ message }}

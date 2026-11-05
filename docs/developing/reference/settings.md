@@ -43,6 +43,16 @@ The [server theme plugin](../../../app/plugins/init-theme.server.ts) emits eithe
 
 Custom colors live in `customTheme`. A theme slot or fixed choice can select `custom`; the palette then supplies CSS roles through [custom theme utilities](../../../app/utils/customTheme.ts). `theme: 'custom'` is the legacy shape, not the current settings contract.
 
+## Interface contrast
+
+**Settings → Appearance → Contrast** adjusts interface text and structural borders from 50–200%, in 5-point steps. The default and reset value is 100%, which preserves the original theme. Backgrounds, accent fills, book covers, and EPUB content retain their colors.
+
+The control follows T3 Code's piecewise function. Below 100%, text blends toward the theme background in OKLab, while borders fade toward transparency. Above 100%, text blends toward black on light backgrounds or white on dark backgrounds. Borders blend toward the original foreground at one-quarter strength: 150% adds a 12.5% border boost, and 200% adds 25%.
+
+`appearanceContrast` belongs to each user settings profile, including independent mobile settings. Changes apply immediately and use the existing debounced account sync. Missing or invalid values use 100%; finite values are rounded and clamped to the supported range.
+
+The [contrast utility](../../../app/utils/appearanceContrast.ts) owns the coefficients and chooses the target from the palette background. The [universal plugin](../../../app/plugins/init-contrast.ts) applies saved coefficients during SSR and client updates. Target rules follow fixed/system themes, custom palettes, and temporary previews without modifying the saved colors. [Shared CSS](../../../app/assets/css/main.css) derives separate text and border roles; browsers without OKLab color mixing retain the original theme.
+
 ## Write acknowledgements and concurrent changes
 
 `PUT /api/settings/user` receives the settings document and its `updatedAt` revision. [The handler](../../../server/api/settings/user.put.ts) accepts a newer revision, or acknowledges an identical repeat of the stored revision/content. It returns the stored row and whether the write was accepted.

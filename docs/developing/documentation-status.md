@@ -40,6 +40,14 @@ Only documentation, its link checker, the package command, and the CI check chan
 
 The offline demo reported unavailable external font providers and fallback icon requests. Core actions above completed, but these screenshots are not production styling evidence. See [screenshot provenance](../images/README.md).
 
+## Interface contrast verification (2026-11-04)
+
+The contrast change passed all 242 tests, typechecking, the production build, and the documentation link check. Lint passed with the existing `BookDescriptionEditor.vue` prop warning.
+
+Headless Chromium exercised the production build with a disposable synthetic account. Light and dark themes matched their original text and border colors at 100%. Checks at 50%, 150%, and 200% confirmed background blending, text boosting in OKLab, and the separate quarter-strength border boost. Body and header backgrounds stayed unchanged, with no opacity or filter applied to the page. Saved contrast appeared in SSR HTML and survived reload. Reset, keyboard adjustment, and custom light/dark background target changes passed without page errors.
+
+Store tests cover independent desktop/mobile values and unchanged saved palettes. The demo blocked outbound requests and used fallback icons where external providers were unavailable. Other browser engines and physical mobile devices were not exercised.
+
 ## Reconciled documentation drift
 
 | Earlier description                                            | Current source evidence                                                                                                                                           | Documentation treatment                                                                        |

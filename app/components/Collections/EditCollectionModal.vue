@@ -624,7 +624,7 @@ function close() {
             <p
               v-if="deleteErrorMessage"
               role="alert"
-              class="text-sm text-(--error-color)"
+              class="text-sm text-(--contrast-error-color)"
             >
               {{ deleteErrorMessage }}
             </p>
@@ -652,7 +652,7 @@ function close() {
             <p
               v-if="transferErrorMessage"
               role="alert"
-              class="text-sm text-(--error-color)"
+              class="text-sm text-(--contrast-error-color)"
             >
               {{ transferErrorMessage }}
             </p>
@@ -666,7 +666,7 @@ function close() {
           <p
             v-if="leaveErrorMessage"
             role="alert"
-            class="text-sm text-(--error-color)"
+            class="text-sm text-(--contrast-error-color)"
           >
             {{ leaveErrorMessage }}
           </p>
@@ -694,7 +694,7 @@ function close() {
           <button
             v-if="confirmation === 'delete'"
             type="button"
-            class="px-3 py-2 rounded-md bg-(--error-color) text-(--text-color)"
+            class="px-3 py-2 rounded-md bg-(--error-color) text-(--contrast-text-color)"
             :disabled="
               busy ||
               !collection ||
@@ -707,7 +707,7 @@ function close() {
           <button
             v-else-if="confirmation === 'transfer'"
             type="button"
-            class="px-3 py-2 rounded-md bg-(--error-color) text-(--text-color)"
+            class="px-3 py-2 rounded-md bg-(--error-color) text-(--contrast-text-color)"
             :disabled="busy || !transferEmail.trim()"
             @click="confirmTransferOwnership"
           >
@@ -716,7 +716,7 @@ function close() {
           <button
             v-else
             type="button"
-            class="px-3 py-2 rounded-md bg-(--error-color) text-(--text-color)"
+            class="px-3 py-2 rounded-md bg-(--error-color) text-(--contrast-text-color)"
             :disabled="busy"
             @click="confirmLeave"
           >
@@ -742,7 +742,7 @@ function close() {
             <p
               v-if="errorMessage"
               role="alert"
-              class="text-sm text-(--error-color)"
+              class="text-sm text-(--contrast-error-color)"
             >
               {{ errorMessage }}
             </p>
@@ -791,7 +791,7 @@ function close() {
 
         <section
           v-if="collection && !collection.isPersonal"
-          class="space-y-2 border-t border-(--sub-color) pt-3"
+          class="space-y-2 border-t border-(--contrast-border-color) pt-3"
           aria-labelledby="collection-sharing-title"
         >
           <div>
@@ -845,7 +845,7 @@ function close() {
             <p
               v-if="membersErrorMessage"
               role="alert"
-              class="text-sm text-(--error-color)"
+              class="text-sm text-(--contrast-error-color)"
             >
               {{ membersErrorMessage }}
             </p>
@@ -888,7 +888,7 @@ function close() {
 
         <section
           v-if="canDelete || canTransferOwnership || canLeave"
-          class="border-t border-(--sub-color) pt-3 space-y-2"
+          class="border-t border-(--contrast-border-color) pt-3 space-y-2"
         >
           <button
             ref="actionsButton"
@@ -929,7 +929,7 @@ function close() {
             <button
               v-if="canDelete"
               type="button"
-              class="flex items-center gap-2 px-2 py-2 text-sm text-(--error-color)"
+              class="flex items-center gap-2 px-2 py-2 text-sm text-(--contrast-error-color)"
               :disabled="busy"
               @click="showConfirmation('delete')"
             >

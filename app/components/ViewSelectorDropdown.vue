@@ -97,14 +97,14 @@ onBeforeUnmount(() => {
       >
         <Icon
           :name="activeItem.icon"
-          class="text-(--main-color) opacity-90 shrink-0 text-2xl"
+          class="text-(--contrast-main-color) opacity-90 shrink-0 text-2xl"
         />
-        <span class="text-xl text-(--main-color)">
+        <span class="text-xl text-(--contrast-main-color)">
           {{ activeItem.label }}
         </span>
         <Icon
           name="lucide:chevron-down"
-          class="text-(--main-color) opacity-70 shrink-0 transition"
+          class="text-(--contrast-main-color) opacity-70 shrink-0 transition"
           :class="open ? 'rotate-180' : ''"
         />
       </button>
@@ -112,10 +112,10 @@ onBeforeUnmount(() => {
       <div
         v-if="open"
         ref="panelRef"
-        class="absolute left-0 mt-1 w-44 bg-(--bg-color) border border-(--sub-color) rounded-md shadow-lg z-150 overflow-hidden"
+        class="absolute left-0 mt-1 w-44 bg-(--bg-color) border border-(--contrast-border-color) rounded-md shadow-lg z-150 overflow-hidden"
         role="menu"
       >
-        <div class="px-3 py-2 border-(--sub-color)">
+        <div class="px-3 py-2 border-(--contrast-border-color)">
           <div class="text-xs opacity-70">View</div>
         </div>
 
@@ -127,15 +127,15 @@ onBeforeUnmount(() => {
             class="w-full px-3 py-2 text-left justify-start! gap-3 transition rounded-none! flex items-center"
             :class="
               isActive(item)
-                ? 'bg-(--sub-color)/20 text-(--main-color)'
-                : 'hover:bg-(--sub-color)/15 text-(--main-color) opacity-80 hover:opacity-100'
+                ? 'bg-(--sub-color)/20 text-(--contrast-main-color)'
+                : 'hover:bg-(--sub-color)/15 text-(--contrast-main-color) opacity-80 hover:opacity-100'
             "
             role="menuitem"
             @click="closeDropdown"
           >
             <Icon
               :name="item.icon"
-              class="text-(--main-color) opacity-80 shrink-0"
+              class="text-(--contrast-main-color) opacity-80 shrink-0"
             />
             <span class="truncate text-sm">
               {{ item.label }}
@@ -144,7 +144,7 @@ onBeforeUnmount(() => {
             <Icon
               v-if="isActive(item)"
               name="lucide:check"
-              class="ml-auto text-(--main-color) opacity-80 shrink-0"
+              class="ml-auto text-(--contrast-main-color) opacity-80 shrink-0"
             />
           </NuxtLink>
         </div>
@@ -160,8 +160,8 @@ onBeforeUnmount(() => {
         class="px-2 py-1 flex items-center gap-2 transition"
         :class="
           isActive(item)
-            ? 'bg-(--sub-color)/20 text-(--main-color)'
-            : 'hover:bg-(--sub-color)/15 text-(--main-color) opacity-80 hover:opacity-100'
+            ? 'bg-(--sub-color)/20 text-(--contrast-main-color)'
+            : 'hover:bg-(--sub-color)/15 text-(--contrast-main-color) opacity-80 hover:opacity-100'
         "
       >
         <Icon :name="item.icon" class="shrink-0 opacity-80" />

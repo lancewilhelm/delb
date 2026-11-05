@@ -5,6 +5,10 @@ import {
 } from '~/utils/bookFields';
 import { normalizeCustomTheme, type CustomTheme } from '~/utils/customTheme';
 import {
+  DEFAULT_APPEARANCE_CONTRAST,
+  normalizeAppearanceContrast,
+} from '~/utils/appearanceContrast';
+import {
   defaultThemePreference,
   normalizeThemePreference,
   type ThemePreference,
@@ -35,6 +39,7 @@ export type ReaderTheme = 'system' | 'light' | 'gray' | 'shadow' | 'app';
 
 export interface BaseUserSettings {
   themePreference: ThemePreference;
+  appearanceContrast: number;
   customTheme?: CustomTheme;
   fontFamily: FontFamily;
   favoriteThemes: string[];
@@ -119,6 +124,7 @@ export interface UserSettings extends BaseUserSettings {
 function getBaseDefaults(): BaseUserSettings {
   return {
     themePreference: defaultThemePreference(),
+    appearanceContrast: DEFAULT_APPEARANCE_CONTRAST,
     fontFamily: 'Nunito',
     favoriteThemes: [],
     themeSorting: {
@@ -243,9 +249,14 @@ function normalizeReaderTheme(theme: unknown): ReaderTheme {
   return 'app';
 }
 
-function normalizeReaderSettings(settings: BaseUserSettings): BaseUserSettings {
+function normalizeProfileSettings(
+  settings: BaseUserSettings,
+): BaseUserSettings {
   return {
     ...settings,
+    appearanceContrast: normalizeAppearanceContrast(
+      settings.appearanceContrast,
+    ),
     ...(settings.customTheme !== undefined ||
     Object.values(settings.themePreference).includes('custom')
       ? { customTheme: normalizeCustomTheme(settings.customTheme) }
@@ -317,7 +328,7 @@ function normalizeSettings(remote: Partial<UserSettings>): UserSettings {
     : defaults.mobile;
 
   const base = getBaseSettings(merged);
-  const normalizedBase = normalizeReaderSettings(base);
+  const normalizedBase = normalizeProfileSettings(base);
   const legacyOverrides = isPlainObject(
     (mobileBase as unknown as Record<string, unknown>).overrides,
   )
@@ -346,7 +357,7 @@ function normalizeSettings(remote: Partial<UserSettings>): UserSettings {
     mobile: {
       enabled: !!mobileBase.enabled,
       searchButton: !!mobileBase.searchButton,
-      settings: normalizeReaderSettings(mobileSettings),
+      settings: normalizeProfileSettings(mobileSettings),
     },
   };
 }

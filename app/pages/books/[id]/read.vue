@@ -987,7 +987,7 @@ watch(
     <!-- Page header -->
     <div
       v-if="!isFullscreen"
-      class="relative z-60 flex items-center justify-between p-2 border-b border-t border-(--sub-color) bg-(--sub-alt-color)"
+      class="relative z-60 flex items-center justify-between p-2 border-b border-t border-(--contrast-border-color) bg-(--sub-alt-color)"
     >
       <div class="flex items-center gap-3 min-w-0">
         <!-- Back button -->
@@ -1018,7 +1018,7 @@ watch(
             v-tooltip="'Table of contents'"
             name="lucide:list"
             class="text-2xl opacity-80 hover:opacity-100 cursor-pointer"
-            :class="{ 'text-(--main-color) opacity-100': isTocOpen }"
+            :class="{ 'text-(--contrast-main-color) opacity-100': isTocOpen }"
           />
         </button>
         <div class="relative">
@@ -1040,7 +1040,7 @@ watch(
           <div
             v-if="isSettingsOpen"
             ref="settingsMenuRef"
-            class="absolute right-0 mt-2 w-72 rounded-md border border-(--sub-color) bg-(--bg-color) p-3 shadow-lg"
+            class="absolute right-0 mt-2 w-72 rounded-md border border-(--contrast-border-color) bg-(--bg-color) p-3 shadow-lg"
             @click.stop
           >
             <div class="space-y-3">
@@ -1126,7 +1126,7 @@ watch(
                       class="sr-only peer"
                     />
                     <span
-                      class="flex items-center justify-center rounded-md px-2 py-1 text-center text-xs font-medium bg-(--bg-color) text-(--text-color) border-(--sub-color) peer-checked:border-(--main-color) border-2"
+                      class="flex items-center justify-center rounded-md px-2 py-1 text-center text-xs font-medium bg-(--bg-color) text-(--contrast-text-color) border-(--contrast-border-color) peer-checked:border-(--main-color) border-2"
                     >
                       Delb
                     </span>
@@ -1145,7 +1145,7 @@ watch(
                       class="sr-only peer"
                     />
                     <span
-                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-(--sub-alt-color) text-(--text-color) peer-checked:bg-(--main-color) peer-checked:text-(--bg-color)"
+                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-(--sub-alt-color) text-(--contrast-text-color) peer-checked:bg-(--main-color) peer-checked:text-(--bg-color)"
                     >
                       Pages
                     </span>
@@ -1158,7 +1158,7 @@ watch(
                       class="sr-only peer"
                     />
                     <span
-                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-(--sub-alt-color) text-(--text-color) peer-checked:bg-(--main-color) peer-checked:text-(--bg-color)"
+                      class="block rounded-md px-2 py-1 text-center text-xs font-medium bg-(--sub-alt-color) text-(--contrast-text-color) peer-checked:bg-(--main-color) peer-checked:text-(--bg-color)"
                     >
                       Scroll
                     </span>
@@ -1178,7 +1178,7 @@ watch(
             >*</span
           >
         </span>
-        <span v-if="saveErrorMessage" class="text-(--error-color) text-xs">
+        <span v-if="saveErrorMessage" class="text-(--contrast-error-color) text-xs">
           {{ saveErrorMessage }}
         </span>
       </div>
@@ -1198,10 +1198,10 @@ watch(
         @click.stop
       >
         <div
-          class="flex h-full w-full flex-col border-r border-(--sub-color) bg-(--bg-color)"
+          class="flex h-full w-full flex-col border-r border-(--contrast-border-color) bg-(--bg-color)"
         >
           <div
-            class="flex items-center justify-between px-3 py-1 border-b border-(--sub-color)"
+            class="flex items-center justify-between px-3 py-1 border-b border-(--contrast-border-color)"
           >
             <div class="text-sm font-semibold">Contents</div>
             <button
@@ -1223,7 +1223,7 @@ watch(
             </div>
             <div
               v-else-if="tocErrorMessage"
-              class="text-sm text-(--error-color) p-2"
+              class="text-sm text-(--contrast-error-color) p-2"
             >
               {{ tocErrorMessage }}
             </div>
@@ -1237,7 +1237,7 @@ watch(
               type="button"
               class="w-full rounded-md px-2 py-1.5 text-left text-sm hover:bg-(--sub-color)/10"
               :class="{
-                'bg-(--sub-color)/10 text-(--main-color)': isActiveTocHref(
+                'bg-(--sub-color)/10 text-(--contrast-main-color)': isActiveTocHref(
                   item.href,
                 ),
               }"
@@ -1285,7 +1285,7 @@ watch(
           v-else-if="errorMessage"
           class="flex items-center justify-center w-full h-full"
         >
-          <div class="text-sm text-(--error-color)">{{ errorMessage }}</div>
+          <div class="text-sm text-(--contrast-error-color)">{{ errorMessage }}</div>
         </div>
       </div>
 

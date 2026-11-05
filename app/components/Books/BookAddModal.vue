@@ -1002,7 +1002,7 @@ function startManualEntry() {
       <div class="flex gap-2">
         <button
           type="button"
-          class="flex-1 border border-(--sub-color) p-2 rounded-md transition"
+          class="flex-1 border border-(--contrast-border-color) p-2 rounded-md transition"
           :class="
             mode === 'upload'
               ? 'bg-(--main-color)/20'
@@ -1019,7 +1019,7 @@ function startManualEntry() {
 
         <button
           type="button"
-          class="flex-1 border border-(--sub-color) p-2 rounded-md transition"
+          class="flex-1 border border-(--contrast-border-color) p-2 rounded-md transition"
           :class="
             mode === 'metadata'
               ? 'bg-(--main-color)/20'
@@ -1036,7 +1036,7 @@ function startManualEntry() {
 
         <button
           type="button"
-          class="flex-1 border border-(--sub-color) p-2 rounded-md transition"
+          class="flex-1 border border-(--contrast-border-color) p-2 rounded-md transition"
           :class="
             mode === 'manual'
               ? 'bg-(--main-color)/20'
@@ -1078,7 +1078,7 @@ function startManualEntry() {
               class="peer sr-only"
             />
             <span
-              class="h-5 w-5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
+              class="h-5 w-5 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
               :class="
                 busy || c.isPersonal
                   ? 'peer-checked:bg-(--sub-color) cursor-default!'
@@ -1088,7 +1088,7 @@ function startManualEntry() {
             <span class="truncate">{{ c.name }}</span>
             <span
               v-if="c.isPersonal"
-              class="ml-1 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-(--sub-color) opacity-70"
+              class="ml-1 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-(--contrast-border-color) opacity-70"
             >
               Personal
             </span>
@@ -1126,17 +1126,17 @@ function startManualEntry() {
           <div v-if="duplicateReview" class="space-y-2">
             <div class="text-sm font-semibold">Incoming</div>
 
-            <div class="flex gap-3 p-3 rounded border border-(--sub-color)/30">
+            <div class="flex gap-3 p-3 rounded border border-(--contrast-border-color)/30">
               <div class="shrink-0">
                 <img
                   v-if="incomingCoverUrl()"
                   :src="incomingCoverUrl() || ''"
-                  class="w-16 h-24 object-cover rounded border border-(--sub-color)/30"
+                  class="w-16 h-24 object-cover rounded border border-(--contrast-border-color)/30"
                   alt=""
                 />
                 <div
                   v-else
-                  class="w-16 h-24 rounded border border-(--sub-color)/30 flex items-center justify-center text-xs opacity-60"
+                  class="w-16 h-24 rounded border border-(--contrast-border-color)/30 flex items-center justify-center text-xs opacity-60"
                 >
                   no cover
                 </div>
@@ -1184,7 +1184,7 @@ function startManualEntry() {
               :class="
                 selectedDuplicateBookId === c.book.id
                   ? 'border-(--main-color)/60 bg-(--main-color)/5'
-                  : 'border-(--sub-color)/30 hover:bg-(--sub-color)/10'
+                  : 'border-(--contrast-border-color)/30 hover:bg-(--sub-color)/10'
               "
             >
               <input
@@ -1195,7 +1195,7 @@ function startManualEntry() {
                 :disabled="busy"
               />
               <span
-                class="mt-1 h-5 w-5 shrink-0 rounded-full border border-(--sub-color) relative transition"
+                class="mt-1 h-5 w-5 shrink-0 rounded-full border border-(--contrast-border-color) relative transition"
                 :class="busy ? 'opacity-60 cursor-not-allowed' : ''"
                 :aria-hidden="true"
               >
@@ -1218,12 +1218,12 @@ function startManualEntry() {
                       c.book.updatedAt ?? undefined,
                     )
                   "
-                  class="w-16 h-24 object-cover rounded border border-(--sub-color)/30"
+                  class="w-16 h-24 object-cover rounded border border-(--contrast-border-color)/30"
                   alt=""
                 />
                 <div
                   v-else
-                  class="w-16 h-24 rounded border border-(--sub-color)/30 flex items-center justify-center text-xs opacity-60"
+                  class="w-16 h-24 rounded border border-(--contrast-border-color)/30 flex items-center justify-center text-xs opacity-60"
                 >
                   no cover
                 </div>
@@ -1375,7 +1375,7 @@ function startManualEntry() {
               <Icon
                 v-tooltip="'Remove file'"
                 name="lucide-x"
-                class="scale-100 opacity-80 text-(--error-color) cursor-pointer shrink-0"
+                class="scale-100 opacity-80 text-(--contrast-error-color) cursor-pointer shrink-0"
                 @click="removeFile(f)"
               />
             </div>
@@ -1419,7 +1419,7 @@ function startManualEntry() {
             ref="metadataInputRef"
             v-model="query"
             type="text"
-            class="w-full p-2 border border-(--sub-color) rounded-lg"
+            class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
             placeholder="e.g. Dungeon Crawler Carl, 9780593820247"
             :disabled="creating"
             @keydown="onMetadataEnter"
@@ -1438,7 +1438,7 @@ function startManualEntry() {
             :disabled="creating"
           />
           <span
-            class="h-5 w-5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
+            class="h-5 w-5 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
             :class="
               keepOpen ? 'peer-checked:bg-(--sub-color) cursor-default!' : ''
             "
@@ -1449,7 +1449,7 @@ function startManualEntry() {
         <div class="flex gap-2">
           <button
             type="button"
-            class="flex-1 border border-(--sub-color) p-2 rounded-md bg-(--main-color)/20 hover:bg-(--main-color)/30 transition"
+            class="flex-1 border border-(--contrast-border-color) p-2 rounded-md bg-(--main-color)/20 hover:bg-(--main-color)/30 transition"
             :disabled="actionDisabled"
             @click="createFromMetadata"
           >
@@ -1459,7 +1459,7 @@ function startManualEntry() {
 
           <button
             type="button"
-            class="flex-1 border border-(--sub-color) p-2 rounded-md bg-(--sub-color)/15 hover:bg-(--sub-color)/25 transition"
+            class="flex-1 border border-(--contrast-border-color) p-2 rounded-md bg-(--sub-color)/15 hover:bg-(--sub-color)/25 transition"
             :disabled="busy || !selectedCollectionIds.length"
             @click="metadataSearchOpen = true"
           >
@@ -1477,7 +1477,7 @@ function startManualEntry() {
 
         <button
           type="button"
-          class="w-full border border-(--sub-color) p-2 rounded-md bg-(--sub-color)/15 hover:bg-(--sub-color)/25 transition"
+          class="w-full border border-(--contrast-border-color) p-2 rounded-md bg-(--sub-color)/15 hover:bg-(--sub-color)/25 transition"
           :disabled="busy || !selectedCollectionIds.length"
           @click="startManualEntry"
         >
@@ -1489,7 +1489,7 @@ function startManualEntry() {
         </div>
       </div>
 
-      <div v-if="errorMessage" class="text-sm text-(--error-color)">
+      <div v-if="errorMessage" class="text-sm text-(--contrast-error-color)">
         {{ errorMessage }}
       </div>
       <div v-else-if="successMessage" class="text-sm text-green-400">

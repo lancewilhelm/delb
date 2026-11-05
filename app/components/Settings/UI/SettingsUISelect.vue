@@ -88,7 +88,7 @@ function selectOption(option: string) {
         v-for="option in options"
         :key="option"
         class="px-4 py-2 cursor-pointer truncate hover:bg-(--sub-color) settings-select-item-option"
-        :class="option === value ? 'text-(--main-color)' : ''"
+        :class="option === value ? 'text-(--contrast-main-color)' : ''"
         @click="selectOption(option)"
       >
         {{ option }}

@@ -178,14 +178,14 @@ onBeforeUnmount(() => {
     >
       <Icon
         :name="activeLabel === 'All' ? 'lucide:library-big' : 'lucide:folder'"
-        class="text-(--main-color) opacity-80 shrink-0"
+        class="text-(--contrast-main-color) opacity-80 shrink-0"
       />
       <span class="max-w-48 truncate text-sm opacity-80">{{
         activeLabel
       }}</span>
       <Icon
         name="lucide:chevron-down"
-        class="text-(--main-color) opacity-80 shrink-0 transition"
+        class="text-(--contrast-main-color) opacity-80 shrink-0 transition"
         :class="open ? 'rotate-180' : ''"
       />
     </button>
@@ -194,10 +194,10 @@ onBeforeUnmount(() => {
     <div
       v-if="open"
       ref="panelRef"
-      class="absolute left-0 mt-2 w-72 border border-(--sub-color) bg-(--bg-color) rounded-md shadow-lg z-150 overflow-hidden"
+      class="absolute left-0 mt-2 w-72 border border-(--contrast-border-color) bg-(--bg-color) rounded-md shadow-lg z-150 overflow-hidden"
       role="menu"
     >
-      <div class="px-2 py-1 border-b border-(--sub-color)">
+      <div class="px-2 py-1 border-b border-(--contrast-border-color)">
         <div class="text-sm opacity-70">Collection</div>
       </div>
 
@@ -215,12 +215,12 @@ onBeforeUnmount(() => {
         >
           <Icon
             name="lucide:library-big"
-            class="text-(--main-color) opacity-80 shrink-0"
+            class="text-(--contrast-main-color) opacity-80 shrink-0"
           />
           <span class="truncate">All</span>
         </button>
 
-        <div class="h-px bg-(--sub-color) opacity-60" />
+        <div class="h-px bg-(--contrast-border-color) opacity-60" />
 
         <div
           v-if="collectionsStore.loading"
@@ -252,12 +252,12 @@ onBeforeUnmount(() => {
           <div class="flex items-center gap-2 min-w-0">
             <Icon
               name="lucide:folder"
-              class="text-(--main-color) opacity-80 shrink-0"
+              class="text-(--contrast-main-color) opacity-80 shrink-0"
             />
             <span class="truncate">{{ c.name }}</span>
             <span
               v-if="c.isPersonal"
-              class="ml-2 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-(--sub-color) opacity-70 shrink-0"
+              class="ml-2 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-(--contrast-border-color) opacity-70 shrink-0"
             >
               Personal
             </span>
@@ -276,7 +276,7 @@ onBeforeUnmount(() => {
                 }
               "
             >
-              <Icon name="lucide:settings" class="text-(--main-color)" />
+              <Icon name="lucide:settings" class="text-(--contrast-main-color)" />
             </button>
 
             <span class="text-[11px] opacity-60 shrink-0">{{ c.role }}</span>
@@ -291,10 +291,10 @@ onBeforeUnmount(() => {
         </p>
       </div>
 
-      <div class="border-t border-(--sub-color) p-2">
+      <div class="border-t border-(--contrast-border-color) p-2">
         <button
           v-tooltip="'Create a new collection'"
-          class="w-full px-3 py-2 border border-(--sub-color) flex items-center justify-center gap-2"
+          class="w-full px-3 py-2 border border-(--contrast-border-color) flex items-center justify-center gap-2"
           role="menuitem"
           @click="
             () => {
@@ -303,7 +303,7 @@ onBeforeUnmount(() => {
             }
           "
         >
-          <Icon name="lucide:plus" class="text-(--main-color)" />
+          <Icon name="lucide:plus" class="text-(--contrast-main-color)" />
           <span>Create collection</span>
         </button>
       </div>
@@ -339,7 +339,7 @@ onBeforeUnmount(() => {
             @keyup.enter="createCollection"
           />
 
-          <p v-if="createError" class="text-sm text-(--error-color)">
+          <p v-if="createError" class="text-sm text-(--contrast-error-color)">
             {{ createError }}
           </p>
         </div>

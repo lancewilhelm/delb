@@ -170,7 +170,7 @@ function keydown(event: KeyboardEvent) {
         :theme="{ name: 'custom', ...palette }"
         :is-favorite="store.activeSettings.favoriteThemes.includes('custom')"
       />
-      <p class="text-sm text-(--sub-color)">
+      <p class="text-sm text-(--contrast-sub-color)">
         Select custom to apply your colors, or right-click or press and hold it
         to assign a system slot. Changes save automatically.
       </p>
@@ -230,7 +230,7 @@ function keydown(event: KeyboardEvent) {
         </div>
         <div class="flex flex-col gap-3 min-w-0">
           <div
-            class="h-10 rounded-lg border border-(--sub-color)"
+            class="h-10 rounded-lg border border-(--contrast-border-color)"
             :style="{ backgroundColor: palette[selected] }"
             aria-hidden="true"
           />
@@ -288,7 +288,7 @@ function keydown(event: KeyboardEvent) {
       </div>
       <p
         id="custom-color-keyboard-help"
-        class="mt-3 text-xs text-(--sub-color)"
+        class="mt-3 text-xs text-(--contrast-sub-color)"
       >
         Use arrow keys in the color square to adjust saturation and brightness.
         Hold Shift for larger steps.

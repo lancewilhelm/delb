@@ -74,17 +74,17 @@ onBeforeUnmount(() => {
 
 <template>
   <aside
-    class="shrink-0 border-r border-(--sub-color) bg-(--sub-alt-color) h-full flex flex-col relative"
+    class="shrink-0 border-r border-(--contrast-border-color) bg-(--sub-alt-color) h-full flex flex-col relative"
     :style="{ width: `${isCollapsed ? 56 : sidebarWidthPx}px` }"
   >
     <!-- Header -->
     <div
-      class="px-2 py-2.5 border-b border-(--sub-color) flex items-center gap-2"
+      class="px-2 py-2.5 border-b border-(--contrast-border-color) flex items-center gap-2"
       :class="isCollapsed ? 'justify-center' : 'justify-between'"
     >
       <div v-if="!isCollapsed" class="flex items-center gap-2 min-w-0">
         <div class="min-w-0">
-          <div class="text-md font-semibold text-(--main-color)">Filters</div>
+          <div class="text-md font-semibold text-(--contrast-main-color)">Filters</div>
         </div>
       </div>
 
@@ -96,7 +96,7 @@ onBeforeUnmount(() => {
       >
         <Icon
           :name="isCollapsed ? 'lucide:chevrons-right' : 'lucide:chevrons-left'"
-          class="text-(--main-color)"
+          class="text-(--contrast-main-color)"
         />
       </button>
     </div>
@@ -121,7 +121,7 @@ onBeforeUnmount(() => {
           >
             <Icon
               name="lucide:book-open"
-              class="text-(--main-color) opacity-80 shrink-0"
+              class="text-(--contrast-main-color) opacity-80 shrink-0"
             />
             <span v-if="!isCollapsed" class="truncate">Reading</span>
           </button>
@@ -134,7 +134,7 @@ onBeforeUnmount(() => {
           >
             <Icon
               name="lucide:bookmark"
-              class="text-(--main-color) opacity-80 shrink-0"
+              class="text-(--contrast-main-color) opacity-80 shrink-0"
             />
             <span v-if="!isCollapsed" class="truncate">To Read</span>
           </button>
@@ -147,7 +147,7 @@ onBeforeUnmount(() => {
           >
             <Icon
               name="lucide:check"
-              class="text-(--main-color) opacity-80 shrink-0"
+              class="text-(--contrast-main-color) opacity-80 shrink-0"
             />
             <span v-if="!isCollapsed" class="truncate">Read</span>
           </button>
@@ -171,7 +171,7 @@ onBeforeUnmount(() => {
         >
           <Icon
             name="lucide:tag"
-            class="text-(--main-color) opacity-80 shrink-0"
+            class="text-(--contrast-main-color) opacity-80 shrink-0"
           />
           <span v-if="!isCollapsed" class="truncate">Multi-select (soon)</span>
         </button>
@@ -194,7 +194,7 @@ onBeforeUnmount(() => {
         >
           <Icon
             name="lucide:star"
-            class="text-(--main-color) opacity-80 shrink-0"
+            class="text-(--contrast-main-color) opacity-80 shrink-0"
           />
           <span v-if="!isCollapsed" class="truncate">Stars (soon)</span>
         </button>
@@ -220,7 +220,7 @@ onBeforeUnmount(() => {
         >
           <Icon
             name="lucide:sliders-horizontal"
-            class="text-(--main-color) opacity-80 shrink-0"
+            class="text-(--contrast-main-color) opacity-80 shrink-0"
           />
           <span v-if="!isCollapsed" class="truncate"
             >Language, format, year… (soon)</span

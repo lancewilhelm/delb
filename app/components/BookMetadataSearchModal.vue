@@ -655,7 +655,7 @@ function getThumbnail(item: GoogleBookItem): string {
     <div class="flex flex-col gap-4 w-full!">
       <!-- Header -->
       <div
-        class="flex items-center justify-between border-b border-(--sub-color) pb-2"
+        class="flex items-center justify-between border-b border-(--contrast-border-color) pb-2"
       >
         <div class="text-xl font-semibold">Search Book Metadata</div>
         <Icon
@@ -671,7 +671,7 @@ function getThumbnail(item: GoogleBookItem): string {
           v-model="searchQuery"
           type="text"
           placeholder="Search by title, author, ISBN..."
-          class="flex-1 px-3 py-2 border border-(--sub-color) rounded-md bg-(--bg-color) text-(--text-color) focus:outline-none focus:border-(--main-color)"
+          class="flex-1 px-3 py-2 border border-(--contrast-border-color) rounded-md bg-(--bg-color) text-(--contrast-text-color) focus:outline-none focus:border-(--main-color)"
           @keydown="handleKeydown"
         />
         <button
@@ -690,7 +690,7 @@ function getThumbnail(item: GoogleBookItem): string {
         <span class="text-sm opacity-70 ml-1">Selected Providers:</span>
         <div
           type="button"
-          class="px-3 py-1.5 rounded-md border border-(--sub-color) text-xs transition cursor-pointer"
+          class="px-3 py-1.5 rounded-md border border-(--contrast-border-color) text-xs transition cursor-pointer"
           :class="
             providerState.googleBooks
               ? 'bg-(--main-color)/50'
@@ -703,7 +703,7 @@ function getThumbnail(item: GoogleBookItem): string {
 
         <div
           type="button"
-          class="px-3 py-1.5 rounded-md border border-(--sub-color) text-xs transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          class="px-3 py-1.5 rounded-md border border-(--contrast-border-color) text-xs transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           :class="
             providerState.hardcover
               ? 'bg-(--main-color)/50'
@@ -723,7 +723,7 @@ function getThumbnail(item: GoogleBookItem): string {
       </div>
 
       <!-- Error Message -->
-      <div v-if="errorMessage" class="text-sm text-(--error-color)">
+      <div v-if="errorMessage" class="text-sm text-(--contrast-error-color)">
         {{ errorMessage }}
       </div>
 
@@ -748,7 +748,7 @@ function getThumbnail(item: GoogleBookItem): string {
           <div
             v-for="result in searchResults"
             :key="resultKey(result)"
-            class="border border-(--sub-color) rounded-lg p-3"
+            class="border border-(--contrast-border-color) rounded-lg p-3"
           >
             <template v-if="props.mode === 'full'">
               <div class="flex gap-3">
@@ -845,7 +845,7 @@ function getThumbnail(item: GoogleBookItem): string {
                     <button
                       v-else
                       type="button"
-                      class="px-4 py-2 rounded-md border border-(--sub-color) text-sm opacity-60 cursor-not-allowed"
+                      class="px-4 py-2 rounded-md border border-(--contrast-border-color) text-sm opacity-60 cursor-not-allowed"
                       disabled
                     >
                       Import not available
@@ -880,7 +880,7 @@ function getThumbnail(item: GoogleBookItem): string {
                       class="peer sr-only"
                     />
                     <span
-                      class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                      class="h-4 w-4 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                     ></span>
                     <span class="opacity-70">Import cover</span>
                   </label>
@@ -903,7 +903,7 @@ function getThumbnail(item: GoogleBookItem): string {
                       class="peer sr-only"
                     />
                     <span
-                      class="h-4 w-4 mt-0.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                      class="h-4 w-4 mt-0.5 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                     ></span>
                     <div class="flex-1 min-w-0">
                       <div class="text-lg font-semibold truncate">
@@ -934,7 +934,7 @@ function getThumbnail(item: GoogleBookItem): string {
                       class="peer sr-only"
                     />
                     <span
-                      class="h-4 w-4 mt-0.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                      class="h-4 w-4 mt-0.5 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                     ></span>
                     <div class="flex-1 min-w-0">
                       <div class="text-sm truncate">
@@ -955,7 +955,7 @@ function getThumbnail(item: GoogleBookItem): string {
                       class="peer sr-only"
                     />
                     <span
-                      class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                      class="h-4 w-4 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                     ></span>
                     <div>
                       <span class="opacity-60">Publisher:</span>
@@ -974,7 +974,7 @@ function getThumbnail(item: GoogleBookItem): string {
                       class="peer sr-only"
                     />
                     <span
-                      class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                      class="h-4 w-4 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                     ></span>
                     <div>
                       <span class="opacity-60">Published:</span>
@@ -1000,7 +1000,7 @@ function getThumbnail(item: GoogleBookItem): string {
                       class="peer sr-only"
                     />
                     <span
-                      class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                      class="h-4 w-4 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                     ></span>
                     <div>
                       <span class="opacity-60">Language:</span>
@@ -1021,7 +1021,7 @@ function getThumbnail(item: GoogleBookItem): string {
                         class="peer sr-only"
                       />
                       <span
-                        class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                        class="h-4 w-4 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                       ></span>
                       <div>
                         <span class="opacity-60">Series:</span>
@@ -1043,7 +1043,7 @@ function getThumbnail(item: GoogleBookItem): string {
                         class="peer sr-only"
                       />
                       <span
-                        class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                        class="h-4 w-4 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                       ></span>
                       <div>
                         <span class="opacity-60">Index:</span> #{{
@@ -1067,7 +1067,7 @@ function getThumbnail(item: GoogleBookItem): string {
                       class="peer sr-only"
                     />
                     <span
-                      class="h-4 w-4 mt-0.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                      class="h-4 w-4 mt-0.5 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                     ></span>
                     <span class="flex flex-wrap items-center gap-2">
                       <span class="opacity-60"> Identfiers: </span>
@@ -1102,7 +1102,7 @@ function getThumbnail(item: GoogleBookItem): string {
                       class="peer sr-only"
                     />
                     <span
-                      class="h-4 w-4 mt-0.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                      class="h-4 w-4 mt-0.5 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                     ></span>
                     <div>
                       <span class="opacity-60"> Pages:</span>
@@ -1125,7 +1125,7 @@ function getThumbnail(item: GoogleBookItem): string {
                       class="peer sr-only"
                     />
                     <span
-                      class="h-4 w-4 mt-0.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                      class="h-4 w-4 mt-0.5 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                     ></span>
                     <div class="flex-1 min-w-0">
                       <div class="text-xs flex items-center gap-2">
@@ -1154,7 +1154,7 @@ function getThumbnail(item: GoogleBookItem): string {
                       class="peer sr-only"
                     />
                     <span
-                      class="h-4 w-4 mt-0.5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                      class="h-4 w-4 mt-0.5 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                     ></span>
                     <div class="flex-1 min-w-0">
                       <div class="flex gap-2">
@@ -1176,7 +1176,7 @@ function getThumbnail(item: GoogleBookItem): string {
                     <template v-if="result.googleItem">
                       <button
                         type="button"
-                        class="flex-1 px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-xs transition"
+                        class="flex-1 px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-xs transition"
                         @click="
                           selectAllFields(resultKey(result), result.googleItem)
                         "
@@ -1185,7 +1185,7 @@ function getThumbnail(item: GoogleBookItem): string {
                       </button>
                       <button
                         type="button"
-                        class="flex-1 px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-xs transition"
+                        class="flex-1 px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-xs transition"
                         @click="clearAllFields(resultKey(result))"
                       >
                         Clear
@@ -1203,7 +1203,7 @@ function getThumbnail(item: GoogleBookItem): string {
                     <template v-else>
                       <button
                         type="button"
-                        class="flex-1 px-3 py-2 rounded-md border border-(--sub-color) text-xs opacity-60 cursor-not-allowed"
+                        class="flex-1 px-3 py-2 rounded-md border border-(--contrast-border-color) text-xs opacity-60 cursor-not-allowed"
                         disabled
                       >
                         Import not available
@@ -1219,7 +1219,7 @@ function getThumbnail(item: GoogleBookItem): string {
 
       <!-- Footer -->
       <div
-        class="text-xs opacity-60 text-center pt-2 border-t border-(--sub-color)"
+        class="text-xs opacity-60 text-center pt-2 border-t border-(--contrast-border-color)"
       >
         Select one or more providers above to search.
       </div>

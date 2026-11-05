@@ -404,7 +404,7 @@ const menuItems = computed(() => rootMenuItems.value);
       <div
         v-if="isMenuOpen"
         ref="menuEl"
-        class="fixed z-50 min-w-40 overflow-hidden rounded-md border bg-(--bg-color) text-(--text-color) shadow-lg"
+        class="fixed z-50 min-w-40 overflow-hidden rounded-md border bg-(--bg-color) text-(--contrast-text-color) shadow-lg"
         :style="{ left: `${menuPos.x}px`, top: `${menuPos.y}px` }"
         role="menu"
         @contextmenu.prevent
@@ -450,7 +450,7 @@ const menuItems = computed(() => rootMenuItems.value);
       <div
         v-if="isMenuOpen && submenu"
         ref="submenuEl"
-        class="fixed z-50 min-w-40 overflow-hidden rounded-md border bg-(--bg-color) text-(--text-color) shadow-lg"
+        class="fixed z-50 min-w-40 overflow-hidden rounded-md border bg-(--bg-color) text-(--contrast-text-color) shadow-lg"
         :style="{ left: `${submenu.pos.x}px`, top: `${submenu.pos.y}px` }"
         role="menu"
         @contextmenu.prevent

@@ -121,9 +121,9 @@ async function handleUpdateProfile() {
         </button>
         <div
           v-if="changePasswordSuccess"
-          class="flex items-center gap-2 italic text-(--main-color)"
+          class="flex items-center gap-2 italic text-(--contrast-main-color)"
         >
-          <Icon name="lucide:check" class="w-4 h-4 text-(--main-color)" />
+          <Icon name="lucide:check" class="w-4 h-4 text-(--contrast-main-color)" />
           password updated
         </div>
       </div>
@@ -135,14 +135,14 @@ async function handleUpdateProfile() {
           type="text"
           autocomplete="name"
           placeholder="name"
-          class="w-full p-2 border border-(--sub-color) rounded-lg"
+          class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
         />
         <input
           v-model="profileEmail"
           type="email"
           autocomplete="email"
           placeholder="email"
-          class="w-full p-2 border border-(--sub-color) rounded-lg"
+          class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
         />
         <div class="flex items-center gap-2">
           <button
@@ -157,9 +157,9 @@ async function handleUpdateProfile() {
           </button>
           <div
             v-if="profileUpdateSuccess"
-            class="flex items-center gap-2 italic text-(--main-color)"
+            class="flex items-center gap-2 italic text-(--contrast-main-color)"
           >
-            <Icon name="lucide:check" class="w-4 h-4 text-(--main-color)" />
+            <Icon name="lucide:check" class="w-4 h-4 text-(--contrast-main-color)" />
             profile updated
           </div>
         </div>
@@ -172,18 +172,18 @@ async function handleUpdateProfile() {
     >
       <DelbLogo fill="var(--main-color)" />
       <div class="logo text-2xl">Delb</div>
-      <div class="italic text-(--sub-color) font-light text-sm">
+      <div class="italic text-(--contrast-sub-color) font-light text-sm">
         Donde está la biblioteca
       </div>
-      <div class="text-(--sub-color) italic">
+      <div class="text-(--contrast-sub-color) italic">
         version: {{ config.public.appVersion || 'manual' }}
       </div>
       <NuxtLink
         to="https://github.com/lancewilhelm/delb"
         class="flex items-center gap-1"
       >
-        <Icon name="simple-icons:github" class="w-4 h-4 text-(--main-color)" />
-        <span class="text-(--main-color)"
+        <Icon name="simple-icons:github" class="w-4 h-4 text-(--contrast-main-color)" />
+        <span class="text-(--contrast-main-color)"
           ><span class="logo">Delb</span> on GitHub</span
         >
       </NuxtLink>
@@ -206,21 +206,21 @@ async function handleUpdateProfile() {
           v-model="currentPassword"
           type="password"
           placeholder="current password"
-          class="w-full p-2 border border-(--sub-color) rounded-lg"
+          class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
           @keyup.enter="handleUpdatePassword"
         />
         <input
           v-model="newPassword"
           type="password"
           placeholder="new password"
-          class="w-full p-2 border border-(--sub-color) rounded-lg"
+          class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
           @keyup.enter="handleUpdatePassword"
         />
         <input
           v-model="confirmPassword"
           type="password"
           placeholder="confirm new password"
-          class="w-full p-2 border border-(--sub-color) rounded-lg"
+          class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
           @keyup.enter="handleUpdatePassword"
         />
         <button

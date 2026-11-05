@@ -14,7 +14,7 @@ async function nukeData() {
       icon="lucide:cloud"
       description="cloud database tools"
     >
-      <p class="text-sm text-(--text-color) mt-2">
+      <p class="text-sm text-(--contrast-text-color) mt-2">
         Settings now sync automatically: user/global settings are pulled on app
         load (when logged in), and pushed when changed.
       </p>
@@ -30,7 +30,7 @@ async function nukeData() {
       >
         Nuke Data
       </button>
-      <p class="text-sm text-(--text-color) mt-2">
+      <p class="text-sm text-(--contrast-text-color) mt-2">
         This action is irreversible and will delete all your data.
       </p>
     </SettingsUIGroup>

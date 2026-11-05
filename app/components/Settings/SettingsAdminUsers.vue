@@ -296,7 +296,7 @@ async function setUserPassword() {
     <SettingsUIGroup title="Users" icon="lucide:users">
       <div class="w-full mt-4 overflow-x-auto">
         <table class="min-w-full">
-          <thead class="bg-(--sub-color) text-(--main-color)">
+          <thead class="bg-(--sub-color) text-(--contrast-main-color)">
             <tr>
               <th scope="col" class="px-6 py-1 text-left font-medium">email</th>
               <th scope="col" class="px-6 py-1 text-left font-medium">name</th>
@@ -309,7 +309,7 @@ async function setUserPassword() {
               </th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-(--sub-color) text-(--text-color)">
+          <tbody class="divide-y divide-(--contrast-border-color) text-(--contrast-text-color)">
             <template v-if="sortedUsers.length > 0">
               <tr v-for="u in sortedUsers" :key="u.id" class="h-10">
                 <td class="px-6 py-1 whitespace-nowrap text-sm">
@@ -327,12 +327,12 @@ async function setUserPassword() {
                 <td class="px-6 py-1 whitespace-nowrap text-sm">
                   <div v-if="canEditUser(u)" class="flex gap-2">
                     <button
-                      class="flex items-center bg-(--sub-alt-color) p-2 rounded-lg text-(--text-color)"
+                      class="flex items-center bg-(--sub-alt-color) p-2 rounded-lg text-(--contrast-text-color)"
                       @click="() => openEditUser(u)"
                     >
                       <Icon
                         name="lucide:user-pen"
-                        class="text-(--text-color) scale-125"
+                        class="text-(--contrast-text-color) scale-125"
                       />
                     </button>
                     <button
@@ -423,7 +423,7 @@ async function setUserPassword() {
       @close="createUserModalVisible = false"
     >
       <div class="flex flex-col gap-4 items-center">
-        <div class="text-(--main-color) text-lg self-start">
+        <div class="text-(--contrast-main-color) text-lg self-start">
           create new user
         </div>
         <div class="flex flex-col gap-2 w-62.5">
@@ -431,7 +431,7 @@ async function setUserPassword() {
             v-model="newUserName"
             type="text"
             placeholder="name"
-            class="w-full p-2 border border-(--sub-color) rounded-lg"
+            class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
             @keyup.enter="createUser"
           />
           <input
@@ -439,19 +439,19 @@ async function setUserPassword() {
             v-model="newUserEmail"
             type="email"
             placeholder="email"
-            class="w-full p-2 border border-(--sub-color) rounded-lg"
+            class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
             @keyup.enter="createUser"
           />
           <input
             v-model="newUserPassword"
             type="password"
             placeholder="password"
-            class="w-full p-2 border border-(--sub-color) rounded-lg"
+            class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
             @keyup.enter="createUser"
           />
           <select
             v-model="newUserRole"
-            class="w-full p-2 border border-(--sub-color) rounded-lg"
+            class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
           >
             <option value="user">user</option>
             <option value="admin">admin</option>
@@ -477,11 +477,11 @@ async function setUserPassword() {
       "
     >
       <div class="flex flex-col items-center justify-center gap-2">
-        <div class="text-(--text-color) text-lg text-center">
+        <div class="text-(--contrast-text-color) text-lg text-center">
           Are you sure you want to delete {{ deleteUserEmail }}? This action
           cannot be undone.
         </div>
-        <div class="text-(--text-color) text-lg text-center">
+        <div class="text-(--contrast-text-color) text-lg text-center">
           If you are sure, please type their email below.
         </div>
         <input
@@ -489,7 +489,7 @@ async function setUserPassword() {
           v-model="deleteUserEmailConfirmation"
           type="email"
           placeholder="user email"
-          class="w-full p-2 border border-(--sub-color) rounded-lg"
+          class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
           @keyup.enter="deleteUser"
         />
         <button
@@ -517,7 +517,7 @@ async function setUserPassword() {
       "
     >
       <div class="flex flex-col items-center justify-center gap-2">
-        <div class="text-(--text-color) text-lg text-center">
+        <div class="text-(--contrast-text-color) text-lg text-center">
           Are you sure you want to ban {{ banUserEmail }}?
         </div>
         <div class="flex gap-2">
@@ -540,14 +540,14 @@ async function setUserPassword() {
     <!-- Edit User Modal -->
     <ModalWindow :open="editUserModalVisible" @close="closeEditUser">
       <div class="flex flex-col gap-4 items-center">
-        <div class="text-(--main-color) text-lg self-start">edit user</div>
+        <div class="text-(--contrast-main-color) text-lg self-start">edit user</div>
 
         <div class="flex flex-col gap-2 w-62.5">
           <input
             v-model="editUserName"
             type="text"
             placeholder="name"
-            class="w-full p-2 border border-(--sub-color) rounded-lg"
+            class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
             :disabled="editUserSaving"
             @keyup.enter="saveUserEdits"
           />
@@ -556,13 +556,13 @@ async function setUserPassword() {
             v-model="editUserEmail"
             type="email"
             placeholder="email"
-            class="w-full p-2 border border-(--sub-color) rounded-lg"
+            class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
             :disabled="editUserSaving"
             @keyup.enter="saveUserEdits"
           />
           <select
             v-model="editUserRole"
-            class="w-full p-2 border border-(--sub-color) rounded-lg"
+            class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
             :disabled="editUserSaving"
           >
             <option value="user">user</option>
@@ -570,20 +570,20 @@ async function setUserPassword() {
           </select>
         </div>
 
-        <div class="w-full border-t border-(--sub-color) pt-4">
-          <div class="text-(--text-color) text-sm mb-2">password reset</div>
+        <div class="w-full border-t border-(--contrast-border-color) pt-4">
+          <div class="text-(--contrast-text-color) text-sm mb-2">password reset</div>
           <div class="flex flex-col gap-2 w-62.5">
             <input
               v-model="editUserNewPassword"
               type="text"
               placeholder="new password"
-              class="w-full p-2 border border-(--sub-color) rounded-lg"
+              class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
               :disabled="editUserPasswordSaving"
               @keyup.enter="setUserPassword"
             />
             <div class="flex gap-2">
               <button
-                class="flex-1 bg-(--sub-alt-color) text-(--text-color) p-2 rounded-lg"
+                class="flex-1 bg-(--sub-alt-color) text-(--contrast-text-color) p-2 rounded-lg"
                 :disabled="editUserPasswordSaving"
                 @click="
                   () => {
@@ -594,7 +594,7 @@ async function setUserPassword() {
                 generate
               </button>
               <button
-                class="flex-1 bg-(--sub-alt-color) text-(--text-color) p-2 rounded-lg"
+                class="flex-1 bg-(--sub-alt-color) text-(--contrast-text-color) p-2 rounded-lg"
                 :disabled="!editUserNewPassword || editUserPasswordSaving"
                 @click="
                   async () => {
@@ -613,7 +613,7 @@ async function setUserPassword() {
             >
               set password
             </button>
-            <div class="text-(--sub-color) text-xs">
+            <div class="text-(--contrast-sub-color) text-xs">
               No email provider is configured. This sets the user&apos;s
               password directly; share it with them securely.
             </div>
@@ -622,7 +622,7 @@ async function setUserPassword() {
 
         <div class="flex gap-2 w-full justify-end">
           <button
-            class="bg-(--sub-alt-color) text-(--text-color) p-2 rounded-lg"
+            class="bg-(--sub-alt-color) text-(--contrast-text-color) p-2 rounded-lg"
             :disabled="editUserSaving"
             @click="closeEditUser"
           >

@@ -9,6 +9,7 @@ const props = defineProps<{
   /** Min value for range */
   min: number;
   max: number;
+  step?: number;
   displayValue?: boolean;
   valueInput?: boolean;
   suffix?: string;
@@ -132,6 +133,9 @@ onBeforeUnmount(() => {
           type="range"
           :min="props.min"
           :max="props.max"
+          :step="props.step ?? 1"
+          :aria-label="title"
+          :aria-valuetext="props.suffix ? `${model}${props.suffix}` : undefined"
         />
         <div v-if="props.displayValue && !props.valueInput">
           {{ model }}{{ props.suffix }}
@@ -139,6 +143,7 @@ onBeforeUnmount(() => {
         <div v-if="props.valueInput" class="flex gap-2 items-center">
           <input
             :value="draftValue"
+            :aria-label="title ? `${title} value` : undefined"
             class="w-20 text-right"
             inputmode="numeric"
             :min="props.min"
@@ -152,7 +157,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <div
-        class="flex row-start-2 col-start-2 text-(--error-color) justify-end text-sm"
+        class="flex row-start-2 col-start-2 text-(--contrast-error-color) justify-end text-sm"
       >
         <span v-if="Number(draftValue) < props.min"
           >Value must be >= {{ props.min }}</span
