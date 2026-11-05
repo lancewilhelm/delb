@@ -1,0 +1,67 @@
+{
+  "foliate/mobi.js": {
+    "url": "https://raw.githubusercontent.com/johnfactotum/foliate-js/78914aef4466eb960965702401634c2cb348e9b1/mobi.js",
+    "sha256": "016526df13a9f11ee6671a8c74346e1cf41fe6bdfe50165fdcbf744f015694f3",
+    "bytes": 47716
+  },
+  "foliate/LICENSE": {
+    "url": "https://raw.githubusercontent.com/johnfactotum/foliate-js/78914aef4466eb960965702401634c2cb348e9b1/LICENSE",
+    "sha256": "b621ffc351fe263bc9b09dd0bc1c9332fda9c462a3904c1e4f0b4d3236b9c28c",
+    "bytes": 1070
+  },
+  "fixtures/sample-cp1252.mobi": {
+    "url": "https://raw.githubusercontent.com/bfabiszewski/libmobi/906274205c11944b628da1c553b255acb1af7c55/tests/samples/sample-cp1252.mobi",
+    "sha256": "e77aa8f99d65f12bc7b5d71f272a2a4a8f36fe6d5c00e9b95c8a926b145ad088",
+    "bytes": 108476
+  },
+  "fixtures/sample-unicode-huffdic.mobi": {
+    "url": "https://raw.githubusercontent.com/bfabiszewski/libmobi/906274205c11944b628da1c553b255acb1af7c55/tests/samples/sample-unicode-huffdic.mobi",
+    "sha256": "560dda58429878a64f73381ffddfcf1a59809e7c669a5222666257df8976a68f",
+    "bytes": 484776
+  },
+  "fixtures/sample-unicode-uncompressed.mobi": {
+    "url": "https://raw.githubusercontent.com/bfabiszewski/libmobi/906274205c11944b628da1c553b255acb1af7c55/tests/samples/sample-unicode-uncompressed.mobi",
+    "sha256": "9419834c41bf2e7e9ccb78a870e679d56dc4a0a380c5afae3168a2fb5827412d",
+    "bytes": 658770
+  },
+  "fixtures/sample-ncx.mobi": {
+    "url": "https://raw.githubusercontent.com/bfabiszewski/libmobi/906274205c11944b628da1c553b255acb1af7c55/tests/samples/sample-ncx.mobi",
+    "sha256": "bb33217f3369d8ca6c5a373ca8e21a151be5494f5de6623aa9e7f42fb5fed743",
+    "bytes": 28999
+  },
+  "fixtures/sample-obfuscated-fonts.mobi": {
+    "url": "https://raw.githubusercontent.com/bfabiszewski/libmobi/906274205c11944b628da1c553b255acb1af7c55/tests/samples/sample-obfuscated-fonts.mobi",
+    "sha256": "34fc67043eeeaa6563481d6ea2fea1b5349cb73e459a1f10e3aa09186f56302e",
+    "bytes": 84412
+  },
+  "fixtures/sample-multimedia.mobi": {
+    "url": "https://raw.githubusercontent.com/bfabiszewski/libmobi/906274205c11944b628da1c553b255acb1af7c55/tests/samples/sample-multimedia.mobi",
+    "sha256": "a301cce8187f1f1ea9562196c46328ca75585da280d4b742827cebd4698697c9",
+    "bytes": 565041
+  },
+  "fixtures/sample-drm-v1.mobi": {
+    "url": "https://raw.githubusercontent.com/bfabiszewski/libmobi/906274205c11944b628da1c553b255acb1af7c55/tests/samples/sample-drm-v1.mobi",
+    "sha256": "631e7afe719c04a91744c22f3021a2af1cafef541f93612a27d629ab74645494",
+    "bytes": 86580
+  },
+  "fixtures/sample-drm_pidLTKULBB^5V-v2.mobi": {
+    "url": "https://raw.githubusercontent.com/bfabiszewski/libmobi/906274205c11944b628da1c553b255acb1af7c55/tests/samples/sample-drm_pidLTKULBB^5V-v2.mobi",
+    "sha256": "73238bbadfc40b5818bd7c872093cd47926ba3dad07d6b12b8dde7185298ee94",
+    "bytes": 114965
+  },
+  "fixtures/alice.mobi": {
+    "url": "https://www.gutenberg.org/ebooks/11.kindle.images",
+    "sha256": "1b4222ffdf1862a39d0fae6d42c588f28a34c12ad73cc21c2849fe2646cac3e1",
+    "bytes": 241000
+  },
+  "fixtures/alice.azw3": {
+    "url": "https://www.gutenberg.org/ebooks/11.kf8.images",
+    "sha256": "d8211269aed55ded8302f289950936db8368b4d4d384c463b722034152f8f1d2",
+    "bytes": 255506
+  },
+  "fixtures/alice-reference.epub": {
+    "url": "https://www.gutenberg.org/ebooks/11.epub3.images",
+    "sha256": "4f81245d31380ac1d6eafb9a321e3691369bc70985736ae4bccf849a4f784036",
+    "bytes": 189249
+  }
+}

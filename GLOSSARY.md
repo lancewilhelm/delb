@@ -22,6 +22,21 @@ The user recorded as having created a book entry. Sharing that entry does not tr
 **Reference-only book**:
 A catalog entry without a downloadable ebook file. It can represent a physical book and can still have a cover and reading history.
 
+**Book metadata**:
+Descriptive information about a book, such as its title, authors, identifiers, and cover. It is distinct from the book's reading content.
+
+**Catalog metadata**:
+Book metadata recorded in Delb's catalog.
+
+**Embedded metadata**:
+Book metadata stored inside an ebook file.
+
+**Metadata synchronization**:
+Updating a book file's embedded metadata to match the catalog metadata.
+
+**Format conversion**:
+Creation of an ebook in a different file format from an existing ebook.
+
 **Reading position**:
 A reader's saved location within an ebook. It is distinct from the historical progress log.
 

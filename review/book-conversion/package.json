@@ -1,0 +1,17 @@
+{
+  "name": "delb-book-conversion-feasibility",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node check.mjs",
+    "check:original": "node check.mjs --original-parser",
+    "setup": "node setup.mjs",
+    "validate": "node validate.mjs",
+    "evidence": "node record.mjs"
+  },
+  "dependencies": {
+    "css.escape": "1.5.1",
+    "fflate": "0.8.2",
+    "jsdom": "26.1.0"
+  }
+}

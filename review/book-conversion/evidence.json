@@ -1,0 +1,227 @@
+{
+  "verdict": "JavaScript conversion demonstrated on this corpus; production integration and broader fidelity remain unproven",
+  "foliateCommit": "78914aef4466eb960965702401634c2cb348e9b1",
+  "code": {
+    "convert.mjs": "d19103b44d0076476e07007fd2ecadfac985dc68b94972d8a1b638f7f5dd14eb",
+    "check.mjs": "2c1bcb84f7226377506a69bd755c52f0ecdc19c24d1022fcf744a9dc64e18454",
+    "setup.mjs": "76dba5c4d27ff2a8f256c455314dc4cc09222a0107dabd5677f22184f636672f",
+    "validate.mjs": "57468a64f9478cace954d9d408fe2c973498709a6075dd367eb70c0edd4e5c25",
+    "package-lock.json": "b2b091efac61f8fb46c86c0a942c48a1ad0ba1322ba7991a979e442926651fc3"
+  },
+  "samples": [
+    {
+      "name": "alice.mobi",
+      "diagnostic": false,
+      "sourceHash": "1b4222ffdf1862a39d0fae6d42c588f28a34c12ad73cc21c2849fe2646cac3e1",
+      "result": "structural-checks-passed",
+      "originalParserResult": "structural-checks-passed",
+      "version": 6,
+      "compression": 2,
+      "sections": 20,
+      "navigation": "source",
+      "navEntries": 16,
+      "assets": [],
+      "independentReference": {
+        "paragraphs": 768,
+        "matchedInOrder": 768,
+        "missingExamples": []
+      },
+      "sourceTextPreserved": true,
+      "warnings": [],
+      "epubcheck": {
+        "name": "alice.mobi",
+        "exitCode": 0,
+        "errors": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "name": "alice.azw3",
+      "diagnostic": false,
+      "sourceHash": "d8211269aed55ded8302f289950936db8368b4d4d384c463b722034152f8f1d2",
+      "result": "structural-checks-passed",
+      "originalParserResult": "structural-checks-passed",
+      "version": 8,
+      "compression": 2,
+      "sections": 19,
+      "navigation": "source",
+      "navEntries": 16,
+      "assets": [
+        "text/css",
+        "text/css",
+        "image/jpeg",
+        "text/css"
+      ],
+      "independentReference": {
+        "paragraphs": 768,
+        "matchedInOrder": 768,
+        "missingExamples": []
+      },
+      "sourceTextPreserved": true,
+      "warnings": [],
+      "epubcheck": {
+        "name": "alice.azw3",
+        "exitCode": 0,
+        "errors": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "name": "sample-cp1252.mobi",
+      "diagnostic": false,
+      "sourceHash": "e77aa8f99d65f12bc7b5d71f272a2a4a8f36fe6d5c00e9b95c8a926b145ad088",
+      "result": "structural-checks-passed",
+      "originalParserResult": "structural-checks-passed",
+      "version": 6,
+      "compression": 2,
+      "sections": 3,
+      "navigation": "generated",
+      "navEntries": 3,
+      "assets": [
+        "image/jpeg"
+      ],
+      "sourceTextPreserved": true,
+      "warnings": [],
+      "epubcheck": {
+        "name": "sample-cp1252.mobi",
+        "exitCode": 0,
+        "errors": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "name": "sample-unicode-huffdic.mobi",
+      "diagnostic": false,
+      "sourceHash": "560dda58429878a64f73381ffddfcf1a59809e7c669a5222666257df8976a68f",
+      "result": "structural-checks-passed",
+      "originalParserResult": "conversion-failed",
+      "originalParserError": "Error: Missing internal link anchor: kindle:pos:fid:0001:off:0000000000",
+      "version": 8,
+      "compression": 17480,
+      "sections": 2,
+      "navigation": "source",
+      "navEntries": 2,
+      "assets": [
+        "image/jpeg"
+      ],
+      "sourceTextPreserved": true,
+      "warnings": [],
+      "epubcheck": {
+        "name": "sample-unicode-huffdic.mobi",
+        "exitCode": 0,
+        "errors": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "name": "sample-unicode-uncompressed.mobi",
+      "diagnostic": false,
+      "sourceHash": "9419834c41bf2e7e9ccb78a870e679d56dc4a0a380c5afae3168a2fb5827412d",
+      "result": "structural-checks-passed",
+      "originalParserResult": "conversion-failed",
+      "originalParserError": "Error: Missing internal link anchor: kindle:pos:fid:0001:off:0000000000",
+      "version": 8,
+      "compression": 1,
+      "sections": 2,
+      "navigation": "source",
+      "navEntries": 2,
+      "assets": [
+        "image/jpeg"
+      ],
+      "sourceTextPreserved": true,
+      "warnings": [],
+      "epubcheck": {
+        "name": "sample-unicode-uncompressed.mobi",
+        "exitCode": 0,
+        "errors": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "name": "sample-ncx.mobi",
+      "diagnostic": false,
+      "sourceHash": "bb33217f3369d8ca6c5a373ca8e21a151be5494f5de6623aa9e7f42fb5fed743",
+      "result": "structural-checks-passed",
+      "originalParserResult": "structural-checks-passed",
+      "version": 8,
+      "compression": 2,
+      "sections": 3,
+      "navigation": "source",
+      "navEntries": 4,
+      "assets": [],
+      "sourceTextPreserved": true,
+      "warnings": [],
+      "epubcheck": {
+        "name": "sample-ncx.mobi",
+        "exitCode": 0,
+        "errors": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "name": "sample-obfuscated-fonts.mobi",
+      "diagnostic": false,
+      "sourceHash": "34fc67043eeeaa6563481d6ea2fea1b5349cb73e459a1f10e3aa09186f56302e",
+      "result": "structural-checks-passed",
+      "originalParserResult": "structural-checks-passed",
+      "version": 8,
+      "compression": 2,
+      "sections": 1,
+      "navigation": "generated",
+      "navEntries": 1,
+      "assets": [
+        "text/css",
+        "font/otf",
+        "text/css"
+      ],
+      "sourceTextPreserved": true,
+      "warnings": [],
+      "epubcheck": {
+        "name": "sample-obfuscated-fonts.mobi",
+        "exitCode": 0,
+        "errors": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "name": "sample-multimedia.mobi",
+      "diagnostic": true,
+      "sourceHash": "a301cce8187f1f1ea9562196c46328ca75585da280d4b742827cebd4698697c9",
+      "result": "structural-checks-passed",
+      "originalParserResult": "conversion-failed",
+      "originalParserError": "Error: Missing internal link anchor: kindle:pos:fid:0001:off:0000000000",
+      "version": 8,
+      "compression": 2,
+      "sections": 2,
+      "navigation": "source",
+      "navEntries": 2,
+      "assets": [
+        "image/jpeg",
+        "video/mp4",
+        "audio/mpeg"
+      ],
+      "sourceTextPreserved": true,
+      "warnings": [],
+      "epubcheck": {
+        "name": "sample-multimedia.mobi",
+        "exitCode": 0,
+        "errors": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "name": "sample-drm-v1.mobi",
+      "diagnostic": false,
+      "sourceHash": "631e7afe719c04a91744c22f3021a2af1cafef541f93612a27d629ab74645494",
+      "result": "protected-input-rejected",
+      "originalParserResult": "protected-input-rejected"
+    },
+    {
+      "name": "sample-drm_pidLTKULBB^5V-v2.mobi",
+      "diagnostic": false,
+      "sourceHash": "73238bbadfc40b5818bd7c872093cd47926ba3dad07d6b12b8dde7185298ee94",
+      "result": "protected-input-rejected",
+      "originalParserResult": "protected-input-rejected"
+    }
+  ]
+}
