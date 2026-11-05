@@ -903,6 +903,12 @@ const hasEpub = computed(() => {
   );
 });
 
+const hasPdf = computed(() =>
+  (book.value?.files ?? []).some(
+    (file) => file.format?.trim().toLowerCase() === 'pdf',
+  ),
+);
+
 const downloading = ref(false);
 
 const downloadDropdownOpen = ref(false);
@@ -1270,12 +1276,21 @@ const { copy } = useClipboard();
             <!-- Actions -->
             <div class="flex flex-wrap gap-1 pt-2 items-center justify-center">
               <NuxtLink
-                v-if="hasEpub"
+                v-if="hasEpub || hasPdf"
                 v-tooltip="'Read book'"
+                aria-label="Read book"
                 class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
                 :to="`/books/${book.id}/read`"
               >
                 <icon name="lucide:book-open" class="text-xl" />
+              </NuxtLink>
+
+              <NuxtLink
+                v-if="hasEpub && hasPdf"
+                class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm"
+                :to="`/books/${book.id}/read?format=pdf`"
+              >
+                Read PDF
               </NuxtLink>
 
               <div v-if="book.files && book.files.length > 0" class="relative">

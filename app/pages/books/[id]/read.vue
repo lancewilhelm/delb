@@ -3,6 +3,7 @@ import type Book from 'epubjs/types/book';
 import type Rendition from 'epubjs/types/rendition';
 import { v4 as uuidv4 } from 'uuid';
 import type { ReaderTheme } from '~/stores/userSettings';
+import { selectReaderFile } from '~/utils/readerFile';
 
 definePageMeta({
   auth: {
@@ -10,6 +11,7 @@ definePageMeta({
     redirectGuestTo: '/login',
   },
   layout: false,
+  key: (route) => route.fullPath,
 });
 
 useHead({
@@ -47,6 +49,7 @@ const bookTitle = ref<string>('Reader');
 const currentProgress = ref<number | null>(null);
 const saveErrorMessage = ref<string | null>(null);
 const epubFileId = ref<string | null>(null);
+const pdfFileId = ref<string | null>(null);
 const progressSyncEnabled = ref(false);
 const syncedProgressPercent = ref<number | null>(null);
 
@@ -735,8 +738,18 @@ async function loadBookMetadata() {
       format?: string | null;
     }>;
 
-    const epub = files.find((f) => (f.format || '').toLowerCase() === 'epub');
-    epubFileId.value = epub?.id ? String(epub.id) : null;
+    const selected = selectReaderFile(
+      files.filter(
+        (file): file is { id: string; format: string | null } =>
+          typeof file.id === 'string' && typeof file.format === 'string',
+      ),
+      route.query.format,
+    );
+    if (selected?.format?.trim().toLowerCase() === 'pdf') {
+      pdfFileId.value = selected.id;
+    } else {
+      epubFileId.value = selected?.id ?? null;
+    }
   } catch {
     // Title is best-effort; ignore failures.
   }
@@ -798,7 +811,9 @@ async function loadEpub() {
         ? loadLatestProgressLog()
         : Promise.resolve(null),
     ]);
-    const savedLocation = saved?.location ?? null;
+    const savedLocation = saved?.location?.startsWith('epubcfi(')
+      ? saved.location
+      : null;
     syncedProgressPercent.value =
       progressSyncEnabled.value && syncedProgress != null
         ? syncedProgress
@@ -910,6 +925,7 @@ function onKeydown(event: KeyboardEvent) {
 
 onMounted(async () => {
   await loadBookMetadata();
+  if (pdfFileId.value) return;
   await nextTick();
   await loadEpub();
   window.addEventListener('keydown', onKeydown);
@@ -983,7 +999,15 @@ watch(
 </script>
 
 <template>
-  <div class="flex flex-col h-full w-full overflow-hidden">
+  <LazyReadersPdfReader
+    v-if="pdfFileId"
+    :book-id="bookId"
+    :file-id="pdfFileId"
+    :title="bookTitle"
+    :progress-sync-enabled="progressSyncEnabled"
+    @back="backToBook"
+  />
+  <div v-else class="flex flex-col h-full w-full overflow-hidden">
     <!-- Page header -->
     <div
       v-if="!isFullscreen"

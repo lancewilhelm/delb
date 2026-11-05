@@ -353,7 +353,7 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(6, minmax(0, 1fr));
   padding-bottom: 28px;
   border-bottom: 1px solid var(--contrast-border-color);
-  margin-bottom: 32px;
+  margin-bottom: 20px;
 }
 .dashboard-count {
   display: flex;
@@ -403,7 +403,7 @@ onBeforeUnmount(() => {
   border-radius: 0;
   border: 0;
   border-bottom: 2px solid transparent;
-  padding: 8px 0 12px;
+  padding: 8px 0 8px;
   font-size: 14px;
   opacity: 0.6;
   white-space: nowrap;
@@ -436,7 +436,7 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 20px;
   overflow-x: auto;
-  padding: 4px 4px 12px;
+  padding: 12px 4px 12px;
   margin: 0 -4px;
 }
 .dashboard-book {

@@ -121,11 +121,6 @@ onBeforeUnmount(() => {
         class="absolute left-0 mt-1 w-44 bg-(--bg-color) border border-(--contrast-border-color) rounded-md shadow-lg z-150 overflow-hidden"
         role="menu"
       >
-        <div class="px-3 py-2 border-(--contrast-border-color)">
-          <div class="text-xs opacity-70">View</div>
-        </div>
-
-        <div>
           <NuxtLink
             v-for="item in items"
             :key="item.id"
@@ -153,7 +148,6 @@ onBeforeUnmount(() => {
               class="ml-auto text-(--contrast-main-color) opacity-80 shrink-0"
             />
           </NuxtLink>
-        </div>
       </div>
     </div>
 

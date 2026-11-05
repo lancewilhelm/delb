@@ -101,6 +101,17 @@ Issue [#35](https://github.com/lancewilhelm/delb/issues/35) implements the selec
 
 This is local synthetic API and browser evidence. Physical touch, assistive technology, other browsers, live providers, and Docker were not exercised.
 
+## PDF reader verification, 2026-11-05
+
+The minimal PDF reader uses PDF.js 6.5.438 and the existing authenticated download and per-user position endpoints. EPUB remains preferred for multi-format books. There is no schema migration or server-side PDF conversion.
+
+- `pnpm test` passed all 270 tests, including selection, malformed/stale PDF positions, and the existing EPUB suite. Typecheck, production build, and documentation links passed. Lint retains the existing `BookDescriptionEditor.vue` optional-prop warning.
+- `pnpm run dev --host 127.0.0.1 --port 4317` started against the disposable synthetic database. PDF upload/download, authorization, position isolation and ordering, opt-in progress sync, and access revocation passed against the dev server. The full production API regression workflow includes these checks through `review/pdf-reader-api.mjs`.
+- `node review/pdf-reader-browser.mjs` passed in headless Chrome against the production demo: real portrait/landscape rendering, page navigation and bounds, invalid page input, zoom, reload restoration, failed-save feedback/retry, malformed-PDF download fallback, mixed-format selection, and Escape return. CMap, font, and codec assets returned 200. A PDF open-action script probe was not executed. EPUB page navigation saved a new CFI after switching from PDF; its table of contents and return navigation worked. No unhandled browser exceptions occurred.
+- Desktop and phone-width screenshots were captured, inspected, and saved in [the image directory](../images/README.md). The demo blocks outbound connections; unrelated fallback icons remain unavailable. The initial dev browser request exceeded its 30-second first-render timeout, so the completed browser walkthrough used the production build.
+
+This is synthetic API and Chrome evidence. Calibre/Dropbox ingestion paths were inspected but not rerun; they already accept PDFs. Physical touch, other browser engines, screen readers, large or scanned/complex PDFs, and live deployment remain unverified. Canvas rendering does not expose document text, selection, search, annotations, forms, or password entry. PDF progress uses the displayed page, and one saved position is shared between formats for each user/book.
+
 ## Next documentation passes
 
 Expand dedicated guides for appearance/mobile profiles, metadata editing/provider administration, Calibre migration, Dropbox claim/failure handling, health-check remediation, and deployment-specific restore drills. Keep those passes tied to code and named verification environments.

@@ -57,6 +57,7 @@ See:
 - **Modern UI** - Clean, responsive interface with theme support
 - **Book Details** - View metadata, descriptions, and cover images (admins can edit metadata, authors, and covers)
 - **Direct Downloads** - Download books directly from the web interface
+- **In-app Reading** - Read EPUBs and PDFs, with a saved position for each reader
 - **Search & Filter** - Find books quickly with search and filtering
 - **SQLite Database** - Lightweight, file-based database with Drizzle ORM
 

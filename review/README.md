@@ -96,6 +96,12 @@ The browser checks exercise grid and list sorting on tag, author, and publisher 
 
 Deleting a tag removes its links from every book. Merging moves those links to an existing destination tag and deletes the source tag in one transaction. Both actions require confirmation. A later metadata edit or import can recreate the old tag name.
 
+## PDF reader checks
+
+`pnpm test:integration` includes `review/pdf-reader-api.mjs` against a fresh disposable production server. It verifies PDF upload/download bytes, MIME, authentication, collection visibility, file selection, private ordered positions, opt-in history sync, and access revocation.
+
+For browser checks, use the synthetic setup above, run `pnpm build`, and start `node review/start-demo.mjs --production`. In another terminal run `node review/pdf-reader-browser.mjs`. It creates a synthetic PDF, malformed PDF, ordinary EPUB, and a multi-format fixture. It launches Chrome with a temporary profile, verifies page rendering/navigation/resume, phone-width fit, local PDF.js assets, failed-save retry, an inert script probe, and EPUB navigation/TOC after format switching. Results and screenshots are saved in a printed temporary evidence directory. Set `CHROME_BIN` for another Chrome executable or `DELB_REVIEW_URL` for another loopback demo port. It does not use your normal browser profile or library.
+
 ## Book reading-status menu checks
 
 Use the disposable demo setup above, build the app with `pnpm build`, and start `node review/start-demo.mjs --production`. In a second terminal at the same checkout, run:

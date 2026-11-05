@@ -4,7 +4,7 @@ The [reader page](../../../app/pages/books/[id]/read.vue) is a full-screen EPUB.
 
 ## File access and controls
 
-The book detail page offers Read when the file list contains an EPUB. The reader requests `GET /api/books/:id/download?format=epub`, optionally identifying a file with `fileId`. The download handler checks session and collection visibility, then streams the stored file from the managed library.
+The book detail page offers Read when the file list contains an EPUB or PDF. EPUB remains preferred when both exist; the [PDF reader](pdf-reader.md) handles PDF-only books and the explicit Read PDF action. The EPUB reader requests `GET /api/books/:id/download?format=epub`, optionally identifying a file with `fileId`. The download handler checks session and collection visibility, then streams the stored file from the managed library.
 
 The reader has pages/scroll modes, previous/next navigation, table of contents, left/right keyboard navigation, Escape to return, and font/appearance controls. Reader settings persist through account settings.
 
