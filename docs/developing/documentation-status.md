@@ -68,16 +68,16 @@ Local demo evidence does not prove live Google Books or Hardcover behavior, prod
 
 ## Dashboard shelves, 2026-11-04
 
-Issue [#35](https://github.com/lancewilhelm/delb/issues/35) implements the selected D dashboard. Runtime revision `1428880` includes the quiet count strip, three shelf tabs, and persistent per-user favorites. It also retains the reading-status menu merged in `654d776`.
+Issue [#35](https://github.com/lancewilhelm/delb/issues/35) implements the selected D dashboard with Continue reading and Recently read. Runtime revision `579c23d` retains the quiet count strip, two underline tabs, and the reading-status menu merged in `654d776`. Book favorites are deferred. This change has no schema migration.
 
-- `pnpm test` passed 247 tests. Focused SQLite and Vue checks cover scope, private favorites, preserved status and ratings, date-only serialization across server and browser timezones, stale responses, retry behavior, and cover-menu refresh.
+- `pnpm test` passed 244 tests. Focused SQLite and Vue checks cover collection scope, private reading history, paging, date-only serialization across server and browser timezones, stale responses, retry behavior, and cover-menu refresh. The query fixtures have no favorites or preference tables.
 - `pnpm typecheck` and `pnpm build` passed. `pnpm lint` passed with the existing optional-prop warning in `BookDescriptionEditor.vue`.
-- Production API checks cover authentication, invalid input, collection visibility, deduplication, finish-date order, idempotent favorites, per-reader isolation, preserved progress sync, and access revocation. The dashboard suite is included in `pnpm test:integration`.
-- A headless Chrome walkthrough exercised the built application with a separate browser profile and synthetic accounts. Shelf switching, keyboard tabs, read-date order, favorite changes from the dashboard and book details, reload persistence, stable counts, and a phone-width layout passed. The selected favorite uses a filled star.
+- Production API checks cover authentication, invalid input, collection visibility, deduplication, finish-date order, per-reader history, and access revocation. They also check that the removed favorites shelf and endpoint are unavailable. The dashboard suite is included in `pnpm test:integration`.
+- A headless Chrome walkthrough exercised the built application with a separate browser profile and synthetic accounts. Exactly two tabs, no favorite controls, shelf switching, keyboard wrapping, read-date order, reload persistence, stable counts, and a phone-width layout passed.
 - Desktop and phone screenshots were captured and inspected at 1280 by 900 and 390 by 844. [Screenshot provenance](../images/README.md) distinguishes these from the earlier documentation images.
-- The Standards review found a missing verification-record update. The Spec review found a timezone-dependent date display. This entry and the date-only response address both findings.
+- The earlier Standards finding about the verification record and the Spec finding about calendar dates remain addressed.
 
-This is local synthetic API and browser evidence. Physical touch, assistive technology, other browsers, live providers, Docker, and production upgrades were not exercised.
+This is local synthetic API and browser evidence. Physical touch, assistive technology, other browsers, live providers, and Docker were not exercised.
 
 ## Next documentation passes
 
