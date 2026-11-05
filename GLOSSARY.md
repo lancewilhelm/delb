@@ -36,6 +36,9 @@ A catalog entry without a downloadable ebook file. It can represent a physical b
 **Book metadata**:
 Descriptive information about a book, such as its title, authors, identifiers, and cover. It is distinct from the book's reading content.
 
+**Catalog vocabulary**:
+The authors, tags, series, and publishers shared across Delb's book entries. Individual entries select their own associations with these terms.
+
 **Catalog metadata**:
 Book metadata recorded in Delb's catalog.
 
