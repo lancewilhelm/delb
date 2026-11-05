@@ -33,19 +33,16 @@ const shelves = [
   {
     key: 'reading',
     label: 'Continue reading',
-    subtitle: 'Pick up where you left off',
     empty: 'No books marked as Reading.',
   },
   {
     key: 'recent',
     label: 'Recently read',
-    subtitle: 'Date read · newest first',
     empty: 'Finished books with a date read will appear here, newest first.',
   },
 ] satisfies {
   key: DashboardShelf;
   label: string;
-  subtitle: string;
   empty: string;
 }[];
 const shelfInfo = computed(
@@ -269,7 +266,6 @@ onBeforeUnmount(() => {
           :aria-busy="loading || loadingMore"
           tabindex="0"
         >
-          <p class="dashboard-subtitle">{{ shelfInfo.subtitle }}</p>
           <p v-if="loading" class="dashboard-message" role="status">Loading…</p>
           <p
             v-else-if="!errorMessage && !shelfBooks.length"
