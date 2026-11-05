@@ -75,7 +75,7 @@ const filteredSeries = seriesRows;
       <!-- Main content (fixed header + scrollable content area) -->
       <div class="flex-1 overflow-hidden flex flex-col min-h-0">
         <!-- Header (non-scrolling): view selector stays fixed -->
-        <div class="px-2 shrink-0 border-b border-(--sub-color)">
+        <div class="px-2 shrink-0 border-b border-(--contrast-border-color)">
           <div class="flex items-center justify-between gap-4">
             <!-- View selector (mode) lives here (top-left) -->
             <ViewSelectorDropdown />
@@ -92,7 +92,7 @@ const filteredSeries = seriesRows;
             <div class="flex items-center justify-between gap-3">
               <input
                 v-model="seriesQuery"
-                class="px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm w-56"
+                class="px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm w-56"
                 placeholder="Filter series..."
                 type="text"
               />
@@ -118,7 +118,7 @@ const filteredSeries = seriesRows;
               <div
                 v-for="s in filteredSeries"
                 :key="s.id"
-                class="flex items-center justify-between gap-3 border border-(--sub-color) hover:border-(--main-color) hover:bg-(--sub-color)/10 rounded-md px-3 py-2 overflow-hidden min-h-32 cursor-pointer shadow-sm hover:shadow-md"
+                class="flex items-center justify-between gap-3 border border-(--contrast-border-color) hover:border-(--main-color) hover:bg-(--sub-color)/10 rounded-md px-3 py-2 overflow-hidden min-h-32 cursor-pointer shadow-sm hover:shadow-md"
                 @click="router.push(`/series/${s.id}`)"
               >
                 <!-- Series info -->

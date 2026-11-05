@@ -668,7 +668,7 @@ onBeforeUnmount(() => {
     @scroll="onScroll"
   >
     <div ref="contentRef" class="px-4 py-4">
-      <div v-if="errorMessage" class="text-sm text-(--error-color) mb-3">
+      <div v-if="errorMessage" class="text-sm text-(--contrast-error-color) mb-3">
         {{ errorMessage }}
       </div>
 

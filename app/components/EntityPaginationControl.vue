@@ -56,12 +56,12 @@ onBeforeUnmount(() => observer?.disconnect());
 
 <template>
   <div v-if="hasMore || error || focused" ref="sentinel" class="space-y-2">
-    <p v-if="error" class="text-sm text-(--error-color)" role="alert">
+    <p v-if="error" class="text-sm text-(--contrast-error-color)" role="alert">
       {{ error }}
     </p>
     <button
       type="button"
-      class="px-3 py-2 rounded-md border border-(--sub-color) text-sm"
+      class="px-3 py-2 rounded-md border border-(--contrast-border-color) text-sm"
       :aria-disabled="loading || (!hasMore && !error)"
       @focus="focused = true"
       @blur="focused = false"

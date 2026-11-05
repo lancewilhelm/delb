@@ -78,7 +78,7 @@ async function clearToken() {
 
         <select
           v-model="provider"
-          class="w-full p-2 border border-(--sub-color) rounded-lg"
+          class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
           :disabled="!isAdmin"
         >
           <option
@@ -96,7 +96,7 @@ async function clearToken() {
         </div>
       </div>
 
-      <div class="border-t border-(--sub-color) pt-4">
+      <div class="border-t border-(--contrast-border-color) pt-4">
         <div class="flex flex-col gap-2">
           <div class="text-sm font-semibold">Hardcover API token</div>
 
@@ -113,7 +113,7 @@ async function clearToken() {
             autocomplete="off"
             spellcheck="false"
             placeholder="Hardcover token (stored server-side)"
-            class="w-full p-2 border border-(--sub-color) rounded-lg"
+            class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
             :disabled="!isAdmin || saveState.saving"
             @keyup.enter="saveToken"
           />
@@ -133,7 +133,7 @@ async function clearToken() {
             <div class="flex items-center gap-2 shrink-0">
               <button
                 type="button"
-                class="px-3 py-2 rounded-lg bg-(--main-color) text-(--bg-color) disabled:opacity-50 disabled:cursor-not-allowed"
+                class="px-3 py-2 rounded-lg bg-(--main-color) text-(--contrast-inverse-color) disabled:opacity-50 disabled:cursor-not-allowed"
                 :disabled="!isAdmin || saveState.saving"
                 @click="saveToken"
               >
@@ -142,7 +142,7 @@ async function clearToken() {
 
               <button
                 type="button"
-                class="px-3 py-2 rounded-lg border border-(--sub-color) disabled:opacity-50 disabled:cursor-not-allowed"
+                class="px-3 py-2 rounded-lg border border-(--contrast-border-color) disabled:opacity-50 disabled:cursor-not-allowed"
                 :disabled="!isAdmin || saveState.saving"
                 @click="clearToken"
               >
@@ -151,7 +151,10 @@ async function clearToken() {
             </div>
           </div>
 
-          <div v-if="saveState.error" class="text-sm text-(--error-color)">
+          <div
+            v-if="saveState.error"
+            class="text-sm text-(--contrast-error-color)"
+          >
             {{ saveState.error }}
           </div>
           <div v-else-if="saveState.ok" class="text-sm opacity-80">

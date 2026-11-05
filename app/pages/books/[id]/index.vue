@@ -328,9 +328,7 @@ async function saveTbrRank(next: string) {
   statusMetaErrorMessage.value = null;
 
   try {
-    const trimmed = (
-      typeof next === 'string' ? next : next ?? ''
-    )
+    const trimmed = (typeof next === 'string' ? next : (next ?? ''))
       .toString()
       .trim();
     const payload: { tbrRank?: number | null } = {};
@@ -832,8 +830,6 @@ async function onRatingClick(e: MouseEvent, starIndex: number) {
   await setRating(next);
 }
 
-
-
 const safeDescriptionHtml = computed(() => {
   const desc = book.value?.description;
   if (!desc) return '';
@@ -1232,12 +1228,12 @@ const { copy } = useClipboard();
   <div class="flex flex-col w-full h-full overflow-hidden">
     <AppHeader class="w-full" />
 
-    <div class="px-2 shrink-0 border-b border-(--sub-color)">
+    <div class="px-2 shrink-0 border-b border-(--contrast-border-color)">
       <ViewSelectorDropdown />
     </div>
 
     <div class="flex flex-col w-full h-full p-4 pt-2 sm:pt-4 overflow-auto">
-      <div class="flex items-center gap-4 mb-4 text-(--main-color)">
+      <div class="flex items-center gap-4 mb-4 text-(--contrast-main-color)">
         <icon
           v-tooltip="'Go back'"
           class="opacity-80 hover:opacity-100 text-3xl cursor-pointer"
@@ -1248,7 +1244,10 @@ const { copy } = useClipboard();
 
       <div v-if="loading" class="text-sm opacity-80">Loading...</div>
 
-      <div v-else-if="errorMessage" class="text-sm text-(--error-color)">
+      <div
+        v-else-if="errorMessage"
+        class="text-sm text-(--contrast-error-color)"
+      >
         {{ errorMessage }}
       </div>
 
@@ -1273,7 +1272,7 @@ const { copy } = useClipboard();
               <NuxtLink
                 v-if="hasEpub"
                 v-tooltip="'Read book'"
-                class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
+                class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
                 :to="`/books/${book.id}/read`"
               >
                 <icon name="lucide:book-open" class="text-xl" />
@@ -1283,7 +1282,7 @@ const { copy } = useClipboard();
                 <button
                   ref="downloadAnchorRef"
                   v-tooltip="'Download book'"
-                  class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center"
+                  class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center"
                   type="button"
                   :disabled="downloading"
                   :aria-expanded="downloadDropdownOpen"
@@ -1308,10 +1307,12 @@ const { copy } = useClipboard();
                 <div
                   v-if="downloadDropdownOpen && downloadChoices.length > 1"
                   ref="downloadPanelRef"
-                  class="absolute right-0 mt-1 w-44 bg-(--bg-color) border border-(--sub-color) rounded-md shadow-lg z-150 overflow-hidden"
+                  class="absolute right-0 mt-1 w-44 bg-(--bg-color) border border-(--contrast-border-color) rounded-md shadow-lg z-150 overflow-hidden"
                   role="menu"
                 >
-                  <div class="px-3 py-2 border-b border-(--sub-color)">
+                  <div
+                    class="px-3 py-2 border-b border-(--contrast-border-color)"
+                  >
                     <div class="text-xs opacity-70">Download as</div>
                   </div>
 
@@ -1319,7 +1320,7 @@ const { copy } = useClipboard();
                     <button
                       v-for="opt in downloadChoices"
                       :key="opt.file.id"
-                      class="w-full px-3 py-2 text-left justify-start! gap-3 transition rounded-none! flex items-center hover:bg-(--sub-color)/15 text-(--main-color) opacity-80 hover:opacity-100"
+                      class="w-full px-3 py-2 text-left justify-start! gap-3 transition rounded-none! flex items-center hover:bg-(--sub-color)/15 text-(--contrast-main-color) opacity-80 hover:opacity-100"
                       role="menuitem"
                       type="button"
                       :disabled="downloading"
@@ -1334,7 +1335,7 @@ const { copy } = useClipboard();
               <NuxtLink
                 v-if="canEditBook"
                 v-tooltip="'Edit book details'"
-                class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
+                class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
                 :to="`/books/${book.id}/edit`"
               >
                 <icon name="lucide:pencil" class="text-xl" />
@@ -1343,7 +1344,7 @@ const { copy } = useClipboard();
               <button
                 v-if="canEditBook"
                 v-tooltip="'Delete book'"
-                class="px-3 py-2 rounded-md border border-(--error-color) text-(--error-color) hover:bg-(--error-color)/90! text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
+                class="px-3 py-2 rounded-md border border-(--error-color) text-(--contrast-error-color) hover:bg-(--error-color)/90! text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
                 type="button"
                 :disabled="deleting"
                 @click="showDeleteConfirm = true"
@@ -1361,7 +1362,7 @@ const { copy } = useClipboard();
                 <div class="flex flex-wrap items-center justify-end gap-2">
                   <select
                     v-model="selectedStatusValue"
-                    class="min-w-44 px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                    class="min-w-44 px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
                     :disabled="statusSaving"
                     aria-label="Your status"
                     @change="() => saveStatus(book?.userStatus ?? null)"
@@ -1419,7 +1420,7 @@ const { copy } = useClipboard();
                     </div>
                     <input
                       v-model="startedAtInput"
-                      class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                      class="px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
                       type="date"
                       :disabled="statusMetaSaving"
                       @change="
@@ -1439,7 +1440,7 @@ const { copy } = useClipboard();
                     </div>
                     <input
                       v-model="finishedAtInput"
-                      class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                      class="px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
                       type="date"
                       :disabled="statusMetaSaving"
                       @change="
@@ -1459,7 +1460,7 @@ const { copy } = useClipboard();
                     </div>
                     <input
                       v-model="dnfAtInput"
-                      class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                      class="px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
                       type="date"
                       :disabled="statusMetaSaving"
                       @change="
@@ -1482,7 +1483,7 @@ const { copy } = useClipboard();
                     </div>
                     <input
                       v-model="tbrRankInput"
-                      class="w-28 px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm text-right"
+                      class="w-28 px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm text-right"
                       type="number"
                       min="1"
                       step="1"
@@ -1496,7 +1497,7 @@ const { copy } = useClipboard();
                     <span v-if="statusMetaSaving">Saving...</span>
                     <span
                       v-else-if="statusMetaErrorMessage"
-                      class="text-(--error-color)"
+                      class="text-(--contrast-error-color)"
                     >
                       {{ statusMetaErrorMessage }}
                     </span>
@@ -1524,7 +1525,7 @@ const { copy } = useClipboard();
                     <span v-if="progressSyncSaving">Saving...</span>
                     <span
                       v-else-if="progressSyncErrorMessage"
-                      class="text-(--error-color)"
+                      class="text-(--contrast-error-color)"
                     >
                       {{ progressSyncErrorMessage }}
                     </span>
@@ -1540,17 +1541,19 @@ const { copy } = useClipboard();
                   <div class="flex flex-wrap items-center justify-end gap-2">
                     <select
                       v-model="progressMode"
-                      class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                      class="px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
                       :disabled="progressLogSaving"
                     >
                       <option value="percent">Percent</option>
-                      <option value="page" :disabled="!book?.pages">Page</option>
+                      <option value="page" :disabled="!book?.pages">
+                        Page
+                      </option>
                     </select>
 
                     <input
                       v-if="progressMode === 'percent'"
                       v-model="progressPercentInput"
-                      class="w-28 px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm text-right"
+                      class="w-28 px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm text-right"
                       type="number"
                       min="0"
                       max="100"
@@ -1562,7 +1565,7 @@ const { copy } = useClipboard();
                     <div v-else class="flex items-center gap-2">
                       <input
                         v-model="progressPageInput"
-                        class="w-24 px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm text-right"
+                        class="w-24 px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm text-right"
                         type="number"
                         min="0"
                         step="1"
@@ -1576,13 +1579,13 @@ const { copy } = useClipboard();
 
                     <input
                       v-model="progressDateInput"
-                      class="px-2 py-1.5 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm"
+                      class="px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
                       type="date"
                       :disabled="progressLogSaving"
                     />
 
                     <button
-                      class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
+                      class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm"
                       type="button"
                       :disabled="
                         progressLogSaving ||
@@ -1603,7 +1606,7 @@ const { copy } = useClipboard();
                     </span>
                     <span
                       v-else-if="progressLogErrorMessage"
-                      class="text-(--error-color)"
+                      class="text-(--contrast-error-color)"
                     >
                       {{ progressLogErrorMessage }}
                     </span>
@@ -1632,7 +1635,7 @@ const { copy } = useClipboard();
 
                 <div
                   v-else-if="collectionsErrorMessage"
-                  class="text-sm text-(--error-color) text-right"
+                  class="text-sm text-(--contrast-error-color) text-right"
                 >
                   {{ collectionsErrorMessage }}
                 </div>
@@ -1644,7 +1647,7 @@ const { copy } = useClipboard();
                   <span
                     v-for="c in bookCollections"
                     :key="c.id"
-                    class="border border-(--sub-color) px-2 py-1 rounded-md text-xs"
+                    class="border border-(--contrast-border-color) px-2 py-1 rounded-md text-xs"
                   >
                     {{ c.name }}
                   </span>
@@ -1678,7 +1681,9 @@ const { copy } = useClipboard();
             </div>
 
             <!-- Title -->
-            <div class="text-4xl leading-tight font-serif text-(--main-color)">
+            <div
+              class="text-4xl leading-tight font-serif text-(--contrast-main-color)"
+            >
               {{ book.title }}
             </div>
 
@@ -1700,7 +1705,7 @@ const { copy } = useClipboard();
             <!-- Description -->
             <div
               v-if="book.description"
-              class="min-w-0 book-description prose prose-sm max-w-none text-(--text-color)"
+              class="min-w-0 book-description prose prose-sm max-w-none text-(--contrast-text-color)"
             >
               <div class="relative">
                 <div
@@ -1709,8 +1714,12 @@ const { copy } = useClipboard();
                   ]"
                 >
                   <ClientOnly>
-                    <!-- eslint-disable-next-line vue/no-v-html -->
-                    <div class="book-description-content" v-html="safeDescriptionHtml" />
+                    <!-- eslint-disable vue/no-v-html -->
+                    <div
+                      class="book-description-content"
+                      v-html="safeDescriptionHtml"
+                    />
+                    <!-- eslint-enable vue/no-v-html -->
                     <template #fallback>
                       <span class="book-description-content">{{
                         book.description
@@ -1741,7 +1750,7 @@ const { copy } = useClipboard();
               <div
                 v-for="t in book.tags ?? []"
                 :key="t.id"
-                class="inline-flex items-center px-2 py-1 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-xs cursor-pointer"
+                class="inline-flex items-center px-2 py-1 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-xs cursor-pointer"
                 @click="navigateTo(`/tags/${encodeURIComponent(t.id)}`)"
               >
                 {{ t.name }}
@@ -1819,7 +1828,7 @@ const { copy } = useClipboard();
               >
                 <span v-if="f.format" class="shrink-0 flex items-center"
                   ><span
-                    class="border border-(--sub-color) rounded px-1 no-wrap"
+                    class="border border-(--contrast-border-color) rounded px-1 no-wrap"
                     >{{ f.format.toUpperCase() }}</span
                   ></span
                 >
@@ -1838,9 +1847,9 @@ const { copy } = useClipboard();
               <span
                 v-for="(id, index) in book.identifiers"
                 :key="index"
-                class="border border-(--sub-color) px-2 py-1 rounded-md"
+                class="border border-(--contrast-border-color) px-2 py-1 rounded-md"
                 ><span v-if="id.type && id.value"
-                  ><span class="border-r border-(--sub-color) pr-1">
+                  ><span class="border-r border-(--contrast-border-color) pr-1">
                     {{ id.type }}
                   </span>
                   <span class="pl-1">{{ id.value }}</span>
@@ -1878,8 +1887,8 @@ const { copy } = useClipboard();
                       class="text-2xl"
                       :class="
                         effectiveRatingValue
-                          ? 'text-(--main-color)'
-                          : 'text-(--sub-color)'
+                          ? 'text-(--contrast-main-color)'
+                          : 'text-(--contrast-sub-color)'
                       "
                     />
                   </div>
@@ -1908,7 +1917,7 @@ const { copy } = useClipboard();
             @close="() => (showDeleteConfirm = false)"
           >
             <div class="flex flex-col gap-4 w-90 max-w-full">
-              <div class="text-lg font-semibold text-(--error-color)">
+              <div class="text-lg font-semibold text-(--contrast-error-color)">
                 Delete book?
               </div>
 
@@ -1943,7 +1952,7 @@ const { copy } = useClipboard();
                     :disabled="deleting"
                   />
                   <span
-                    class="h-4 w-4 mt-1 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                    class="h-4 w-4 mt-1 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                   ></span>
                   <div class="min-w-0">
                     <div class="font-medium">Database only</div>
@@ -1968,7 +1977,7 @@ const { copy } = useClipboard();
                     class="h-4 w-4 mt-1 border border-(--error-color) rounded transition peer-checked:bg-(--error-color) cursor-pointer shrink-0"
                   ></span>
                   <div class="min-w-0">
-                    <div class="font-medium text-(--error-color)">
+                    <div class="font-medium text-(--contrast-error-color)">
                       Everything (remove folder)
                     </div>
                     <div class="opacity-70 text-xs">
@@ -1987,7 +1996,7 @@ const { copy } = useClipboard();
                     :disabled="deleting"
                   />
                   <span
-                    class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                    class="h-4 w-4 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                   ></span>
                   <span class="opacity-80 text-xs">Remember my selection</span>
                 </label>
@@ -1995,7 +2004,7 @@ const { copy } = useClipboard();
 
               <div class="flex gap-2 justify-end">
                 <button
-                  class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
+                  class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm"
                   type="button"
                   :disabled="deleting"
                   @click="showDeleteConfirm = false"
@@ -2004,7 +2013,7 @@ const { copy } = useClipboard();
                 </button>
 
                 <button
-                  class="px-3 py-2 rounded-md bg-(--error-color) text-(--bg-color) hover:opacity-90 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                  class="px-3 py-2 rounded-md bg-(--error-color) text-(--contrast-error-inverse-color) hover:opacity-90 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                   type="button"
                   :disabled="deleting"
                   @click="deleteBook"
@@ -2022,7 +2031,6 @@ const { copy } = useClipboard();
             </div>
           </ModalWindow>
         </div>
-
       </div>
 
       <div v-else class="text-sm opacity-80">No book loaded.</div>
@@ -2037,7 +2045,7 @@ const { copy } = useClipboard();
       >
         <button
           type="button"
-          class="fixed top-3 right-3 bg-(--bg-color) border border-(--sub-color) rounded-full w-9 h-9 flex items-center justify-center hover:bg-(--sub-color)/10"
+          class="fixed top-3 right-3 bg-(--bg-color) border border-(--contrast-border-color) rounded-full w-9 h-9 flex items-center justify-center hover:bg-(--sub-color)/10"
           @click="closeCoverViewer"
         >
           <icon name="lucide:x" class="scale-135" />
@@ -2073,11 +2081,14 @@ const { copy } = useClipboard();
             />
           </div>
 
-          <div v-if="collectionsSaveError" class="text-sm text-(--error-color)">
+          <div
+            v-if="collectionsSaveError"
+            class="text-sm text-(--contrast-error-color)"
+          >
             {{ collectionsSaveError }}
           </div>
 
-          <div class="border border-(--sub-color) rounded-lg p-3">
+          <div class="border border-(--contrast-border-color) rounded-lg p-3">
             <div class="text-sm font-semibold mb-2">
               Your editable collections
             </div>
@@ -2115,7 +2126,7 @@ const { copy } = useClipboard();
                     @change="onToggleDesiredCollection(c.id)"
                   />
                   <span
-                    class="h-4 w-4 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
+                    class="h-4 w-4 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
                   ></span>
 
                   <div class="min-w-0 flex items-center gap-2">
@@ -2138,7 +2149,7 @@ const { copy } = useClipboard();
 
           <div class="flex items-center justify-end gap-2">
             <button
-              class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
+              class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm"
               type="button"
               :disabled="collectionsSaving"
               @click="closeCollectionsManager"
@@ -2218,14 +2229,15 @@ const { copy } = useClipboard();
 }
 
 .book-description :deep(.book-description-content blockquote) {
-  border-left: 3px solid color-mix(in srgb, var(--main-color) 40%, var(--sub-color));
+  border-left: 3px solid
+    color-mix(in srgb, var(--main-color) 40%, var(--contrast-border-color));
   opacity: 0.85;
   padding-left: 0.9rem;
 }
 
 .book-description :deep(.book-description-content strong),
 .book-description :deep(.book-description-content b) {
-  color: color-mix(in srgb, var(--text-color) 92%, black);
+  color: color-mix(in srgb, var(--contrast-text-color) 92%, black);
   font-weight: 800;
   font-variation-settings: 'wght' 800;
 }
@@ -2236,7 +2248,7 @@ const { copy } = useClipboard();
 }
 
 .book-description :deep(.book-description-content a) {
-  color: var(--main-color);
+  color: var(--contrast-main-color);
   text-decoration: underline;
 }
 </style>

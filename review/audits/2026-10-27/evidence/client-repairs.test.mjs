@@ -11,6 +11,10 @@ import {
   defaultThemePreference,
   normalizeThemePreference,
 } from '../../../../app/utils/themePreference.ts';
+import {
+  DEFAULT_APPEARANCE_CONTRAST,
+  normalizeAppearanceContrast,
+} from '../../../../app/utils/appearanceContrast.ts';
 
 for (const name of ['Grid', 'List']) {
   test(`${name} retains the latest scope when responses arrive out of order`, async () => {
@@ -112,6 +116,8 @@ test('settings pull keeps local edits while adopting unchanged remote fields', a
     normalizeBookFields,
     defaultThemePreference,
     normalizeThemePreference,
+    DEFAULT_APPEARANCE_CONTRAST,
+    normalizeAppearanceContrast,
     console,
   };
   vm.createContext(c);

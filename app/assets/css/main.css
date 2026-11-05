@@ -5,11 +5,129 @@
   --yes-color: #008800;
   --no-color: #880000;
   --transition: all 0.3s;
+  --appearance-contrast-base: 100%;
+  --appearance-contrast-boost: 0%;
+  --appearance-contrast-border-boost: 0%;
+  --contrast-text-color: var(--text-color);
+  --contrast-sub-color: var(--sub-color);
+  --contrast-main-color: var(--main-color);
+  --contrast-error-color: var(--error-color);
+  --contrast-border-color: var(--sub-color);
+  --contrast-sub-alt-border-color: var(--sub-alt-color);
+  --contrast-main-border-color: var(--main-color);
+  --contrast-inverse-color: var(--bg-color);
+  --contrast-error-inverse-color: var(--bg-color);
+}
+
+@supports (color: color-mix(in oklab, black, white)) {
+  :root {
+    --contrast-text-color: color-mix(
+      in oklab,
+      color-mix(
+        in oklab,
+        var(--text-color) var(--appearance-contrast-base),
+        var(--bg-color)
+      ),
+      var(--appearance-contrast-target) var(--appearance-contrast-boost)
+    );
+    --contrast-sub-color: color-mix(
+      in oklab,
+      color-mix(
+        in oklab,
+        var(--sub-color) var(--appearance-contrast-base),
+        var(--bg-color)
+      ),
+      var(--appearance-contrast-target) var(--appearance-contrast-boost)
+    );
+    --contrast-main-color: color-mix(
+      in oklab,
+      color-mix(
+        in oklab,
+        var(--main-color) var(--appearance-contrast-base),
+        var(--bg-color)
+      ),
+      var(--appearance-contrast-target) var(--appearance-contrast-boost)
+    );
+    --contrast-error-color: color-mix(
+      in oklab,
+      color-mix(
+        in oklab,
+        var(--error-color) var(--appearance-contrast-base),
+        var(--bg-color)
+      ),
+      var(--appearance-contrast-target) var(--appearance-contrast-boost)
+    );
+    --contrast-border-color: color-mix(
+      in srgb,
+      color-mix(
+        in srgb,
+        var(--sub-color) var(--appearance-contrast-base),
+        transparent
+      ),
+      var(--text-color) var(--appearance-contrast-border-boost)
+    );
+    --contrast-sub-alt-border-color: color-mix(
+      in srgb,
+      color-mix(
+        in srgb,
+        var(--sub-alt-color) var(--appearance-contrast-base),
+        transparent
+      ),
+      var(--text-color) var(--appearance-contrast-border-boost)
+    );
+    --contrast-main-border-color: color-mix(
+      in srgb,
+      color-mix(
+        in srgb,
+        var(--main-color) var(--appearance-contrast-base),
+        transparent
+      ),
+      var(--text-color) var(--appearance-contrast-border-boost)
+    );
+    --contrast-inverse-color: color-mix(
+      in oklab,
+      color-mix(
+        in oklab,
+        var(--bg-color) var(--appearance-contrast-base),
+        var(--main-color)
+      ),
+      var(--appearance-contrast-inverse-target) var(--appearance-contrast-boost)
+    );
+    --contrast-error-inverse-color: color-mix(
+      in oklab,
+      color-mix(
+        in oklab,
+        var(--bg-color) var(--appearance-contrast-base),
+        var(--error-color)
+      ),
+      var(--appearance-contrast-error-inverse-target)
+        var(--appearance-contrast-boost)
+    );
+  }
+}
+
+@layer components {
+  .contrast-status {
+    color: var(--contrast-status-color);
+  }
+  @supports (color: color-mix(in oklab, black, white)) {
+    .contrast-status {
+      color: color-mix(
+        in oklab,
+        color-mix(
+          in oklab,
+          var(--contrast-status-color) var(--appearance-contrast-base),
+          var(--bg-color)
+        ),
+        var(--appearance-contrast-target) var(--appearance-contrast-boost)
+      );
+    }
+  }
 }
 
 body {
   background: var(--bg-color);
-  color: var(--text-color);
+  color: var(--contrast-text-color);
   font-family: 'Geist', sans-serif;
   overflow: hidden;
   scrollbar-color: var(--main-color) transparent;
@@ -83,7 +201,7 @@ code {
 
 hr {
   border: none;
-  border-top: 1px solid var(--sub-alt-color);
+  border-top: 1px solid var(--contrast-sub-alt-border-color);
   margin: 1rem 0;
 }
 
@@ -102,7 +220,7 @@ input {
 
   --slider-track-bg: var(--sub-alt-color);
   --slider-fill-bg: var(--main-color);
-  --slider-thumb-bg: var(--text-color);
+  --slider-thumb-bg: var(--contrast-text-color);
   --slider-thumb-ring: color-mix(in srgb, var(--main-color) 65%, transparent);
 }
 
@@ -259,14 +377,14 @@ table {
   width: 100%;
   border-radius: 10px;
   overflow: hidden; /* Ensures content fits rounded corners */
-  border: 1px solid var(--sub-alt-color);
+  border: 1px solid var(--contrast-sub-alt-border-color);
   background: var(--bg-color);
 }
 
 th,
 td {
   padding: 12px 16px;
-  border-bottom: 1px solid var(--sub-alt-color);
+  border-bottom: 1px solid var(--contrast-sub-alt-border-color);
   text-align: left;
 }
 
@@ -290,7 +408,7 @@ tr:last-child td {
 ::selection {
   background-color: var(--main-color);
   color: var(--bg-color);
-  outline: 3px solid var(--sub-color);
+  outline: 3px solid var(--contrast-border-color);
 }
 
 .focus-outline:focus {
@@ -314,7 +432,7 @@ tr:last-child td {
   max-width: 70ch;
   border-radius: 10px;
   background: var(--sub-alt-color);
-  color: var(--text-color);
+  color: var(--contrast-text-color);
   padding: 7px 10px;
   box-shadow: 0 5px 5px rgba(0, 0, 0, 0.1);
 }

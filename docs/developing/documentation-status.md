@@ -40,6 +40,14 @@ Only documentation, its link checker, the package command, and the CI check chan
 
 The offline demo reported unavailable external font providers and fallback icon requests. Core actions above completed, but these screenshots are not production styling evidence. See [screenshot provenance](../images/README.md).
 
+## Interface contrast verification (2026-11-04)
+
+The contrast change passed all 243 tests, typechecking, the production build, and the documentation link check. Lint passed with the existing `BookDescriptionEditor.vue` prop warning.
+
+Headless Chromium exercised the production build with a disposable synthetic account. Light and dark themes matched their original text and border colors at 100%. Checks at 50%, 150%, and 200% confirmed background blending, text boosting in OKLab, and the separate quarter-strength border boost. Body and header backgrounds stayed unchanged, with no opacity or filter applied to the page. Saved contrast appeared in SSR HTML and survived reload. Reset, keyboard adjustment, and custom light/dark background target changes passed without page errors.
+
+Store tests cover independent desktop/mobile values and unchanged saved palettes. The demo blocked outbound requests and used fallback icons where external providers were unavailable. Other browser engines and physical mobile devices were not exercised.
+
 ## Reading-status cover menu verification
 
 Issue #31 adds status changes to grid, list, and dashboard cover menus. `node review/book-status-browser.mjs` exercises the real local API and synthetic database. It checks all status choices, current-choice marks, date transitions, filtered-result removal, failed saves and retry, dashboard refresh, existing EPUB downloads, unavailable status reads, and bulk selection mode. Browser request interception supplies the failure cases. The check uses its own headless Chromium profile and no real library data.

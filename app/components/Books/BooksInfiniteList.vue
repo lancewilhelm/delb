@@ -537,7 +537,7 @@ onBeforeUnmount(() => {
     @scroll="onScroll"
   >
     <div ref="contentRef" class="pb-4">
-      <div v-if="errorMessage" class="text-sm text-(--error-color) mb-3">
+      <div v-if="errorMessage" class="text-sm text-(--contrast-error-color) mb-3">
         {{ errorMessage }}
       </div>
 
@@ -564,7 +564,7 @@ onBeforeUnmount(() => {
 
       <div v-else class="w-full">
         <div
-          class="sticky top-0 z-10 bg-(--bg-color) border-b border-(--sub-color)/50"
+          class="sticky top-0 z-10 bg-(--bg-color) border-b border-(--contrast-border-color)/50"
           :style="listRowLayoutStyle"
         >
           <div

@@ -76,7 +76,7 @@ const editor = useEditor({
   editorProps: {
     attributes: {
       class:
-        'tiptap prose prose-sm max-w-none min-h-36 px-3 py-2 text-(--text-color) focus:outline-none',
+        'tiptap prose prose-sm max-w-none min-h-36 px-3 py-2 text-(--contrast-text-color) focus:outline-none',
     },
   },
   onUpdate: ({ editor }) => {
@@ -181,7 +181,7 @@ function clearFormatting() {
     <div class="flex flex-wrap gap-2">
       <button
         type="button"
-        class="flex-1 sm:flex-none border border-(--sub-color) px-3 py-2 rounded-md transition text-sm"
+        class="flex-1 sm:flex-none border border-(--contrast-border-color) px-3 py-2 rounded-md transition text-sm"
         :class="
           mode === 'rich'
             ? 'bg-(--main-color)/20'
@@ -194,7 +194,7 @@ function clearFormatting() {
       </button>
       <button
         type="button"
-        class="flex-1 sm:flex-none border border-(--sub-color) px-3 py-2 rounded-md transition text-sm"
+        class="flex-1 sm:flex-none border border-(--contrast-border-color) px-3 py-2 rounded-md transition text-sm"
         :class="
           mode === 'html'
             ? 'bg-(--main-color)/20'
@@ -327,7 +327,7 @@ function clearFormatting() {
           </div>
 
           <div
-            class="description-editor-shell rounded-md border border-(--sub-color) bg-(--bg-color) overflow-y-auto"
+            class="description-editor-shell rounded-md border border-(--contrast-border-color) bg-(--bg-color) overflow-y-auto"
             @click="focusEditor"
           >
             <EditorContent :editor="editor" />
@@ -337,7 +337,7 @@ function clearFormatting() {
         <template #fallback>
           <textarea
             :value="modelValue"
-            class="w-full h-52 max-h-52 overflow-y-auto px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) resize-y"
+            class="w-full h-52 max-h-52 overflow-y-auto px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) resize-y"
             :placeholder="placeholder"
             @input="
               emit(
@@ -356,7 +356,7 @@ function clearFormatting() {
       </div>
       <textarea
         :value="modelValue"
-        class="w-full h-52 max-h-52 overflow-y-auto px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) font-mono text-sm resize-y"
+        class="w-full h-52 max-h-52 overflow-y-auto px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) font-mono text-sm resize-y"
         :placeholder="placeholder"
         @input="
           emit(
@@ -373,7 +373,7 @@ function clearFormatting() {
 .description-toolbar-btn {
   align-items: center;
   background: color-mix(in srgb, var(--bg-color) 100%, transparent);
-  border: 1px solid var(--sub-color);
+  border: 1px solid var(--contrast-border-color);
   border-radius: 0.375rem;
   cursor: pointer;
   display: inline-flex;
@@ -395,7 +395,7 @@ function clearFormatting() {
 
 .description-toolbar-btn-active {
   background: color-mix(in srgb, var(--main-color) 20%, var(--bg-color));
-  border-color: color-mix(in srgb, var(--main-color) 50%, var(--sub-color));
+  border-color: color-mix(in srgb, var(--main-color) 50%, var(--contrast-border-color));
 }
 
 .description-editor-shell {
@@ -458,13 +458,13 @@ function clearFormatting() {
 }
 
 :deep(.tiptap blockquote) {
-  border-left: 3px solid color-mix(in srgb, var(--main-color) 40%, var(--sub-color));
+  border-left: 3px solid color-mix(in srgb, var(--main-color) 40%, var(--contrast-border-color));
   opacity: 0.85;
   padding-left: 0.9rem;
 }
 
 :deep(.tiptap strong) {
-  color: color-mix(in srgb, var(--text-color) 92%, black);
+  color: color-mix(in srgb, var(--contrast-text-color) 92%, black);
   font-weight: 800;
 }
 
@@ -473,7 +473,7 @@ function clearFormatting() {
 }
 
 :deep(.tiptap a) {
-  color: var(--main-color);
+  color: var(--contrast-main-color);
   text-decoration: underline;
 }
 

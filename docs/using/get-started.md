@@ -40,4 +40,12 @@ Open `/login`, enter your email and password, and select **Login**. Delb restore
 
 If a form reports an error, correct the named field and submit again. A failed registration does not establish that an account or usable session exists.
 
+## Adjust interface contrast
+
+1. Open **Settings → Appearance**.
+2. Move **Contrast** below 100% to soften text and borders, or above 100% to strengthen them.
+3. Select **Reset contrast to 100%** to restore the original theme.
+
+Changes save automatically. When separate mobile settings are enabled, the slider changes the active device profile. See the [contrast reference](../developing/reference/settings.md#interface-contrast) for the text and border behavior.
+
 Continue with [adding books](add-books.md). For the implementation behind registration and Personal collections, read [account initialization](../developing/core-workflows.md#account-initialization).

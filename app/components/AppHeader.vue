@@ -22,12 +22,12 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
 
 <template>
   <div
-    class="z-140 flex justify-between items-center h-10 app-header bg-(--sub-alt-color) border-b border-t border-(--sub-color)"
+    class="z-140 flex justify-between items-center h-10 app-header bg-(--sub-alt-color) border-b border-t border-(--contrast-border-color)"
   >
     <!-- Left: app/home -->
     <div class="flex items-center gap-3 sm:gap-4 px-2 app-header-left">
       <div
-        class="text-(--main-color) cursor-pointer header-icon font-medium text-2xl logo"
+        class="text-(--contrast-main-color) cursor-pointer header-icon font-medium text-2xl logo"
         @click="
           () => {
             if (route.path === '/') {
@@ -62,14 +62,14 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
           >
             <Icon
               name="lucide:folder"
-              class="text-(--main-color) opacity-80 shrink-0"
+              class="text-(--contrast-main-color) opacity-80 shrink-0"
             />
             <span class="max-w-48 truncate text-sm opacity-80">
               Collection
             </span>
             <Icon
               name="lucide:chevron-down"
-              class="text-(--main-color) opacity-80 shrink-0"
+              class="text-(--contrast-main-color) opacity-80 shrink-0"
             />
           </button>
         </template>
@@ -77,7 +77,7 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
       <Icon
         v-tooltip="'Add book'"
         name="lucide:book-plus"
-        class="text-(--main-color) cursor-pointer text-xl header-icon"
+        class="text-(--contrast-main-color) cursor-pointer text-xl header-icon"
         @click="openAddBook"
       />
     </div>
@@ -91,13 +91,13 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
         v-if="!isMobileDevice || !mobileSearchButton"
         v-tooltip="'Open global search'"
         name="lucide:search"
-        class="text-(--main-color) cursor-pointer text-xl header-icon"
+        class="text-(--contrast-main-color) cursor-pointer text-xl header-icon"
         @click="uiStore.setGlobalSearchVisible(!uiStore.globalSearchVisible)"
       />
       <Icon
         v-tooltip="'Open command palette'"
         name="lucide:command"
-        class="text-(--main-color) cursor-pointer text-xl header-icon"
+        class="text-(--contrast-main-color) cursor-pointer text-xl header-icon"
         @click="
           uiStore.setCommandPaletteVisible(!uiStore.commandPaletteVisible)
         "
@@ -105,7 +105,7 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
       <Icon
         v-tooltip="'Open Settings'"
         name="lucide:settings"
-        class="text-(--main-color) cursor-pointer text-xl header-icon"
+        class="text-(--contrast-main-color) cursor-pointer text-xl header-icon"
         @click="navigateTo('/settings')"
       />
     </div>
@@ -114,13 +114,13 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
     <!-- Mobile: Search button at bottom right of scren -->
     <div
       v-if="isMobileDevice && mobileSearchButton"
-      class="absolute bottom-7 right-7 p-4 bg-(--sub-alt-color)/80 border border-(--sub-color) z-1000 rounded-full flex items-center justify-center"
+      class="absolute bottom-7 right-7 p-4 bg-(--sub-alt-color)/80 border border-(--contrast-border-color) z-1000 rounded-full flex items-center justify-center"
       @click="uiStore.setGlobalSearchVisible(!uiStore.globalSearchVisible)"
     >
       <Icon
         v-tooltip="'Open global search'"
         name="lucide:search"
-        class="text-(--main-color) cursor-pointer text-2xl"
+        class="text-(--contrast-main-color) cursor-pointer text-2xl"
       />
     </div>
   </div>

@@ -10,7 +10,7 @@ const emit = defineEmits(['remove']);
 
 <template>
   <div
-    class="inline-flex items-center gap-2 px-2 py-1 rounded-md border border-(--sub-color) text-sm"
+    class="inline-flex items-center gap-2 px-2 py-1 rounded-md border border-(--contrast-border-color) text-sm"
   >
     <span class="truncate max-w-60">
       {{ props.label }}

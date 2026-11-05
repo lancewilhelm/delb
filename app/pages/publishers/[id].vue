@@ -131,7 +131,7 @@ onMounted(async () => {
 <template>
   <div class="flex flex-col w-full h-full overflow-hidden">
     <AppHeader class="w-full" />
-    <div class="px-2 shrink-0 border-b border-(--sub-color)">
+    <div class="px-2 shrink-0 border-b border-(--contrast-border-color)">
       <div class="flex items-center justify-between gap-2">
         <ViewSelectorDropdown />
         <div class="flex items-center gap-3">
@@ -143,7 +143,7 @@ onMounted(async () => {
     <!-- Fixed header + scrollable books grid -->
     <div class="w-full h-full overflow-hidden flex flex-col min-h-0">
       <div class="p-4 shrink-0">
-        <div class="flex items-center gap-2 text-(--main-color)">
+        <div class="flex items-center gap-2 text-(--contrast-main-color)">
           <Icon
             v-tooltip="'Go back'"
             name="lucide:arrow-left"
@@ -157,14 +157,17 @@ onMounted(async () => {
             </div>
 
             <div
-              class="text-sm sm:text-md opacity-70 italic text-(--sub-color)"
+              class="text-sm sm:text-md opacity-70 italic text-(--contrast-sub-color)"
             >
               {{ bookCount }} book{{ bookCount === 1 ? '' : 's' }}
             </div>
           </div>
         </div>
 
-        <div v-if="errorMessage" class="text-sm text-red-600 mt-2">
+        <div
+          v-if="errorMessage"
+          class="text-sm [--contrast-status-color:var(--color-red-600)] mt-2 contrast-status"
+        >
           {{ errorMessage }}
         </div>
       </div>
