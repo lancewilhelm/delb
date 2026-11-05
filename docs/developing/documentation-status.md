@@ -48,6 +48,12 @@ Headless Chromium exercised the production build with a disposable synthetic acc
 
 Store tests cover independent desktop/mobile values and unchanged saved palettes. The demo blocked outbound requests and used fallback icons where external providers were unavailable. Other browser engines and physical mobile devices were not exercised.
 
+## Reading-status cover menu verification
+
+Issue #31 adds status changes to grid, list, and dashboard cover menus. `node review/book-status-browser.mjs` exercises the real local API and synthetic database. It checks all status choices, current-choice marks, date transitions, filtered-result removal, failed saves and retry, dashboard refresh, existing EPUB downloads, unavailable status reads, and bulk selection mode. Browser request interception supplies the failure cases. The check uses its own headless Chromium profile and no real library data.
+
+The change passed the full 237-test suite, typecheck, production build, documentation links, and lint. Lint retains one existing `BookDescriptionEditor.vue` warning. Physical touch devices, assistive technology, and other browser engines were not exercised.
+
 ## Reconciled documentation drift
 
 | Earlier description                                            | Current source evidence                                                                                                                                           | Documentation treatment                                                                        |

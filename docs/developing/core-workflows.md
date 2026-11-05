@@ -77,6 +77,8 @@ Relocation sends `PUT /api/books/:id/reading-position`. The request can include 
 
 Progress-history sync is opt-in per user/book. Position updates can append reader-sourced progress entries when enabled. On open, the enabled reader can also restore from the latest logged percentage after EPUB locations finish generating, provided the user has not already navigated. Manual progress logs and Finished status create their own entries. A historical percentage remains a separate record from an EPUB location even when this restoration converts between them.
 
+Grid cards, list covers, and dashboard Continue reading covers expose **Reading status** in their context menu. The [shared status menu](../../app/composables/useBookReadingStatusMenu.ts) reads `GET /api/books/:id/status` whenever the menu opens and saves a choice with `POST` to the same endpoint. Successful saves refresh the containing book view or dashboard. Failed saves keep the menu open for retry. Existing View and Download actions remain available, and bulk selection mode disables the cover menu.
+
 [Status transitions](../../server/utils/books/status-transition.ts) apply date and To be read ordering rules. The [bulk status endpoint](../../server/api/books/bulk/status.post.ts) accepts explicit book IDs and applies the current user's status only to visible records. It does not accept all-in-scope selection semantics. Personal ratings use a user/book record with a half-star integer value. Sharing the book leaves each user's records separate.
 
 ## Settings and background work
