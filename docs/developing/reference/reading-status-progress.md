@@ -35,6 +35,12 @@ Status metadata lives on `user_book_status` and is user-scoped:
   - Removing a ranked TBR book shifts higher ranks down.
   - Ranks are capped to the current TBR list size.
 
+## Cover context menu
+
+Book grid and list covers offer **Reading status** with **To be read**, **Reading**, **Finished**, **DNF**, and **No status**. The dashboard Continue reading covers offer the same menu. Choices apply to the signed-in user, including on reference-only books.
+
+Opening the menu fetches the current status. Saving uses the single-book status endpoint and the transition rules above. The menu marks the current choice, disables actions while saving, and retains errors for retry. A successful save refreshes the enclosing view so status fields, status filters, and dashboard totals reflect the saved value. Bulk selection mode keeps its existing separate status action.
+
 ## Progress logging
 
 Progress logs live in `user_book_progress_log` to support charting and history.

@@ -95,3 +95,15 @@ For browser verification, use a fresh dedicated checkout and the synthetic setup
 The browser checks exercise grid and list sorting on tag, author, and publisher pages. They verify cursor-position context menus, left-aligned actions, keyboard card actions without dropdown buttons, confirmation focus, the empty and selected merge preview, delete and merge navigation, viewport-edge menu placement, ordinary-user controls, and delayed header responses. The runner saves the standard theme for its synthetic owner account before taking screenshots. The browser fixture tags are reset before each run. Results, screenshots, and synthetic credentials remain in `.audit/`; do not commit that directory. Exclude `.audit/**` when running lint in a checkout containing browser profiles.
 
 Deleting a tag removes its links from every book. Merging moves those links to an existing destination tag and deletes the source tag in one transaction. Both actions require confirmation. A later metadata edit or import can recreate the old tag name.
+
+## Book reading-status menu checks
+
+Use the disposable demo setup above, build the app with `pnpm build`, and start `node review/start-demo.mjs --production`. In a second terminal at the same checkout, run:
+
+```sh
+node review/book-status-browser.mjs
+```
+
+The runner starts its own headless Chrome with a temporary profile. On macOS it uses the standard Google Chrome application path. Set `CHROME_BIN` to the Chrome or Chromium executable on other systems. `DELB_REVIEW_URL` can select another loopback demo port.
+
+The checks create a synthetic account and a reference-only book. They exercise all five status choices in the grid, status changes in the list, filtered-result removal, pending and failed saves, retry, dashboard refresh, existing EPUB downloads, failed status reads, and bulk selection mode. Results and a menu screenshot are saved under `review/demo/` and ignored by Git. Session cookies and passwords stay in memory. These checks use the real local status API and database. The simulated save failure uses browser request interception.

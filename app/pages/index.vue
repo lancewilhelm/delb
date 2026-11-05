@@ -265,7 +265,11 @@ onMounted(async () => {
                   :key="b.id"
                   class="w-40 shrink-0"
                 >
-                  <BookThumbnail :book="b" :lock-aspect-ratio="true" />
+                  <BookThumbnail
+                    :book="b"
+                    :lock-aspect-ratio="true"
+                    @status-change="refreshDashboard"
+                  />
                   <div class="text-xs opacity-70 mt-1">
                     <span v-if="typeof b.progress === 'number'">
                       {{ b.progress.toFixed(1) }}%
