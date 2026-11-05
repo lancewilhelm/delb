@@ -49,6 +49,8 @@ The [manual handler](../../server/api/books/index.post.ts), [metadata handler](.
 
 The header's [collection store](../../app/stores/collections.ts) holds either All or a concrete collection selection. The [Books page](../../app/pages/books/index.vue) combines it with filters, sort settings, and view preferences. Grid/list components request pages and render the visible portion of the list.
 
+The dashboard's **All books** link calls the [Books filter store](../../app/stores/booksIndexFilters.ts) to clear its persisted status, date-added, and file-presence filters before navigation. The collection selection, sort settings, and view preferences remain unchanged. Dashboard status links retain their status query parameters.
+
 [Book listing](../../server/api/books/index.get.ts) first resolves the authenticated reader's collection memberships. A selected collection must belong to that set. Status filters join the reader's personal status records. Stable sort keys and cursors keep pagination consistent for a chosen ordering. The response enriches the page with the metadata selected by book views.
 
 [Entity list queries](../../server/utils/books/entity-list-query.ts) serve book lists under authors, publishers, and tags. [Global search](../../server/api/search/index.get.ts) searches across accessible records, including stored identifiers. Its visibility scope is not an automatic copy of every Books-page filter.
