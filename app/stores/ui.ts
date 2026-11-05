@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 
 export type LibraryView =
-  'books' | 'authors' | 'series' | 'publishers' | 'tags';
+  'books' | 'authors' | 'series' | 'publishers' | 'tags' | 'to-be-read';
 
 export type BooksSortKey =
   'dateAdded' | 'alphabetical' | 'publishedDate' | 'pages';

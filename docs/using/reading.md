@@ -30,6 +30,19 @@ The menu closes after a successful save, and the book view refreshes. A book lea
 
 Changes affect your account's status, not the status of other collection members. See [status and date rules](../developing/reference/reading-status-progress.md) for the complete transitions.
 
+## Order your To be read queue
+
+1. Select **To be read** in the view menu or on the dashboard.
+2. Drag a book's handle with a mouse or touch, or use its up and down arrows.
+3. Click **Add rationale** or an existing rationale to edit it on the page.
+4. Select **Save** to keep the note or **Cancel** to discard the edit.
+
+Your private queue includes books from every collection you can access. Rank 1 is the book you most want to read. The dashboard's To be read count always covers this full queue, regardless of the selected collection.
+
+Book details show the same rationale and offer numeric rank entry for longer moves. A rationale remains after you start, finish, or remove a book from TBR. Clear the text and save to remove the rationale. If saving fails, the editor keeps your draft for retry.
+
+New and re-added books join the end. A book leaves the queue when you lose all access to it. If access returns while its status is still To be read, it rejoins at the end with its rationale preserved.
+
 ## Log progress
 
 1. Find the progress log controls on the book detail page.

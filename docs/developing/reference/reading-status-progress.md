@@ -34,6 +34,19 @@ Status metadata lives on `user_book_status` and is user-scoped:
   - Moving a book up shifts intermediate ranks down.
   - Removing a ranked TBR book shifts higher ranks down.
   - Ranks are capped to the current TBR list size.
+  - The queue spans all accessible collections and deduplicates books.
+  - Newly added and re-added books append at the end.
+  - Losing all collection access clears the rank and closes gaps. Restored access appends the book if its status is still `to_be_read`.
+
+## TBR rationale and visibility
+
+`user_book_rationale` stores one private plain-text rationale per user and book, independently of `user_book_status`. Clearing status retains the rationale. Reads and writes require current book visibility and use the authenticated user's identity.
+
+The dedicated TBR page loads the full ranked queue. Its inline editor and book details use the same rationale endpoints. The dashboard TBR count is global to the reader, while other counts retain their selected collection scope.
+
+Migration `0006_tbr_queue` normalizes existing accessible ranks and installs access-change triggers on `collection_members` and `collection_books`. These triggers observe loss and restoration in the same transaction as sharing changes, including cascades. A revoke-and-restore cycle therefore appends the book even when no queue request occurs between the two operations. A book remains ranked while any collection still grants access.
+
+The status transition service handles numeric moves and single/bulk status changes transactionally. Access-change triggers use a materialized ranked sequence through SQLite `UPDATE FROM` so rank compaction preserves the existing order.
 
 ## Cover context menu
 
@@ -53,7 +66,7 @@ Progress logs live in `user_book_progress_log` to support charting and history.
 ## UI/UX entry points
 
 - Book detail page: edit status and dates, log manual progress, toggle sync.
-- Future list view: may expose columns for quick date edits and TBR ordering.
+- To be read page: reorder with mouse/touch handles or row arrows, and edit private rationale inline.
 
 ## Implementation references
 

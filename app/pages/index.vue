@@ -71,7 +71,7 @@ const stats = computed(
       {
         key: 'to_be_read',
         label: 'To be read',
-        to: '/books?status=to_be_read',
+        to: '/to-be-read',
       },
       { key: 'finished', label: 'Finished', to: '/books?status=finished' },
       { key: 'dnf', label: 'DNF', to: '/books?status=dnf' },
