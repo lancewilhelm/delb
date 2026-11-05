@@ -43,6 +43,15 @@ A reader's saved location within an ebook. It is distinct from the historical pr
 **Progress log**:
 A reader's history of progress entries for a book, recorded manually, through reader sync, or when marking the book Finished.
 
+**TBR queue**:
+A reader's private, ordered list of books they plan to read. The queue spans all collections the reader can access.
+
+**TBR rank**:
+A book's position in a reader's TBR queue, starting at 1 for the book they most want to read.
+
+**TBR rationale**:
+A reader's optional, private note explaining a book's place in their TBR queue. The note remains associated with the reader and book after the book leaves the queue.
+
 **Book view**:
 A presentation of a set of books as a grid of cover cards or a list of rows.
 
