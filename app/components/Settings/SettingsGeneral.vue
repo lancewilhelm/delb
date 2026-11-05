@@ -182,7 +182,7 @@ async function handleUpdateProfile() {
         Donde está la biblioteca
       </div>
       <div class="text-(--contrast-sub-color) italic">
-        version: {{ config.public.appVersion || 'manual' }}
+        version: {{ config.public.appVersion }}
       </div>
       <NuxtLink
         to="https://github.com/lancewilhelm/delb"

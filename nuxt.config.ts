@@ -1,5 +1,22 @@
+import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import tailwindcss from '@tailwindcss/vite';
+
+function getAppVersion() {
+  if (process.env.NUXT_PUBLIC_APP_VERSION) {
+    return process.env.NUXT_PUBLIC_APP_VERSION;
+  }
+
+  try {
+    return execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], {
+      cwd: import.meta.dirname,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
 
 const require = createRequire(import.meta.url);
 const libsqlRequire = createRequire(
@@ -18,6 +35,11 @@ const nativeSqliteFiles = nativeTargets.flatMap((target) => {
 });
 
 export default defineNuxtConfig({
+  runtimeConfig: {
+    public: {
+      appVersion: getAppVersion(),
+    },
+  },
   ssr: true,
   compatibilityDate: '2025-04-12',
   devtools: { enabled: false },

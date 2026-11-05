@@ -26,6 +26,8 @@ RUN pnpm install --frozen-lockfile --prod
 # -------------------------------
 # Build stage
 FROM base AS build
+ARG NUXT_PUBLIC_APP_VERSION=unknown
+ENV NUXT_PUBLIC_APP_VERSION=${NUXT_PUBLIC_APP_VERSION}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN ./node_modules/.bin/esbuild .drizzle/migrate.ts --platform=node --format=esm --target=node22 --bundle --packages=external --outfile=.drizzle/migrate.mjs
@@ -38,8 +40,6 @@ FROM node:${NODE_VERSION}-slim AS runner
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
-ARG NUXT_PUBLIC_APP_VERSION=manual
-ENV NUXT_PUBLIC_APP_VERSION=${NUXT_PUBLIC_APP_VERSION}
 
 WORKDIR /app
 
