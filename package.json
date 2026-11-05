@@ -55,15 +55,16 @@
     "epubjs": "^0.3.93",
     "esbuild": "^0.28.1",
     "fuzzysort": "^3.1.0",
+    "ipaddr.js": "^2.5.0",
     "nuxt": "^4.6.3",
+    "pdfjs-dist": "6.5.438",
     "pdfreader": "^3.0.8",
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.7.1",
     "pino": "^10.4.0",
     "sharp": "^0.35.5",
     "tailwindcss": "^4.3.3",
-    "uuid": "^13.0.2",
-    "ipaddr.js": "^2.5.0"
+    "uuid": "^13.0.2"
   },
   "packageManager": "pnpm@12.10.1+sha512.ba40a37eb1a370d60fea8c4cf1d364c13bcccef518e98ad2bcee954f539d38da37458e58261a3fa55e06523450ea0ffff9f497b135be41f2c15c1642bacace6c",
   "devDependencies": {

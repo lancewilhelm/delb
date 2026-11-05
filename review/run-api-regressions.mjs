@@ -36,6 +36,7 @@ for (const suite of [
   'review/tag-features-api.mjs',
   'review/dashboard-api.mjs',
   'review/tbr-api.mjs',
+  'review/pdf-reader-api.mjs',
 ]) {
   const directory = await mkdtemp(path.join(tmpdir(), 'delb-api-regression-'));
   let server;
@@ -50,6 +51,7 @@ for (const suite of [
       'review/start-demo.mjs',
       'review/deny-outbound.cjs',
       'review/http-smoke.mjs',
+      'review/pdf-fixture.mjs',
       suite,
     ]) {
       const destination = path.join(directory, file);
