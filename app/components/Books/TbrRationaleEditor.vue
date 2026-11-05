@@ -81,9 +81,6 @@ onBeforeUnmount(() => controller?.abort());
 
 <template>
   <div class="min-w-0 text-sm">
-    <div class="text-xs uppercase tracking-wide opacity-60 mb-1">
-      Your TBR rationale
-    </div>
     <p v-if="loading" role="status" class="opacity-70">Loading rationale...</p>
     <form
       v-else-if="editing"
@@ -93,7 +90,7 @@ onBeforeUnmount(() => controller?.abort());
       <textarea
         ref="input"
         v-model="draft"
-        aria-label="Your TBR rationale"
+        aria-label="Rationale"
         maxlength="10000"
         rows="3"
         class="w-full p-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-(--contrast-text-color) resize-y"

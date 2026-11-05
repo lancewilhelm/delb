@@ -195,17 +195,11 @@ onBeforeUnmount(() => {
         >
           To be read
         </h1>
-        <p class="text-sm opacity-70 mt-1">
-          Your private queue across all accessible collections.
-        </p>
         <p
           v-if="!loading"
           class="text-sm italic text-(--contrast-sub-color) mt-1"
         >
           {{ books.length }} book{{ books.length === 1 ? '' : 's' }}
-        </p>
-        <p id="tbr-reorder-help" class="text-xs opacity-60 mt-2">
-          Drag a handle to reorder, or use the up and down arrows.
         </p>
       </div>
       <p v-if="loading" role="status">Loading your queue...</p>
@@ -254,7 +248,6 @@ onBeforeUnmount(() => {
               class="touch-none cursor-grab active:cursor-grabbing p-1"
               :disabled="busy || !!error"
               :aria-label="`Reorder ${book.title}`"
-              aria-describedby="tbr-reorder-help"
               @pointerdown="startDrag($event, book.id)"
               @pointermove="pointerMove"
               @pointerup="drop"
