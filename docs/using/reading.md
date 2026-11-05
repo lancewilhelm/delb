@@ -12,9 +12,22 @@ Sign in and open a visible book's detail page. Reading status, ratings, position
 
 The reader restores your saved position and saves subsequent location changes. Use its controls to change the reading mode, font, and appearance.
 
-The in-app reader requires an EPUB. For PDF, MOBI, or AZW3, use **Download book** and an appropriate external reader. A reference-only entry has no file to read or download.
+For MOBI or AZW3, use **Download book** and an appropriate external reader. A reference-only entry has no file to read or download.
 
 ![EPUB reader with navigation and reading controls](../images/reader.png)
+
+## Read a PDF
+
+1. Open a book with a PDF file and select **Read book**. If the book also has an EPUB, select **Read PDF**.
+2. Use the previous/next controls, left/right arrows, or page-number field to navigate.
+3. Choose **Fit page** or a zoom level. Enlarged pages can be scrolled.
+4. Select the back arrow or press Escape to return to book details.
+
+The PDF reader saves your page for your account and restores it when you return. Progress sync uses the displayed page divided by the PDF's actual page count; when enabled, the latest logged percentage can also select the opening page. Replacing the file starts at page 1 unless progress sync supplies a position. A book has one saved position, so switching between EPUB and PDF replaces that position.
+
+This is a basic page viewer. Text selection, search, annotations, interactive forms, and password-protected files are not supported. **Download PDF** opens the existing download flow for use in another reader. See the [PDF reader reference](../developing/reference/pdf-reader.md) for file access and persistence details.
+
+![PDF reader with page navigation and zoom](../images/pdf-reader.png)
 
 ## Set a reading status
 
@@ -51,7 +64,7 @@ New and re-added books join the end. A book leaves the queue when you lose all a
 2. Enter a percentage, or a page number when the book has a page count.
 3. Submit the progress entry and check the history.
 
-A manual entry records reading history. With Progress sync disabled, it does not change the saved EPUB location. With Progress sync enabled, reopening the reader can restore from the latest logged percentage after EPUB locations finish generating.
+A manual entry records reading history. With Progress sync disabled, it does not change the saved reading position. With Progress sync enabled, reopening the reader can restore from the latest logged percentage: after EPUB locations finish generating, or by selecting the corresponding PDF page.
 
 To connect reader activity with the history, enable **Progress sync** for this book. It starts disabled. The enabled reader can append progress entries and use the latest logged percentage during restoration. Saving a reader position remains separate from opting into progress-history sync.
 

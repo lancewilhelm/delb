@@ -73,7 +73,7 @@ The [collection settings dialog](../../app/components/Collections/EditCollection
 
 ## Reading and personal data
 
-The [book detail page](../../app/pages/books/[id]/index.vue) loads metadata/files and the current user's status and preferences. The Read action depends on an EPUB file. The [reader page](../../app/pages/books/[id]/read.vue) fetches that file through the authorized download endpoint and restores the saved position.
+The [book detail page](../../app/pages/books/[id]/index.vue) loads metadata/files and the current user's status and preferences. Read supports EPUB and PDF, preferring EPUB when both exist. Read PDF explicitly selects a PDF alongside an EPUB. The [reader page](../../app/pages/books/[id]/read.vue) fetches the selected file through the authorized download endpoint and restores the saved position. The [PDF reference](reference/pdf-reader.md) describes its canvas rendering and page-based locations.
 
 Relocation sends `PUT /api/books/:id/reading-position`. The request can include `clientSessionId` and an increasing `clientSequence`. [Position persistence](../../server/utils/books/save-position.ts) ignores older sequence writes from the same reader session. This is not a global conflict-resolution protocol between devices; a different reader session is accepted independently.
 

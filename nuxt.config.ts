@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 
 function getAppVersion() {
@@ -19,6 +20,7 @@ function getAppVersion() {
 }
 
 const require = createRequire(import.meta.url);
+const pdfjsDirectory = path.dirname(require.resolve('pdfjs-dist/package.json'));
 const libsqlRequire = createRequire(
   createRequire(require.resolve('@libsql/client')).resolve('libsql'),
 );
@@ -123,6 +125,10 @@ export default defineNuxtConfig({
     storage: 'localStorage',
   },
   nitro: {
+    publicAssets: ['cmaps', 'standard_fonts', 'wasm'].map((directory) => ({
+      dir: path.join(pdfjsDirectory, directory),
+      baseURL: `/pdfjs/${directory}`,
+    })),
     externals: {
       inline: ['@delb/epub'],
       traceInclude: nativeSqliteFiles,
