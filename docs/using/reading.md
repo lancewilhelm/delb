@@ -24,6 +24,10 @@ The in-app reader requires an EPUB. For PDF, MOBI, or AZW3, use **Download book*
 
 Setting Reading fills a missing start date. Finished fills a finish date and creates a 100% progress entry. DNF records a stop date without creating a progress entry. Returning to To be read clears the reading dates. Clearing status removes the status record.
 
+To change status while browsing, right-click a book cover and open **Reading status**. Choose a status or **No status** to clear it. A check marks your current choice. This works in grid and list views, including books without ebook files. Exit bulk selection mode to use the cover menu.
+
+The menu closes after a successful save, and the book view refreshes. A book leaves a filtered view if its new status no longer matches. If saving fails, the menu shows an error and lets you retry.
+
 Changes affect your account's status, not the status of other collection members. See [status and date rules](../developing/reference/reading-status-progress.md) for the complete transitions.
 
 ## Log progress

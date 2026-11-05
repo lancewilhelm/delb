@@ -1,37 +1,11 @@
 <script setup lang="ts">
-type ContextMenuItemBase = {
-  key: string;
-  label?: string;
-  disabled?: boolean;
-};
+import type { CoverMenuItem as ContextMenuItem } from '~/utils/coverMenu';
 
-type ContextMenuItemLink = ContextMenuItemBase & {
-  to: string;
-  onSelect?: never;
-  children?: never;
-};
-
-type ContextMenuItemAction = ContextMenuItemBase & {
-  onSelect: () => void | Promise<void>;
-  to?: never;
-  children?: never;
-};
-
-type ContextMenuItemSubmenu = ContextMenuItemBase & {
-  label: string;
-  children: ContextMenuItem[];
-  to?: never;
-  onSelect?: never;
-};
-
-type ContextMenuItem =
-  | ContextMenuItemLink
-  | ContextMenuItemAction
-  | ContextMenuItemSubmenu;
+type ContextMenuItemSubmenu = Extract<ContextMenuItem, { children: unknown }>;
+type ContextMenuItemAction = Extract<ContextMenuItem, { onSelect: unknown }>;
 
 type ContextMenuItemsProp =
-  | ContextMenuItem[]
-  | (() => ContextMenuItem[] | Promise<ContextMenuItem[]>);
+  ContextMenuItem[] | (() => ContextMenuItem[] | Promise<ContextMenuItem[]>);
 
 type Props = {
   /**
@@ -99,6 +73,8 @@ const isMenuOpen = ref(false);
 const menuPos = ref<{ x: number; y: number }>({ x: 0, y: 0 });
 const menuEl = ref<HTMLElement | null>(null);
 const menuLoading = ref(false);
+const actionPending = ref(false);
+const actionError = ref<string | null>(null);
 const rootMenuItems = ref<ContextMenuItem[]>([]);
 const submenu = ref<{
   parentKey: string;
@@ -166,6 +142,7 @@ async function onContextMenu(e: MouseEvent) {
 
   e.preventDefault();
 
+  actionError.value = null;
   isMenuOpen.value = true;
   menuPos.value = { x: e.clientX, y: e.clientY };
   menuLoading.value = true;
@@ -216,7 +193,7 @@ function isActionItem(item: ContextMenuItem): item is ContextMenuItemAction {
 }
 
 function onMenuItemKeydown(e: KeyboardEvent, item: ContextMenuItem) {
-  if (item.disabled) return;
+  if (item.disabled || actionPending.value) return;
   if (e.key === 'ArrowRight' && isSubmenuItem(item)) {
     e.preventDefault();
     const target = e.currentTarget as HTMLElement | null;
@@ -230,7 +207,7 @@ function onMenuItemKeydown(e: KeyboardEvent, item: ContextMenuItem) {
 }
 
 function onSubmenuItemKeydown(e: KeyboardEvent, item: ContextMenuItem) {
-  if (item.disabled) return;
+  if (item.disabled || actionPending.value) return;
 
   if (e.key === 'ArrowLeft') {
     e.preventDefault();
@@ -244,7 +221,7 @@ function onSubmenuItemKeydown(e: KeyboardEvent, item: ContextMenuItem) {
 }
 
 function onMenuItemPointerEnter(item: ContextMenuItem, el: HTMLElement | null) {
-  if (item.disabled) return;
+  if (item.disabled || actionPending.value) return;
   if (!isSubmenuItem(item)) {
     submenu.value = null;
     return;
@@ -290,20 +267,29 @@ function openSubmenuFor(item: ContextMenuItemSubmenu, anchorEl: HTMLElement) {
 }
 
 async function onMenuItemClick(item: ContextMenuItem, el: HTMLElement | null) {
-  if (item.disabled) return;
+  if (item.disabled || actionPending.value) return;
 
   if (isSubmenuItem(item)) {
     if (el) openSubmenuFor(item, el);
     return;
   }
 
-  closeMenu();
-
   if (isActionItem(item)) {
-    await item.onSelect();
+    actionPending.value = true;
+    actionError.value = null;
+    try {
+      await item.onSelect();
+      closeMenu();
+    } catch (error) {
+      actionError.value =
+        error instanceof Error ? error.message : 'Failed to complete action.';
+    } finally {
+      actionPending.value = false;
+    }
     return;
   }
 
+  closeMenu();
   await navigateTo(item.to);
 }
 
@@ -416,15 +402,16 @@ const menuItems = computed(() => rootMenuItems.value);
         <div
           v-for="item in menuItems"
           :key="item.key"
-          role="menuitem"
-          tabindex="0"
+          :role="item.checked === undefined ? 'menuitem' : 'menuitemradio'"
+          :aria-checked="item.checked"
+          :tabindex="item.disabled || actionPending ? -1 : 0"
           class="w-full px-3 py-2 text-left text-sm select-none"
           :class="
-            item.disabled
+            item.disabled || actionPending
               ? 'opacity-50 cursor-not-allowed'
               : 'hover:bg-black/6 cursor-pointer'
           "
-          :aria-disabled="item.disabled ? 'true' : 'false'"
+          :aria-disabled="item.disabled || actionPending ? 'true' : 'false'"
           @click="
             onMenuItemClick(item, $event.currentTarget as HTMLElement | null)
           "
@@ -445,6 +432,20 @@ const menuItems = computed(() => rootMenuItems.value);
             />
           </span>
         </div>
+        <div
+          v-if="actionPending"
+          role="status"
+          class="px-3 py-2 text-sm opacity-70"
+        >
+          Saving…
+        </div>
+        <div
+          v-if="actionError"
+          role="alert"
+          class="max-w-64 px-3 py-2 text-sm text-(--error-color)"
+        >
+          {{ actionError }}
+        </div>
       </div>
 
       <div
@@ -458,19 +459,23 @@ const menuItems = computed(() => rootMenuItems.value);
         <div
           v-for="item in submenu.items"
           :key="item.key"
-          role="menuitem"
-          tabindex="0"
+          :role="item.checked === undefined ? 'menuitem' : 'menuitemradio'"
+          :aria-checked="item.checked"
+          :tabindex="item.disabled || actionPending ? -1 : 0"
           class="w-full px-3 py-2 text-left text-sm select-none"
           :class="
-            item.disabled
+            item.disabled || actionPending
               ? 'opacity-50 cursor-not-allowed'
               : 'hover:bg-black/6 cursor-pointer'
           "
-          :aria-disabled="item.disabled ? 'true' : 'false'"
+          :aria-disabled="item.disabled || actionPending ? 'true' : 'false'"
           @click="onMenuItemClick(item, null)"
           @keydown="onSubmenuItemKeydown($event, item)"
         >
-          {{ labelForItem(item) }}
+          <span class="flex items-center justify-between gap-2">
+            <span>{{ labelForItem(item) }}</span>
+            <Icon v-if="item.checked" name="lucide:check" aria-hidden="true" />
+          </span>
         </div>
       </div>
     </Teleport>
