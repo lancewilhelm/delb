@@ -85,8 +85,7 @@ type ImportSummary = {
 };
 
 type ApiResponse =
-  | { success: true; data: ImportSummary }
-  | { success: false; message?: string };
+  { success: true; data: ImportSummary } | { success: false; message?: string };
 
 type CollectionOption = { id: string; name: string; isPersonal?: boolean };
 
@@ -101,8 +100,7 @@ const errorMessage = ref<string | null>(null);
 const importDryRun = ref(false);
 
 type HealthApiResponse =
-  | { success: true; data: HealthReport }
-  | { success: false; message?: string };
+  { success: true; data: HealthReport } | { success: false; message?: string };
 
 const healthBusy = ref(false);
 const healthReport = ref<HealthReport | null>(null);
@@ -161,10 +159,10 @@ function isValidSelectionForImport(): boolean {
 
 function statusClass(status: HealthStatus): string {
   return status === 'error'
-    ? 'text-(--error-color)'
+    ? 'text-(--contrast-error-color)'
     : status === 'warn'
-      ? 'text-yellow-600 dark:text-yellow-400'
-      : 'text-green-600 dark:text-green-400';
+      ? '[--contrast-status-color:var(--color-yellow-600)] dark:[--contrast-status-color:var(--color-yellow-400)] contrast-status'
+      : '[--contrast-status-color:var(--color-green-600)] dark:[--contrast-status-color:var(--color-green-400)] contrast-status';
 }
 
 async function runHealthChecks(mode: HealthMode) {
@@ -294,7 +292,7 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
                 class="peer sr-only"
               />
               <span
-                class="h-5 w-5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
+                class="h-5 w-5 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
                 :class="
                   runBusy || c.isPersonal
                     ? 'peer-checked:bg-(--sub-color) cursor-default!'
@@ -304,7 +302,7 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
               <span class="truncate">{{ c.name }}</span>
               <span
                 v-if="c.isPersonal"
-                class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-(--sub-color) opacity-70"
+                class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-(--contrast-border-color) opacity-70"
               >
                 Personal
               </span>
@@ -334,7 +332,7 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
             class="peer sr-only"
           />
           <span
-            class="h-5 w-5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
+            class="h-5 w-5 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
           ></span>
 
           <span>dry run (preview only; no changes)</span>
@@ -360,7 +358,7 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
 
         <div
           v-if="!isValidSelectionForImport()"
-          class="text-xs text-(--error-color)"
+          class="text-xs text-(--contrast-error-color)"
         >
           Select at least one collection before importing.
         </div>
@@ -391,7 +389,10 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
           </button>
         </div>
 
-        <div v-if="healthErrorMessage" class="text-sm text-(--error-color)">
+        <div
+          v-if="healthErrorMessage"
+          class="text-sm text-(--contrast-error-color)"
+        >
           {{ healthErrorMessage }}
         </div>
 
@@ -413,7 +414,7 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
             <div
               v-for="r in healthReport.results"
               :key="r.id"
-              class="p-3 rounded border border-(--sub-color)/30"
+              class="p-3 rounded border border-(--contrast-border-color)/30"
             >
               <div class="flex items-center justify-between gap-3">
                 <div class="font-semibold text-sm">{{ r.name }}</div>
@@ -468,7 +469,7 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div class="p-3 rounded border border-(--sub-color)/30">
+          <div class="p-3 rounded border border-(--contrast-border-color)/30">
             <div class="font-semibold mb-2">scanned (calibre)</div>
             <div>
               books:
@@ -523,7 +524,7 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
             </div>
           </div>
 
-          <div class="p-3 rounded border border-(--sub-color)/30">
+          <div class="p-3 rounded border border-(--contrast-border-color)/30">
             <div class="font-semibold mb-2">delb changes</div>
             <div>
               books created:
@@ -586,7 +587,7 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
           </div>
         </div>
 
-        <div class="p-3 rounded border border-(--sub-color)/30">
+        <div class="p-3 rounded border border-(--contrast-border-color)/30">
           <div class="font-semibold mb-2">notes</div>
           <div>
             cover candidates checked:
@@ -606,7 +607,9 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
           </div>
 
           <div v-if="lastResult.results.warnings?.length" class="mt-2">
-            <div class="font-semibold text-(--error-color)">warnings</div>
+            <div class="font-semibold text-(--contrast-error-color)">
+              warnings
+            </div>
             <ul class="list-disc ml-5">
               <li
                 v-for="(w, i) in lastResult.results.warnings"
@@ -620,7 +623,7 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
       </div>
     </SettingsUIGroup>
 
-    <div v-if="errorMessage" class="mt-3 text-sm text-(--error-color)">
+    <div v-if="errorMessage" class="mt-3 text-sm text-(--contrast-error-color)">
       {{ errorMessage }}
     </div>
   </div>

@@ -329,7 +329,7 @@ async function addToTargetCollection() {
 <template>
   <div v-if="showBar" class="px-4 pb-2">
     <div
-      class="border border-(--sub-color) rounded-md p-3 flex items-center justify-between gap-3 bg-(--bg-color)"
+      class="border border-(--contrast-border-color) rounded-md p-3 flex items-center justify-between gap-3 bg-(--bg-color)"
     >
       <div class="text-sm opacity-80 min-w-0">
         <span class="font-medium">{{ selectedSummary }}</span>
@@ -344,7 +344,7 @@ async function addToTargetCollection() {
 
       <div class="flex items-center gap-2 shrink-0">
         <button
-          class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+          class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
           type="button"
           :disabled="selectionIsEmpty()"
           @click="pickerOpen = true"
@@ -354,7 +354,7 @@ async function addToTargetCollection() {
 
         <button
           v-if="isInCollectionScope"
-          class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+          class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
           type="button"
           :disabled="
             !canEditScopeCollection || selectionIsEmpty() || removeBusy
@@ -365,7 +365,7 @@ async function addToTargetCollection() {
         </button>
 
         <button
-          class="px-3 py-2 rounded-md border border-(--sub-color) hover:bg-(--sub-color)/10 text-sm"
+          class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm"
           type="button"
           @click="
             () => {
@@ -379,7 +379,10 @@ async function addToTargetCollection() {
       </div>
     </div>
 
-    <p v-if="removeError" class="text-sm text-red-600 mt-2">
+    <p
+      v-if="removeError"
+      class="text-sm [--contrast-status-color:var(--color-red-600)] mt-2 contrast-status"
+    >
       {{ removeError }}
     </p>
 
@@ -419,7 +422,10 @@ async function addToTargetCollection() {
             You don’t have any editable (non-personal) collections.
           </p>
 
-          <p v-if="pickerError" class="text-sm text-red-600">
+          <p
+            v-if="pickerError"
+            class="text-sm [--contrast-status-color:var(--color-red-600)] contrast-status"
+          >
             {{ pickerError }}
           </p>
         </div>
@@ -435,7 +441,7 @@ async function addToTargetCollection() {
           </button>
 
           <button
-            class="px-3 py-2 bg-(--main-color) text-(--bg-color) disabled:opacity-60 disabled:cursor-not-allowed"
+            class="px-3 py-2 bg-(--main-color) text-(--contrast-inverse-color) disabled:opacity-60 disabled:cursor-not-allowed"
             type="button"
             :disabled="pickerSubmitting || !targetCollectionId"
             @click="addToTargetCollection"
@@ -444,7 +450,10 @@ async function addToTargetCollection() {
           </button>
         </div>
 
-        <p v-if="addError" class="text-sm text-red-600">
+        <p
+          v-if="addError"
+          class="text-sm [--contrast-status-color:var(--color-red-600)] contrast-status"
+        >
           {{ addError }}
         </p>
 

@@ -82,7 +82,7 @@ onBeforeUnmount(() => {
     >
       <Icon
         name="lucide:arrow-up-down"
-        class="text-(--main-color) opacity-80 shrink-0 text-xl sm:text-lg"
+        class="text-(--contrast-main-color) opacity-80 shrink-0 text-xl sm:text-lg"
       />
       <span class="hidden lg:block text-sm opacity-80">{{
         activeBooksSortLabel
@@ -92,10 +92,10 @@ onBeforeUnmount(() => {
     <div
       v-if="sortOpen"
       ref="sortPanelRef"
-      class="absolute right-0 mt-1 w-48 border border-(--sub-color) bg-(--bg-color) rounded-md shadow-lg z-50 overflow-hidden"
+      class="absolute right-0 mt-1 w-48 border border-(--contrast-border-color) bg-(--bg-color) rounded-md shadow-lg z-50 overflow-hidden"
       role="menu"
     >
-      <div class="px-2 py-1 border-b border-(--sub-color)">
+      <div class="px-2 py-1 border-b border-(--contrast-border-color)">
         <div class="text-xs opacity-70">Sort</div>
       </div>
 
@@ -120,7 +120,7 @@ onBeforeUnmount(() => {
                 ? 'lucide:arrow-up'
                 : 'lucide:arrow-down'
             "
-            class="text-(--main-color) opacity-80 shrink-0"
+            class="text-(--contrast-main-color) opacity-80 shrink-0"
           />
         </button>
       </div>

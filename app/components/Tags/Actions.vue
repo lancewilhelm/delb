@@ -233,7 +233,7 @@ async function submit() {
           top: `${menuPosition.top}px`,
         }"
         role="menu"
-        class="fixed z-200 w-40 rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg"
+        class="fixed z-200 w-40 rounded-md border border-(--contrast-border-color) bg-(--bg-color) shadow-lg"
       >
         <button
           type="button"
@@ -254,7 +254,7 @@ async function submit() {
       </div>
       <dialog
         ref="dialog"
-        class="m-auto w-[min(32rem,90vw)] rounded-lg border border-(--sub-color) bg-(--bg-color) text-(--text-color) p-6 backdrop:bg-black/50"
+        class="m-auto w-[min(32rem,90vw)] rounded-lg border border-(--contrast-border-color) bg-(--bg-color) text-(--contrast-text-color) p-6 backdrop:bg-black/50"
         :aria-labelledby="titleId"
         @close="onClose"
         @cancel="pending && $event.preventDefault()"
@@ -280,7 +280,7 @@ async function submit() {
             <div role="group" aria-label="From tag" class="flex-1 min-w-0">
               <div class="text-xs opacity-70 mb-1">From tag</div>
               <div
-                class="border border-(--sub-color) rounded-md px-3 py-2 truncate"
+                class="border border-(--contrast-border-color) rounded-md px-3 py-2 truncate"
               >
                 {{ source?.name }}
               </div>
@@ -293,7 +293,7 @@ async function submit() {
             <div role="group" aria-label="To tag" class="flex-1 min-w-0">
               <div class="text-xs opacity-70 mb-1">To tag</div>
               <div
-                class="border border-(--sub-color) rounded-md px-3 py-2 truncate min-h-10"
+                class="border border-(--contrast-border-color) rounded-md px-3 py-2 truncate min-h-10"
               >
                 {{ state.target?.name }}
               </div>
@@ -303,7 +303,7 @@ async function submit() {
           <input
             :id="searchId"
             v-model="query"
-            class="w-full px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color)"
+            class="w-full px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
             placeholder="Search tags"
             :disabled="pending"
             @input="state.target = null"
@@ -320,13 +320,17 @@ async function submit() {
             </button>
           </div>
         </div>
-        <p v-if="error" role="alert" class="text-sm text-(--error-color) mt-3">
+        <p
+          v-if="error"
+          role="alert"
+          class="text-sm text-(--contrast-error-color) mt-3"
+        >
           {{ error }}
         </p>
         <div class="flex justify-end gap-2 mt-5">
           <button
             type="button"
-            class="px-3 py-2 rounded-md border border-(--sub-color)"
+            class="px-3 py-2 rounded-md border border-(--contrast-border-color)"
             :disabled="pending"
             @click="closeDialog"
           >
@@ -334,7 +338,7 @@ async function submit() {
           </button>
           <button
             type="button"
-            class="px-3 py-2 rounded-md bg-(--main-color) text-(--bg-color)"
+            class="px-3 py-2 rounded-md bg-(--main-color) text-(--contrast-inverse-color)"
             :disabled="pending || (state.kind === 'merge' && !state.target)"
             @click="submit"
           >

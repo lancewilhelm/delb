@@ -8,7 +8,7 @@ const userSettingsStore = useUserSettingsStore();
       class="rounded-lg fira-code"
       :class="
         userSettingsStore.activeSettings.fontFamily === 'Fira Code'
-          ? 'bg-(--main-color) text-(--bg-color)'
+          ? 'bg-(--main-color) text-(--contrast-inverse-color)'
           : 'bg-(--sub-color)'
       "
       @click="
@@ -25,7 +25,7 @@ const userSettingsStore = useUserSettingsStore();
       class="rounded-lg geist"
       :class="
         userSettingsStore.activeSettings.fontFamily === 'Geist'
-          ? 'bg-(--main-color) text-(--bg-color)'
+          ? 'bg-(--main-color) text-(--contrast-inverse-color)'
           : 'bg-(--sub-color)'
       "
       @click="
@@ -42,7 +42,7 @@ const userSettingsStore = useUserSettingsStore();
       class="rounded-lg ibm-plex-mono"
       :class="
         userSettingsStore.activeSettings.fontFamily === 'IBM Plex Mono'
-          ? 'bg-(--main-color) text-(--bg-color)'
+          ? 'bg-(--main-color) text-(--contrast-inverse-color)'
           : 'bg-(--sub-color)'
       "
       @click="
@@ -59,7 +59,7 @@ const userSettingsStore = useUserSettingsStore();
       class="rounded-lg inter"
       :class="
         userSettingsStore.activeSettings.fontFamily === 'Inter'
-          ? 'bg-(--main-color) text-(--bg-color)'
+          ? 'bg-(--main-color) text-(--contrast-inverse-color)'
           : 'bg-(--sub-color)'
       "
       @click="
@@ -76,7 +76,7 @@ const userSettingsStore = useUserSettingsStore();
       class="rounded-lg montserrat"
       :class="
         userSettingsStore.activeSettings.fontFamily === 'Montserrat'
-          ? 'bg-(--main-color) text-(--bg-color)'
+          ? 'bg-(--main-color) text-(--contrast-inverse-color)'
           : 'bg-(--sub-color)'
       "
       @click="
@@ -94,7 +94,7 @@ const userSettingsStore = useUserSettingsStore();
       class="rounded-lg noto-serif"
       :class="
         userSettingsStore.activeSettings.fontFamily === 'Noto Serif'
-          ? 'bg-(--main-color) text-(--bg-color)'
+          ? 'bg-(--main-color) text-(--contrast-inverse-color)'
           : 'bg-(--sub-color)'
       "
       @click="
@@ -111,7 +111,7 @@ const userSettingsStore = useUserSettingsStore();
       class="rounded-lg nunito"
       :class="
         userSettingsStore.activeSettings.fontFamily === 'Nunito'
-          ? 'bg-(--main-color) text-(--bg-color)'
+          ? 'bg-(--main-color) text-(--contrast-inverse-color)'
           : 'bg-(--sub-color)'
       "
       @click="
@@ -128,7 +128,7 @@ const userSettingsStore = useUserSettingsStore();
       class="rounded-lg poppins"
       :class="
         userSettingsStore.activeSettings.fontFamily === 'Poppins'
-          ? 'bg-(--main-color) text-(--bg-color)'
+          ? 'bg-(--main-color) text-(--contrast-inverse-color)'
           : 'bg-(--sub-color)'
       "
       @click="
@@ -145,7 +145,7 @@ const userSettingsStore = useUserSettingsStore();
       class="rounded-lg pt-serif"
       :class="
         userSettingsStore.activeSettings.fontFamily === 'PT Serif'
-          ? 'bg-(--main-color) text-(--bg-color)'
+          ? 'bg-(--main-color) text-(--contrast-inverse-color)'
           : 'bg-(--sub-color)'
       "
       @click="
@@ -162,7 +162,7 @@ const userSettingsStore = useUserSettingsStore();
       class="rounded-lg roboto-mono"
       :class="
         userSettingsStore.activeSettings.fontFamily === 'Roboto Mono'
-          ? 'bg-(--main-color) text-(--bg-color)'
+          ? 'bg-(--main-color) text-(--contrast-inverse-color)'
           : 'bg-(--sub-color)'
       "
       @click="

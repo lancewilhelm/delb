@@ -12,10 +12,10 @@ defineProps<{
     :to="path"
     :class="[
       'flex items-center gap-1 cursor-pointer hover:opacity-80 settings-tab-bar-item',
-      isActiveTab ? 'text-(--main-color) underline' : 'text-(--text-color)',
+      isActiveTab ? 'text-(--contrast-main-color) underline' : 'text-(--contrast-text-color)',
     ]"
   >
-    <Icon :name="icon" class="text-(--main-color) header-icon" />
+    <Icon :name="icon" class="text-(--contrast-main-color) header-icon" />
     {{ label }}
   </NuxtLink>
 </template>

@@ -79,8 +79,6 @@ function coverThumbUrl(bookId: string, updatedAt?: string | number | Date) {
   return `${base}&v=${encodeURIComponent(String(ts))}`;
 }
 
-
-
 async function refresh() {
   if (!seriesId.value) return;
 
@@ -157,12 +155,12 @@ watch(
   <div class="flex flex-col w-full h-full overflow-hidden">
     <AppHeader class="w-full" />
 
-    <div class="px-2 shrink-0 border-b border-(--sub-color)">
+    <div class="px-2 shrink-0 border-b border-(--contrast-border-color)">
       <ViewSelectorDropdown />
     </div>
 
     <div class="w-full h-full p-4 overflow-auto">
-      <div class="flex items-center gap-2 mb-4 text-(--main-color)">
+      <div class="flex items-center gap-2 mb-4 text-(--contrast-main-color)">
         <Icon
           v-tooltip="'Go back'"
           name="lucide:arrow-left"
@@ -173,7 +171,9 @@ watch(
           <div class="text-2xl sm:text-3xl font-serif truncate">
             {{ seriesName }}
           </div>
-          <div class="text-sm sm:text-md opacity-70 italic text-(--sub-color)">
+          <div
+            class="text-sm sm:text-md opacity-70 italic text-(--contrast-sub-color)"
+          >
             {{ bookCount }} book{{ bookCount === 1 ? '' : 's' }}
           </div>
         </div>
@@ -181,7 +181,10 @@ watch(
 
       <div v-if="loading" class="text-sm opacity-80">Loading...</div>
 
-      <div v-else-if="errorMessage" class="text-sm text-red-600">
+      <div
+        v-else-if="errorMessage"
+        class="text-sm [--contrast-status-color:var(--color-red-600)] contrast-status"
+      >
         {{ errorMessage }}
       </div>
 
@@ -197,7 +200,9 @@ watch(
             :book="b"
             class="grid grid-cols-[30px_auto_4fr] gap-4"
           >
-            <div class="text-xl sm:text-2xl self-center text-(--sub-color)">
+            <div
+              class="text-xl sm:text-2xl self-center text-(--contrast-sub-color)"
+            >
               {{ b.seriesIndex }}
             </div>
             <BookCover
@@ -234,7 +239,7 @@ watch(
               <!-- Description -->
               <div
                 v-if="b.description"
-                class="min-w-0 font-light prose prose-sm max-w-none text-(--text-color) opacity-90"
+                class="min-w-0 font-light prose prose-sm max-w-none text-(--contrast-text-color) opacity-90"
               >
                 <div class="relative">
                   <div class="line-clamp-3">

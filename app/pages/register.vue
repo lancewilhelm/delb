@@ -106,7 +106,7 @@ async function handleSubmit() {
   >
     <NuxtLink
       to="/login"
-      class="logo text-7xl font-bold mb-6 text-(--main-color)"
+      class="logo text-7xl font-bold mb-6 text-(--contrast-main-color)"
       >Delb</NuxtLink
     >
     <form
@@ -118,21 +118,21 @@ async function handleSubmit() {
         type="text"
         autocomplete="name"
         placeholder="name"
-        class="border border-(--sub-color) px-2 py-1 rounded text-[12pt] w-62.5"
+        class="border border-(--contrast-border-color) px-2 py-1 rounded text-[12pt] w-62.5"
       />
       <input
         v-model="email"
         type="email"
         autocomplete="email"
         placeholder="email"
-        class="border border-(--sub-color) px-2 py-1 rounded text-[12pt] w-62.5"
+        class="border border-(--contrast-border-color) px-2 py-1 rounded text-[12pt] w-62.5"
       />
       <input
         v-model="password"
         type="password"
         autocomplete="password"
         placeholder="password"
-        class="border border-(--sub-color) px-2 py-1 rounded text-[12pt] w-62.5"
+        class="border border-(--contrast-border-color) px-2 py-1 rounded text-[12pt] w-62.5"
       />
       <input
         v-model="verifyPassword"
@@ -143,11 +143,11 @@ async function handleSubmit() {
           'border px-2 py-1 rounded text-[12pt] w-62.5',
           password && verifyPassword && password !== verifyPassword
             ? 'border-(--error-color)'
-            : 'border-(--sub-color)',
+            : 'border-(--contrast-border-color)',
         ]"
       />
       <button
-        class="bg-(--main-color) text-(--bg-color) rounded px-2 py-1 hover:opacity-80 active:opacity-60 disabled:opacity-60 disabled:cursor-not-allowed"
+        class="bg-(--main-color) text-(--contrast-inverse-color) rounded px-2 py-1 hover:opacity-80 active:opacity-60 disabled:opacity-60 disabled:cursor-not-allowed"
         :disabled="isSubmitting"
       >
         Register

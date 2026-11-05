@@ -254,7 +254,7 @@ function onRowClick(e?: MouseEvent) {
 <template>
   <div
     ref="rowRef"
-    class="w-full border-b border-(--sub-color)/50 transition"
+    class="w-full border-b border-(--contrast-border-color)/50 transition"
     :class="[
       props.selectable ? 'cursor-pointer hover:bg-(--sub-color)/10' : '',
       props.selected ? 'bg-(--sub-color)/15' : '',
@@ -277,8 +277,8 @@ function onRowClick(e?: MouseEvent) {
           class="absolute top-1 right-1 w-5 h-5 rounded-full border flex items-center justify-center text-xs"
           :class="
             props.selected
-              ? 'bg-(--main-color) border-(--main-color) text-(--bg-color)'
-              : 'bg-(--bg-color)/80 border-(--sub-color) text-(--text-color)'
+              ? 'bg-(--main-color) border-(--main-color) text-(--contrast-inverse-color)'
+              : 'bg-(--bg-color)/80 border-(--contrast-border-color) text-(--contrast-text-color)'
           "
         >
           <Icon :name="props.selected ? 'lucide:check' : ''" />

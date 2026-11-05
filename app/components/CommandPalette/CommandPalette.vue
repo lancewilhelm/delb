@@ -99,12 +99,12 @@ watch(
       role="dialog"
       aria-modal="true"
       aria-label="Command palette"
-      class="flex flex-col backdrop-blur-lg bg-(--bg-color)/80 w-150 h-150 m-4 rounded-lg shadow-lg font-mono command-palette border border-(--sub-color)"
+      class="flex flex-col backdrop-blur-lg bg-(--bg-color)/80 w-150 h-150 m-4 rounded-lg shadow-lg font-mono command-palette border border-(--contrast-border-color)"
       @keydown="containFocus"
       @click.stop
     >
       <div
-        class="h-12 flex items-center px-3 py-2 border-b border-(--sub-color) command-palette-search"
+        class="h-12 flex items-center px-3 py-2 border-b border-(--contrast-border-color) command-palette-search"
       >
         <Icon name="lucide:search" class="scale-125" />
         <input
@@ -128,7 +128,7 @@ watch(
       <button
         v-if="selectedOption"
         type="button"
-        class="flex items-center gap-2 px-3 cursor-pointer hover:bg-(--sub-alt-color) command-palette-back h-9 border-b border-(--sub-color)"
+        class="flex items-center gap-2 px-3 cursor-pointer hover:bg-(--sub-alt-color) command-palette-back h-9 border-b border-(--contrast-border-color)"
         @click="
           () => {
             selectedOption = undefined;
@@ -137,7 +137,7 @@ watch(
       >
         <Icon
           name="lucide:arrow-left"
-          class="text-(--main-color) scale-125 header-icon"
+          class="text-(--contrast-main-color) scale-125 header-icon"
         />
         back
       </button>
@@ -228,7 +228,7 @@ watch(
             class="h-9 cursor-pointer px-3 py-1 hover:bg-(--sub-alt-color) flex items-center justify-between command-palette-option"
             :class="[
               highlightedIndex === i
-                ? 'bg-(--sub-color) text-(--text-color)'
+                ? 'bg-(--sub-color) text-(--contrast-text-color)'
                 : '',
             ]"
             @click="selectOption(option)"

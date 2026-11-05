@@ -83,10 +83,10 @@ onBeforeUnmount(() => {
       <Icon
         v-if="currentPage"
         :name="currentPage.icon"
-        class="text-(--main-color) scale-125"
+        class="text-(--contrast-main-color) scale-125"
       />
       <div class="flex items-center gap-1">
-        <div v-if="currentPage" class="text-sm text-(--main-color)">
+        <div v-if="currentPage" class="text-sm text-(--contrast-main-color)">
           {{ currentPage.name }}
         </div>
         <Icon
@@ -94,7 +94,7 @@ onBeforeUnmount(() => {
           name="lucide:chevron-up"
           :class="[
             'cursor-pointer hover:opacity-80 transition-transform ',
-            currentPage ? 'text-(--main-color)' : 'text-(--error-color)',
+            currentPage ? 'text-(--contrast-main-color)' : 'text-(--contrast-error-color)',
             popupVisible ? 'rotate-0' : 'rotate-180',
           ]"
         />
@@ -105,7 +105,7 @@ onBeforeUnmount(() => {
     <div
       v-if="popupVisible && Object.keys(pages).length"
       ref="popupRef"
-      class="absolute top-full mb-2 mt-2 left-0 bg-(--bg-color) border border-(--sub-color) rounded-lg shadow-lg w-60 max-h-60 z-20 overflow-y-auto"
+      class="absolute top-full mb-2 mt-2 left-0 bg-(--bg-color) border border-(--contrast-border-color) rounded-lg shadow-lg w-60 max-h-60 z-20 overflow-y-auto"
     >
       <div
         v-for="page in pages"
@@ -118,7 +118,7 @@ onBeforeUnmount(() => {
         ]"
         @click="page.action()"
       >
-        <Icon :name="page.icon" class="text-(--main-color) scale-125" />
+        <Icon :name="page.icon" class="text-(--contrast-main-color) scale-125" />
         <div class="flex flex-col overflow-hidden">
           <HoverScrollText>{{ page.name }}</HoverScrollText>
         </div>

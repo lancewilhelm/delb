@@ -82,13 +82,13 @@ function selectOption(option: string) {
     <div
       v-if="popupVisible"
       ref="popupRef"
-      class="absolute top-full mb-2 right-0 bg-(--bg-color) border border-(--main-color) rounded-lg shadow-lg max-h-100 min-w-37.5 z-10 overflow-y-auto settings-select-item-popup"
+      class="absolute top-full mb-2 right-0 bg-(--bg-color) border border-(--contrast-main-border-color) rounded-lg shadow-lg max-h-100 min-w-37.5 z-10 overflow-y-auto settings-select-item-popup"
     >
       <div
         v-for="option in options"
         :key="option"
         class="px-4 py-2 cursor-pointer truncate hover:bg-(--sub-color) settings-select-item-option"
-        :class="option === value ? 'text-(--main-color)' : ''"
+        :class="option === value ? 'text-(--contrast-main-color)' : ''"
         @click="selectOption(option)"
       >
         {{ option }}

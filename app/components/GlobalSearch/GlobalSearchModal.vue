@@ -423,12 +423,12 @@ onBeforeUnmount(() => {
       role="dialog"
       aria-modal="true"
       aria-label="Search library"
-      class="flex flex-col backdrop-blur-lg bg-(--bg-color)/80 w-180 h-150 m-4 md:max-w-[80%] lg:max-w-[60%] rounded-lg shadow-lg border border-(--sub-color) overflow-hidden"
+      class="flex flex-col backdrop-blur-lg bg-(--bg-color)/80 w-180 h-150 m-4 md:max-w-[80%] lg:max-w-[60%] rounded-lg shadow-lg border border-(--contrast-border-color) overflow-hidden"
       @keydown="containFocus"
       @click.stop
     >
       <div
-        class="h-12 flex items-center px-3 py-2 border-b border-(--sub-color)"
+        class="h-12 flex items-center px-3 py-2 border-b border-(--contrast-border-color)"
       >
         <Icon name="lucide:search" class="scale-125" />
         <input
@@ -457,7 +457,7 @@ onBeforeUnmount(() => {
           class="h-full overflow-y-auto"
         >
           <div
-            class="px-3 py-2 text-xs opacity-70 border-b border-(--sub-color)"
+            class="px-3 py-2 text-xs opacity-70 border-b border-(--contrast-border-color)"
           >
             <span v-if="loading">searching…</span>
             <span v-else-if="errorMessage">{{ errorMessage }}</span>
@@ -507,7 +507,7 @@ onBeforeUnmount(() => {
                 :class="[
                   flatResults[highlightedIndex]?.item?.id === item.id &&
                   flatResults[highlightedIndex]?.item?.kind === item.kind
-                    ? 'bg-(--sub-color) text-(--text-color)'
+                    ? 'bg-(--sub-color) text-(--contrast-text-color)'
                     : '',
                   item.kind === 'book' ? 'h-12' : 'h-9',
                 ]"
@@ -524,7 +524,7 @@ onBeforeUnmount(() => {
                 <Icon
                   v-if="item.kind !== 'book' && item.icon"
                   :name="item.icon"
-                  class="scale-125 text-(--main-color)"
+                  class="scale-125 text-(--contrast-main-color)"
                 />
                 <BookCover
                   v-else
@@ -544,7 +544,7 @@ onBeforeUnmount(() => {
       </div>
       <div
         v-if="query.trim().length > 0"
-        class="px-3 py-2 text-xs opacity-60 border-t border-(--sub-color) hidden sm:block"
+        class="px-3 py-2 text-xs opacity-60 border-t border-(--contrast-border-color) hidden sm:block"
       >
         <span class="opacity-80">enter</span> to open •
         <span class="opacity-80">esc</span> to close •

@@ -9,6 +9,10 @@ import { computed, ref } from 'vue';
 import type { UserSettings } from './userSettings';
 import { defaultCustomTheme, normalizeCustomTheme } from '../utils/customTheme';
 import {
+  DEFAULT_APPEARANCE_CONTRAST,
+  normalizeAppearanceContrast,
+} from '../utils/appearanceContrast';
+import {
   defaultThemePreference,
   normalizeThemePreference,
 } from '../utils/themePreference';
@@ -21,6 +25,7 @@ function createStore() {
   )
     .replace(/import [\s\S]*?from '~\/utils\/bookFields';/, '')
     .replace(/import [\s\S]*?from '~\/utils\/customTheme';/, '')
+    .replace(/import [\s\S]*?from '~\/utils\/appearanceContrast';/, '')
     .replace(/import [\s\S]*?from '~\/utils\/themePreference';/, '');
   const code = transformSync(source, { loader: 'ts', format: 'cjs' }).code;
   const mobile = ref(false);
@@ -36,6 +41,8 @@ function createStore() {
     defaultBookFields,
     normalizeBookFields,
     normalizeCustomTheme,
+    DEFAULT_APPEARANCE_CONTRAST,
+    normalizeAppearanceContrast,
     defaultThemePreference,
     normalizeThemePreference,
     useIsMobileDevice: () => mobile,
@@ -44,6 +51,53 @@ function createStore() {
   });
   return { store: module.exports.useUserSettingsStore(createPinia()), mobile };
 }
+
+test('contrast persists independently without modifying theme palettes', async () => {
+  const { store, mobile } = createStore();
+  assert.equal(store.activeSettings.appearanceContrast, 100);
+  await store.updateSettings({
+    customTheme: defaultCustomTheme,
+    appearanceContrast: 75,
+  });
+  const originalPalette = JSON.stringify(store.activeSettings.customTheme);
+  store.setMobileEnabled(true);
+  mobile.value = true;
+  assert.equal(store.activeSettings.appearanceContrast, 75);
+  await store.updateSettings({ appearanceContrast: 175 });
+  assert.equal(store.activeSettings.appearanceContrast, 175);
+  assert.equal(
+    JSON.stringify(store.activeSettings.customTheme),
+    originalPalette,
+  );
+  mobile.value = false;
+  assert.equal(store.activeSettings.appearanceContrast, 75);
+  assert.equal(
+    JSON.stringify(store.activeSettings.customTheme),
+    originalPalette,
+  );
+
+  const restored = createStore();
+  restored.store.applyRemoteSettings(
+    JSON.parse(JSON.stringify(store.settings)),
+  );
+  assert.equal(restored.store.activeSettings.appearanceContrast, 75);
+  restored.mobile.value = true;
+  assert.equal(restored.store.activeSettings.appearanceContrast, 175);
+  restored.store.$reset();
+  assert.equal(restored.store.activeSettings.appearanceContrast, 100);
+});
+
+test('invalid saved contrast is repaired in both device profiles', () => {
+  const { store, mobile } = createStore();
+  const saved = JSON.parse(JSON.stringify(store.settings));
+  saved.appearanceContrast = '150';
+  saved.mobile.enabled = true;
+  saved.mobile.settings.appearanceContrast = 900;
+  store.applyRemoteSettings(saved);
+  assert.equal(store.activeSettings.appearanceContrast, 100);
+  mobile.value = true;
+  assert.equal(store.activeSettings.appearanceContrast, 200);
+});
 
 test('legacy settings remain uninitialized until a palette is saved', () => {
   const { store } = createStore();

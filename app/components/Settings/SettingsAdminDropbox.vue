@@ -179,7 +179,7 @@ const targetUserId = computed({
           :disabled="!isAdmin"
         />
         <span
-          class="h-5 w-5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
+          class="h-5 w-5 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
           :class="
             !isAdmin ? 'peer-checked:bg-(--sub-color) cursor-default!' : ''
           "
@@ -191,7 +191,7 @@ const targetUserId = computed({
         <div class="text-sm font-semibold">dropbox folder (relative)</div>
         <input
           v-model="dir"
-          class="w-full p-2 border border-(--sub-color) rounded-lg"
+          class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
           placeholder="dropbox"
           :disabled="!isAdmin"
         />
@@ -208,13 +208,13 @@ const targetUserId = computed({
         <div class="flex gap-2">
           <input
             v-model="extensionsInput"
-            class="w-full p-2 border border-(--sub-color) rounded-lg"
+            class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
             :disabled="!isAdmin"
             @keyup.enter="saveExtensions"
           />
           <button
             type="button"
-            class="px-3 py-2 rounded-lg bg-(--main-color) text-(--bg-color) disabled:opacity-50 disabled:cursor-not-allowed"
+            class="px-3 py-2 rounded-lg bg-(--main-color) text-(--contrast-inverse-color) disabled:opacity-50 disabled:cursor-not-allowed"
             :disabled="!isAdmin"
             @click="saveExtensions"
           >
@@ -230,7 +230,7 @@ const targetUserId = computed({
             v-model.number="pollIntervalMs"
             type="number"
             min="250"
-            class="w-full p-2 border border-(--sub-color) rounded-lg"
+            class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
             :disabled="!isAdmin"
           />
         </div>
@@ -240,7 +240,7 @@ const targetUserId = computed({
             v-model.number="stablePassesRequired"
             type="number"
             min="1"
-            class="w-full p-2 border border-(--sub-color) rounded-lg"
+            class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
             :disabled="!isAdmin"
           />
         </div>
@@ -250,7 +250,7 @@ const targetUserId = computed({
             v-model.number="stableMaxAgeMs"
             type="number"
             min="1000"
-            class="w-full p-2 border border-(--sub-color) rounded-lg"
+            class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
             :disabled="!isAdmin"
           />
         </div>
@@ -284,7 +284,7 @@ const targetUserId = computed({
               class="peer sr-only"
             />
             <span
-              class="h-5 w-5 border border-(--sub-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
+              class="h-5 w-5 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
               :class="
                 !isAdmin ? 'peer-checked:bg-(--sub-color) cursor-default!' : ''
               "
@@ -295,7 +295,7 @@ const targetUserId = computed({
           <div class="flex gap-2 mt-2">
             <button
               type="button"
-              class="px-3 py-2 rounded-lg bg-(--main-color) text-(--bg-color) disabled:opacity-50 disabled:cursor-not-allowed"
+              class="px-3 py-2 rounded-lg bg-(--main-color) text-(--contrast-inverse-color) disabled:opacity-50 disabled:cursor-not-allowed"
               :disabled="!isAdmin"
               @click="saveAdditionalCollections"
             >
@@ -314,7 +314,7 @@ const targetUserId = computed({
         <div class="text-sm font-semibold">book owner (optional)</div>
         <select
           v-model="targetUserId"
-          class="w-full p-2 border border-(--sub-color) rounded-lg"
+          class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
           :disabled="!isAdmin || usersLoading"
         >
           <option value="">(default: system owner)</option>

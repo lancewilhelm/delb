@@ -111,7 +111,7 @@ const filteredTags = tags;
       <!-- Main content (fixed header + scrollable content area) -->
       <div class="flex-1 overflow-hidden flex flex-col min-h-0">
         <!-- Header (non-scrolling): view selector stays fixed -->
-        <div class="px-2 shrink-0 border-b border-(--sub-color)">
+        <div class="px-2 shrink-0 border-b border-(--contrast-border-color)">
           <div class="flex items-center justify-between gap-4">
             <!-- Simple navigation menu -->
             <ViewSelectorDropdown />
@@ -129,7 +129,7 @@ const filteredTags = tags;
               <input
                 ref="filterInput"
                 v-model="tagQuery"
-                class="px-3 py-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-sm w-56"
+                class="px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm w-56"
                 placeholder="Filter tags..."
                 type="text"
               />
@@ -150,7 +150,7 @@ const filteredTags = tags;
               <div
                 v-for="t in filteredTags"
                 :key="t.id"
-                class="relative flex items-center justify-between gap-3 border border-(--sub-color) hover:border-(--main-color) hover:bg-(--sub-color)/10 rounded-md px-3 py-2 overflow-hidden min-h-32 cursor-pointer shadow-sm hover:shadow-md"
+                class="relative flex items-center justify-between gap-3 border border-(--contrast-border-color) hover:border-(--main-color) hover:bg-(--sub-color)/10 rounded-md px-3 py-2 overflow-hidden min-h-32 cursor-pointer shadow-sm hover:shadow-md"
                 @contextmenu="onTagContextMenu($event, t)"
                 @keydown="onTagKey($event, t)"
               >

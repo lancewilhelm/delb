@@ -79,7 +79,7 @@ function onBlur() {
     </div>
     <div
       v-if="description"
-      class="row-start-2 col-start-1 italic font-light text-sm settings-item-description text-(--text-color)/80"
+      class="row-start-2 col-start-1 italic font-light text-sm settings-item-description text-(--contrast-text-color)/80"
     >
       {{ description }}
     </div>

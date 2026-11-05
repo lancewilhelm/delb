@@ -96,7 +96,7 @@ onBeforeUnmount(() => controller?.abort());
         aria-label="Your TBR rationale"
         maxlength="10000"
         rows="3"
-        class="w-full p-2 rounded-md border border-(--sub-color) bg-(--bg-color) text-(--text-color) resize-y"
+        class="w-full p-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-(--contrast-text-color) resize-y"
         :disabled="saving"
         @keydown.esc.prevent="!saving && cancel()"
         @keydown.ctrl.enter.prevent="save"
@@ -105,7 +105,7 @@ onBeforeUnmount(() => controller?.abort());
       <div class="flex gap-2 items-center">
         <button
           type="submit"
-          class="px-3 py-1 border border-(--sub-color) rounded-md"
+          class="px-3 py-1 border border-(--contrast-border-color) rounded-md"
           :disabled="saving"
         >
           {{ saving ? 'Saving...' : error ? 'Retry save' : 'Save' }}
@@ -132,13 +132,13 @@ onBeforeUnmount(() => controller?.abort());
       }}</span>
       <Icon name="lucide:pencil" class="shrink-0 ml-2 opacity-50" />
     </button>
-    <p v-if="error" role="alert" class="text-(--error-color) mt-2">
+    <p v-if="error" role="alert" class="text-(--contrast-error-color) mt-2">
       {{ error }}
     </p>
     <button
       v-if="error && !editing && !loading"
       type="button"
-      class="mt-1 px-2 py-1 border border-(--sub-color) rounded-md"
+      class="mt-1 px-2 py-1 border border-(--contrast-border-color) rounded-md"
       @click="load"
     >
       Retry

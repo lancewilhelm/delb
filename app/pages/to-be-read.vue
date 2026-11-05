@@ -181,7 +181,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex flex-col w-full h-full overflow-hidden">
     <AppHeader class="w-full" />
-    <div class="px-2 shrink-0 border-b border-(--sub-color)">
+    <div class="px-2 shrink-0 border-b border-(--contrast-border-color)">
       <ViewSelectorDropdown />
     </div>
     <main
@@ -190,13 +190,18 @@ onBeforeUnmount(() => {
       :aria-busy="busy || loading"
     >
       <div class="mb-6">
-        <h1 class="text-2xl sm:text-3xl font-serif text-(--main-color)">
+        <h1
+          class="text-2xl sm:text-3xl font-serif text-(--contrast-main-color)"
+        >
           To be read
         </h1>
         <p class="text-sm opacity-70 mt-1">
           Your private queue across all accessible collections.
         </p>
-        <p v-if="!loading" class="text-sm italic text-(--sub-color) mt-1">
+        <p
+          v-if="!loading"
+          class="text-sm italic text-(--contrast-sub-color) mt-1"
+        >
           {{ books.length }} book{{ books.length === 1 ? '' : 's' }}
         </p>
         <p id="tbr-reorder-help" class="text-xs opacity-60 mt-2">
@@ -204,11 +209,11 @@ onBeforeUnmount(() => {
         </p>
       </div>
       <p v-if="loading" role="status">Loading your queue...</p>
-      <div v-if="error" role="alert" class="mb-4 text-(--error-color)">
+      <div v-if="error" role="alert" class="mb-4 text-(--contrast-error-color)">
         <p>{{ error }}</p>
         <button
           type="button"
-          class="mt-2 px-3 py-1 border border-(--sub-color) rounded-md"
+          class="mt-2 px-3 py-1 border border-(--contrast-border-color) rounded-md"
           :disabled="busy || loading"
           @click="load"
         >
@@ -229,15 +234,15 @@ onBeforeUnmount(() => {
           v-for="(book, index) in books"
           :key="book.id"
           :data-tbr-book="book.id"
-          class="grid grid-cols-[2rem_5rem_minmax(0,1fr)] sm:grid-cols-[3rem_10rem_minmax(0,1fr)] gap-3 sm:gap-4 pb-5 border-b border-(--sub-color)/20 rounded-sm"
+          class="grid grid-cols-[2rem_5rem_minmax(0,1fr)] sm:grid-cols-[3rem_10rem_minmax(0,1fr)] gap-3 sm:gap-4 pb-5 border-b border-(--contrast-border-color)/20 rounded-sm"
           :class="
             drag?.targetId === book.id && drag.bookId !== book.id
-              ? 'outline-2 outline-(--main-color)'
+              ? 'outline-2 outline-(--contrast-main-border-color)'
               : ''
           "
         >
           <div
-            class="flex flex-col items-center gap-1 row-span-2 text-(--sub-color)"
+            class="flex flex-col items-center gap-1 row-span-2 text-(--contrast-sub-color)"
           >
             <span
               class="text-xl sm:text-2xl mb-1"
@@ -306,7 +311,7 @@ onBeforeUnmount(() => {
             </div>
             <div
               v-if="book.description"
-              class="line-clamp-3 text-sm font-light opacity-90 prose prose-sm max-w-none text-(--text-color)"
+              class="line-clamp-3 text-sm font-light opacity-90 prose prose-sm max-w-none text-(--contrast-text-color)"
             >
               <ClientOnly>
                 <!-- eslint-disable-next-line vue/no-v-html -->

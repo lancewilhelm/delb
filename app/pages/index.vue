@@ -179,7 +179,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex flex-col w-full h-full overflow-hidden">
     <AppHeader class="w-full" />
-    <div class="px-4 shrink-0 border-b border-(--sub-color)">
+    <div class="px-4 shrink-0 border-b border-(--contrast-border-color)">
       <div class="flex items-center justify-center">
         <ViewSelectorDropdown />
       </div>
@@ -299,7 +299,7 @@ onBeforeUnmount(() => {
   width: min(100%, 1000px);
   margin: auto;
   padding: 48px 28px;
-  color: var(--text-color);
+  color: var(--contrast-text-color);
 }
 .dashboard-greeting {
   display: flex;
@@ -328,7 +328,7 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   padding-bottom: 28px;
-  border-bottom: 1px solid var(--sub-color);
+  border-bottom: 1px solid var(--contrast-border-color);
   margin-bottom: 32px;
 }
 .dashboard-count {
@@ -338,7 +338,8 @@ onBeforeUnmount(() => {
   padding: 4px 16px;
   color: inherit;
   text-decoration: none;
-  border-right: 1px solid color-mix(in srgb, var(--sub-color) 55%, transparent);
+  border-right: 1px solid
+    color-mix(in srgb, var(--contrast-border-color) 55%, transparent);
 }
 .dashboard-count:first-child {
   padding-left: 0;
@@ -437,13 +438,13 @@ onBeforeUnmount(() => {
   margin: 28px 0;
 }
 .dashboard-error {
-  color: var(--error-color);
+  color: var(--contrast-error-color);
   font-size: 13px;
   margin-top: 16px;
 }
 .dashboard-error button {
   display: inline-flex;
-  color: var(--text-color);
+  color: var(--contrast-text-color);
   text-decoration: underline;
   padding: 4px;
   margin-left: 4px;
@@ -451,7 +452,7 @@ onBeforeUnmount(() => {
 .dashboard-show-more {
   font-size: 12px;
   padding: 8px 12px;
-  border: 1px solid var(--sub-color);
+  border: 1px solid var(--contrast-border-color);
   margin-top: 16px;
 }
 .dashboard-show-more:disabled {

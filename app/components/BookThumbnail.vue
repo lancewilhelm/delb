@@ -267,7 +267,7 @@ const visibleFields = computed(() =>
         <button
           v-if="props.selectable"
           type="button"
-          class="absolute inset-0 rounded-md border border-transparent hover:border-(--sub-color)"
+          class="absolute inset-0 rounded-md border border-transparent hover:border-(--contrast-border-color)"
           :aria-pressed="props.selected ? 'true' : 'false'"
           :aria-label="props.selected ? 'Deselect book' : 'Select book'"
           @click.stop="onToggleSelect"
@@ -276,8 +276,8 @@ const visibleFields = computed(() =>
             class="absolute top-2 right-2 w-6 h-6 rounded-full border flex items-center justify-center"
             :class="
               props.selected
-                ? 'bg-(--main-color) border-(--main-color) text-(--bg-color)'
-                : 'bg-(--bg-color)/80 border-(--sub-color) text-(--text-color)'
+                ? 'bg-(--main-color) border-(--main-color) text-(--contrast-inverse-color)'
+                : 'bg-(--bg-color)/80 border-(--contrast-border-color) text-(--contrast-text-color)'
             "
           >
             <Icon :name="props.selected ? 'lucide:check' : ''" />
