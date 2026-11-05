@@ -181,10 +181,7 @@ try {
     recent.data.data.shelf.books.map((book) => book.id),
     [newer, older],
   );
-  assert.equal(
-    recent.data.data.shelf.books[0].finishedAt,
-    new Date(2026, 10, 2).toISOString(),
-  );
+  assert.equal(recent.data.data.shelf.books[0].finishedDate, '2026-11-02');
   const favorites = await request('/api/dashboard?shelf=favorites', a.cookie);
   assert.deepEqual(
     new Set(favorites.data.data.shelf.books.map((book) => book.id)),

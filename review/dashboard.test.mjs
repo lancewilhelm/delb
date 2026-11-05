@@ -297,7 +297,7 @@ test('shelf changes reject stale scope responses and loading more can retry with
             title,
             updatedAt: '2026-01-01',
             progress: 10,
-            finishedAt: null,
+            finishedDate: null,
             userFavorite: false,
           },
         ],
@@ -388,55 +388,58 @@ test('favorite controls wait for acknowledgement and retain the saved value when
   assert.ok(!view.text().includes('Could not save favorite'));
 });
 
-test('Recently read shows the local calendar date in timezones ahead of UTC', async (t) => {
+test('Recently read preserves calendar dates across browser timezones', async (t) => {
   const previousTimezone = process.env.TZ;
-  process.env.TZ = 'Pacific/Kiritimati';
   t.after(() => {
     if (previousTimezone === undefined) delete process.env.TZ;
     else process.env.TZ = previousTimezone;
   });
-  const view = mountedComponent('../app/pages/index.vue', {
-    definePageMeta() {},
-    useHead() {},
-    useAuth: () => ({ user: vue.ref({ name: 'Reader' }) }),
-    useCollectionsStore: () => ({
-      collections: [{}],
-      activeSelection: { kind: 'all' },
-    }),
-    useBooksIndexFiltersStore: () => ({ clearAll() {} }),
-    useRoute: () => ({ query: { shelf: 'recent' } }),
-    useRouter: () => ({ replace() {} }),
-    $fetch: async () => ({
-      success: true,
-      data: {
-        counts: {
-          total: 1,
-          reading: 0,
-          finished: 1,
-          none: 0,
-          to_be_read: 0,
-          dnf: 0,
+  for (const timezone of ['America/New_York', 'Pacific/Kiritimati']) {
+    process.env.TZ = timezone;
+    const view = mountedComponent('../app/pages/index.vue', {
+      definePageMeta() {},
+      useHead() {},
+      useAuth: () => ({ user: vue.ref({ name: 'Reader' }) }),
+      useCollectionsStore: () => ({
+        collections: [{}],
+        activeSelection: { kind: 'all' },
+      }),
+      useBooksIndexFiltersStore: () => ({ clearAll() {} }),
+      useRoute: () => ({ query: { shelf: 'recent' } }),
+      useRouter: () => ({ replace() {} }),
+      $fetch: async () => ({
+        success: true,
+        data: {
+          counts: {
+            total: 1,
+            reading: 0,
+            finished: 1,
+            none: 0,
+            to_be_read: 0,
+            dnf: 0,
+          },
+          shelf: {
+            kind: 'recent',
+            nextOffset: null,
+            books: [
+              {
+                id: 'date',
+                title: 'Date test',
+                updatedAt: '2026-11-02',
+                finishedDate: '2026-11-02',
+                progress: null,
+                userFavorite: false,
+              },
+            ],
+          },
         },
-        shelf: {
-          kind: 'recent',
-          nextOffset: null,
-          books: [
-            {
-              id: 'date',
-              title: 'Date test',
-              updatedAt: '2026-11-02',
-              finishedAt: '2026-11-01T10:00:00.000Z',
-              progress: null,
-              userFavorite: false,
-            },
-          ],
-        },
-      },
-    }),
-  });
-  t.after(() => view.app.unmount());
-  await flush();
-  assert.match(view.text(), /Read Nov 2, 2026/);
+      }),
+    });
+    t.after(() => view.app.unmount());
+    await flush();
+    assert.match(view.text(), /Read Nov 2, 2026/);
+    view.app.unmount();
+  }
 });
 
 test('other dashboard status links keep their targets and do not clear filters', async () => {

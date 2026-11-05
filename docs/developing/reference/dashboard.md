@@ -12,7 +12,7 @@ The count strip stays above the shelf tabs and describes the whole selected coll
 | Recently read    | Current user's Finished status with a non-null finish date | Finish date, newest first                               |
 | Favorites        | Current user's favorite flag, regardless of status         | Title, alphabetically without case distinction          |
 
-Book ID resolves equal sort values. Recently read displays the finish date in the browser's local timezone, like book details. Finished books without a date remain in the Finished count but do not appear on Recently read.
+Book ID resolves equal sort values. The API converts the stored finish date into a `YYYY-MM-DD` calendar date in the server's timezone, where the status endpoint parses date-only input. The browser formats that date without a timezone conversion. Finished books without a date remain in the Finished count but do not appear on Recently read.
 
 ## Dashboard API
 
@@ -26,7 +26,7 @@ Book ID resolves equal sort values. Recently read displays the finish date in th
 
 The response contains `data.counts` and `data.shelf`. The shelf has `kind`, `books`, and `nextOffset`. Each page contains up to twelve books. A null `nextOffset` ends the list. The frontend appends subsequent pages with **Show more**.
 
-Each book includes its ID, title, cover pointer, update timestamp, progress, finish date, and `userFavorite` boolean. The shared response type is [DashboardData](../../../shared/types/dashboard.ts).
+Each book includes its ID, title, cover pointer, update timestamp, progress, `finishedDate` calendar date, and `userFavorite` boolean. The shared response type is [DashboardData](../../../shared/types/dashboard.ts).
 
 Unauthenticated requests return 401. Invalid query values return 400. An inaccessible collection returns zero counts and an empty shelf. Responses use `Cache-Control: private, no-store`.
 

@@ -71,9 +71,9 @@ test('Recently read orders by the current user finish date and excludes undated 
     result.shelf.books.map((book) => book.id),
     ['4', '3'],
   );
-  assert.equal(
-    result.shelf.books[0]?.finishedAt,
-    new Date(200_000).toISOString(),
+  assert.match(
+    result.shelf.books[0]?.finishedDate ?? '',
+    /^\d{4}-\d{2}-\d{2}$/,
   );
   const scoped = await getDashboard(db, {
     userId: 'u',
@@ -247,5 +247,30 @@ test('the additive favorite migration preserves existing progress sync preferenc
     );
   } finally {
     client.close();
+  }
+});
+
+test('finish dates retain the server calendar date when serialized', async (t) => {
+  const previousTimezone = process.env.TZ;
+  t.after(() => {
+    if (previousTimezone === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTimezone;
+  });
+  for (const timezone of ['UTC', 'America/New_York', 'Pacific/Kiritimati']) {
+    process.env.TZ = timezone;
+    const { client, db, cleanup } = await fixture();
+    try {
+      await client.execute({
+        sql: "UPDATE user_book_status SET finished_at=? WHERE user_id='u' AND book_id='4'",
+        args: [new Date(2026, 10, 2).getTime() / 1000],
+      });
+      const result = await getDashboard(db, { userId: 'u', shelf: 'recent' });
+      assert.equal(
+        result.shelf.books.find((book) => book.id === '4')?.finishedDate,
+        '2026-11-02',
+      );
+    } finally {
+      cleanup();
+    }
   }
 });

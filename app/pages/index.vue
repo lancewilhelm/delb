@@ -172,7 +172,8 @@ function readDate(value: string) {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-  }).format(new Date(value));
+    timeZone: 'UTC',
+  }).format(new Date(`${value}T12:00:00Z`));
 }
 
 watch([scope, selectedShelf], () => {
@@ -271,8 +272,8 @@ onBeforeUnmount(() => {
             >
               <BookThumbnail :book="book" :lock-aspect-ratio="true" />
               <div class="dashboard-book-meta">
-                <span v-if="selectedShelf === 'recent' && book.finishedAt"
-                  >Read {{ readDate(book.finishedAt) }}</span
+                <span v-if="selectedShelf === 'recent' && book.finishedDate"
+                  >Read {{ readDate(book.finishedDate) }}</span
                 >
                 <span v-else-if="selectedShelf === 'reading'">{{
                   typeof book.progress === 'number'

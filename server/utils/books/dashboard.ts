@@ -13,6 +13,10 @@ import type {
   DashboardShelf,
 } from '../../../shared/types/dashboard';
 
+function calendarDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 function visibleBooks({
   userId,
   collectionId,
@@ -128,7 +132,7 @@ export async function getDashboard(
         coverImagePath: book.coverImagePath,
         updatedAt: book.updatedAt.toISOString(),
         progress: book.progress,
-        finishedAt: book.finishedAt?.toISOString() ?? null,
+        finishedDate: book.finishedAt ? calendarDate(book.finishedAt) : null,
         userFavorite: book.favorite ?? false,
       })),
       nextOffset: rows.length > pageSize ? offset + pageSize : null,

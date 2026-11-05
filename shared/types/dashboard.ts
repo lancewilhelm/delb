@@ -15,7 +15,7 @@ export type DashboardBook = {
   coverImagePath: string | null;
   updatedAt: string;
   progress: number | null;
-  finishedAt: string | null;
+  finishedDate: string | null;
   userFavorite: boolean;
 };
 
