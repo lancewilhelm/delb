@@ -28,4 +28,12 @@ Open `/login`, enter your email and password, and select **Login**. Delb restore
 
 If a form reports an error, correct the named field and submit again. A failed registration does not establish that an account or usable session exists.
 
+## Adjust menu and dialog transparency
+
+1. Open **Settings → Appearance**.
+2. Move **Glass opacity** toward 40% for more transparency or 100% for solid menus and dialogs.
+3. Open the collection picker or global search to see the effect. Text stays opaque.
+
+Changes save automatically. Select **Reset glass opacity to 80%** to restore the default. If separate mobile settings are enabled, the slider changes the active device profile.
+
 Continue with [adding books](add-books.md). For the implementation behind registration and Personal collections, read [account initialization](../developing/core-workflows.md#account-initialization).

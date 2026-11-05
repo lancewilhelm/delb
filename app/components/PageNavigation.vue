@@ -105,7 +105,7 @@ onBeforeUnmount(() => {
     <div
       v-if="popupVisible && Object.keys(pages).length"
       ref="popupRef"
-      class="absolute top-full mb-2 mt-2 left-0 bg-(--bg-color) border border-(--sub-color) rounded-lg shadow-lg w-60 max-h-60 z-20 overflow-y-auto"
+      class="absolute top-full mb-2 mt-2 left-0 surface-glass border border-(--sub-color) rounded-lg shadow-lg w-60 max-h-60 z-20 overflow-y-auto"
     >
       <div
         v-for="page in pages"

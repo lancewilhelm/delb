@@ -8,6 +8,10 @@ import { createPinia, defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import { normalizeCustomTheme } from '../utils/customTheme';
 import {
+  DEFAULT_GLASS_OPACITY,
+  normalizeGlassOpacity,
+} from '../utils/glassOpacity';
+import {
   defaultThemePreference,
   normalizeThemePreference,
 } from '../utils/themePreference';
@@ -31,6 +35,7 @@ function createStore(
   )
     .replace(/import [\s\S]*?from '~\/utils\/bookFields';/, '')
     .replace(/import [\s\S]*?from '~\/utils\/customTheme';/, '')
+    .replace(/import [\s\S]*?from '~\/utils\/glassOpacity';/, '')
     .replace(/import [\s\S]*?from '~\/utils\/themePreference';/, '');
   const code = transformSync(source, { loader: 'ts', format: 'cjs' }).code;
   const module = { exports: {} as typeof import('./userSettings') };
@@ -44,6 +49,8 @@ function createStore(
     defaultBookFields,
     normalizeBookFields,
     normalizeCustomTheme,
+    DEFAULT_GLASS_OPACITY,
+    normalizeGlassOpacity,
     defaultThemePreference,
     normalizeThemePreference,
     Date: class extends Date {

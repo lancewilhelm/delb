@@ -99,7 +99,7 @@ watch(
       role="dialog"
       aria-modal="true"
       aria-label="Command palette"
-      class="flex flex-col backdrop-blur-lg bg-(--bg-color)/80 w-150 h-150 m-4 rounded-lg shadow-lg font-mono command-palette border border-(--sub-color)"
+      class="flex flex-col surface-glass w-150 h-150 m-4 rounded-lg shadow-lg font-mono command-palette border border-(--sub-color)"
       @keydown="containFocus"
       @click.stop
     >

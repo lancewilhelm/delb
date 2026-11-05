@@ -423,7 +423,7 @@ onBeforeUnmount(() => {
       role="dialog"
       aria-modal="true"
       aria-label="Search library"
-      class="flex flex-col backdrop-blur-lg bg-(--bg-color)/80 w-180 h-150 m-4 md:max-w-[80%] lg:max-w-[60%] rounded-lg shadow-lg border border-(--sub-color) overflow-hidden"
+      class="flex flex-col surface-glass w-180 h-150 m-4 md:max-w-[80%] lg:max-w-[60%] rounded-lg shadow-lg border border-(--sub-color) overflow-hidden"
       @keydown="containFocus"
       @click.stop
     >

@@ -233,7 +233,7 @@ async function submit() {
           top: `${menuPosition.top}px`,
         }"
         role="menu"
-        class="fixed z-200 w-40 rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg"
+        class="fixed z-200 w-40 rounded-md border border-(--sub-color) surface-glass shadow-lg"
       >
         <button
           type="button"
@@ -254,7 +254,7 @@ async function submit() {
       </div>
       <dialog
         ref="dialog"
-        class="m-auto w-[min(32rem,90vw)] rounded-lg border border-(--sub-color) bg-(--bg-color) text-(--text-color) p-6 backdrop:bg-black/50"
+        class="m-auto w-[min(32rem,90vw)] rounded-lg border border-(--sub-color) surface-glass text-(--text-color) p-6 backdrop:bg-black/50"
         :aria-labelledby="titleId"
         @close="onClose"
         @cancel="pending && $event.preventDefault()"

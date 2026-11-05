@@ -39,7 +39,7 @@ function close() {
       ref="panel"
       role="dialog"
       :aria-label="`${mode === 'grid' ? 'Grid' : 'List'} view settings`"
-      class="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto border border-(--sub-color) bg-(--bg-color) rounded-md shadow-lg z-50 p-3"
+      class="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto border border-(--sub-color) surface-glass rounded-md shadow-lg z-50 p-3"
     >
       <div class="flex items-center justify-between mb-2">
         <div class="text-sm font-semibold">

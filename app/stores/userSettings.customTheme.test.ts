@@ -9,6 +9,10 @@ import { computed, ref } from 'vue';
 import type { UserSettings } from './userSettings';
 import { defaultCustomTheme, normalizeCustomTheme } from '../utils/customTheme';
 import {
+  DEFAULT_GLASS_OPACITY,
+  normalizeGlassOpacity,
+} from '../utils/glassOpacity';
+import {
   defaultThemePreference,
   normalizeThemePreference,
 } from '../utils/themePreference';
@@ -21,6 +25,7 @@ function createStore() {
   )
     .replace(/import [\s\S]*?from '~\/utils\/bookFields';/, '')
     .replace(/import [\s\S]*?from '~\/utils\/customTheme';/, '')
+    .replace(/import [\s\S]*?from '~\/utils\/glassOpacity';/, '')
     .replace(/import [\s\S]*?from '~\/utils\/themePreference';/, '');
   const code = transformSync(source, { loader: 'ts', format: 'cjs' }).code;
   const mobile = ref(false);
@@ -36,6 +41,8 @@ function createStore() {
     defaultBookFields,
     normalizeBookFields,
     normalizeCustomTheme,
+    DEFAULT_GLASS_OPACITY,
+    normalizeGlassOpacity,
     defaultThemePreference,
     normalizeThemePreference,
     useIsMobileDevice: () => mobile,
@@ -44,6 +51,53 @@ function createStore() {
   });
   return { store: module.exports.useUserSettingsStore(createPinia()), mobile };
 }
+
+test('glass opacity persists independently in default and mobile profiles', async () => {
+  const { store, mobile } = createStore();
+  assert.equal(store.activeSettings.glassOpacity, 80);
+  await store.updateSettings({ glassOpacity: 60 });
+  store.setMobileEnabled(true);
+  mobile.value = true;
+  assert.equal(store.activeSettings.glassOpacity, 60);
+  await store.updateSettings({ glassOpacity: 100 });
+  assert.equal(store.activeSettings.glassOpacity, 100);
+  mobile.value = false;
+  assert.equal(store.activeSettings.glassOpacity, 60);
+
+  const restored = createStore();
+  restored.store.applyRemoteSettings(
+    JSON.parse(JSON.stringify(store.settings)),
+  );
+  assert.equal(restored.store.activeSettings.glassOpacity, 60);
+  restored.mobile.value = true;
+  assert.equal(restored.store.activeSettings.glassOpacity, 100);
+  restored.store.$reset();
+  assert.equal(restored.store.activeSettings.glassOpacity, 80);
+});
+
+test('saved glass opacity is normalized before rendering either profile', () => {
+  const { store, mobile } = createStore();
+  for (const [value, expected] of [
+    [undefined, 80],
+    ['60', 80],
+    [null, 80],
+    [Number.NaN, 80],
+    [Number.POSITIVE_INFINITY, 80],
+    [0, 40],
+    [150, 100],
+    [65.4, 65],
+  ]) {
+    const saved = JSON.parse(JSON.stringify(store.settings));
+    saved.glassOpacity = value;
+    saved.mobile.enabled = true;
+    saved.mobile.settings.glassOpacity = value;
+    store.applyRemoteSettings(saved);
+    mobile.value = false;
+    assert.equal(store.activeSettings.glassOpacity, expected);
+    mobile.value = true;
+    assert.equal(store.activeSettings.glassOpacity, expected);
+  }
+});
 
 test('legacy settings remain uninitialized until a palette is saved', () => {
   const { store } = createStore();

@@ -5,6 +5,25 @@
   --yes-color: #008800;
   --no-color: #880000;
   --transition: all 0.3s;
+  --glass-opacity: 80%;
+  --glass-blur: 12px;
+}
+
+.surface-glass {
+  background: var(--bg-color);
+}
+
+@supports (background: color-mix(in srgb, black, transparent)) and
+  ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .surface-glass {
+    background: color-mix(
+      in srgb,
+      var(--bg-color) var(--glass-opacity),
+      transparent
+    );
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    backdrop-filter: blur(var(--glass-blur));
+  }
 }
 
 body {

@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import themesList from '~/assets/json/themes.json';
 import { normalizeCustomTheme } from '~/utils/customTheme';
+import {
+  DEFAULT_GLASS_OPACITY,
+  MAX_GLASS_OPACITY,
+  MIN_GLASS_OPACITY,
+} from '~/utils/glassOpacity';
 
 interface Theme {
   name: string;
@@ -13,6 +18,7 @@ interface Theme {
 const userSettingsStore = useUserSettingsStore();
 const appearance = useThemeAppearance();
 const isMobileDevice = useIsMobileDevice();
+const glassOpacity = userSettingsStore.settingRef<number>('glassOpacity');
 
 // ------------------------------
 // Mobile settings
@@ -193,6 +199,30 @@ function handleSortChange(target: string) {
       >
         You are currently editing mobile-specific settings.
       </div>
+    </SettingsUIGroup>
+    <SettingsUIGroup
+      title="Glass"
+      icon="lucide:blend"
+      description="adjust the transparency of menus and dialogs"
+    >
+      <SettingsUISlider
+        v-model="glassOpacity"
+        title="Glass opacity"
+        description="Higher values make menus and dialogs more solid. At 100%, they are opaque."
+        :min="MIN_GLASS_OPACITY"
+        :max="MAX_GLASS_OPACITY"
+        :step="5"
+        :display-value="true"
+        suffix="%"
+      />
+      <button
+        v-if="glassOpacity !== DEFAULT_GLASS_OPACITY"
+        type="button"
+        class="self-start rounded-lg px-3 py-1 bg-(--sub-alt-color)!"
+        @click="glassOpacity = DEFAULT_GLASS_OPACITY"
+      >
+        Reset glass opacity to {{ DEFAULT_GLASS_OPACITY }}%
+      </button>
     </SettingsUIGroup>
     <SettingsUIGroup
       title="Cover Style"

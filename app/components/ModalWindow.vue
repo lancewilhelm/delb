@@ -52,7 +52,7 @@ onMounted(() => {
       @click="onBackdropClick"
     >
       <div
-        class="bg-(--bg-color) border border-(--main-color) m-4 md:max-w-[80%] lg:max-w-[60%] p-4 rounded-lg shadow-lg"
+        class="surface-glass border border-(--main-color) m-4 md:max-w-[80%] lg:max-w-[60%] p-4 rounded-lg shadow-lg"
         :class="widthFull ? 'w-full' : ''"
         @click.stop
       >

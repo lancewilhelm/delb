@@ -92,7 +92,7 @@ onBeforeUnmount(() => {
     <div
       v-if="sortOpen"
       ref="sortPanelRef"
-      class="absolute right-0 mt-1 w-48 border border-(--sub-color) bg-(--bg-color) rounded-md shadow-lg z-50 overflow-hidden"
+      class="absolute right-0 mt-1 w-48 border border-(--sub-color) surface-glass rounded-md shadow-lg z-50 overflow-hidden"
       role="menu"
     >
       <div class="px-2 py-1 border-b border-(--sub-color)">

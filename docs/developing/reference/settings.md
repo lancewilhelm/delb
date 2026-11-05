@@ -43,6 +43,14 @@ The [server theme plugin](../../../app/plugins/init-theme.server.ts) emits eithe
 
 Custom colors live in `customTheme`. A theme slot or fixed choice can select `custom`; the palette then supplies CSS roles through [custom theme utilities](../../../app/utils/customTheme.ts). `theme: 'custom'` is the legacy shape, not the current settings contract.
 
+## Menu and dialog opacity
+
+**Settings → Appearance → Glass opacity** controls floating menus and dialogs from 40–100% in 5-point slider steps. The default and reset value is 80%. Text and controls stay opaque. The main page, header, sidebar, and reader surfaces retain their existing backgrounds.
+
+`glassOpacity` belongs to each user settings profile, so enabled mobile overrides can keep a separate value. Changes apply locally immediately and use the existing debounced settings sync. Non-numeric saved values use the default; finite numbers are rounded and clamped to the supported range.
+
+The [glass plugin](../../../app/plugins/init-glass.ts) sets reactive CSS variables during server rendering and client updates. [Shared glass styling](../../../app/assets/css/main.css) mixes the current theme background with transparency and adds backdrop blur. At 100%, blur is disabled. Browsers without the required color mixing or backdrop filtering render opaque surfaces.
+
 ## Write acknowledgements and concurrent changes
 
 `PUT /api/settings/user` receives the settings document and its `updatedAt` revision. [The handler](../../../server/api/settings/user.put.ts) accepts a newer revision, or acknowledges an identical repeat of the stored revision/content. It returns the stored row and whether the write was accepted.

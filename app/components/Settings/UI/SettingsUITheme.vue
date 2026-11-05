@@ -157,7 +157,7 @@ function onEscape(event: KeyboardEvent) {
     </div>
     <div
       v-if="menuOpen"
-      class="theme-menu absolute right-0 z-30 mt-1 flex min-w-48 flex-col rounded-lg border border-(--sub-color) bg-(--bg-color) p-1 text-(--text-color) shadow-lg"
+      class="theme-menu absolute right-0 z-30 mt-1 flex min-w-48 flex-col rounded-lg border border-(--sub-color) surface-glass p-1 text-(--text-color) shadow-lg"
     >
       <button type="button" @click="assign('light')">
         Use for system light

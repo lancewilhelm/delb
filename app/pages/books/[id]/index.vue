@@ -1308,7 +1308,7 @@ const { copy } = useClipboard();
                 <div
                   v-if="downloadDropdownOpen && downloadChoices.length > 1"
                   ref="downloadPanelRef"
-                  class="absolute right-0 mt-1 w-44 bg-(--bg-color) border border-(--sub-color) rounded-md shadow-lg z-150 overflow-hidden"
+                  class="absolute right-0 mt-1 w-44 surface-glass border border-(--sub-color) rounded-md shadow-lg z-150 overflow-hidden"
                   role="menu"
                 >
                   <div class="px-3 py-2 border-b border-(--sub-color)">

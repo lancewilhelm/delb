@@ -2010,7 +2010,7 @@ watch(
                     authorSuggestOpen &&
                     (authorSearching || authorSuggestions.length)
                   "
-                  class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
+                  class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) surface-glass shadow-lg overflow-hidden"
                 >
                   <div
                     v-if="authorSearching"
@@ -2124,7 +2124,7 @@ watch(
                       seriesSuggestOpen &&
                       (seriesSearching || seriesSuggestions.length)
                     "
-                    class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
+                    class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) surface-glass shadow-lg overflow-hidden"
                   >
                     <div
                       v-if="seriesSearching"
@@ -2273,7 +2273,7 @@ watch(
                   v-if="
                     tagSuggestOpen && (tagSearching || tagSuggestions.length)
                   "
-                  class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
+                  class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) surface-glass shadow-lg overflow-hidden"
                 >
                   <div v-if="tagSearching" class="px-3 py-2 text-sm opacity-70">
                     Searching…
@@ -2357,7 +2357,7 @@ watch(
                       publisherSuggestOpen &&
                       (publisherSearching || publisherSuggestions.length)
                     "
-                    class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) bg-(--bg-color) shadow-lg overflow-hidden"
+                    class="absolute z-50 mt-1 w-full rounded-md border border-(--sub-color) surface-glass shadow-lg overflow-hidden"
                   >
                     <div
                       v-if="publisherSearching"
