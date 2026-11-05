@@ -34,6 +34,7 @@ for (const suite of [
   'review/audits/2026-10-27/bootstrap-regression.mjs',
   'review/audits/2026-10-27/server-regression.mjs',
   'review/tag-features-api.mjs',
+  'review/dashboard-api.mjs',
 ]) {
   const directory = await mkdtemp(path.join(tmpdir(), 'delb-api-regression-'));
   let server;
