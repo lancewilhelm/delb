@@ -245,7 +245,7 @@ onBeforeUnmount(() => {
             >
             <button
               type="button"
-              class="touch-none cursor-grab active:cursor-grabbing p-1"
+              class="touch-none cursor-grab! active:cursor-grabbing! hover:bg-transparent! active:bg-transparent! p-1"
               :disabled="busy || !!error"
               :aria-label="`Reorder ${book.title}`"
               @pointerdown="startDrag($event, book.id)"
