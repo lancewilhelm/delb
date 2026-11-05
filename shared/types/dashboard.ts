@@ -1,4 +1,4 @@
-export type DashboardShelf = 'reading' | 'recent' | 'favorites';
+export type DashboardShelf = 'reading' | 'recent';
 
 export type DashboardCounts = {
   total: number;
@@ -16,7 +16,6 @@ export type DashboardBook = {
   updatedAt: string;
   progress: number | null;
   finishedDate: string | null;
-  userFavorite: boolean;
 };
 
 export type DashboardData = {

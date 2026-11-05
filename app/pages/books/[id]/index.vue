@@ -38,7 +38,6 @@ type Book = {
   userStatusDnfAt?: string | number | Date | null;
   userStatusTbrRank?: number | null;
   userProgressSyncEnabled?: boolean | null;
-  userFavorite?: boolean;
 
   // New schema: authors are related entities (many-to-many)
   authors?: { id: string; name: string }[];
@@ -1271,13 +1270,6 @@ const { copy } = useClipboard();
           <div class="flex flex-col items-center w-full">
             <!-- Actions -->
             <div class="flex flex-wrap gap-1 pt-2 items-center justify-center">
-              <BookFavoriteButton
-                :key="book.id"
-                :book-id="book.id"
-                :title="book.title"
-                :favorite="book.userFavorite ?? false"
-                @updated="book.userFavorite = $event"
-              />
               <NuxtLink
                 v-if="hasEpub"
                 v-tooltip="'Read book'"

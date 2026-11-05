@@ -4,7 +4,6 @@ import {
   books,
   collectionBooks,
   collectionMembers,
-  userBookPreferences,
   userBookReadingPosition,
   userBookStatus,
 } from '../../../app/utils/db/schema';
@@ -66,7 +65,6 @@ export async function getDashboard(
       eq(userBookStatus.status, 'finished'),
       isNotNull(userBookStatus.finishedAt),
     ),
-    favorites: eq(userBookPreferences.favorite, true),
   };
   const order: Record<DashboardShelf, SQL[]> = {
     reading: [
@@ -75,7 +73,6 @@ export async function getDashboard(
       asc(books.id),
     ],
     recent: [desc(userBookStatus.finishedAt), asc(books.id)],
-    favorites: [asc(sql`lower(${books.title})`), asc(books.id)],
   };
   const pageSize = 12;
   const rows = await db
@@ -86,7 +83,6 @@ export async function getDashboard(
       updatedAt: books.updatedAt,
       progress: userBookReadingPosition.progress,
       finishedAt: userBookStatus.finishedAt,
-      favorite: userBookPreferences.favorite,
     })
     .from(books)
     .leftJoin(
@@ -101,13 +97,6 @@ export async function getDashboard(
       and(
         eq(userBookReadingPosition.bookId, books.id),
         eq(userBookReadingPosition.userId, userId),
-      ),
-    )
-    .leftJoin(
-      userBookPreferences,
-      and(
-        eq(userBookPreferences.bookId, books.id),
-        eq(userBookPreferences.userId, userId),
       ),
     )
     .where(and(visible, filters[shelf]))
@@ -133,36 +122,8 @@ export async function getDashboard(
         updatedAt: book.updatedAt.toISOString(),
         progress: book.progress,
         finishedDate: book.finishedAt ? calendarDate(book.finishedAt) : null,
-        userFavorite: book.favorite ?? false,
       })),
       nextOffset: rows.length > pageSize ? offset + pageSize : null,
     },
   };
-}
-
-export async function setBookFavorite(
-  db: LibSQLDatabase,
-  {
-    userId,
-    bookId,
-    favorite,
-  }: { userId: string; bookId: string; favorite: boolean },
-): Promise<{ userFavorite: boolean } | null> {
-  return db.transaction(async (tx) => {
-    const [book] = await tx
-      .select({ id: books.id })
-      .from(books)
-      .where(and(eq(books.id, bookId), visibleBooks({ userId })))
-      .limit(1);
-    if (!book) return null;
-    const updatedAt = new Date();
-    await tx
-      .insert(userBookPreferences)
-      .values({ userId, bookId, favorite, updatedAt })
-      .onConflictDoUpdate({
-        target: [userBookPreferences.userId, userBookPreferences.bookId],
-        set: { favorite, updatedAt },
-      });
-    return { userFavorite: favorite };
-  });
 }

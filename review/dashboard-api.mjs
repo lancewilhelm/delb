@@ -102,33 +102,14 @@ try {
     ).status,
     200,
   );
-  assert.equal(
-    (
-      await request(`/api/books/${reading}/rating`, a.cookie, 'POST', {
-        rating: 7,
-      })
-    ).status,
-    200,
-  );
-  assert.equal(
-    (
-      await request(`/api/books/${reading}/progress-sync`, a.cookie, 'PUT', {
-        enabled: true,
-      })
-    ).status,
-    200,
-  );
+
   assert.equal((await request('/api/dashboard')).status, 401);
   assert.equal(
-    (
-      await request(`/api/books/${reading}/favorite`, undefined, 'PUT', {
-        favorite: true,
-      })
-    ).status,
-    401,
+    (await request('/api/dashboard?shelf=unknown', a.cookie)).status,
+    400,
   );
   assert.equal(
-    (await request('/api/dashboard?shelf=unknown', a.cookie)).status,
+    (await request('/api/dashboard?shelf=favorites', a.cookie)).status,
     400,
   );
   assert.equal(
@@ -138,29 +119,11 @@ try {
   assert.equal(
     (
       await request(`/api/books/${reading}/favorite`, a.cookie, 'PUT', {
-        favorite: 'true',
-      })
-    ).status,
-    400,
-  );
-  assert.equal(
-    (
-      await request(`/api/books/${hidden}/favorite`, a.cookie, 'PUT', {
         favorite: true,
       })
     ).status,
     404,
   );
-
-  for (const id of [reading, older, reading])
-    assert.equal(
-      (
-        await request(`/api/books/${id}/favorite`, a.cookie, 'PUT', {
-          favorite: true,
-        })
-      ).status,
-      200,
-    );
   const first = await request('/api/dashboard', a.cookie);
   assert.equal(first.headers.get('cache-control'), 'private, no-store');
   assert.equal(
@@ -169,91 +132,54 @@ try {
     'books in two collections count once',
   );
   assert.deepEqual(
-    first.data.data.shelf.books.map((book) => [
-      book.id,
-      book.progress,
-      book.userFavorite,
-    ]),
-    [[reading, 42, true]],
+    first.data.data.shelf.books.map((book) => [book.id, book.progress]),
+    [[reading, 42]],
   );
+  assert.ok(!('userFavorite' in first.data.data.shelf.books[0]));
   const recent = await request('/api/dashboard?shelf=recent', a.cookie);
   assert.deepEqual(
     recent.data.data.shelf.books.map((book) => book.id),
     [newer, older],
   );
   assert.equal(recent.data.data.shelf.books[0].finishedDate, '2026-11-02');
-  const favorites = await request('/api/dashboard?shelf=favorites', a.cookie);
-  assert.deepEqual(
-    new Set(favorites.data.data.shelf.books.map((book) => book.id)),
-    new Set([reading, older]),
-  );
-  assert.deepEqual(favorites.data.data.counts, recent.data.data.counts);
+  assert.deepEqual(first.data.data.counts, recent.data.data.counts);
   const scoped = await request(
-    `/api/dashboard?shelf=favorites&collectionId=${shared}`,
+    `/api/dashboard?shelf=recent&collectionId=${shared}`,
     a.cookie,
   );
   assert.deepEqual(
     scoped.data.data.shelf.books.map((book) => book.id),
-    [reading],
+    [newer],
   );
   assert.equal(scoped.data.data.counts.total, 2);
+  const other = await request('/api/dashboard?shelf=recent', b.cookie);
   assert.deepEqual(
-    (await request('/api/dashboard?shelf=favorites', b.cookie)).data.data.shelf
-      .books,
+    other.data.data.shelf.books,
     [],
+    'shared books do not share personal finish dates',
   );
-  assert.equal(
-    (await request(`/api/books/${reading}`, b.cookie)).data.data.book
-      .userFavorite,
-    false,
-  );
-  assert.equal(
-    (
-      await request(`/api/books/${reading}/favorite`, b.cookie, 'PUT', {
-        favorite: true,
-      })
-    ).status,
-    200,
-    'viewers can set personal favorites',
-  );
-  assert.equal(
-    (
-      await request(`/api/books/${reading}/favorite`, a.cookie, 'PUT', {
-        favorite: false,
-      })
-    ).status,
-    200,
-  );
-  const detail = (await request(`/api/books/${reading}`, a.cookie)).data.data
-    .book;
-  assert.equal(detail.userFavorite, false);
-  assert.equal(detail.userProgressSyncEnabled, true);
-  assert.equal(detail.userStatus, 'reading');
-  assert.equal(detail.userRating, 7);
-  assert.equal(
-    (await request(`/api/books/${reading}`, b.cookie)).data.data.book
-      .userFavorite,
-    true,
-  );
+  assert.equal(other.data.data.counts.total, 3);
+  assert.equal(other.data.data.counts.none, 3);
   await db.execute({
     sql: 'DELETE FROM collection_members WHERE collection_id=? AND user_id=?',
     args: [shared, b.id],
   });
+  assert.equal(
+    (await request('/api/dashboard', b.cookie)).data.data.counts.total,
+    1,
+  );
   assert.deepEqual(
-    (await request('/api/dashboard?shelf=favorites', b.cookie)).data.data.shelf
-      .books,
+    (
+      await request(
+        `/api/dashboard?shelf=recent&collectionId=${shared}`,
+        b.cookie,
+      )
+    ).data.data.shelf.books,
     [],
   );
-  assert.equal(
-    (
-      await request(`/api/books/${reading}/favorite`, b.cookie, 'PUT', {
-        favorite: false,
-      })
-    ).status,
-    404,
-  );
+  assert.ok(!recent.data.data.shelf.books.some((book) => book.id === hidden));
   console.log(
-    'PASS dashboard API: auth, validation, visibility, finish-date order, retry-safe private favorites, preserved status/rating/sync, and revoked access',
+    'PASS dashboard API: auth, validation, collection visibility, finish-date order, private reading history, revoked access, and deferred favorites',
   );
 } finally {
   db.close();

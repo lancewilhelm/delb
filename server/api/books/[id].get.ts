@@ -202,7 +202,6 @@ export default defineEventHandler(async (event) => {
         await cloudDb
           .select({
             progressSyncEnabled: userBookPreferences.progressSyncEnabled,
-            favorite: userBookPreferences.favorite,
           })
           .from(userBookPreferences)
           .where(
@@ -232,7 +231,6 @@ export default defineEventHandler(async (event) => {
           userStatusDnfAt,
           userStatusTbrRank,
           userProgressSyncEnabled,
-          userFavorite: prefsRow?.favorite ?? false,
         },
         authors: bookAuthorsOut,
         files,

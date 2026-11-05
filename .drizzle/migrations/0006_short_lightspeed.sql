@@ -1,1 +1,0 @@
-ALTER TABLE `user_book_preferences` ADD `favorite` integer DEFAULT false NOT NULL;

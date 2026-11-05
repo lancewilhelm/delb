@@ -104,7 +104,6 @@ async function dashboard() {
     'ViewSelectorDropdown',
     'Icon',
     'BookThumbnail',
-    'BookFavoriteButton',
   ]) {
     app.component(name, { render: () => null });
   }
@@ -225,7 +224,6 @@ function mountedComponent(filename, globals, rootProps = {}) {
       return vue.h('span', this.book.title);
     },
   });
-  app.component('BookFavoriteButton', { render: () => null });
   app.component('NuxtLink', {
     props: ['to'],
     setup:
@@ -298,7 +296,6 @@ test('shelf changes reject stale scope responses and loading more can retry with
             updatedAt: '2026-01-01',
             progress: 10,
             finishedDate: null,
-            userFavorite: false,
           },
         ],
       },
@@ -306,7 +303,7 @@ test('shelf changes reject stale scope responses and loading more can retry with
   });
   assert.equal(requests.length, 1);
   assert.ok(view.text().includes('Loading…'));
-  view.button('Favorites').props.onClick();
+  view.button('Recently read').props.onClick();
   await flush();
   assert.equal(requests[0].signal.aborted, true);
   collections.activeSelection = {
@@ -315,90 +312,45 @@ test('shelf changes reject stale scope responses and loading more can retry with
   };
   await flush();
   assert.equal(requests[2].query.collectionId, 'new-scope');
-  requests[1].resolve(result('Old scope favorite', 'favorites'));
+  requests[1].resolve(result('Old scope finished book', 'recent'));
   await flush();
-  assert.ok(!view.text().includes('Old scope favorite'));
-  requests[2].resolve(result('New scope favorite', 'favorites', 12));
+  assert.ok(!view.text().includes('Old scope finished book'));
+  requests[2].resolve(result('New scope finished book', 'recent', 12));
   await flush();
-  assert.ok(view.text().includes('New scope favorite'));
+  assert.ok(view.text().includes('New scope finished book'));
   view.button('Show more').props.onClick();
   await flush();
   assert.equal(requests[3].query.offset, 12);
   requests[3].reject(new Error('offline'));
   await flush();
-  assert.ok(view.text().includes('New scope favorite'));
+  assert.ok(view.text().includes('New scope finished book'));
   assert.ok(view.text().includes('Could not load this shelf'));
   view.button('Retry').props.onClick();
   await flush();
   assert.equal(requests[4].query.offset, 12);
-  requests[4].resolve(result('Next page favorite', 'favorites'));
+  requests[4].resolve(result('Next page finished book', 'recent'));
   await flush();
   assert.ok(
-    view.text().includes('New scope favorite') &&
-      view.text().includes('Next page favorite'),
+    view.text().includes('New scope finished book') &&
+      view.text().includes('Next page finished book'),
   );
   assert.equal(view.button('Show more'), undefined);
   view
     .all()
     .find(
       (element) =>
-        element.tag === 'span' && element.text === 'New scope favorite',
+        element.tag === 'span' && element.text === 'New scope finished book',
     )
     .props.onStatusChange();
   await flush();
   assert.equal(requests[5].query.offset, 0);
-  requests[5].resolve(result('Refreshed after status change', 'favorites'));
+  requests[5].resolve(result('Refreshed after status change', 'recent'));
   await flush();
   assert.ok(view.text().includes('Refreshed after status change'));
-  assert.ok(!view.text().includes('New scope favorite'));
+  assert.ok(!view.text().includes('New scope finished book'));
   requests[0].resolve(result('Stale initial reading', 'reading'));
   await flush();
   assert.ok(!view.text().includes('Stale initial reading'));
-});
-
-test('favorite controls wait for acknowledgement and retain the saved value when a request fails', async (t) => {
-  const requests = [];
-  const props = vue.reactive({
-    bookId: 'one',
-    title: 'One',
-    favorite: false,
-    onUpdated: (favorite) => {
-      props.favorite = favorite;
-    },
-  });
-  const view = mountedComponent(
-    '../app/components/BookFavoriteButton.vue',
-    {
-      $fetch: (_url, options) =>
-        new Promise((resolve, reject) =>
-          requests.push({ ...options, resolve, reject }),
-        ),
-    },
-    props,
-  );
-  t.after(() => view.app.unmount());
-  const button = () => view.all().find((element) => element.tag === 'button');
-  button().props.onClick({ stopPropagation() {} });
-  await flush();
-  assert.equal(button().props.disabled, true);
-  assert.equal(button().props['aria-pressed'], false);
-  requests[0].resolve({ success: true, data: { userFavorite: true } });
-  await flush();
-  assert.equal(button().props['aria-pressed'], true);
-  button().props.onClick({ stopPropagation() {} });
-  await flush();
-  assert.deepEqual(requests[1].body, { favorite: false });
-  requests[1].reject(new Error('offline'));
-  await flush();
-  assert.equal(button().props['aria-pressed'], true);
-  assert.equal(button().props.disabled, false);
-  assert.ok(view.text().includes('Could not save favorite'));
-  button().props.onClick({ stopPropagation() {} });
-  await flush();
-  requests[2].resolve({ success: true, data: { userFavorite: false } });
-  await flush();
-  assert.equal(button().props['aria-pressed'], false);
-  assert.ok(!view.text().includes('Could not save favorite'));
 });
 
 test('Recently read preserves calendar dates across browser timezones', async (t) => {
@@ -441,7 +393,6 @@ test('Recently read preserves calendar dates across browser timezones', async (t
                 updatedAt: '2026-11-02',
                 finishedDate: '2026-11-02',
                 progress: null,
-                userFavorite: false,
               },
             ],
           },

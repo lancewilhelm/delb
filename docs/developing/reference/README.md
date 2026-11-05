@@ -7,7 +7,7 @@ These pages describe feature contracts and implementation behavior. Start with t
 | Authentication errors and account administration | [Authentication](auth.md)                                 |
 | Collection visibility, roles, and endpoints      | [Collections and access control](collections.md)          |
 | Library navigation and book presentation         | [Library layout](library-layout.md)                       |
-| Dashboard shelves and personal favorites         | [Dashboard](dashboard.md)                                 |
+| Dashboard shelves                                | [Dashboard](dashboard.md)                                 |
 | Accessible book and entity search                | [Global search](global-search.md)                         |
 | Account settings, themes, and synchronization    | [Settings](settings.md)                                   |
 | Reader persistence and endpoints                 | [EPUB reader](epub-reader.md)                             |

@@ -25,12 +25,10 @@ Your Personal collection starts empty. Delb includes it when you add books throu
 ## Choose a dashboard shelf
 
 1. Select **Delb** to open the dashboard.
-2. Choose **Continue reading**, **Recently read**, or **Favorites** above the books.
+2. Choose **Continue reading** or **Recently read** above the books.
 3. Select **Show more** when more books are available.
 
-Continue reading shows your saved progress. Recently read shows finished books with a date read, newest first. Favorites shows books you have starred. The counts above the tabs always describe your selected collection.
-
-To save a favorite, open a book and select its star. Select the filled star again to remove the favorite. Dashboard books also have a star beside their progress or date. Your favorites do not change another reader's favorites, status, or ratings.
+Continue reading shows your saved progress. Recently read shows finished books with a date read, newest first. The counts above the tabs always describe your selected collection.
 
 See the [dashboard reference](../developing/reference/dashboard.md) for shelf order and data rules.
 

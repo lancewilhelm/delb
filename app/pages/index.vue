@@ -21,9 +21,7 @@ const collectionName = computed(() =>
     : (collectionsStore.activeCollection?.name ?? ''),
 );
 const selectedShelf = computed<DashboardShelf>(() =>
-  route.query.shelf === 'recent' || route.query.shelf === 'favorites'
-    ? route.query.shelf
-    : 'reading',
+  route.query.shelf === 'recent' ? route.query.shelf : 'reading',
 );
 const scope = computed(() =>
   collectionsStore.activeSelection.kind === 'collection'
@@ -42,12 +40,6 @@ const shelves = [
     label: 'Recently read',
     subtitle: 'Date read · newest first',
     empty: 'Finished books with a date read will appear here, newest first.',
-  },
-  {
-    key: 'favorites',
-    label: 'Favorites',
-    subtitle: 'Books you want to keep close',
-    empty: 'No favorites yet. Open a book and select its star to keep it here.',
   },
 ] satisfies {
   key: DashboardShelf;
@@ -158,13 +150,6 @@ function onTabKeydown(event: KeyboardEvent, index: number) {
       );
     tabs?.[next]?.focus();
   }
-}
-
-function favoriteChanged(bookId: string, favorite: boolean) {
-  shelfBooks.value = shelfBooks.value.map((book) =>
-    book.id === bookId ? { ...book, userFavorite: favorite } : book,
-  );
-  if (selectedShelf.value === 'favorites' && !favorite) void loadDashboard();
 }
 
 function readDate(value: string) {
@@ -284,13 +269,6 @@ onBeforeUnmount(() => {
                     ? `${book.progress.toFixed(1)}%`
                     : '—'
                 }}</span>
-                <span v-else class="dashboard-favorite-label">Favorite</span>
-                <BookFavoriteButton
-                  :book-id="book.id"
-                  :title="book.title"
-                  :favorite="book.userFavorite"
-                  @updated="favoriteChanged(book.id, $event)"
-                />
               </div>
             </article>
           </div>

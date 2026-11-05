@@ -37,7 +37,7 @@ The Personal flag identifies a user's default collection independently of its di
 | ---------------------------- | -------------------------------------------------------------------------------- |
 | `user_book_status`           | One user/book status with start, finish, DNF dates, and optional To be read rank |
 | `user_book_reading_position` | One user/book location, progress, and reader-session sequence                    |
-| `user_book_preferences`      | User/book favorites and reader-to-history progress sync                          |
+| `user_book_preferences`      | User/book options, including reader-to-history progress sync                     |
 | `user_book_progress_log`     | Historical entries with source, percentage, optional page, and occurrence date   |
 | `book_ratings`               | One user/book rating on the integer half-star scale, 1 through 10                |
 | `book_notes`                 | User/book note records in the schema; not evidence of a complete notes interface |
