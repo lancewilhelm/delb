@@ -33,16 +33,17 @@ The Personal flag identifies a user's default collection independently of its di
 
 ## Records scoped to a reader
 
-| Table                        | Scope and purpose                                                                |
-| ---------------------------- | -------------------------------------------------------------------------------- |
-| `user_book_status`           | One user/book status with start, finish, DNF dates, and optional To be read rank |
-| `user_book_reading_position` | One user/book location, progress, and reader-session sequence                    |
-| `user_book_preferences`      | User/book options, including reader-to-history progress sync                     |
-| `user_book_progress_log`     | Historical entries with source, percentage, optional page, and occurrence date   |
-| `book_ratings`               | One user/book rating on the integer half-star scale, 1 through 10                |
-| `book_notes`                 | User/book note records in the schema; not evidence of a complete notes interface |
+| Table                        | Scope and purpose                                                                      |
+| ---------------------------- | -------------------------------------------------------------------------------------- |
+| `user_book_status`           | One user/book status with start, finish, DNF dates, and optional To be read rank       |
+| `user_book_reading_position` | One user/book location, progress, and reader-session sequence                          |
+| `user_book_preferences`      | User/book options, including reader-to-history progress sync                           |
+| `user_book_progress_log`     | Historical entries with source, percentage, optional page, and occurrence date         |
+| `book_ratings`               | One user/book rating on the integer half-star scale, 1 through 10                      |
+| `user_book_rationale`        | One private plain-text TBR rationale per reader/book, retained independently of status |
+| `book_notes`                 | User/book note records in the schema; not evidence of a complete notes interface       |
 
-The same shared book can have different statuses, positions, ratings, and history for different users. Current endpoints select the authenticated user's records.
+The same shared book can have different statuses, positions, ratings, rationale, and history for different users. Current endpoints select the authenticated user's records.
 
 ## Accounts and settings
 
@@ -62,14 +63,14 @@ Read [storage recovery](../hosting/storage-recovery.md) before changing file del
 
 ## Useful constraints
 
-| Constraint                                                | Effect                                                                                |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Unique user email                                         | Collection member lookup identifies an existing account                               |
-| Unique collection/user membership                         | A member has one role in a collection                                                 |
-| Partial unique collection owner                           | At most one owner membership per collection                                           |
-| Unique collection/book pair                               | Repeated adds do not create duplicate links                                           |
-| Unique non-null Calibre book ID                           | Calibre re-import can identify an existing Delb book                                  |
-| Unique user/book status, position, preference, and rating | Personal values remain separate across readers                                        |
-| Unique book/identifier type                               | An identifier type has one value per book; cross-book duplicates still need detection |
+| Constraint                                                           | Effect                                                                                |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Unique user email                                                    | Collection member lookup identifies an existing account                               |
+| Unique collection/user membership                                    | A member has one role in a collection                                                 |
+| Partial unique collection owner                                      | At most one owner membership per collection                                           |
+| Unique collection/book pair                                          | Repeated adds do not create duplicate links                                           |
+| Unique non-null Calibre book ID                                      | Calibre re-import can identify an existing Delb book                                  |
+| Unique user/book status, position, preference, rating, and rationale | Personal values remain separate across readers                                        |
+| Unique book/identifier type                                          | An identifier type has one value per book; cross-book duplicates still need detection |
 
 Foreign-key cascades and explicit mutation logic remove related rows. They do not automatically remove ebook bytes. File deletion requires the storage operation path.

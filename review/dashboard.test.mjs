@@ -535,14 +535,19 @@ test('Recently read preserves calendar dates across browser timezones', async (t
   }
 });
 
-test('other dashboard status links keep their targets and do not clear filters', async () => {
+test('dashboard status links preserve filters and TBR opens its dedicated queue', async () => {
   const view = await dashboard();
   const statusLinks = view.links.filter((link) => link.to !== '/books');
   assert.deepEqual(
     statusLinks.map((link) => link.to),
-    ['reading', 'to_be_read', 'finished', 'dnf', 'none', 'reading'].map(
-      (status) => `/books?status=${status}`,
-    ),
+    [
+      '/books?status=reading',
+      '/to-be-read',
+      '/books?status=finished',
+      '/books?status=dnf',
+      '/books?status=none',
+      '/books?status=reading',
+    ],
   );
   for (const link of statusLinks) await link.onClick?.();
   assert.equal(JSON.stringify(view.filters.$state), view.initialFilters);

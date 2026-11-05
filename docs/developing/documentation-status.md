@@ -56,6 +56,18 @@ The initial change passed the full 237-test suite, typecheck, production build, 
 
 The scroll-preservation follow-up first reproduced a status save moving the grid from scroll position 2200 to 0. After the fix, the same browser harness passed deep-scroll checks in grid and list views, both unfiltered and status-filtered, without refetching book pages. Continued cursor pagination also passed. Badge checks covered the default-off toggle, persistence, live status updates, theme accent color, and clearing the badge. The settings-store test covered independent desktop and mobile choices. The follow-up passed 243 tests, typecheck, lint with the same existing warning, production build, and documentation links.
 
+## Personal To be read queue verification
+
+Issue #32 adds a private queue across all accessible collections, row reordering, and rationale editing shared with book details. The queue follows the series detail layout. The ordinary Books filters and series page retain their behavior.
+
+`server/utils/books/tbr.test.ts` runs real production migrations against disposable SQLite databases. It covers upgrade and restart, 63-book ordering, deduplication, reader isolation, note retention, single/bulk status changes, rollback, and loss/restoration of access without an intermediate read.
+
+`review/tbr-editor.test.mjs` compiles the real editor and queue page with Vue's custom renderer. It checks failed-save draft retention, retry, cancellation, load retry, and a delayed reorder refresh racing with a successful rationale save. These are component checks with simulated network responses, not browser or device evidence.
+
+`review/tbr-api.mjs` runs in the isolated production API suite with synthetic accounts and books. It checks authentication, full queue/global dashboard counts, private notes, malformed input, numeric moves, failed-write rollback, status changes, and real membership revocation/restoration.
+
+The full unit/component suite, typecheck, production build, documentation links, and API regressions passed. Lint retains one existing `BookDescriptionEditor.vue` warning. Mouse/touch dragging, responsive layout, assistive technology, and other browser engines remain manual verification items.
+
 ## Reconciled documentation drift
 
 | Earlier description                                            | Current source evidence                                                                                                                                           | Documentation treatment                                                                        |

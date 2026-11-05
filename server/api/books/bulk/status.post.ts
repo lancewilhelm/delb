@@ -1,5 +1,6 @@
 import { USER_BOOK_STATUSES } from '~/utils/db/schema';
 import { transitionBookStatuses } from '~~/server/utils/books/status-transition';
+import { cloudDb } from '~~/server/utils/db/cloud';
 import { auth } from '~/utils/auth';
 import { logger } from '~/utils/logger';
 
@@ -107,7 +108,7 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const result = await transitionBookStatuses({
+    const result = await transitionBookStatuses(cloudDb, {
       userId,
       bookIds,
       change: { status },

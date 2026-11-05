@@ -2,7 +2,7 @@
 
 The dashboard uses the active collection from the header. All includes the authenticated reader's accessible collections. A book shared through several collections appears once.
 
-The count strip stays above the shelf tabs and describes the whole selected collection. Switching tabs does not change its scope.
+The count strip stays above the shelf tabs. To be read always counts the full personal queue across accessible collections and opens the dedicated queue page. Other counts describe the selected collection. Switching shelf tabs does not change either scope.
 
 ## Shelf order
 
@@ -27,7 +27,7 @@ The response contains `data.counts` and `data.shelf`. The shelf has `kind`, `boo
 
 Each book includes its ID, title, cover pointer, update timestamp, progress, and `finishedDate` calendar date. The shared response type is [DashboardData](../../../shared/types/dashboard.ts).
 
-Unauthenticated requests return 401. Invalid query values return 400. An inaccessible collection returns zero counts and an empty shelf. Responses use `Cache-Control: private, no-store`.
+Unauthenticated requests return 401. Invalid query values return 400. An inaccessible collection returns an empty shelf and zero collection-scoped counts. The personal To be read count keeps its global scope. Responses use `Cache-Control: private, no-store`.
 
 The selected tab is stored in the dashboard's `shelf` URL parameter. Shelf and collection changes cancel the previous client request. A late response cannot replace the current selection. A failed later page keeps the books already displayed and offers Retry.
 

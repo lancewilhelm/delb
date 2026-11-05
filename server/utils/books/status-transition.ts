@@ -1,5 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import { cloudDb } from '~~/server/utils/db/cloud';
+import type { cloudDb } from '../db/cloud';
+import { visibleBook } from './visibility';
 import {
   books,
   collectionBooks,
@@ -7,7 +8,7 @@ import {
   userBookProgressLog,
   userBookStatus,
   USER_BOOK_STATUSES,
-} from '~/utils/db/schema';
+} from '../../../app/utils/db/schema';
 
 type Status = (typeof USER_BOOK_STATUSES)[number];
 type Change = {
@@ -26,18 +27,25 @@ type ResultRow = {
   tbrRank: number | null;
 };
 
-export async function transitionBookStatuses({
-  userId,
-  bookIds,
-  change,
-  now,
-}: {
-  userId: string;
-  bookIds: string[];
-  change: Change;
-  now: Date;
-}) {
-  return cloudDb.transaction(async (tx) => {
+class BookStatusError extends Error {
+  statusCode = 400;
+}
+
+export async function transitionBookStatuses(
+  db: typeof cloudDb,
+  {
+    userId,
+    bookIds,
+    change,
+    now,
+  }: {
+    userId: string;
+    bookIds: string[];
+    change: Change;
+    now: Date;
+  },
+) {
+  return db.transaction(async (tx) => {
     const visible = await tx
       .selectDistinct({ id: books.id, pages: books.pages })
       .from(books)
@@ -54,7 +62,12 @@ export async function transitionBookStatuses({
     const existing = await tx
       .select()
       .from(userBookStatus)
-      .where(eq(userBookStatus.userId, userId));
+      .where(
+        and(
+          eq(userBookStatus.userId, userId),
+          visibleBook(userId, userBookStatus.bookId),
+        ),
+      );
     const rows = new Map(existing.map((row) => [row.bookId, row]));
     const tbr = existing
       .filter((row) => row.status === 'to_be_read')
@@ -110,10 +123,9 @@ export async function transitionBookStatuses({
           change.dnfAt ||
           (change.tbrRank !== undefined && change.tbrRank !== null)
         )
-          throw createError({
-            statusCode: 400,
-            statusMessage: 'Cannot set status metadata when clearing status.',
-          });
+          throw new BookStatusError(
+            'Cannot set status metadata when clearing status.',
+          );
         const deleted = await tx
           .delete(userBookStatus)
           .where(
@@ -135,10 +147,9 @@ export async function transitionBookStatuses({
         continue;
       }
       if (change.tbrRank !== undefined && status !== 'to_be_read')
-        throw createError({
-          statusCode: 400,
-          statusMessage: 'tbrRank can only be set when status is to_be_read.',
-        });
+        throw new BookStatusError(
+          'tbrRank can only be set when status is to_be_read.',
+        );
       if (status === 'reading') startedAt ??= now;
       if (status === 'finished') {
         finishedAt ??= now;
@@ -156,15 +167,9 @@ export async function transitionBookStatuses({
         dnfAt = null;
       }
       if (startedAt && finishedAt && finishedAt < startedAt)
-        throw createError({
-          statusCode: 400,
-          statusMessage: 'finishedAt must be on or after startedAt.',
-        });
+        throw new BookStatusError('finishedAt must be on or after startedAt.');
       if (startedAt && dnfAt && dnfAt < startedAt)
-        throw createError({
-          statusCode: 400,
-          statusMessage: 'dnfAt must be on or after startedAt.',
-        });
+        throw new BookStatusError('dnfAt must be on or after startedAt.');
       if (status === 'to_be_read') {
         const index =
           change.tbrRank != null
@@ -220,17 +225,15 @@ export async function transitionBookStatuses({
             .set(values)
             .where(eq(userBookProgressLog.id, logs[0].id));
         else
-          await tx
-            .insert(userBookProgressLog)
-            .values({
-              id: crypto.randomUUID(),
-              userId,
-              bookId,
-              location: null,
-              source: 'status-finished',
-              createdAt: now,
-              ...values,
-            });
+          await tx.insert(userBookProgressLog).values({
+            id: crypto.randomUUID(),
+            userId,
+            bookId,
+            location: null,
+            source: 'status-finished',
+            createdAt: now,
+            ...values,
+          });
       }
     }
     for (let i = 0; i < tbr.length; i++) {

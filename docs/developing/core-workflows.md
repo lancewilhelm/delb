@@ -49,9 +49,9 @@ The [manual handler](../../server/api/books/index.post.ts), [metadata handler](.
 
 The header's [collection store](../../app/stores/collections.ts) holds either All or a concrete collection selection. The [Books page](../../app/pages/books/index.vue) combines it with filters, sort settings, and view preferences. Grid/list components request pages and render the visible portion of the list.
 
-The dashboard's **All books** link calls the [Books filter store](../../app/stores/booksIndexFilters.ts) to clear its persisted status, date-added, and file-presence filters before navigation. The collection selection, sort settings, and view preferences remain unchanged. Dashboard status links retain their status query parameters.
+The dashboard's **All books** link calls the [Books filter store](../../app/stores/booksIndexFilters.ts) to clear its persisted status, date-added, and file-presence filters before navigation. The collection selection, sort settings, and view preferences remain unchanged. **To be read** opens the dedicated personal queue. Other dashboard status links retain their status query parameters.
 
-The [dashboard query](../../server/utils/books/dashboard.ts) counts books in the active collection and pages the selected reading shelf. Continue reading uses the reader's saved progress. Recently read uses the reader's finish dates. Membership checks apply to both counts and shelf results. [The dashboard reference](reference/dashboard.md) describes the request and order rules.
+The [dashboard query](../../server/utils/books/dashboard.ts) counts books in the active collection and pages the selected reading shelf. The To be read count covers the reader's full private queue across accessible collections. Continue reading uses the reader's saved progress. Recently read uses the reader's finish dates. Membership checks apply to both counts and shelf results. [The dashboard reference](reference/dashboard.md) describes the request and order rules.
 
 [Book listing](../../server/api/books/index.get.ts) first resolves the authenticated reader's collection memberships. A selected collection must belong to that set. Status filters join the reader's personal status records. Stable sort keys and cursors keep pagination consistent for a chosen ordering. The response enriches the page with the metadata selected by book views.
 

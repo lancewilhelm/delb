@@ -1,5 +1,15 @@
 import type { LibSQLDatabase } from 'drizzle-orm/libsql';
-import { and, asc, desc, eq, isNotNull, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  isNotNull,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
+import { visibleBook } from './visibility';
 import {
   books,
   collectionBooks,
@@ -40,6 +50,16 @@ export async function getDashboard(
 ): Promise<DashboardData> {
   const { userId, shelf, offset = 0 } = options;
   const visible = visibleBooks(options);
+  const [globalTbr] = await db
+    .select({ count: count() })
+    .from(userBookStatus)
+    .where(
+      and(
+        eq(userBookStatus.userId, userId),
+        eq(userBookStatus.status, 'to_be_read'),
+        visibleBook(userId, userBookStatus.bookId),
+      ),
+    );
   const [counts] = await db
     .select({
       total: sql<number>`COUNT(*)`,
@@ -105,13 +125,16 @@ export async function getDashboard(
     .offset(offset);
 
   return {
-    counts: counts ?? {
-      total: 0,
-      none: 0,
-      to_be_read: 0,
-      reading: 0,
-      finished: 0,
-      dnf: 0,
+    counts: {
+      ...(counts ?? {
+        total: 0,
+        none: 0,
+        to_be_read: 0,
+        reading: 0,
+        finished: 0,
+        dnf: 0,
+      }),
+      to_be_read: globalTbr?.count ?? 0,
     },
     shelf: {
       kind: shelf,

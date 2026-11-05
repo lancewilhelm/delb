@@ -106,6 +106,27 @@ test('shared books keep reading status and counts private to each reader', async
   );
 });
 
+test('the global personal TBR count preserves scoped shelf contents and other counts', async (t) => {
+  const { client, db, cleanup } = await fixture();
+  t.after(cleanup);
+  await client.execute(
+    "UPDATE user_book_status SET status='to_be_read' WHERE user_id='u' AND book_id='2'",
+  );
+  const result = await getDashboard(db, {
+    userId: 'u',
+    shelf: 'reading',
+    collectionId: 'y',
+  });
+  assert.equal(result.counts.total, 2);
+  assert.equal(result.counts.to_be_read, 1);
+  assert.equal(result.counts.reading, 1);
+  assert.equal(result.counts.finished, 1);
+  assert.deepEqual(
+    result.shelf.books.map((book) => book.id),
+    ['1'],
+  );
+});
+
 test('Recently read pages stay bounded, stable at equal dates, and reachable past the first twelve', async (t) => {
   const { client, db, cleanup } = await fixture();
   t.after(cleanup);

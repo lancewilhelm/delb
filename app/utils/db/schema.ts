@@ -5,6 +5,7 @@ import {
   real,
   uniqueIndex,
   index,
+  primaryKey,
 } from 'drizzle-orm/sqlite-core';
 
 import { sql, type InferInsertModel, type InferSelectModel } from 'drizzle-orm';
@@ -552,6 +553,20 @@ export const bookRatings = sqliteTable(
       t.bookId,
     ),
   }),
+);
+
+export const userBookRationale = sqliteTable(
+  'user_book_rationale',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    bookId: text('book_id')
+      .notNull()
+      .references(() => books.id, { onDelete: 'cascade' }),
+    text: text('text').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.bookId] })],
 );
 
 export const bookNotes = sqliteTable('book_notes', {

@@ -16,6 +16,12 @@ const items: NavItem[] = [
     icon: 'lucide:layout-dashboard',
   },
   { id: 'books', label: 'Books', to: '/books', icon: 'lucide:book' },
+  {
+    id: 'to-be-read',
+    label: 'To be read',
+    to: '/to-be-read',
+    icon: 'lucide:list-ordered',
+  },
   { id: 'authors', label: 'Authors', to: '/authors', icon: 'lucide:user' },
   { id: 'series', label: 'Series', to: '/series', icon: 'lucide:layers' },
   {

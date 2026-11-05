@@ -1505,6 +1505,13 @@ const { copy } = useClipboard();
                 </div>
               </div>
 
+              <BooksTbrRationaleEditor
+                v-if="book"
+                :key="book.id"
+                :book-id="book.id"
+                class="my-4"
+              />
+
               <!-- Progress sync -->
               <div class="grid grid-cols-[min-content_1fr] gap-4 items-center">
                 <div class="font-semibold">Progress sync</div>

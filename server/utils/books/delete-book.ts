@@ -9,6 +9,7 @@ import {
   bookFiles,
   bookIdentifiers,
   bookNotes,
+  userBookRationale,
   bookRatings,
   bookTags,
   books,
@@ -148,6 +149,9 @@ async function deleteBookUnlocked(opts: {
       await tx.delete(userBookStatus).where(eq(userBookStatus.bookId, bookId));
       await tx.delete(bookRatings).where(eq(bookRatings.bookId, bookId));
       await tx.delete(bookNotes).where(eq(bookNotes.bookId, bookId));
+      await tx
+        .delete(userBookRationale)
+        .where(eq(userBookRationale.bookId, bookId));
       await tx.delete(books).where(eq(books.id, bookId));
     });
   };
