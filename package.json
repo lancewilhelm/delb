@@ -6,6 +6,7 @@
   "scripts": {
     "build": "pnpm --filter @delb/epub build && nuxt build",
     "dev": "pnpm --filter @delb/epub build && nuxt dev",
+    "prototype:dashboard": "node scripts/dashboard-prototype.mjs",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "prepare:nuxt": "nuxt prepare",

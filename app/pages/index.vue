@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import DashboardPrototypeLayouts from '~/components/DashboardPrototype/Layouts.vue';
+import DashboardPrototypeSwitcher from '~/components/DashboardPrototype/Switcher.vue';
+
 definePageMeta({
   auth: {
     only: 'user',
@@ -12,6 +15,17 @@ useHead({
 
 const collectionsStore = useCollectionsStore();
 const { user } = useAuth();
+const route = useRoute();
+const router = useRouter();
+const isDashboardPrototype = computed(
+  () =>
+    import.meta.dev &&
+    ['current', 'A', 'B', 'C'].includes(String(route.query.variant)),
+);
+
+function selectDashboardPrototype(variant: string) {
+  router.replace({ query: { ...route.query, variant } });
+}
 
 type FetchErrorLike = {
   data?: { message?: string };
@@ -120,6 +134,32 @@ onMounted(async () => {
         </div>
 
         <div
+          v-if="isDashboardPrototype && route.query.variant !== 'current'"
+          class="flex-1 min-h-0 overflow-auto"
+        >
+          <div v-if="loading" class="p-4 text-sm opacity-80">Loading…</div>
+          <div
+            v-else-if="errorMessage"
+            class="p-4 text-sm text-(--error-color)"
+          >
+            {{ errorMessage }}
+          </div>
+          <DashboardPrototypeLayouts
+            v-else
+            :variant="String(route.query.variant)"
+            :display-name="displayName"
+            :collection-name="
+              collectionsStore.activeSelection.kind === 'all'
+                ? 'All'
+                : (collectionsStore.activeCollection?.name ?? '')
+            "
+            :counts="counts"
+            :books="readingBooks"
+          />
+        </div>
+
+        <div
+          v-else
           class="flex-1 min-h-0 overflow-auto p-4 space-y-8 flex items-center justify-center max-w-225 self-center"
         >
           <div v-if="loading" class="text-sm opacity-80">Loading…</div>
@@ -277,5 +317,10 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+    <DashboardPrototypeSwitcher
+      v-if="isDashboardPrototype"
+      :current="String(route.query.variant)"
+      @select="selectDashboardPrototype"
+    />
   </div>
 </template>
