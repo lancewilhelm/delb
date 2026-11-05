@@ -66,6 +66,14 @@ pnpm test:integration
 
 Integration checks use disposable fixtures. Keep synthetic/offline checks distinct from a live provider, container, filesystem, or device test. Document the actual evidence and remaining gaps in the PR.
 
+[Test](../../.github/workflows/test.yml) checks PR merge results with the full suite.
+[Push verification](../../.github/workflows/push-test.yml) runs the same suite for tags and branches without an open PR in this repository.
+For a branch with an open PR, the push workflow runs only its routing job and leaves full verification to the PR.
+If the PR lookup fails, the push workflow runs full verification.
+
+Main pushes and published releases run full verification through [Build & Push Docker Image](../../.github/workflows/docker-image.yml).
+Publishing waits for successful verification.
+
 For documentation-only changes:
 
 ```sh
