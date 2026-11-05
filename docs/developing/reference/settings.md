@@ -45,7 +45,7 @@ Custom colors live in `customTheme`. A theme slot or fixed choice can select `cu
 
 ## Interface contrast
 
-**Settings → Appearance → Contrast** adjusts interface text and structural borders from 50–200%, in 5-point steps. The default and reset value is 100%, which preserves the original theme. Backgrounds, accent fills, book covers, and EPUB content retain their colors.
+**Settings → Appearance → Themes → Contrast** adjusts interface text and structural borders from 50–200%, in 5-point steps. The default and reset value is 100%, which preserves the original theme. Backgrounds, accent fills, book covers, and EPUB content retain their colors.
 
 The control follows T3 Code's piecewise function. Below 100%, text blends toward the theme background in OKLab, while borders fade toward transparency. Above 100%, text blends toward black on light backgrounds or white on dark backgrounds. Borders blend toward the original foreground at one-quarter strength: 150% adds a 12.5% border boost, and 200% adds 25%.
 

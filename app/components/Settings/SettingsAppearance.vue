@@ -201,30 +201,6 @@ function handleSortChange(target: string) {
       </div>
     </SettingsUIGroup>
     <SettingsUIGroup
-      title="Contrast"
-      icon="lucide:contrast"
-      description="adjust text and border contrast across the interface"
-    >
-      <SettingsUISlider
-        v-model="contrast"
-        title="Contrast"
-        description="Below 100% softens text and borders. Above 100% strengthens text and gradually emphasizes borders."
-        :min="MIN_APPEARANCE_CONTRAST"
-        :max="MAX_APPEARANCE_CONTRAST"
-        :step="5"
-        :display-value="true"
-        suffix="%"
-      />
-      <button
-        v-if="contrast !== DEFAULT_APPEARANCE_CONTRAST"
-        type="button"
-        class="self-start rounded-lg px-3 py-1 bg-(--sub-alt-color)!"
-        @click="contrast = DEFAULT_APPEARANCE_CONTRAST"
-      >
-        Reset contrast to {{ DEFAULT_APPEARANCE_CONTRAST }}%
-      </button>
-    </SettingsUIGroup>
-    <SettingsUIGroup
       title="Cover Style"
       icon="lucide:book-image"
       description="customize the cover style"
@@ -350,6 +326,26 @@ function handleSortChange(target: string) {
       <SettingsAppearanceFonts />
     </SettingsUIGroup>
     <SettingsUIGroup title="Themes" icon="lucide:palette">
+      <div class="flex w-full flex-col items-start gap-2 mb-4">
+        <SettingsUISlider
+          v-model="contrast"
+          title="Contrast"
+          description="Below 100% softens text and borders. Above 100% strengthens text and gradually emphasizes borders."
+          :min="MIN_APPEARANCE_CONTRAST"
+          :max="MAX_APPEARANCE_CONTRAST"
+          :step="5"
+          :display-value="true"
+          suffix="%"
+        />
+        <button
+          v-if="contrast !== DEFAULT_APPEARANCE_CONTRAST"
+          type="button"
+          class="self-start rounded-lg px-3 py-1 bg-(--sub-alt-color)!"
+          @click="contrast = DEFAULT_APPEARANCE_CONTRAST"
+        >
+          Reset contrast to {{ DEFAULT_APPEARANCE_CONTRAST }}%
+        </button>
+      </div>
       <div class="flex flex-wrap items-center gap-3 mb-4 text-sm">
         <span>{{
           userSettingsStore.activeSettings.themePreference.mode === 'system'
