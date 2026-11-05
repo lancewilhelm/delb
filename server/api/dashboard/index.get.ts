@@ -4,6 +4,7 @@ import { auth } from '~/utils/auth';
 import { logger } from '~/utils/logger';
 
 export default defineEventHandler(async (event) => {
+  logger.debug('GET /api/dashboard');
   setHeader(event, 'Cache-Control', 'private, no-store');
   const session = await auth.api.getSession({ headers: event.headers });
   if (!session)

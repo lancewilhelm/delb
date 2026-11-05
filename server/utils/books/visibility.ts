@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { sql, type AnyColumn } from 'drizzle-orm';
 import {
   authors,
   bookAuthors,
@@ -11,11 +11,15 @@ import {
   tags,
 } from '~/utils/db/schema';
 
+export function visibleBook(userId: string, bookId: AnyColumn = books.id) {
+  return sql`EXISTS (SELECT 1 FROM ${collectionBooks} INNER JOIN ${collectionMembers} ON ${collectionMembers.collectionId} = ${collectionBooks.collectionId} WHERE ${collectionBooks.bookId} = ${bookId} AND ${collectionMembers.userId} = ${userId})`;
+}
+
 export function visibleEntity(
   kind: 'author' | 'tag' | 'publisher' | 'series',
   userId: string,
 ) {
-  const visible = sql`EXISTS (SELECT 1 FROM ${collectionBooks} INNER JOIN ${collectionMembers} ON ${collectionMembers.collectionId} = ${collectionBooks.collectionId} WHERE ${collectionBooks.bookId} = ${books.id} AND ${collectionMembers.userId} = ${userId})`;
+  const visible = visibleBook(userId);
   switch (kind) {
     case 'author':
       return sql`EXISTS (SELECT 1 FROM ${bookAuthors} INNER JOIN ${books} ON ${books.id} = ${bookAuthors.bookId} WHERE ${bookAuthors.authorId} = ${authors.id} AND ${visible})`;
