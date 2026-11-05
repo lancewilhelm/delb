@@ -11,6 +11,7 @@ useHead({
 });
 
 const collectionsStore = useCollectionsStore();
+const booksFiltersStore = useBooksIndexFiltersStore();
 const { user } = useAuth();
 
 type FetchErrorLike = {
@@ -159,6 +160,7 @@ onMounted(async () => {
               <NuxtLink
                 to="/books"
                 class="border border-(--sub-color) rounded-lg p-4 hover:bg-(--sub-color)/10 transition"
+                @click="booksFiltersStore.clearAll()"
               >
                 <Icon
                   name="lucide:library"
