@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { CoverMenuItem } from '~/utils/coverMenu';
 import { readDownloadFilename } from '~/utils/downloadFilename';
 import { buildBookCoverUrl } from '~/utils/covers';
 import {
@@ -78,26 +79,6 @@ type BookFilesResponse = {
   data: { files: BookFile[] };
 };
 
-type CoverMenuItemBase = {
-  key: string;
-  label?: string;
-  disabled?: boolean;
-};
-
-type CoverMenuItem =
-  | (CoverMenuItemBase & { to: string; onSelect?: never; children?: never })
-  | (CoverMenuItemBase & {
-      onSelect: () => void | Promise<void>;
-      to?: never;
-      children?: never;
-    })
-  | (CoverMenuItemBase & {
-      label: string;
-      children: CoverMenuItem[];
-      to?: never;
-      onSelect?: never;
-    });
-
 function getFileFormatLabel(file: BookFile) {
   const fmt = (file.format || '').trim().toLowerCase();
   if (fmt) return fmt.toUpperCase();
@@ -159,9 +140,15 @@ async function downloadBookFile(file?: BookFile | null) {
 const fileCache = ref<BookFile[] | null>(null);
 const fileCacheLoaded = ref(false);
 
+const { getReadingStatusMenuItem } = useBookReadingStatusMenu({
+  bookId: () => props.book.id,
+  onChanged: () => emit('status-change'),
+});
+
 async function getContextMenuItems(): Promise<CoverMenuItem[]> {
   const items: CoverMenuItem[] = [
     { key: 'view', label: 'View', to: `/books/${props.book.id}` },
+    await getReadingStatusMenuItem(),
   ];
 
   try {
@@ -232,6 +219,7 @@ async function getContextMenuItems(): Promise<CoverMenuItem[]> {
 }
 
 const emit = defineEmits<{
+  (e: 'status-change'): void;
   /** Fired when in selection mode and the user toggles selection for this book. */
   (e: 'toggle-select', bookId: string, meta?: { shiftKey?: boolean }): void;
 }>();

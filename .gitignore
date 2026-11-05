@@ -56,3 +56,7 @@ review/check-results.json
 /public/__review
 
 /review/demo/audit-script.epub
+
+# Cover status browser-check evidence
+review/demo/book-status-*.png
+review/demo/book-status-results.json

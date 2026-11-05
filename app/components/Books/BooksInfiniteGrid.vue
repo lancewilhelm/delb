@@ -722,6 +722,7 @@ onBeforeUnmount(() => {
                 "
                 :selected="selectionStore.isSelected(b.id)"
                 @toggle-select="onBookToggleSelect"
+                @status-change="loadFirstPage"
               />
             </div>
           </div>

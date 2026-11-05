@@ -270,7 +270,11 @@ onBeforeUnmount(() => {
               :key="book.id"
               class="dashboard-book"
             >
-              <BookThumbnail :book="book" :lock-aspect-ratio="true" />
+              <BookThumbnail
+                :book="book"
+                :lock-aspect-ratio="true"
+                @status-change="loadDashboard()"
+              />
               <div class="dashboard-book-meta">
                 <span v-if="selectedShelf === 'recent' && book.finishedDate"
                   >Read {{ readDate(book.finishedDate) }}</span

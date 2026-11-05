@@ -598,6 +598,7 @@ onBeforeUnmount(() => {
               :selectable="props.selectionEnabled && selectionStore.selectMode"
               :selected="selectionStore.isSelected(b.id)"
               @toggle-select="onBookToggleSelect"
+              @status-change="loadFirstPage"
               @measure="measureRow"
             />
           </div>
