@@ -112,4 +112,3 @@ FROM (
 ) AS ranked
 WHERE user_book_status.user_id = ranked.user_id AND user_book_status.book_id = ranked.book_id;
 END;
-

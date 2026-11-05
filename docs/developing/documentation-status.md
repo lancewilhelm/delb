@@ -46,6 +46,18 @@ Issue #31 adds status changes to grid, list, and dashboard cover menus. `node re
 
 The change passed the full 237-test suite, typecheck, production build, documentation links, and lint. Lint retains one existing `BookDescriptionEditor.vue` warning. Physical touch devices, assistive technology, and other browser engines were not exercised.
 
+## Personal To be read queue verification
+
+Issue #32 adds a private queue across all accessible collections, row reordering, and rationale editing shared with book details. The queue follows the series detail layout. The ordinary Books filters and series page retain their behavior.
+
+`server/utils/books/tbr.test.ts` runs real production migrations against disposable SQLite databases. It covers upgrade and restart, 63-book ordering, deduplication, reader isolation, note retention, single/bulk status changes, rollback, and loss/restoration of access without an intermediate read.
+
+`review/tbr-editor.test.mjs` compiles the real editor and queue page with Vue's custom renderer. It checks failed-save draft retention, retry, cancellation, load retry, and a delayed reorder refresh racing with a successful rationale save. These are component checks with simulated network responses, not browser or device evidence.
+
+`review/tbr-api.mjs` runs in the isolated production API suite with synthetic accounts and books. It checks authentication, full queue/global dashboard counts, private notes, malformed input, numeric moves, failed-write rollback, status changes, and real membership revocation/restoration.
+
+The full unit/component suite, typecheck, production build, documentation links, and API regressions passed. Lint retains one existing `BookDescriptionEditor.vue` warning. Mouse/touch dragging, responsive layout, assistive technology, and other browser engines remain manual verification items.
+
 ## Reconciled documentation drift
 
 | Earlier description                                            | Current source evidence                                                                                                                                           | Documentation treatment                                                                        |

@@ -15,6 +15,12 @@ import { drizzle } from 'drizzle-orm/libsql';
 import { migrate } from 'drizzle-orm/libsql/migrator';
 import { getTbrQueue, readRationale, writeRationale } from './tbr';
 import { transitionBookStatuses } from './status-transition';
+import { parseBookId, parseReaderId } from './ids';
+
+const readerId = parseReaderId('reader');
+const otherId = parseReaderId('other');
+const bookA = parseBookId('a');
+const bookB = parseBookId('b');
 
 async function fixture({ legacy = false } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'delb-tbr-'));
@@ -120,7 +126,11 @@ test('upgrading an existing database backfills visible ranks and restart preserv
       ['a', 2],
       ['b', 3],
     ]);
-    await writeRationale(db, 'reader', 'b', 'Retain across restart');
+    await writeRationale(db, {
+      userId: readerId,
+      bookId: bookB,
+      text: 'Retain across restart',
+    });
     await migrate(db, { migrationsFolder: '.drizzle/migrations' });
     assert.deepEqual(await ranks(), [
       ['c', 1],
@@ -128,7 +138,7 @@ test('upgrading an existing database backfills visible ranks and restart preserv
       ['b', 3],
     ]);
     assert.equal(
-      await readRationale(db, 'reader', 'b'),
+      await readRationale(db, { userId: readerId, bookId: bookB }),
       'Retain across restart',
     );
   } finally {
@@ -160,7 +170,11 @@ test('the queue includes all 63 books, deduplicates collection access, and prese
       change: { status: 'to_be_read' },
       now: new Date(),
     });
-    await writeRationale(db, 'reader', 'a', 'Read this first');
+    await writeRationale(db, {
+      userId: readerId,
+      bookId: bookA,
+      text: 'Read this first',
+    });
     const queue = await getTbrQueue(db, 'reader');
     assert.equal(queue.count, 63);
     assert.equal(new Set(queue.books.map((book) => book.id)).size, 63);
@@ -188,14 +202,31 @@ test('the queue includes all 63 books, deduplicates collection access, and prese
 test('rationale is private, shared by both read surfaces, and independent of reading status', async () => {
   const { client, db, cleanup } = await fixture();
   try {
-    assert.equal(await readRationale(db, 'reader', 'a'), '');
-    await writeRationale(db, 'reader', 'a', 'A private reason');
+    assert.equal(
+      await readRationale(db, { userId: readerId, bookId: bookA }),
+      '',
+    );
+    await writeRationale(db, {
+      userId: readerId,
+      bookId: bookA,
+      text: 'A private reason',
+    });
     await client.execute(
       "INSERT INTO collection_members(collection_id,user_id,role,created_at) VALUES ('one','other','viewer',1)",
     );
-    assert.equal(await readRationale(db, 'other', 'a'), '');
-    await writeRationale(db, 'other', 'a', 'A different reason');
-    assert.equal(await readRationale(db, 'reader', 'a'), 'A private reason');
+    assert.equal(
+      await readRationale(db, { userId: otherId, bookId: bookA }),
+      '',
+    );
+    await writeRationale(db, {
+      userId: otherId,
+      bookId: bookA,
+      text: 'A different reason',
+    });
+    assert.equal(
+      await readRationale(db, { userId: readerId, bookId: bookA }),
+      'A private reason',
+    );
     assert.deepEqual(await getTbrQueue(db, 'other'), { books: [], count: 0 });
     await transitionBookStatuses(db, {
       userId: 'reader',
@@ -203,7 +234,10 @@ test('rationale is private, shared by both read surfaces, and independent of rea
       change: { status: 'finished' },
       now: new Date(),
     });
-    assert.equal(await readRationale(db, 'reader', 'a'), 'A private reason');
+    assert.equal(
+      await readRationale(db, { userId: readerId, bookId: bookA }),
+      'A private reason',
+    );
     assert.equal((await getTbrQueue(db, 'reader')).count, 2);
     const progress = await client.execute(
       "SELECT progress_percent FROM user_book_progress_log WHERE user_id='reader' AND book_id='a'",
@@ -215,9 +249,13 @@ test('rationale is private, shared by both read surfaces, and independent of rea
       change: { status: null },
       now: new Date(),
     });
-    await writeRationale(db, 'reader', 'a', 'Edited after clearing status');
+    await writeRationale(db, {
+      userId: readerId,
+      bookId: bookA,
+      text: 'Edited after clearing status',
+    });
     assert.equal(
-      await readRationale(db, 'reader', 'a'),
+      await readRationale(db, { userId: readerId, bookId: bookA }),
       'Edited after clearing status',
     );
     await transitionBookStatuses(db, {
@@ -230,8 +268,11 @@ test('rationale is private, shared by both read surfaces, and independent of rea
       (await getTbrQueue(db, 'reader')).books.at(-1)?.rationale,
       'Edited after clearing status',
     );
-    await writeRationale(db, 'reader', 'a', '');
-    assert.equal(await readRationale(db, 'reader', 'a'), '');
+    await writeRationale(db, { userId: readerId, bookId: bookA, text: '' });
+    assert.equal(
+      await readRationale(db, { userId: readerId, bookId: bookA }),
+      '',
+    );
   } finally {
     cleanup();
   }
@@ -240,15 +281,28 @@ test('rationale is private, shared by both read surfaces, and independent of rea
 test('queue and rationale enforce visibility, including restore without an intermediate request', async () => {
   const { client, db, ranks, cleanup } = await fixture();
   try {
-    await writeRationale(db, 'reader', 'b', 'Remember this');
-    await assert.rejects(readRationale(db, 'other', 'b'), { statusCode: 404 });
-    await assert.rejects(writeRationale(db, 'other', 'b', 'Overwrite'), {
-      statusCode: 404,
+    await writeRationale(db, {
+      userId: readerId,
+      bookId: bookB,
+      text: 'Remember this',
     });
+    await assert.rejects(
+      readRationale(db, { userId: otherId, bookId: bookB }),
+      { statusCode: 404 },
+    );
+    await assert.rejects(
+      writeRationale(db, { userId: otherId, bookId: bookB, text: 'Overwrite' }),
+      {
+        statusCode: 404,
+      },
+    );
     await client.execute(
       "DELETE FROM collection_books WHERE collection_id='one' AND book_id='b'",
     );
-    await assert.rejects(readRationale(db, 'reader', 'b'), { statusCode: 404 });
+    await assert.rejects(
+      readRationale(db, { userId: readerId, bookId: bookB }),
+      { statusCode: 404 },
+    );
     await client.execute(
       "INSERT INTO collection_books(collection_id,book_id,added_at) VALUES ('one','b',2)",
     );
@@ -272,7 +326,11 @@ test('queue and rationale enforce visibility, including restore without an inter
 test('numeric and bulk status changes use one order and failed transactions restore saved state', async () => {
   const { client, db, ranks, cleanup } = await fixture();
   try {
-    await writeRationale(db, 'reader', 'a', 'Preserve this');
+    await writeRationale(db, {
+      userId: readerId,
+      bookId: bookA,
+      text: 'Preserve this',
+    });
     await transitionBookStatuses(db, {
       userId: 'reader',
       bookIds: ['c'],
@@ -322,7 +380,10 @@ test('numeric and bulk status changes use one order and failed transactions rest
       ['b', 2],
       ['c', 3],
     ]);
-    assert.equal(await readRationale(db, 'reader', 'a'), 'Preserve this');
+    assert.equal(
+      await readRationale(db, { userId: readerId, bookId: bookA }),
+      'Preserve this',
+    );
     await assert.rejects(
       transitionBookStatuses(db, {
         userId: 'reader',

@@ -10,6 +10,9 @@ import type { TbrBook } from '../../../app/types/tbr';
 import type { cloudDb } from '../db/cloud';
 import { visibleBook } from './visibility';
 import { buildBookCoverUrl } from './cover-url';
+import type { BookId, ReaderId } from './ids';
+
+type RationaleTarget = { userId: ReaderId; bookId: BookId };
 
 export async function getTbrQueue(db: typeof cloudDb, userId: string) {
   const rows = await db
@@ -91,8 +94,7 @@ class BookNotFoundError extends Error {
 
 export async function readRationale(
   db: typeof cloudDb,
-  userId: string,
-  bookId: string,
+  { userId, bookId }: RationaleTarget,
 ) {
   return db.transaction(async (tx) => {
     const [book] = await tx
@@ -115,9 +117,7 @@ export async function readRationale(
 
 export async function writeRationale(
   db: typeof cloudDb,
-  userId: string,
-  bookId: string,
-  text: string,
+  { userId, bookId, text }: RationaleTarget & { text: string },
 ) {
   return db.transaction(async (tx) => {
     const [book] = await tx

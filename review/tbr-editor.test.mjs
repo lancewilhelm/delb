@@ -8,28 +8,40 @@ import * as vue from 'vue';
 const { parse, compileScript } = createRequire(
   import.meta.resolve('nuxt/package.json'),
 )('@vue/compiler-sfc');
-const { descriptor } = parse(
-  readFileSync(
-    new URL('../app/components/Books/TbrRationaleEditor.vue', import.meta.url),
-    'utf8',
-  ),
-);
-const compiled = compileScript(descriptor, {
-  id: 'tbr-editor-test',
-  inlineTemplate: true,
-});
-const code = transformSync(
-  `import {ref, watch, nextTick, onMounted, onBeforeUnmount} from 'vue';\n${compiled.content}`,
-  { loader: 'ts', format: 'cjs' },
-).code;
+function compileComponent(path) {
+  const { descriptor } = parse(
+    readFileSync(new URL(path, import.meta.url), 'utf8'),
+  );
+  const compiled = compileScript(descriptor, {
+    id: 'tbr-component-test',
+    inlineTemplate: true,
+  });
+  return transformSync(
+    `import {ref, shallowRef, watch, nextTick, onMounted, onBeforeUnmount} from 'vue';\n${compiled.content}`,
+    { loader: 'ts', format: 'cjs' },
+  ).code;
+}
+const code = compileComponent('../app/components/Books/TbrRationaleEditor.vue');
 
-function mount(fetch, props) {
+function mount(fetch, props, { compiledCode = code, globals = {} } = {}) {
   const module = { exports: {} };
-  new Function('require', 'module', 'exports', '$fetch', code)(
-    () => vue,
+  new Function(
+    'require',
+    'module',
+    'exports',
+    '$fetch',
+    ...Object.keys(globals),
+    compiledCode,
+  )(
+    (name) => {
+      if (name === 'vue') return vue;
+      assert.equal(name, '~/utils/descriptionHtml');
+      return { sanitizeDescriptionHtml: (value) => value };
+    },
     module,
     module.exports,
     fetch,
+    ...Object.values(globals),
   );
   const node = (type, text = '') => ({
     type,
@@ -82,6 +94,28 @@ function mount(fetch, props) {
   const container = node('container');
   const app = renderer.createApp(module.exports.default, props);
   app.component('Icon', { render: () => null });
+  app.component('NuxtLink', {
+    props: ['to'],
+    setup:
+      (props, { slots }) =>
+      () =>
+        vue.h('a', { href: props.to }, slots.default?.()),
+  });
+  for (const name of [
+    'AppHeader',
+    'ViewSelectorDropdown',
+    'BookCover',
+    'ClientOnly',
+  ])
+    app.component(name, { render: () => null });
+  app.component('BooksTbrRationaleEditor', {
+    props: ['bookId', 'rationale'],
+    setup: (props) => () =>
+      vue.h('div', {
+        'data-editor-book': props.bookId,
+        'data-editor-value': props.rationale,
+      }),
+  });
   app.mount(container);
   const all = (parent = container) => [
     parent,
@@ -204,5 +238,83 @@ test('book details load the saved rationale and offer retry after a failed read'
     assert.equal(reads, 2);
   } finally {
     view.app.unmount();
+  }
+});
+
+test('a delayed reorder refresh cannot replace a rationale saved while it was in flight', async () => {
+  const original = [
+    {
+      id: 'one',
+      title: 'Alpha',
+      rank: 1,
+      rationale: 'Old reason',
+      authors: [],
+      description: null,
+      coverThumbnailUrl: null,
+    },
+    {
+      id: 'two',
+      title: 'Beta',
+      rank: 2,
+      rationale: '',
+      authors: [],
+      description: null,
+      coverThumbnailUrl: null,
+    },
+  ];
+  let completeRefresh;
+  const delayed = new Promise((resolve) => {
+    completeRefresh = resolve;
+  });
+  let reads = 0;
+  const previousCancel = globalThis.cancelAnimationFrame;
+  globalThis.cancelAnimationFrame = () => {};
+  const view = mount(
+    async (_url, options) => {
+      if (options?.method === 'POST') return { success: true };
+      return ++reads === 1
+        ? { data: { books: structuredClone(original), count: 2 } }
+        : delayed;
+    },
+    {},
+    {
+      compiledCode: compileComponent('../app/pages/to-be-read.vue'),
+      globals: {
+        definePageMeta() {},
+        useHead() {},
+        useUiStore: () => ({ setLibraryView() {} }),
+      },
+    },
+  );
+  try {
+    await settle();
+    const move = view
+      .find((el) => el.props['aria-label'] === 'Move Alpha down')
+      .props.onClick();
+    await settle();
+    view
+      .find((el) => el.props['data-editor-book'] === 'one')
+      .props.onSaved('New saved reason');
+    await settle();
+    completeRefresh({
+      data: {
+        books: [
+          { ...original[1], rank: 1 },
+          { ...original[0], rank: 2 },
+        ],
+        count: 2,
+      },
+    });
+    await move;
+    await settle();
+    assert.equal(
+      view.find((el) => el.props['data-editor-book'] === 'one').props[
+        'data-editor-value'
+      ],
+      'New saved reason',
+    );
+  } finally {
+    view.app.unmount();
+    globalThis.cancelAnimationFrame = previousCancel;
   }
 });

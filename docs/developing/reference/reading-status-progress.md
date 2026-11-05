@@ -48,6 +48,8 @@ Migration `0006_tbr_queue` normalizes existing accessible ranks and installs acc
 
 The status transition service handles numeric moves and single/bulk status changes transactionally. Access-change triggers use a materialized ranked sequence through SQLite `UPDATE FROM` so rank compaction preserves the existing order.
 
+The four access triggers share the same visibility and rank-order rule. A future migration that rebuilds `collection_members` or `collection_books` must recreate their triggers; SQLite drops triggers attached to a dropped table, and Drizzle's generated table snapshot does not preserve these custom triggers. Exercise membership insert/delete and book-link insert/delete with the production migrations after such a change.
+
 ## Cover context menu
 
 Book grid and list covers offer **Reading status** with **To be read**, **Reading**, **Finished**, **DNF**, and **No status**. The dashboard Continue reading covers offer the same menu. Choices apply to the signed-in user, including on reference-only books.

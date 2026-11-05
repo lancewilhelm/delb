@@ -22,14 +22,29 @@ type Drag = {
 const drag = shallowRef<Drag | null>(null);
 let frame = 0;
 let controller: AbortController | null = null;
+let rationaleSequence = 0;
+const rationaleSaves = new Map<string, { value: string; sequence: number }>();
+
+function rationaleSaved(bookId: string, value: string) {
+  rationaleSaves.set(bookId, { value, sequence: ++rationaleSequence });
+  const book = books.value.find((item) => item.id === bookId);
+  if (book) book.rationale = value;
+}
 
 async function refresh() {
+  const startedAt = rationaleSequence;
   controller = new AbortController();
   const response = await $fetch<{ data: { books: TbrBook[]; count: number } }>(
     '/api/tbr',
     { signal: controller.signal },
   );
-  books.value = response.data.books;
+  books.value = response.data.books.map((book) => {
+    const saved = rationaleSaves.get(book.id);
+    // A rationale can save while this queue request is in flight.
+    return saved && saved.sequence > startedAt
+      ? { ...book, rationale: saved.value }
+      : book;
+  });
 }
 
 async function load() {
@@ -306,7 +321,7 @@ onBeforeUnmount(() => {
             class="col-start-2 col-span-2"
             :book-id="book.id"
             :rationale="book.rationale"
-            @saved="book.rationale = $event"
+            @saved="rationaleSaved(book.id, $event)"
           />
         </li>
       </ol>
