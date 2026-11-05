@@ -1,0 +1,43 @@
+name: Push verification
+
+on:
+  push:
+    branches-ignore:
+      - main
+    tags:
+      - '**'
+
+permissions:
+  contents: read
+
+jobs:
+  route:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      should_run: ${{ steps.route.outputs.should_run }}
+    steps:
+      - id: route
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          should_run=true
+          if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then
+            if count=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls" \
+              -f state=open \
+              -f "head=$GITHUB_REPOSITORY_OWNER:$GITHUB_REF_NAME" \
+              -f per_page=1 --jq length); then
+              if [[ "$count" != "0" ]]; then
+                should_run=false
+              fi
+            else
+              echo "::warning::Could not check open PRs; running full verification."
+            fi
+          fi
+          echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
+
+  verify:
+    needs: route
+    if: needs.route.outputs.should_run == 'true'
+    uses: ./.github/workflows/test.yml
