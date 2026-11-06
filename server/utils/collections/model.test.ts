@@ -237,3 +237,20 @@ test('health reports cross-collection matching entries without requiring members
     0,
   );
 });
+
+test('health identifies a book without a valid collection after external corruption', async (t) => {
+  const { client, db, cleanup } = await collectionFixture();
+  t.after(cleanup);
+  await enrollNewUser(db, 'owner');
+  // Simulate a damaged external database; normal writes are protected by the trigger.
+  await client.execute('DROP TRIGGER books_require_collection_insert');
+  await client.execute(
+    "INSERT INTO books(id,title,created_at,updated_at) VALUES('damaged','Needs collection',0,0)",
+  );
+  const check = (await collectionHealth(db, 20)).find(
+    (item) => item.id === 'collections.membership',
+  );
+  assert.equal(check?.status, 'error');
+  assert.equal(check?.meta?.invalidBookCount, 1);
+  assert.equal(check?.sample?.[0]?.id, 'damaged');
+});

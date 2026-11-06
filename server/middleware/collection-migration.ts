@@ -10,7 +10,11 @@ export default defineEventHandler(async (event) => {
   if (!pathname.startsWith('/api/')) return;
   if ((await collectionModelState(cloudDb)) === 'exclusive') return;
   if (pathname === '/api/settings/admin/collections-migration') return;
-  if (pathname.endsWith('/sign-up/email') && !(await cloudDb.select({id:users.id}).from(users).limit(1)).length) return;
+  if (
+    pathname.endsWith('/sign-up/email') &&
+    !(await cloudDb.select({ id: users.id }).from(users).limit(1)).length
+  )
+    return;
   if (
     pathname.startsWith('/api/auth/') &&
     (event.method === 'GET' ||

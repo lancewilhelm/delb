@@ -106,7 +106,7 @@ const otherCookies = otherRegistration.headers
   .getSetCookie()
   .map((value) => value.split(';')[0])
   .join('; ');
-const defaultCollection = (await collection.json()).data.find(
+const defaultCollection = (await collection.json()).data.collections.find(
   (item) => item.isDefault,
 );
 assert.ok(defaultCollection);

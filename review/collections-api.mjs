@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { randomBytes } from 'node:crypto';
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { readFile, readdir, mkdir, writeFile } from 'node:fs/promises';
 import { createClient } from '@libsql/client';
 import { fetchAuth } from './fetch-auth.mjs';
 
@@ -334,25 +334,164 @@ try {
     'PASS administrative default changes, prospective enrollment, ownership recovery and empty-only deletion',
   );
 
-  await mkdir('calibre/fixture',{recursive:true});
-  await writeFile('calibre/fixture/book.epub',await readFile('review/demo/ordinary.epub'));
-  calibre=createClient({url:'file:./calibre/metadata.db'});
-  await calibre.execute('CREATE TABLE books(id INTEGER PRIMARY KEY,title TEXT,path TEXT)');
-  await calibre.execute("INSERT INTO books VALUES(1001,'Calibre canonical','fixture')");
-  await expect('/api/settings/admin/calibre',owner,'POST',{action:'import',collectionIds:[source],dryRun:true});
-  assert.equal((await db.execute('SELECT count(*) AS n FROM books WHERE calibre_book_id=1001')).rows[0].n,0);
-  await expect('/api/settings/admin/calibre',owner,'POST',{action:'import',collectionIds:[source]});
-  const calibreId=(await db.execute('SELECT id FROM books WHERE calibre_book_id=1001')).rows[0].id;
-  assert.equal((await expect(`/api/books/${calibreId}`,owner)).book.collectionId,source);
-  await expect('/api/settings/admin/calibre',owner,'POST',{action:'import',collectionIds:[source,originalDefault]},400);
-  console.log('PASS Calibre dry run, single-target import and stored format file');
+  await mkdir('calibre/fixture', { recursive: true });
+  await writeFile(
+    'calibre/fixture/book.epub',
+    await readFile('review/demo/ordinary.epub'),
+  );
+  calibre = createClient({ url: 'file:./calibre/metadata.db' });
+  await calibre.execute(
+    'CREATE TABLE books(id INTEGER PRIMARY KEY,title TEXT,path TEXT)',
+  );
+  await calibre.execute(
+    "INSERT INTO books VALUES(1001,'Calibre canonical','fixture')",
+  );
+  await expect('/api/settings/admin/calibre', owner, 'POST', {
+    action: 'import',
+    collectionIds: [source],
+    dryRun: true,
+  });
+  assert.equal(
+    (
+      await db.execute(
+        'SELECT count(*) AS n FROM books WHERE calibre_book_id=1001',
+      )
+    ).rows[0].n,
+    0,
+  );
+  await expect('/api/settings/admin/calibre', owner, 'POST', {
+    action: 'import',
+    collectionIds: [source],
+  });
+  const calibreId = (
+    await db.execute('SELECT id FROM books WHERE calibre_book_id=1001')
+  ).rows[0].id;
+  assert.equal(
+    (await expect(`/api/books/${calibreId}`, owner)).book.collectionId,
+    source,
+  );
+  await expect(
+    '/api/settings/admin/calibre',
+    owner,
+    'POST',
+    { action: 'import', collectionIds: [source, originalDefault] },
+    400,
+  );
+  console.log(
+    'PASS Calibre dry run, single-target import and stored format file',
+  );
+
+  // Resume claims with their retained destination, even after configuration changes.
+  const claimId = randomUUID();
+  const deniedClaimId = randomUUID();
+  const missingClaimId = randomUUID();
+  const dropboxTarget = await createCollection(
+    owner,
+    'Dropbox retained collection',
+  );
+  await mkdir('dropbox', { recursive: true });
+  await db.execute({
+    sql: 'INSERT INTO system_state(key,value) VALUES(?,?),(?,?)',
+    args: [
+      `dropbox-claim:${claimId}`,
+      JSON.stringify({ ownerUserId: owner.id, collectionIds: [dropboxTarget] }),
+      `dropbox-claim:${deniedClaimId}`,
+      JSON.stringify({
+        ownerUserId: editor.id,
+        collectionIds: [dropboxTarget],
+      }),
+    ],
+  });
+  await writeFile(
+    `dropbox/Dropbox retained target.pdf.delb-processing-${claimId}`,
+    'retained claim bytes',
+  );
+  await writeFile(
+    `dropbox/Dropbox denied target.pdf.delb-processing-${deniedClaimId}`,
+    'denied claim bytes',
+  );
+  await writeFile(
+    `dropbox/Dropbox unknown target.pdf.delb-processing-${missingClaimId}`,
+    'unrecorded claim bytes',
+  );
+  await expect('/api/settings/global', owner, 'PUT', {
+    settings: {
+      allowRegistration: true,
+      dropbox: {
+        enabled: true,
+        pollIntervalMs: 100,
+        stablePassesRequired: 1,
+        targetCollectionId: originalDefault,
+        targetUserId: owner.id,
+      },
+    },
+  });
+  let dropboxRows = [];
+  let errors = [];
+  const deadline = Date.now() + 45000;
+  while (Date.now() < deadline) {
+    dropboxRows = (
+      await db.execute(
+        "SELECT id,collection_id FROM books WHERE title='Dropbox retained target'",
+      )
+    ).rows;
+    try {
+      errors = (await readdir('dropbox/failed')).filter((file) =>
+        file.endsWith('.error.txt'),
+      );
+    } catch {
+      errors = [];
+    }
+    if (dropboxRows.length === 1 && errors.length >= 2) break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.equal(dropboxRows.length, 1, 'watcher must resume the retained claim');
+  assert.equal(
+    dropboxRows[0].collection_id,
+    dropboxTarget,
+    'configured/default changes must not redirect a claim',
+  );
+  const dropboxFile = (
+    await db.execute({
+      sql: 'SELECT relative_path FROM book_files WHERE book_id=?',
+      args: [dropboxRows[0].id],
+    })
+  ).rows[0].relative_path;
+  assert.equal(await readFile(dropboxFile, 'utf8'), 'retained claim bytes');
+  assert.equal(
+    errors.length,
+    2,
+    'denied and unrecorded destinations must stop imports',
+  );
+  const reasons = await Promise.all(
+    errors.map((file) => readFile(`dropbox/failed/${file}`, 'utf8')),
+  );
+  assert.ok(reasons.some((text) => text.includes('retained destination')));
+  assert.ok(reasons.some((text) => text.includes('editor access')));
+  assert.equal(
+    (
+      await db.execute(
+        "SELECT count(*) AS n FROM books WHERE title IN ('Dropbox denied target','Dropbox unknown target')",
+      )
+    ).rows[0].n,
+    0,
+  );
+  await expect('/api/settings/global', owner, 'PUT', {
+    settings: { allowRegistration: true, dropbox: { enabled: false } },
+  });
+  console.log(
+    'PASS Dropbox claim recovery retains destination, verifies bytes and stops revoked or unknown target imports',
+  );
 
   // Stage the supported legacy relation in this disposable database, then drive the real admin migration API.
   const second = await createCollection(owner, 'Migration second collection');
   await db.execute(
     'INSERT INTO legacy_collection_books(collection_id,book_id,added_by_user_id,added_at) SELECT collection_id,id,added_by_user_id,added_at FROM books',
   );
-  await db.execute({sql:'INSERT INTO legacy_collection_books(collection_id,book_id,added_at) VALUES(?,?,0),(?,?,0)',args:[second,movable,second,calibreId]});
+  await db.execute({
+    sql: 'INSERT INTO legacy_collection_books(collection_id,book_id,added_at) VALUES(?,?,0),(?,?,0)',
+    args: [second, movable, second, calibreId],
+  });
   await db.execute(
     "UPDATE system_state SET value='pending' WHERE key='collections-model'",
   );
@@ -371,7 +510,10 @@ try {
   assert.equal(preview.splits.length, 2);
   const body = {
     fingerprint: preview.fingerprint,
-    choices: [{ bookId: movable, collectionId: source },{bookId:calibreId,collectionId:source}],
+    choices: [
+      { bookId: movable, collectionId: source },
+      { bookId: calibreId, collectionId: source },
+    ],
     backupConfirmed: false,
   };
   await expect(
@@ -402,10 +544,74 @@ try {
   console.log(
     'PASS production-server migration preview/apply authorization, backup gate, maintenance gate and independent splitting',
   );
-  await calibre.execute("UPDATE books SET title='Calibre rescanned' WHERE id=1001");
-  await expect('/api/settings/admin/calibre',owner,'POST',{action:'rescan',collectionIds:[source]});
-  assert.equal((await expect(`/api/books/${calibreId}`,owner)).book.title,'Calibre rescanned');
-  const independent=(await db.execute({sql:"SELECT id,title FROM books WHERE collection_id=? AND title='Calibre canonical'",args:[second]})).rows;
-  assert.equal(independent.length,1);
-  console.log('PASS Calibre rescan updates its designated entry and preserves the independent migrated copy');
-} finally {calibre?.close();db.close();}
+  await calibre.execute(
+    "UPDATE books SET title='Calibre rescanned' WHERE id=1001",
+  );
+  await expect('/api/settings/admin/calibre', owner, 'POST', {
+    action: 'rescan',
+    collectionIds: [source],
+  });
+  assert.equal(
+    (await expect(`/api/books/${calibreId}`, owner)).book.title,
+    'Calibre rescanned',
+  );
+  const independent = (
+    await db.execute({
+      sql: "SELECT id,title FROM books WHERE collection_id=? AND title='Calibre canonical'",
+      args: [second],
+    })
+  ).rows;
+  assert.equal(independent.length, 1);
+  console.log(
+    'PASS Calibre rescan updates its designated entry and preserves the independent migrated copy',
+  );
+  // A deterministic revocation after the first known entry proves each rescan rechecks the batch target.
+  const importer = await signup('calibre-admin');
+  await db.execute({
+    sql: "UPDATE users SET role='admin' WHERE id=?",
+    args: [importer.id],
+  });
+  const batchTarget = await createCollection(owner, 'Calibre batch target');
+  for (const collectionId of [source, batchTarget])
+    await expect(`/api/collections/${collectionId}/members`, owner, 'PUT', {
+      email: importer.email,
+      role: 'editor',
+    });
+  const nextCalibreId = await createBook(
+    owner,
+    'Unchanged after revoked batch target',
+    source,
+  );
+  await db.execute({
+    sql: 'UPDATE books SET calibre_book_id=1002 WHERE id=?',
+    args: [nextCalibreId],
+  });
+  await calibre.execute(
+    "INSERT INTO books VALUES(1002,'Must not rescan after revocation','fixture')",
+  );
+  const literal = (value) => "'" + value.replaceAll("'", "''") + "'";
+  await db.execute(
+    `CREATE TRIGGER revoke_calibre_batch AFTER UPDATE OF title ON books WHEN NEW.id=${literal(calibreId)} BEGIN DELETE FROM collection_members WHERE collection_id=${literal(batchTarget)} AND user_id=${literal(importer.id)}; END`,
+  );
+  try {
+    await expect(
+      '/api/settings/admin/calibre',
+      importer,
+      'POST',
+      { action: 'rescan', collectionIds: [batchTarget] },
+      403,
+    );
+    assert.equal(
+      (await expect(`/api/books/${nextCalibreId}`, owner)).book.title,
+      'Unchanged after revoked batch target',
+    );
+  } finally {
+    await db.execute('DROP TRIGGER revoke_calibre_batch');
+  }
+  console.log(
+    'PASS Calibre rescans stop when the retained batch destination loses editor access',
+  );
+} finally {
+  calibre?.close();
+  db.close();
+}

@@ -10,7 +10,26 @@ import {
 } from 'node:fs/promises';
 import path from 'node:path';
 import { eq, sql } from 'drizzle-orm';
-import { systemState } from '../../../app/utils/db/schema';
+import { getTableConfig, type AnySQLiteTable } from 'drizzle-orm/sqlite-core';
+import {
+  users,
+  collections,
+  collectionMembers,
+  books,
+  bookAuthors,
+  bookTags,
+  bookIdentifiers,
+  bookFiles,
+  userBookStatus,
+  userBookReadingPosition,
+  userBookPreferences,
+  userBookProgressLog,
+  bookRatings,
+  userBookRationale,
+  bookNotes,
+  globalSettings,
+  systemState,
+} from '../../../app/utils/db/schema';
 import { withBookStorageLock } from '../books/storage/book-lock';
 import {
   copyVerifiedExclusive,
@@ -24,27 +43,25 @@ import {
   type CollectionDatabase,
 } from './model';
 
-type Row = Record<string, string | number | null>;
-const catalogTables = [
-  'users',
-  'collections',
-  'collection_members',
-  'books',
-  'legacy_collection_books',
-  'book_authors',
-  'book_tags',
-  'book_identifiers',
-  'book_files',
-  'user_book_status',
-  'user_book_reading_position',
-  'user_book_preferences',
-  'user_book_progress_log',
-  'book_ratings',
-  'user_book_rationale',
-  'book_notes',
-  'global_settings',
-] as const;
-type CatalogTable = (typeof catalogTables)[number];
+type SqlValue = string | number | null;
+type SqlRow<T extends AnySQLiteTable> = {
+  [K in keyof T['_']['columns'] as T['_']['columns'][K]['_']['name']]:
+    | (T['_']['columns'][K]['_']['dataType'] extends 'json'
+        ? string
+        : T['_']['columns'][K]['_']['data'] extends Date | boolean
+          ? number
+          : T['_']['columns'][K]['_']['data'])
+    | (T['_']['columns'][K]['_']['notNull'] extends true ? never : null);
+};
+type LegacyBook = Omit<SqlRow<typeof books>, 'collection_id'> & {
+  collection_id: string | null;
+};
+type LegacyLink = {
+  collection_id: string;
+  book_id: string;
+  added_by_user_id: string | null;
+  added_at: number;
+};
 const readerTables = [
   'user_book_status',
   'user_book_reading_position',
@@ -55,30 +72,101 @@ const readerTables = [
   'book_notes',
 ] as const;
 
-async function snapshot(db: CollectionConnection) {
-  const data: Record<CatalogTable, Row[]> = {
-    users: [],
-    collections: [],
-    collection_members: [],
-    books: [],
-    legacy_collection_books: [],
-    book_authors: [],
-    book_tags: [],
-    book_identifiers: [],
-    book_files: [],
-    user_book_status: [],
-    user_book_reading_position: [],
-    user_book_preferences: [],
-    user_book_progress_log: [],
-    book_ratings: [],
-    user_book_rationale: [],
-    book_notes: [],
-    global_settings: [],
+async function tableRows<T extends AnySQLiteTable>(
+  db: CollectionConnection,
+  table: T,
+) {
+  const { name, columns } = getTableConfig(table);
+  const rows = await db.all<Record<string, unknown>>(
+    sql`SELECT * FROM ${sql.identifier(name)} ORDER BY rowid`,
+  );
+  for (const row of rows) {
+    for (const column of columns) {
+      const value = row[column.name];
+      const nullable =
+        !column.notNull ||
+        (name === 'books' && column.name === 'collection_id');
+      const expected = ['date', 'boolean'].includes(column.dataType)
+        ? 'number'
+        : column.dataType === 'json'
+          ? 'string'
+          : column.dataType;
+      if (
+        !(value === null && nullable) &&
+        (typeof value !== expected ||
+          (typeof value === 'number' && !Number.isFinite(value)))
+      )
+        throw new CollectionError(
+          409,
+          `Invalid legacy ${name}.${column.name}; repair the source before migration`,
+        );
+    }
+    if (
+      Object.keys(row).some(
+        (key) => !columns.some((column) => column.name === key),
+      )
+    )
+      throw new CollectionError(
+        409,
+        `Unrecognized legacy ${name} columns; check the migration version`,
+      );
+  }
+  // The authoritative column metadata above validates every raw field before it enters the plan.
+  return rows as SqlRow<T>[];
+}
+
+async function legacyLinks(db: CollectionConnection): Promise<LegacyLink[]> {
+  const rows = await db.all<Record<string, unknown>>(
+    sql`SELECT * FROM legacy_collection_books ORDER BY rowid`,
+  );
+  return rows.map((row) => {
+    if (
+      typeof row.collection_id !== 'string' ||
+      typeof row.book_id !== 'string' ||
+      (row.added_by_user_id !== null &&
+        typeof row.added_by_user_id !== 'string') ||
+      typeof row.added_at !== 'number' ||
+      !Number.isFinite(row.added_at)
+    )
+      throw new CollectionError(
+        409,
+        'Invalid legacy collection link; repair the source before migration',
+      );
+    return {
+      collection_id: row.collection_id,
+      book_id: row.book_id,
+      added_by_user_id: row.added_by_user_id,
+      added_at: row.added_at,
+    };
+  });
+}
+
+async function catalogSnapshot(db: CollectionConnection) {
+  return {
+    users: await tableRows(db, users),
+    collections: await tableRows(db, collections),
+    collection_members: await tableRows(db, collectionMembers),
+    books: (await tableRows(db, books)) as LegacyBook[],
+    legacy_collection_books: await legacyLinks(db),
+    book_authors: await tableRows(db, bookAuthors),
+    book_tags: await tableRows(db, bookTags),
+    book_identifiers: await tableRows(db, bookIdentifiers),
+    book_files: await tableRows(db, bookFiles),
+    user_book_status: await tableRows(db, userBookStatus),
+    user_book_reading_position: await tableRows(db, userBookReadingPosition),
+    user_book_preferences: await tableRows(db, userBookPreferences),
+    user_book_progress_log: await tableRows(db, userBookProgressLog),
+    book_ratings: await tableRows(db, bookRatings),
+    user_book_rationale: await tableRows(db, userBookRationale),
+    book_notes: await tableRows(db, bookNotes),
+    global_settings: await tableRows(db, globalSettings),
   };
-  for (const table of catalogTables)
-    data[table] = await db.all<Row>(
-      sql.raw(`SELECT * FROM "${table}" ORDER BY rowid`),
-    );
+}
+type Catalog = Awaited<ReturnType<typeof catalogSnapshot>>;
+type CatalogTable = keyof Catalog;
+
+async function snapshot(db: CollectionConnection) {
+  const data = await catalogSnapshot(db);
   return {
     data,
     fingerprint: createHash('sha256')
@@ -108,10 +196,10 @@ function record(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function legacyDropbox(data: Record<CatalogTable, Row[]>) {
+function legacyDropbox(data: Catalog) {
   const row = data.global_settings[0];
   if (!row) return null;
-  const settings: unknown = JSON.parse(String(row.settings));
+  const settings: unknown = JSON.parse(row.settings);
   if (!record(settings) || !record(settings.dropbox)) return null;
   const dropbox = settings.dropbox;
   const ids = Array.from(
@@ -196,12 +284,12 @@ export async function previewCollectionMigration(db: CollectionDatabase) {
   const splits = data.books.flatMap((book) => {
     const ids = data.legacy_collection_books
       .filter((link) => link.book_id === book.id)
-      .map((link) => String(link.collection_id));
+      .map((link) => link.collection_id);
     return ids.length > 1
       ? [
           {
-            bookId: String(book.id),
-            title: String(book.title),
+            bookId: book.id,
+            title: book.title,
             calibreBookId: book.calibre_book_id,
             collections: ids.map((id) => ({
               id,
@@ -214,7 +302,9 @@ export async function previewCollectionMigration(db: CollectionDatabase) {
         ]
       : [];
   });
-  const operations = await db.all<Row>(sql`SELECT id FROM storage_operations`);
+  const operations = await db.all<{ id: string }>(
+    sql`SELECT id FROM storage_operations`,
+  );
   const dropbox = legacyDropbox(data);
   const badOwners = data.collections.filter(
     (collection) =>
@@ -252,8 +342,8 @@ export async function previewCollectionMigration(db: CollectionDatabase) {
           )),
       ),
       options: data.collections.map((collection) => ({
-        id: String(collection.id),
-        name: String(collection.name),
+        id: collection.id,
+        name: collection.name,
       })),
       configuredIds: dropbox?.ids ?? [],
     },
@@ -275,7 +365,7 @@ export async function previewCollectionMigration(db: CollectionDatabase) {
 async function insertRow(
   db: CollectionConnection,
   table: CatalogTable,
-  row: Row,
+  row: Record<string, SqlValue>,
 ) {
   const entries = Object.entries(row);
   await db.run(
@@ -301,14 +391,14 @@ async function inside(root: string, stored: string) {
 
 async function copyBookFiles(
   root: string,
-  book: Row,
-  files: Row[],
+  book: LegacyBook,
+  files: SqlRow<typeof bookFiles>[],
   newId: string,
   fingerprint: string,
 ) {
   const known = [
-    ...files.map((file) => String(file.relative_path)),
-    ...(book.cover_image_path ? [String(book.cover_image_path)] : []),
+    ...files.map((file) => file.relative_path),
+    ...(book.cover_image_path ? [book.cover_image_path] : []),
   ];
   if (!known.length) return { files: new Map<string, string>(), cover: null };
   // A full ID prevents collisions between independent entries, including equal titles.
@@ -421,7 +511,7 @@ async function copyBookFiles(
   return {
     files: mapping,
     cover: book.cover_image_path
-      ? (mapping.get(String(book.cover_image_path)) ?? null)
+      ? (mapping.get(book.cover_image_path) ?? null)
       : null,
   };
 }
@@ -498,7 +588,7 @@ export async function applyCollectionMigration(
       choices: input.choices,
       defaultId: randomUUID(),
       recoveredId: randomUUID(),
-      ownerId: String(owner.id),
+      ownerId: owner.id,
       dropboxTargetId,
     };
     await db.transaction(async (tx) => {
@@ -536,22 +626,30 @@ export async function applyCollectionMigration(
         .where(eq(systemState.key, 'collections-model'));
     });
     const copies: Array<{
-      original: Row;
-      row: Row & { id: string };
+      original: LegacyBook;
+      row: LegacyBook;
       collectionId: string;
       files: Awaited<ReturnType<typeof copyBookFiles>>;
     }> = [];
-    for (const book of data.books) {
+    const assignments = data.books.map((book) => {
       const links = data.legacy_collection_books.filter(
         (link) => link.book_id === book.id,
       );
-      const keep =
+      const collectionId =
         plan.choices.find((choice) => choice.bookId === book.id)
           ?.collectionId ??
         links[0]?.collection_id ??
         plan.recoveredId;
+      return {
+        book,
+        links,
+        collectionId,
+        link: links.find((link) => link.collection_id === collectionId),
+      };
+    });
+    for (const { book, links, collectionId: keep } of assignments) {
       for (const link of links.filter((link) => link.collection_id !== keep)) {
-        const id = copyId(String(book.id), String(link.collection_id));
+        const id = copyId(book.id, link.collection_id);
         copies.push({
           original: book,
           row: {
@@ -562,7 +660,7 @@ export async function applyCollectionMigration(
             added_by_user_id: link.added_by_user_id ?? null,
             added_at: link.added_at ?? 0,
           },
-          collectionId: String(link.collection_id),
+          collectionId: link.collection_id,
           files: await copyBookFiles(
             root,
             book,
@@ -597,16 +695,7 @@ export async function applyCollectionMigration(
         await tx.run(
           sql`INSERT INTO collections(id,name,owner_user_id,is_personal,is_default,created_at,updated_at) VALUES(${plan.recoveredId},'Recovered books',${plan.ownerId},0,0,${now},${now})`,
         );
-      for (const book of data.books) {
-        const links = data.legacy_collection_books.filter(
-          (link) => link.book_id === book.id,
-        );
-        const collectionId =
-          plan.choices.find((choice) => choice.bookId === book.id)
-            ?.collectionId ??
-          links[0]?.collection_id ??
-          plan.recoveredId;
-        const link = links.find((link) => link.collection_id === collectionId);
+      for (const { book, collectionId, link } of assignments) {
         await tx.run(
           sql`UPDATE books SET collection_id=${collectionId},added_by_user_id=${link?.added_by_user_id ?? book.created_by_user_id},added_at=${link?.added_at ?? book.created_at} WHERE id=${book.id}`,
         );
@@ -628,7 +717,7 @@ export async function applyCollectionMigration(
         for (const row of data.book_files.filter(
           (row) => row.book_id === copy.original.id,
         )) {
-          const file = copy.files.files.get(String(row.relative_path));
+          const file = copy.files.files.get(row.relative_path);
           if (!file)
             throw new CollectionError(409, 'Missing verified book copy');
           await insertRow(tx, 'book_files', {
@@ -646,12 +735,11 @@ export async function applyCollectionMigration(
         for (const table of readerTables)
           for (const row of data[table].filter(
             (row) =>
-              row.book_id === copy.original.id &&
-              members.has(row.user_id ?? null),
+              row.book_id === copy.original.id && members.has(row.user_id),
           ))
             await insertRow(tx, table, {
               ...row,
-              ...(row.id ? { id: randomUUID() } : {}),
+              ...('id' in row ? { id: randomUUID() } : {}),
               book_id: copy.row.id,
             });
       }
@@ -665,15 +753,15 @@ export async function applyCollectionMigration(
             (a, b) =>
               Number(a.tbr_rank ?? Number.MAX_SAFE_INTEGER) -
                 Number(b.tbr_rank ?? Number.MAX_SAFE_INTEGER) ||
-              String(a.book_id).localeCompare(String(b.book_id)),
+              a.book_id.localeCompare(b.book_id),
           );
         let rank = 0;
         for (const original of queue) {
           const ids = [
-            String(original.book_id),
+            original.book_id,
             ...copies
               .filter((copy) => copy.original.id === original.book_id)
-              .map((copy) => String(copy.row.id)),
+              .map((copy) => copy.row.id),
           ];
           for (const id of ids) {
             const [visible] = await tx.all(

@@ -116,13 +116,14 @@ This is synthetic API and Chrome evidence. Calibre/Dropbox ingestion paths were 
 
 The accepted [collection contract](../adr/0004-exclusive-collections-and-shared-default.md) is implemented with one collection per book, a shared default, and an administrative upgrade for legacy installations.
 
-- All 280 unit tests passed. Focused regressions cover ownership, one-time enrollment, exclusive moves, verified independent file copies, interrupted migration recovery, Calibre mapping, private reading data, and adjacent TBR copies. Two defects were reproduced before their fixes: legacy orphan insertion remained possible, and different referenced files with the same basename collided during migration.
+- All 283 unit tests passed. Focused regressions cover ownership, one-time enrollment, exclusive moves, verified independent file copies, interrupted migration recovery, Calibre mapping, private reading data, and adjacent TBR copies. Two defects were reproduced before their fixes: legacy orphan insertion remained possible, and different referenced files with the same basename collided during migration.
 - Typecheck and production build passed. Lint has no errors and retains the existing `BookDescriptionEditor.vue` optional-prop warning. Committed migration generation reports no schema drift.
-- The collection production API suite passed against a disposable database. It covers permissions, moves and access revocation, future-only default changes, zero memberships, duplicate health findings, owner/account deletion, synthetic Calibre import/rescan, and administrative migration preview/apply.
+- The collection production API suite passed against a disposable database. It covers permissions, moves and access revocation, future-only default changes, zero memberships, duplicate health findings, owner/account deletion, synthetic Calibre import/rescan, and administrative migration preview/apply. The local Dropbox watcher resumed a retained claim into its original collection despite changed configuration, verified stored bytes, and rejected revoked or unknown targets. A deterministic Calibre revocation stopped later rescan writes.
 - Headless Chrome passed move confirmation, default administration, zero-membership collection creation, required migration choices and backup confirmation, and phone-width layout. Screenshots were inspected; no unhandled browser exceptions occurred.
+- The Standards review found a raw migration-row boundary and duplicated retained-entry selection. Snapshot fields now validate against schema metadata, and both copy and assignment stages use one resolved mapping. The Spec review found Dropbox recovery redirection and a missing Calibre batch-target recheck; retained claim plans and per-entry authorization address both.
 - [Reusable checks and manual steps](../../review/README.md#exclusive-collection-checks) separate API, browser, and operator verification. The [migration guide](../hosting/collection-migration.md) describes backup and resume requirements.
 
-This is local synthetic API and Chrome evidence. No real library was migrated. Live providers, real Dropbox/network storage, Docker, assistive technology, other browser engines, and deployment restore reliability were not exercised.
+This is local synthetic API and Chrome evidence. No real library was migrated. Live providers, network storage, Docker, assistive technology, other browser engines, and deployment restore reliability were not exercised.
 
 ## Next documentation passes
 

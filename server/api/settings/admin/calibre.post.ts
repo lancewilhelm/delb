@@ -601,9 +601,9 @@ export default defineEventHandler(async (event) => {
       const perform = () =>
         cloudDb.transaction(async (tx) => {
           if (!dryRun) await lockCollectionChanges(tx);
+          await assertCollectionEditor(tx, userId, targetCollectionId);
           if (knownDelbBookId)
             await assertBookEditor(tx, userId, knownDelbBookId);
-          else await assertCollectionEditor(tx, userId, targetCollectionId);
           // Publisher/Series (optional)
           const calibrePublisherId = calibrePublisherByBookId.get(
             calibreBook.calibreBookId,

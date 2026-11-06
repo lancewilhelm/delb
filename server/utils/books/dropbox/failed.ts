@@ -34,7 +34,7 @@ export async function moveToFailed(opts: {
     await unlink(opts.fileAbs);
   } catch {
     // Keep the claim if the failed destination cannot be safely created.
-    return;
+    return false;
   }
 
   try {
@@ -42,4 +42,5 @@ export async function moveToFailed(opts: {
   } catch {
     // ignore
   }
+  return true;
 }

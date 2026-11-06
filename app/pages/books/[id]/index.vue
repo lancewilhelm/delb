@@ -1515,7 +1515,17 @@ const { copy } = useClipboard();
               <div class="grid grid-cols-[min-content_1fr] gap-4 items-center">
                 <div class="flex gap-2 items-center">
                   <div class="font-semibold">Collection</div>
-                  <button v-if="canEditCollectionsForBook" type="button" aria-label="Move book to another collection" @click="openCollectionsManager"><Icon name="lucide:pencil" class="text-md opacity-50 hover:opacity-80" /></button>
+                  <button
+                    v-if="canEditCollectionsForBook"
+                    type="button"
+                    aria-label="Move book to another collection"
+                    @click="openCollectionsManager"
+                  >
+                    <Icon
+                      name="lucide:pencil"
+                      class="text-md opacity-50 hover:opacity-80"
+                    />
+                  </button>
                 </div>
 
                 <div

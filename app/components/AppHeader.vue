@@ -75,7 +75,12 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
           </button>
         </template>
       </ClientOnly>
-      <button type="button" aria-label="Add book" @click="openAddBook"><Icon name="lucide:book-plus" class="text-(--contrast-main-color) cursor-pointer text-xl header-icon" /></button>
+      <button type="button" aria-label="Add book" @click="openAddBook">
+        <Icon
+          name="lucide:book-plus"
+          class="text-(--contrast-main-color) cursor-pointer text-xl header-icon"
+        />
+      </button>
     </div>
 
     <!-- Center: Collection switcher (scope) -->

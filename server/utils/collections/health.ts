@@ -24,6 +24,13 @@ export async function collectionHealth(
   }>(sql`SELECT c.id,c.name FROM collections c WHERE
     (SELECT count(*) FROM collection_members cm WHERE cm.collection_id=c.id AND cm.role='owner')!=1 OR
     NOT EXISTS(SELECT 1 FROM collection_members cm WHERE cm.collection_id=c.id AND cm.user_id=c.owner_user_id AND cm.role='owner')`);
+  const invalidBooks = await db.all<{
+    id: string;
+    title: string;
+    collectionId: string | null;
+  }>(
+    sql`SELECT b.id,b.title,b.collection_id AS collectionId FROM books b LEFT JOIN collections c ON c.id=b.collection_id WHERE b.collection_id IS NULL OR c.id IS NULL ORDER BY b.id`,
+  );
   const groups = await db.all<{ title: string; n: number }>(
     sql`SELECT lower(trim(title)) AS title,count(*) AS n FROM books GROUP BY lower(trim(title)) HAVING count(DISTINCT collection_id)>1 ORDER BY lower(trim(title))`,
   );
@@ -63,6 +70,19 @@ export async function collectionHealth(
         ? `${owners.length} collection(s) have inconsistent ownership`
         : 'Every collection has one matching owner',
       sample: owners.slice(0, sampleLimit),
+    },
+    {
+      id: 'collections.membership',
+      name: 'Exclusive book collections',
+      status: invalidBooks.length ? 'error' : 'ok',
+      message: invalidBooks.length
+        ? `${invalidBooks.length} book(s) have no valid collection`
+        : 'Every book belongs to one existing collection',
+      howToFix: invalidBooks.length
+        ? 'Review the affected entries and restore the matching migration backup or repair their destination before resuming imports.'
+        : undefined,
+      meta: { invalidBookCount: invalidBooks.length },
+      sample: invalidBooks.slice(0, sampleLimit),
     },
     {
       id: 'duplicates.cross-collection-titles',

@@ -1,4 +1,4 @@
-import { assertBookEditor,lockCollectionChanges } from '../collections/model';
+import { assertBookEditor, lockCollectionChanges } from '../collections/model';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import {
@@ -101,7 +101,8 @@ test('cover uploads preserve files and database on every rejected EPUB or image'
     sharp,
     cloudDb,
     ...transaction,
-    assertBookEditor,lockCollectionChanges,
+    assertBookEditor,
+    lockCollectionChanges,
     withBookStorageLock: (
       root: string,
       id: string,
@@ -307,7 +308,7 @@ test('cover uploads preserve files and database on every rejected EPUB or image'
       await writeFile(`${dir}/thumb.webp`, 'old thumbnail');
       await cloudDb.insert(schema.books).values({
         id,
-        collectionId:'test-collection',
+        collectionId: 'test-collection',
         title: 'Synthetic',
         createdByUserId: 'test-user',
         coverImagePath: `${dir}/thumb.webp`,

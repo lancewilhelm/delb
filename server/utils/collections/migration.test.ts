@@ -304,3 +304,28 @@ test('split copies preserve distinct files with the same basename and resolve le
   assert.equal(settings.dropbox.targetCollectionId, '');
   assert.deepEqual(settings.dropbox.additionalCollectionIds, []);
 });
+
+test('malformed legacy fields stop preview before any file or library changes', async (t) => {
+  const { client, db, library, cleanup } = await fixture();
+  t.after(cleanup);
+  await client.execute(
+    "UPDATE book_files SET relative_path=X'616263' WHERE id='f'",
+  );
+  await assert.rejects(
+    previewCollectionMigration(db),
+    /Invalid legacy book_files.relative_path/,
+  );
+  assert.equal(
+    (
+      await client.execute(
+        "SELECT value FROM system_state WHERE key='collections-model'",
+      )
+    ).rows[0]?.value,
+    'pending',
+  );
+  assert.deepEqual(await readdir(library), ['source']);
+  assert.equal(
+    await readFile(path.join(library, 'source/book.epub'), 'utf8'),
+    'ebook bytes',
+  );
+});

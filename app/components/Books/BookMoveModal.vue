@@ -9,13 +9,23 @@ const busy = ref(false);
 const error = ref('');
 const targetId = ref('');
 const confirmed = ref(false);
-const dialog=ref<HTMLElement|null>(null);
-let previousFocus:HTMLElement|null=null;
-function trapFocus(event:KeyboardEvent) {
-  const controls=Array.from(dialog.value?.querySelectorAll<HTMLElement>('button:not([disabled]),select:not([disabled]),input:not([disabled]),[tabindex="0"]') ?? []).filter((control)=>control.getClientRects().length);
-  const first=controls[0],last=controls.at(-1);
-  if(event.shiftKey && document.activeElement===first){event.preventDefault();last?.focus();}
-  else if(!event.shiftKey && document.activeElement===last){event.preventDefault();first?.focus();}
+const dialog = ref<HTMLElement | null>(null);
+let previousFocus: HTMLElement | null = null;
+function trapFocus(event: KeyboardEvent) {
+  const controls = Array.from(
+    dialog.value?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]),select:not([disabled]),input:not([disabled]),[tabindex="0"]',
+    ) ?? [],
+  ).filter((control) => control.getClientRects().length);
+  const first = controls[0],
+    last = controls.at(-1);
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last?.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first?.focus();
+  }
 }
 
 const sources = ref<
@@ -53,8 +63,14 @@ const editable = computed(() => {
 watch(
   () => props.open,
   async (open) => {
-    if (!open) {previousFocus?.focus();return;}
-    previousFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;
+    if (!open) {
+      previousFocus?.focus();
+      return;
+    }
+    previousFocus =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     error.value = '';
     targetId.value = '';
     confirmed.value = false;
@@ -78,7 +94,8 @@ watch(
           : 'Unable to load the selected books';
     } finally {
       loading.value = false;
-      await nextTick();dialog.value?.querySelector<HTMLElement>('select,button')?.focus();
+      await nextTick();
+      dialog.value?.querySelector<HTMLElement>('select,button')?.focus();
     }
   },
 );
@@ -128,7 +145,14 @@ async function move() {
 
 <template>
   <ModalWindow :open="open" @close="!busy && emit('close')">
-    <div ref="dialog" role="dialog" aria-modal="true" aria-labelledby="book-move-title" class="flex flex-col gap-3 sm:w-95 max-w-[90vw]" @keydown.tab="trapFocus">
+    <div
+      ref="dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="book-move-title"
+      class="flex flex-col gap-3 sm:w-95 max-w-[90vw]"
+      @keydown.tab="trapFocus"
+    >
       <div id="book-move-title" class="text-lg font-semibold">Move books</div>
       <p class="text-sm">
         Choose the one collection these books will belong to. Readers who only

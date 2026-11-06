@@ -60,3 +60,5 @@ Dropbox and Calibre pin one new-entry destination at batch start and recheck acc
 | `POST /api/settings/admin/collections-migration` | Backup-confirmed apply/resume                                |
 
 The [collection model](../../../server/utils/collections/model.ts), [migration](../../../server/utils/collections/migration.ts), and [accepted ADR](../../adr/0004-exclusive-collections-and-shared-default.md) define the contract. See [collection procedures](../../using/collections.md).
+
+Dropbox persists each claimed file's importing user and collection before renaming the input. Recovery reloads that destination and rechecks its editor access; changed settings or defaults do not redirect a retained claim. A legacy claim without a destination stops with an error for explicit review and retry. Calibre checks the retained batch target on every entry, including rescans of existing entries.
