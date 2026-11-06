@@ -1,3 +1,4 @@
+import { assertBookEditor, lockCollectionChanges } from '../collections/model';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import {
@@ -100,6 +101,8 @@ test('cover uploads preserve files and database on every rejected EPUB or image'
     sharp,
     cloudDb,
     ...transaction,
+    assertBookEditor,
+    lockCollectionChanges,
     withBookStorageLock: (
       root: string,
       id: string,
@@ -215,7 +218,6 @@ test('cover uploads preserve files and database on every rejected EPUB or image'
 
   process.chdir(root);
   await client.execute('DELETE FROM collection_members');
-  await client.execute('DELETE FROM collection_books');
   await client.execute('DELETE FROM book_files');
   await client.execute('DELETE FROM books');
   await cloudDb
@@ -234,11 +236,6 @@ test('cover uploads preserve files and database on every rejected EPUB or image'
     .insert(schema.collections)
     .values({ id: 'test-collection', name: 'Test', ownerUserId: 'test-user' })
     .onConflictDoNothing();
-  await cloudDb.insert(schema.collectionMembers).values({
-    collectionId: 'test-collection',
-    userId: 'test-user',
-    role: 'owner',
-  });
   const cases = [
     'valid-epub3',
     'valid-epub2',
@@ -311,13 +308,11 @@ test('cover uploads preserve files and database on every rejected EPUB or image'
       await writeFile(`${dir}/thumb.webp`, 'old thumbnail');
       await cloudDb.insert(schema.books).values({
         id,
+        collectionId: 'test-collection',
         title: 'Synthetic',
         createdByUserId: 'test-user',
         coverImagePath: `${dir}/thumb.webp`,
       });
-      await cloudDb
-        .insert(schema.collectionBooks)
-        .values({ collectionId: 'test-collection', bookId: id });
       await cloudDb.insert(schema.bookFiles).values({
         id: `${id}-file`,
         bookId: id,

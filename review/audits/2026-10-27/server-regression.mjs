@@ -46,24 +46,25 @@ async function signup(label) {
 }
 const a = await signup('a'),
   b = await signup('b');
+const cA = await request('/api/collections', a.cookie, 'POST', {
+  name: 'Audit A Shared',
+});
+const cB = await request('/api/collections', b.cookie, 'POST', {
+  name: 'Audit B Collection',
+});
+assert.equal(cA.status, 200);
+assert.equal(cB.status, 200);
+const aCollection = cA.data.data.collection.id,
+  bCollection = cB.data.data.collection.id;
 const createA = await request('/api/books', a.cookie, 'POST', {
   title: 'Private Audit Title One',
   authors: ['PrivateUniqueAuditAuthor'],
   tags: ['PrivateUniqueAuditTag'],
   published: '2020-01-01',
+  collectionIds: [aCollection],
 });
 assert.equal(createA.status, 200, JSON.stringify(createA.data));
 const aBook = createA.data.data.book.id;
-const cA = await request('/api/collections', a.cookie, 'POST', {
-    name: 'Audit A Shared',
-  }),
-  cB = await request('/api/collections', b.cookie, 'POST', {
-    name: 'Audit B Collection',
-  });
-assert.equal(cA.status, 200);
-assert.equal(cB.status, 200);
-const aCollection = cA.data.data.collection.id,
-  bCollection = cB.data.data.collection.id;
 const before = await request('/api/books/' + aBook, b.cookie);
 assert.ok([403, 404].includes(before.status));
 const leak = await request('/api/search?q=PrivateUniqueAudit', b.cookie);
@@ -74,16 +75,20 @@ const singleAssign = await request(
   `/api/books/${aBook}/collections`,
   b.cookie,
   'PUT',
-  { addCollectionIds: [bCollection] },
+  {
+    collectionId: bCollection,
+    sourceCollectionId: aCollection,
+    confirmed: true,
+  },
 );
 assert.equal(singleAssign.status, 404);
 const assign = await request(
   `/api/collections/${bCollection}/books/bulk`,
   b.cookie,
   'POST',
-  { bookIds: [aBook], addToCollectionIds: [bCollection] },
+  { bookIds: [aBook], targetCollectionId: bCollection, confirmed: true },
 );
-assert.equal(assign.status, 404);
+assert.equal(assign.status, 409);
 assert.equal((await request('/api/books/' + aBook, b.cookie)).status, 404);
 assert.equal(
   (await request(`/api/books/${aBook}/rating`, b.cookie, 'POST', { rating: 1 }))
@@ -148,16 +153,24 @@ const linkToShared = await request(
   `/api/collections/${aCollection}/books/bulk`,
   a.cookie,
   'POST',
-  { bookIds: [aBook], addToCollectionIds: [aCollection] },
+  { bookIds: [aBook], targetCollectionId: aCollection, confirmed: true },
 );
 assert.equal(linkToShared.status, 200);
-const reshare = await request(
+const moved = await request(
+  `/api/collections/${aCollection}/books/bulk`,
+  b.cookie,
+  'POST',
+  { bookIds: [aBook], targetCollectionId: bCollection, confirmed: true },
+);
+assert.equal(moved.status, 200, JSON.stringify(moved.data));
+assert.equal((await request('/api/books/' + aBook, a.cookie)).status, 404);
+const movedBack = await request(
   `/api/collections/${bCollection}/books/bulk`,
   b.cookie,
   'POST',
-  { bookIds: [aBook], addToCollectionIds: [bCollection] },
+  { bookIds: [aBook], targetCollectionId: aCollection, confirmed: true },
 );
-assert.equal(reshare.status, 200, JSON.stringify(reshare.data));
+assert.equal(movedBack.status, 200, JSON.stringify(movedBack.data));
 assert.equal((await request('/api/books/' + aBook, b.cookie)).status, 200);
 const visibleSearch = await request(
   '/api/search?q=PrivateUniqueAudit',
@@ -386,7 +399,7 @@ assert.equal(
       { email: b.email },
     )
   ).status,
-  403,
+  200,
 );
 const adminUser = await signup('admin');
 const authDb = createClient({ url: 'file:./review/demo/synthetic.db' });
@@ -422,7 +435,7 @@ try {
     );
     assert.equal(
       response.status,
-      path === '/api/users/delete' ? 404 : 403,
+      403,
       `${path} returned ${response.status}: ${JSON.stringify(response.data)}`,
     );
   }

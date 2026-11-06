@@ -12,7 +12,12 @@ import {
   type DropboxIngestConfig,
 } from './config';
 import { ingestDropboxFile } from './ingest';
-import { finishCommittedDropboxClaim } from './claim';
+import {
+  finishCommittedDropboxClaim,
+  retainDropboxClaimTarget,
+  readDropboxClaimTarget,
+  removeDropboxClaimTarget,
+} from './claim';
 import { moveToFailed } from './failed';
 import { resolveDropboxTarget, type DropboxTarget } from './target';
 import { getGlobalSettingsRow } from './settings';
@@ -47,7 +52,6 @@ export function startDropboxIngestWatcher(): DropboxWatcherState {
 
   const seen = new Map<string, SeenFile>();
   let scanning = false;
-  let targetPromise: Promise<DropboxTarget> | null = null;
   let stopRequested = false;
   let timer: NodeJS.Timeout | null = null;
 
@@ -64,19 +68,13 @@ export function startDropboxIngestWatcher(): DropboxWatcherState {
     const row = await getGlobalSettingsRow();
     cachedSettings = row?.settings ?? {};
     lastSettingsRefreshAt = now;
-    // Re-resolve target periodically so admin settings changes take effect.
-    targetPromise = null;
+    // Polling configuration is cached; each new batch resolves its destination once.
     return cachedSettings;
   }
 
   async function getCfg() {
     const settings = await refreshSettingsIfNeeded();
     return getDropboxIngestConfigFromSettings(settings);
-  }
-
-  async function getTarget(): Promise<DropboxTarget> {
-    targetPromise ??= resolveDropboxTarget();
-    return await targetPromise;
   }
 
   function noteSeen(
@@ -158,7 +156,7 @@ export function startDropboxIngestWatcher(): DropboxWatcherState {
 
           if (!ready.length) return;
 
-          const target = await getTarget();
+          let batchTarget: DropboxTarget | undefined;
 
           // Process sequentially to keep things simple and avoid locking issues.
           for (const r of ready) {
@@ -174,9 +172,12 @@ export function startDropboxIngestWatcher(): DropboxWatcherState {
                   `${originalFilename}.delb-processing-${operationId}`,
                 );
             if (!claimed) {
+              batchTarget ??= await resolveDropboxTarget();
+              await retainDropboxClaimTarget(cloudDb, operationId, batchTarget);
               try {
                 await rename(r.fileAbs, processingAbs);
               } catch {
+                await removeDropboxClaimTarget(cloudDb, operationId);
                 continue;
               }
             }
@@ -209,10 +210,12 @@ export function startDropboxIngestWatcher(): DropboxWatcherState {
                     .where(eq(storageOperations.id, operationId));
                 },
               });
+              await removeDropboxClaimTarget(cloudDb, operationId);
               continue;
             }
 
             try {
+              const target = await readDropboxClaimTarget(cloudDb, operationId);
               const result = await ingestDropboxFile({
                 fileAbs: processingAbs,
                 originalFilename,
@@ -228,6 +231,7 @@ export function startDropboxIngestWatcher(): DropboxWatcherState {
                     .where(eq(storageOperations.id, operationId));
                 },
               });
+              await removeDropboxClaimTarget(cloudDb, operationId);
               logger.info(
                 { bookId: result.bookId, relativePath: result.relativePath },
                 'dropbox: ingested book',
@@ -248,12 +252,13 @@ export function startDropboxIngestWatcher(): DropboxWatcherState {
                 .where(eq(storageOperations.id, operationId))
                 .limit(1);
               if (committed.length) continue;
-              await moveToFailed({
+              const removed = await moveToFailed({
                 failedDirAbs: cfg.failedDirAbs,
                 fileAbs: processingAbs,
                 originalFilename,
                 reason: msg,
               });
+              if (removed) await removeDropboxClaimTarget(cloudDb, operationId);
             } finally {
               seen.delete(r.fileAbs);
               seen.delete(processingAbs);

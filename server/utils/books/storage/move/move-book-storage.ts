@@ -103,6 +103,9 @@ async function fileExists(absPath: string): Promise<boolean> {
 
 export async function moveBookStorageToCanonical(opts: {
   bookId: string;
+  authorize?: (
+    tx: Parameters<Parameters<typeof cloudDb.transaction>[0]>[0],
+  ) => Promise<void>;
 }): Promise<MoveBookStorageResult> {
   const { bookId } = opts;
 
@@ -253,6 +256,7 @@ export async function moveBookStorageToCanonical(opts: {
     decision: moveDecision,
     commit: async (id) => {
       await cloudDb.transaction(async (tx) => {
+        await opts.authorize?.(tx);
         await tx
           .insert(storageOperations)
           .values({ id, bookId, kind: 'move', createdAt: new Date() });

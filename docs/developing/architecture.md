@@ -44,7 +44,7 @@ The [route middleware](../../app/middleware/auth.global.ts) sends a fresh instal
 
 ## Three different ownership questions
 
-A collection membership makes books visible. A collection owner or editor can manage membership in that collection. A book's creator or a system administrator controls privileged metadata/file mutations. Personal status, ratings, position, and progress belong to the current reader.
+A book belongs to one collection. Its membership makes books visible, and collection owner/editor roles govern book metadata, files, deletion, and moves. Creator is provenance. Administrators can manage collection membership and ownership without joining. Personal status, ratings, position, and progress belong to the current reader.
 
 These checks are related but distinct. Sharing a collection does not create a private copy of a book, grant every metadata edit, or share the owner's reading history. Read the [data model](data-model.md) and [access reference](reference/collections.md) before changing those rules.
 

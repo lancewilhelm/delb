@@ -18,6 +18,8 @@ pnpm dev
 
 Open `http://localhost:3000`. The database defaults to `data/delb.db`; managed files use `library/`. On the first visit, register an account. This creates local application data, so use a dedicated checkout when you need a disposable environment.
 
+Existing installations require the [administrative collection migration](../hosting/collection-migration.md) after applying committed SQL migrations.
+
 Generate and commit SQL migrations with `pnpm db:generate` when changing the schema. Apply committed migrations with `pnpm db:migrate`. `pnpm db:push` changes a database directly and is not the documented upgrade path for an existing deployment.
 
 ## Run the synthetic demo
@@ -50,7 +52,7 @@ In a second terminal at the same checkout:
 node review/http-smoke.mjs
 ```
 
-The smoke verifies guest rejection, registration, upload, listing, Personal collection access, and download authorization/filenames. It is API evidence; it does not exercise every UI control. [The review setup](../../review/README.md#cloud-or-local-setup) has additional fixtures and their limits.
+The smoke verifies guest rejection, registration, upload, listing, shared default collection access, and download authorization/filenames. It is API evidence; it does not exercise every UI control. [The review setup](../../review/README.md#cloud-or-local-setup) has additional fixtures and their limits.
 
 ## Check a change
 

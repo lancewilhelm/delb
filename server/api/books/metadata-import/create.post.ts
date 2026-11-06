@@ -1,3 +1,9 @@
+import {
+  resolveBookTarget,
+  assertBookEditor,
+  lockCollectionChanges,
+  CollectionError,
+} from '~~/server/utils/collections/model';
 import { withBookStorageLock } from '~~/server/utils/books/storage/book-lock';
 import path from 'node:path';
 import { mkdir } from 'node:fs/promises';
@@ -13,9 +19,7 @@ import {
   bookIdentifiers,
   bookTags,
   books,
-  collectionBooks,
   collectionMembers,
-  collections,
   publishers,
   series,
   tags,
@@ -57,16 +61,16 @@ type Body = {
   item?: GoogleBookItem;
 
   /**
-   * One or more target collection IDs. If empty/missing, defaults to the user's Personal collection.
+   * One target collection ID. If omitted, use the authorized shared default.
    */
   collectionIds?: string[];
 
   /**
    * Duplicate-resolution behavior:
    * - When omitted, the server will block on possible duplicates (409) and return candidates.
-   * - `use_existing`: add the selected existing book to missing collections (no new book created).
+   * - `use_existing`: reuse an editable entry already in the destination (no new book created).
    * - `replace_existing`: replace the selected existing book's metadata with the incoming metadata,
-   *   and add it to missing collections.
+   *   without changing its collection.
    * - `add_new`: create a new book even if a possible duplicate exists.
    */
   duplicateAction?: DuplicateAction;
@@ -155,10 +159,6 @@ function toNonEmptyStringOrNull(input: unknown): string | null {
   return v ? v : null;
 }
 
-function isAdminRole(role: unknown): boolean {
-  return role === 'admin' || role === 'owner';
-}
-
 function normalizeDuplicateAction(
   input: unknown,
   allowDuplicate: unknown,
@@ -186,84 +186,6 @@ function isGoogleBookItem(input: unknown): input is GoogleBookItem {
 /**
  * Ensure the user can add books to every target collection.
  * Mirrors the permission behavior used by upload.
- */
-async function assertCanAddToCollections(opts: {
-  userId: string;
-  collectionIds: string[];
-}) {
-  const uniqueIds = Array.from(new Set(opts.collectionIds)).filter(Boolean);
-  if (!uniqueIds.length) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'At least one target collection is required',
-    });
-  }
-
-  const memberships = await cloudDb
-    .select()
-    .from(collectionMembers)
-    .where(eq(collectionMembers.userId, opts.userId));
-
-  const roleByCollectionId = new Map(
-    memberships.map((m) => [m.collectionId, m.role] as const),
-  );
-
-  const forbidden = uniqueIds.filter((id) => {
-    const role = roleByCollectionId.get(id);
-    return role !== 'owner' && role !== 'editor';
-  });
-
-  if (forbidden.length) {
-    throw createError({
-      statusCode: 403,
-      statusMessage:
-        'You do not have permission to add to one or more selected collections',
-    });
-  }
-}
-
-/**
- * Defaults to the user's Personal collection when no collectionIds are provided.
- * Mirrors upload behavior.
- */
-async function resolveCollectionIdsOrPersonal(opts: {
-  userId: string;
-  collectionIds?: string[];
-}): Promise<string[]> {
-  const incoming = Array.isArray(opts.collectionIds)
-    ? opts.collectionIds.filter((x) => typeof x === 'string' && x.trim())
-    : [];
-
-  if (incoming.length) return Array.from(new Set(incoming));
-
-  const personal = await cloudDb
-    .select({ id: collections.id })
-    .from(collectionMembers)
-    .innerJoin(collections, eq(collectionMembers.collectionId, collections.id))
-    .where(
-      and(
-        eq(collectionMembers.userId, opts.userId),
-        eq(collections.isPersonal, true),
-      ),
-    )
-    .limit(1);
-
-  const personalCollectionId = personal[0]?.id;
-
-  if (!personalCollectionId) {
-    throw createError({
-      statusCode: 400,
-      statusMessage:
-        'Personal collection not found. Please try again after your Personal collection is created.',
-    });
-  }
-
-  return [personalCollectionId];
-}
-
-/**
- * Find or create an author by name (lean v1: unique by exact name).
- * Matches upload approach.
  */
 async function findOrCreateAuthorByName(name: string, db: Transaction) {
   const existing = await db
@@ -336,7 +258,7 @@ async function findOrCreateSeriesByName(name: string, db: Transaction) {
   return { id, name };
 }
 
-async function addBookToCollectionsMissingTx(
+async function validateExistingDestination(
   tx: Transaction,
   opts: {
     userId: string;
@@ -344,79 +266,13 @@ async function addBookToCollectionsMissingTx(
     collectionIds: string[];
   },
 ) {
-  const uniqueCollectionIds = Array.from(new Set(opts.collectionIds)).filter(
-    Boolean,
-  );
-  if (!uniqueCollectionIds.length)
-    return { addedCollectionIds: [] as string[] };
-
-  const visible = await tx
-    .select({ id: collectionBooks.bookId })
-    .from(collectionBooks)
-    .innerJoin(
-      collectionMembers,
-      eq(collectionMembers.collectionId, collectionBooks.collectionId),
-    )
-    .where(
-      and(
-        eq(collectionBooks.bookId, opts.bookId),
-        eq(collectionMembers.userId, opts.userId),
-      ),
-    )
-    .limit(1);
-  if (!visible.length)
-    throw createError({ statusCode: 404, statusMessage: 'Book not found' });
-  const memberships = await tx
-    .select({
-      id: collectionMembers.collectionId,
-      role: collectionMembers.role,
-    })
-    .from(collectionMembers)
-    .where(
-      and(
-        eq(collectionMembers.userId, opts.userId),
-        inArray(collectionMembers.collectionId, uniqueCollectionIds),
-      ),
+  const target = await resolveBookTarget(tx, opts.userId, opts.collectionIds);
+  const current = await assertBookEditor(tx, opts.userId, opts.bookId);
+  if (current !== target)
+    throw new CollectionError(
+      409,
+      'This entry belongs to another collection. Create an independent entry or use Move collection.',
     );
-  if (
-    memberships.filter((m) => m.role === 'owner' || m.role === 'editor')
-      .length !== uniqueCollectionIds.length
-  ) {
-    throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
-  }
-  const existing = await tx
-    .select({ collectionId: collectionBooks.collectionId })
-    .from(collectionBooks)
-    .where(
-      and(
-        eq(collectionBooks.bookId, opts.bookId),
-        inArray(collectionBooks.collectionId, uniqueCollectionIds),
-      ),
-    );
-
-  const already = new Set(existing.map((r) => r.collectionId));
-  const missing = uniqueCollectionIds.filter((id) => !already.has(id));
-  if (!missing.length) return { addedCollectionIds: [] as string[] };
-
-  const now = new Date();
-  for (const collectionId of missing) {
-    await tx.insert(collectionBooks).values({
-      collectionId,
-      bookId: opts.bookId,
-      addedByUserId: opts.userId,
-      addedAt: now,
-    });
-  }
-
-  return { addedCollectionIds: missing };
-}
-
-async function addBookToCollectionsMissing(opts: {
-  userId: string;
-  bookId: string;
-  collectionIds: string[];
-}) {
-  return cloudDb.transaction((tx) => addBookToCollectionsMissingTx(tx, opts));
 }
 
 export default defineEventHandler(async (event) => {
@@ -434,11 +290,12 @@ export default defineEventHandler(async (event) => {
   const query = (body.query ?? '').toString().trim();
 
   // Resolve collections + permissions
-  const collectionIds = await resolveCollectionIdsOrPersonal({
+  const collectionId = await resolveBookTarget(
+    cloudDb,
     userId,
-    collectionIds: body.collectionIds,
-  });
-  await assertCanAddToCollections({ userId, collectionIds });
+    body.collectionIds,
+  );
+  const collectionIds = [collectionId];
 
   const duplicateAction = normalizeDuplicateAction(
     body.duplicateAction,
@@ -584,10 +441,13 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    const { addedCollectionIds } = await addBookToCollectionsMissing({
-      userId,
-      bookId: useBookId,
-      collectionIds,
+    await cloudDb.transaction(async (tx) => {
+      await lockCollectionChanges(tx);
+      await validateExistingDestination(tx, {
+        userId,
+        bookId: useBookId,
+        collectionIds,
+      });
     });
 
     const row = await cloudDb
@@ -604,7 +464,6 @@ export default defineEventHandler(async (event) => {
           title: row[0]?.title ?? '',
         },
         duplicateResolution: 'use_existing' as const,
-        addedCollectionIds,
         provider,
         query,
         collectionIds,
@@ -614,13 +473,6 @@ export default defineEventHandler(async (event) => {
 
   // Duplicate resolution: "replace existing"
   if (hasCandidates && duplicateAction === 'replace_existing') {
-    if (!isAdminRole((session.user as { role?: unknown }).role)) {
-      throw createError({
-        statusCode: 403,
-        statusMessage: 'Only admins can replace an existing book entry',
-      });
-    }
-
     const allowedIds = new Set(candidates.map((c) => c.book.id));
     const replaceBookId = selectedExistingBookId || candidates[0]!.book.id;
     if (!allowedIds.has(replaceBookId)) {
@@ -646,7 +498,13 @@ export default defineEventHandler(async (event) => {
           updatedAt: new Date(),
         };
 
-        const { addedCollectionIds } = await cloudDb.transaction(async (tx) => {
+        await cloudDb.transaction(async (tx) => {
+          await lockCollectionChanges(tx);
+          await validateExistingDestination(tx, {
+            userId,
+            bookId: replaceBookId,
+            collectionIds,
+          });
           // Optional relationships
           if (publisherName) {
             const pub = await findOrCreatePublisherByName(publisherName, tx);
@@ -704,12 +562,6 @@ export default defineEventHandler(async (event) => {
               });
             }
           }
-
-          return addBookToCollectionsMissingTx(tx, {
-            userId,
-            bookId: replaceBookId,
-            collectionIds,
-          });
         });
 
         // Cover (best-effort): same logic as create, but targets the existing book id.
@@ -757,29 +609,37 @@ export default defineEventHandler(async (event) => {
 
             const { bytes } = await fetchExternalImageBuffer(coverUrl);
 
-            const ensured = await ensureCoverOutputsFromBytes({
-              sourceBytes: bytes,
-              sourceMimeTypeHint: null,
-              sourceExtensionHint: null,
-              processing: {
-                outputDirAbs,
-                outputDirRelPosix,
-                doNotOverwrite: false,
-                sourceFormat: 'original',
-                sourceBaseName: 'cover.source',
-                thumbFileName: 'thumb.webp',
-                thumbMaxWidth: 320,
-                thumbWebpQuality: 80,
-              },
-            });
+            await cloudDb.transaction(async (tx) => {
+              await lockCollectionChanges(tx);
+              await validateExistingDestination(tx, {
+                userId,
+                bookId: replaceBookId,
+                collectionIds,
+              });
+              const ensured = await ensureCoverOutputsFromBytes({
+                sourceBytes: bytes,
+                sourceMimeTypeHint: null,
+                sourceExtensionHint: null,
+                processing: {
+                  outputDirAbs,
+                  outputDirRelPosix,
+                  doNotOverwrite: false,
+                  sourceFormat: 'original',
+                  sourceBaseName: 'cover.source',
+                  thumbFileName: 'thumb.webp',
+                  thumbMaxWidth: 320,
+                  thumbWebpQuality: 80,
+                },
+              });
 
-            await cloudDb
-              .update(books)
-              .set({
-                coverImagePath: ensured.covers.thumb.relativePath,
-                updatedAt: new Date(),
-              } as never)
-              .where(eq(books.id, replaceBookId));
+              await tx
+                .update(books)
+                .set({
+                  coverImagePath: ensured.covers.thumb.relativePath,
+                  updatedAt: new Date(),
+                } as never)
+                .where(eq(books.id, replaceBookId));
+            });
           } catch (e) {
             logger.warn(
               {
@@ -793,7 +653,17 @@ export default defineEventHandler(async (event) => {
 
         // Best-effort: keep storage canonical if title/authors changed.
         try {
-          await moveBookStorageToCanonical({ bookId: replaceBookId });
+          await moveBookStorageToCanonical({
+            bookId: replaceBookId,
+            authorize: async (tx) => {
+              await lockCollectionChanges(tx);
+              await validateExistingDestination(tx, {
+                userId,
+                bookId: replaceBookId,
+                collectionIds,
+              });
+            },
+          });
         } catch (e) {
           logger.warn(
             {
@@ -809,7 +679,6 @@ export default defineEventHandler(async (event) => {
           data: {
             book: { id: replaceBookId, title },
             duplicateResolution: 'replace_existing' as const,
-            addedCollectionIds,
             provider,
             query,
             collectionIds,
@@ -825,8 +694,11 @@ export default defineEventHandler(async (event) => {
   // NOTE: This assumes your `books` table has optional columns:
   // - publisherId? seriesId? seriesIndex? pages?
   // If your schema differs, remove/adjust these fields.
-  const bookInsert: Record<string, unknown> = {
+  const bookInsert: typeof books.$inferInsert = {
     id: bookId,
+    collectionId,
+    addedByUserId: userId,
+    addedAt: now,
     title,
     sortTitle: makeTitleSortKey(title),
     description,
@@ -840,6 +712,8 @@ export default defineEventHandler(async (event) => {
   };
 
   await cloudDb.transaction(async (tx) => {
+    await lockCollectionChanges(tx);
+    await resolveBookTarget(tx, userId, collectionIds);
     const memberships = await tx
       .select({ role: collectionMembers.role })
       .from(collectionMembers)
@@ -868,7 +742,7 @@ export default defineEventHandler(async (event) => {
       bookInsert.seriesIndex = seriesIndex;
     }
 
-    await tx.insert(books).values(bookInsert as never);
+    await tx.insert(books).values(bookInsert);
 
     // Best-effort relations + metadata tables
 
@@ -904,12 +778,6 @@ export default defineEventHandler(async (event) => {
           value: ident.value,
         });
       }
-    }
-
-    for (const collectionId of collectionIds) {
-      await tx
-        .insert(collectionBooks)
-        .values({ collectionId, bookId, addedByUserId: userId, addedAt: now });
     }
   });
 
@@ -973,45 +841,54 @@ export default defineEventHandler(async (event) => {
         'metadata-import: cover: fetched bytes',
       );
 
-      const ensured = await ensureCoverOutputsFromBytes({
-        sourceBytes: bytes,
-        sourceMimeTypeHint: null,
-        sourceExtensionHint: null,
-        processing: {
-          outputDirAbs,
-          outputDirRelPosix,
-          // Always overwrite on metadata import so repeated adds are deterministic.
-          doNotOverwrite: false,
-          // Keep original if possible; trust upstream bytes.
-          sourceFormat: 'original',
-          sourceBaseName: 'cover.source',
-          thumbFileName: 'thumb.webp',
-          thumbMaxWidth: 320,
-          thumbWebpQuality: 80,
+      await withBookStorageLock(
+        path.resolve(process.cwd(), 'library'),
+        bookId,
+        async () => {
+          await cloudDb.transaction(async (tx) => {
+            await lockCollectionChanges(tx);
+            await validateExistingDestination(tx, {
+              userId,
+              bookId: bookId,
+              collectionIds,
+            });
+            const ensured = await ensureCoverOutputsFromBytes({
+              sourceBytes: bytes,
+              sourceMimeTypeHint: null,
+              sourceExtensionHint: null,
+              processing: {
+                outputDirAbs,
+                outputDirRelPosix,
+                // Always overwrite on metadata import so repeated adds are deterministic.
+                doNotOverwrite: false,
+                // Keep original if possible; trust upstream bytes.
+                sourceFormat: 'original',
+                sourceBaseName: 'cover.source',
+                thumbFileName: 'thumb.webp',
+                thumbMaxWidth: 320,
+                thumbWebpQuality: 80,
+              },
+            });
+
+            logger.debug(
+              {
+                bookId,
+                coverThumbRel: ensured.covers.thumb.relativePath,
+                coverSourceRel: ensured.covers.source.relativePath,
+                changed: ensured.changed,
+              },
+              'metadata-import: cover: processed outputs',
+            );
+
+            await tx
+              .update(books)
+              .set({
+                coverImagePath: ensured.covers.thumb.relativePath,
+                updatedAt: new Date(),
+              } as never)
+              .where(eq(books.id, bookId));
+          });
         },
-      });
-
-      logger.debug(
-        {
-          bookId,
-          coverThumbRel: ensured.covers.thumb.relativePath,
-          coverSourceRel: ensured.covers.source.relativePath,
-          changed: ensured.changed,
-        },
-        'metadata-import: cover: processed outputs',
-      );
-
-      await cloudDb
-        .update(books)
-        .set({
-          coverImagePath: ensured.covers.thumb.relativePath,
-          updatedAt: new Date(),
-        } as never)
-        .where(eq(books.id, bookId));
-
-      logger.debug(
-        { bookId, coverImagePath: ensured.covers.thumb.relativePath },
-        'metadata-import: cover: saved coverImagePath',
       );
     } catch (e) {
       logger.warn(

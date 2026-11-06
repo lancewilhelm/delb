@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { chooseBookTarget } from '~/utils/collectionActions';
 // Admin Library Management (Calibre migration)
 //
 // Assumptions:
@@ -87,7 +88,12 @@ type ImportSummary = {
 type ApiResponse =
   { success: true; data: ImportSummary } | { success: false; message?: string };
 
-type CollectionOption = { id: string; name: string; isPersonal?: boolean };
+type CollectionOption = {
+  id: string;
+  name: string;
+  isDefault?: boolean;
+  role: string | null;
+};
 
 const collectionsLoading = ref(false);
 const collections = ref<CollectionOption[]>([]);
@@ -106,42 +112,24 @@ const healthBusy = ref(false);
 const healthReport = ref<HealthReport | null>(null);
 const healthErrorMessage = ref<string | null>(null);
 
+const targetCollectionId = computed({
+  get: () => selectedCollectionIds.value[0] ?? '',
+  set: (id: string) => {
+    selectedCollectionIds.value = id ? [id] : [];
+  },
+});
 async function fetchCollections() {
   collectionsLoading.value = true;
   try {
-    const res = await $fetch<{
-      success: boolean;
-      data?: {
-        collections?: Array<{
-          id: string;
-          name: string;
-          isPersonal?: boolean;
-        }>;
-      };
-    }>('/api/collections', { method: 'GET' });
-
-    collections.value = (res?.data?.collections ?? []).map((c) => ({
-      id: c.id,
-      name: c.name,
-      isPersonal: Boolean(c.isPersonal),
-    }));
-
-    // Ensure Personal is always selected (cannot be unchecked).
-    const personal = collections.value.find((c) => c.isPersonal);
-    if (personal) {
-      if (!selectedCollectionIds.value.includes(personal.id)) {
-        selectedCollectionIds.value = [
-          personal.id,
-          ...selectedCollectionIds.value.filter((id) => id !== personal.id),
-        ];
-      }
-    } else if (
-      !selectedCollectionIds.value.length &&
-      collections.value.length
-    ) {
-      // Fallback if something is misconfigured and no personal collection is returned.
-      selectedCollectionIds.value = [collections.value[0]!.id];
-    }
+    const response = await $fetch<{
+      data: { collections: CollectionOption[] };
+    }>('/api/collections');
+    collections.value = response.data.collections.filter(
+      (collection) =>
+        collection.role === 'owner' || collection.role === 'editor',
+    );
+    targetCollectionId.value =
+      chooseBookTarget(response.data.collections, null) ?? '';
   } finally {
     collectionsLoading.value = false;
   }
@@ -278,42 +266,28 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
             No collections yet.
           </div>
 
-          <div v-else class="space-y-1">
-            <label
-              v-for="c in collections"
-              :key="c.id"
-              class="flex items-center gap-2 text-sm"
+          <label v-else class="flex flex-col gap-1 text-sm"
+            >Destination collection
+            <select
+              v-model="targetCollectionId"
+              :disabled="runBusy"
+              class="border border-(--contrast-border-color) rounded p-2 bg-(--bg-color)"
             >
-              <input
-                v-model="selectedCollectionIds"
-                type="checkbox"
-                :value="c.id"
-                :disabled="runBusy || c.isPersonal"
-                class="peer sr-only"
-              />
-              <span
-                class="h-5 w-5 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
-                :class="
-                  runBusy || c.isPersonal
-                    ? 'peer-checked:bg-(--sub-color) cursor-default!'
-                    : ''
-                "
-              ></span>
-              <span class="truncate">{{ c.name }}</span>
-              <span
-                v-if="c.isPersonal"
-                class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-(--contrast-border-color) opacity-70"
+              <option value="" disabled>Choose one collection</option>
+              <option
+                v-for="collection in collections"
+                :key="collection.id"
+                :value="collection.id"
               >
-                Personal
-              </span>
-            </label>
-
-            <div class="text-xs opacity-70">
-              All books will be imported to your Personal collection by default.
-              Any additional checked collections will also receive the imported
-              books.
-            </div>
-          </div>
+                {{ collection.name
+                }}{{ collection.isDefault ? ' (default)' : '' }}
+              </option>
+            </select>
+            <span class="text-xs opacity-70"
+              >New entries go to this collection. Existing Calibre entries keep
+              their collection.</span
+            >
+          </label>
         </div>
       </div>
     </SettingsUIGroup>

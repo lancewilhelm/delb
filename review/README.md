@@ -67,7 +67,7 @@ In another terminal:
 node review/http-smoke.mjs
 ```
 
-This exercises guest rejection, synthetic registration/upload, book listing, and personal collection listing. Passwords/cookies remain in memory. Use a new disposable checkout for each setup/smoke run rather than applying cleanup commands to a real installation.
+This exercises guest rejection, synthetic registration/upload, book listing, and shared default collection listing. Passwords/cookies remain in memory. Use a new disposable checkout for each setup/smoke run rather than applying cleanup commands to a real installation.
 
 Browser pages:
 
@@ -113,3 +113,23 @@ node review/book-status-browser.mjs
 The runner starts its own headless Chrome with a temporary profile. On macOS it uses the standard Google Chrome application path. Set `CHROME_BIN` to the Chrome or Chromium executable on other systems. `DELB_REVIEW_URL` can select another loopback demo port.
 
 The checks create a synthetic account, a reference-only book, and 180 synthetic books for scrolling and pagination checks. They exercise all five status choices in the grid, status changes in the list, filtered-result removal, pending and failed saves, retry, dashboard refresh, existing EPUB downloads, failed status reads, and bulk selection mode. They also check deep scroll in both views, filtered removal without a reload, continued cursor pagination, badge settings persistence, theme colors, and all badge states. Use `--scroll-only` to skip the original menu checks. Results and menu screenshots are saved under `review/demo/` and ignored by Git. Session cookies and passwords stay in memory. These checks use the real local status API and database. The simulated save failure uses browser request interception.
+
+## Exclusive collection checks
+
+After `pnpm build`, run `pnpm test:integration` for isolated production API checks. The runner creates and removes its own synthetic database and storage for each suite; port 4317 must be free. It does not use the normal checkout's database, environment files, or books. Run only the collection suite with:
+
+```sh
+node review/run-api-regressions.mjs review/collections-api.mjs
+```
+
+This checks one-time default enrollment, zero-membership sign-in, membership-based browsing and editing, atomic moves, owner/account lifecycle, prospective default changes, advisory duplicates, synthetic Calibre import/rescan with mid-batch access revocation, local Dropbox claim recovery and permission failures, and the real administrative migration endpoints. Migration fixtures include legacy multi-linked books; source files and reading history are checked after splitting. Unit tests also cover interrupted copy recovery, same-name files from different directories, required ownership, and private TBR order and rationale.
+
+For a headless Chrome walkthrough against a fresh isolated production server:
+
+```sh
+node review/run-api-regressions.mjs review/collections-browser.mjs
+```
+
+Chrome uses a temporary profile. On macOS the runner uses the standard Google Chrome application path; set `CHROME_BIN` elsewhere. It checks confirmed moves and revoked access, default selection, zero-membership collection creation, migration choices and backup confirmation, phone-width layout, and unhandled browser exceptions. Screenshots and results go to a printed temporary evidence directory. These are synthetic loopback checks; live metadata providers, network storage, Docker, and deployment restore drills require separate verification.
+
+For manual exploration, use the reusable synthetic demo described above. Register an owner and a second reader in separate browser sessions. Both should see **Default**. Create another collection and add both readers as editors. Upload `review/demo/ordinary.epub`, move it using **Move collection**, and confirm the source access warning. Its ID and reading history should stay the same. Remove the second reader from all collections and sign in again: the library should stay empty, and Add book should offer choosing or creating a collection. As the owner, choose another default in **Settings > Admin > Collections** and register a third reader: only the new account should join the new default automatically.

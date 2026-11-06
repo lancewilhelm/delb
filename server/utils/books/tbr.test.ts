@@ -27,41 +27,53 @@ async function fixture({ legacy = false } = {}) {
   const client = createClient({ url: `file:${join(directory, 'test.db')}` });
   const db = drizzle(client);
   let migrationsFolder = '.drizzle/migrations';
+  const journal = JSON.parse(
+    readFileSync('.drizzle/migrations/meta/_journal.json', 'utf8'),
+  );
   if (legacy) {
     migrationsFolder = join(directory, 'legacy-migrations');
     cpSync('.drizzle/migrations', migrationsFolder, { recursive: true });
-    const journalPath = join(migrationsFolder, 'meta/_journal.json');
-    const journal = JSON.parse(readFileSync(journalPath, 'utf8'));
-    journal.entries = journal.entries.slice(0, -1);
-    writeFileSync(journalPath, JSON.stringify(journal));
+    writeFileSync(
+      join(migrationsFolder, 'meta/_journal.json'),
+      JSON.stringify({
+        ...journal,
+        entries: journal.entries.filter(
+          (entry: { idx: number }) => entry.idx < 6,
+        ),
+      }),
+    );
   }
   await migrate(db, { migrationsFolder });
   await client.executeMultiple(`
-    PRAGMA foreign_keys = ON;
-    INSERT INTO users(id,name,email,email_verified,role,created_at,updated_at)
-      VALUES ('reader','Reader','reader@example.invalid',1,'user',1,1),
-             ('other','Other','other@example.invalid',1,'user',1,1);
-    INSERT INTO collections(id,name,owner_user_id,is_personal,created_at,updated_at)
-      VALUES ('one','One','reader',0,1,1), ('two','Two','reader',0,1,1);
-    INSERT INTO collection_members(collection_id,user_id,role,created_at)
-      VALUES ('one','reader','owner',1), ('two','reader','owner',1);
-    INSERT INTO books(id,title,created_at,updated_at)
-      VALUES ('a','Alpha',1,1),('b','Beta',1,1),('c','Gamma',1,1);
-    INSERT INTO collection_books(collection_id,book_id,added_at)
-      VALUES ('one','a',1),('one','b',1),('one','c',1),('two','a',1);
-    INSERT INTO user_book_status(user_id,book_id,status,tbr_rank,updated_at)
-      VALUES ('reader','a','to_be_read',1,1),('reader','b','to_be_read',2,1),
-             ('reader','c','to_be_read',3,1);
+    PRAGMA foreign_keys=ON;
+    INSERT INTO users(id,name,email,email_verified,role,created_at,updated_at) VALUES('reader','Reader','reader@example.invalid',1,'user',1,1),('other','Other','other@example.invalid',1,'user',1,1),('owner','Owner','owner@example.invalid',1,'owner',1,1);
+    INSERT INTO collections(id,name,owner_user_id,is_personal,created_at,updated_at) VALUES('one','One','owner',0,1,1),('two','Two','owner',0,1,1),('away','Inaccessible','owner',0,1,1);
+    ${legacy ? "INSERT INTO collection_members(collection_id,user_id,role,created_at) VALUES('one','owner','owner',1),('two','owner','owner',1),('away','owner','owner',1);" : ''}
+    INSERT INTO collection_members(collection_id,user_id,role,created_at) VALUES('one','reader','viewer',1),('two','reader','viewer',1);
+    ${legacy ? "INSERT INTO books(id,title,created_at,updated_at) VALUES('a','Alpha',1,1),('b','Beta',1,1),('c','Gamma',1,1); INSERT INTO collection_books(collection_id,book_id,added_at) VALUES('one','a',1),('two','a',1),('one','b',1),('one','c',1);" : "INSERT INTO books(id,title,collection_id,created_at,updated_at) VALUES('a','Alpha','two',1,1),('b','Beta','one',1,1),('c','Gamma','one',1,1);"}
+    INSERT INTO user_book_status(user_id,book_id,status,tbr_rank,updated_at) VALUES('reader','a','to_be_read',1,1),('reader','b','to_be_read',2,1),('reader','c','to_be_read',3,1);
   `);
+  if (legacy)
+    writeFileSync(
+      join(migrationsFolder, 'meta/_journal.json'),
+      JSON.stringify({
+        ...journal,
+        entries: journal.entries.filter(
+          (entry: { idx: number }) => entry.idx <= 6,
+        ),
+      }),
+    );
   const ranks = async () =>
     (
-      await client.execute(`SELECT book_id,tbr_rank FROM user_book_status
-      WHERE user_id='reader' AND tbr_rank IS NOT NULL ORDER BY tbr_rank`)
+      await client.execute(
+        "SELECT book_id,tbr_rank FROM user_book_status WHERE user_id='reader' AND tbr_rank IS NOT NULL ORDER BY tbr_rank",
+      )
     ).rows.map((row) => [row.book_id, row.tbr_rank]);
   return {
     client,
     db,
     ranks,
+    migrationsFolder,
     cleanup: () => {
       client.close();
       rmSync(directory, { recursive: true, force: true });
@@ -84,16 +96,12 @@ test('losing and restoring access closes gaps and appends even without an interv
       ['b', 2],
       ['c', 3],
     ]);
-    await client.execute(
-      "DELETE FROM collection_books WHERE collection_id='one' AND book_id='b'",
-    );
+    await client.execute("UPDATE books SET collection_id='away' WHERE id='b'");
     assert.deepEqual(await ranks(), [
       ['a', 1],
       ['c', 2],
     ]);
-    await client.execute(
-      "INSERT INTO collection_books(collection_id,book_id,added_at) VALUES ('one','b',3)",
-    );
+    await client.execute("UPDATE books SET collection_id='one' WHERE id='b'");
     assert.deepEqual(await ranks(), [
       ['a', 1],
       ['c', 2],
@@ -105,7 +113,9 @@ test('losing and restoring access closes gaps and appends even without an interv
 });
 
 test('upgrading an existing database backfills visible ranks and restart preserves notes and order', async () => {
-  const { client, db, ranks, cleanup } = await fixture({ legacy: true });
+  const { client, db, ranks, cleanup, migrationsFolder } = await fixture({
+    legacy: true,
+  });
   try {
     await client.execute(
       "UPDATE user_book_status SET tbr_rank=CASE book_id WHEN 'c' THEN 1 WHEN 'b' THEN 2 ELSE 3 END",
@@ -113,7 +123,7 @@ test('upgrading an existing database backfills visible ranks and restart preserv
     await client.execute(
       "DELETE FROM collection_books WHERE collection_id='one' AND book_id='b'",
     );
-    await migrate(db, { migrationsFolder: '.drizzle/migrations' });
+    await migrate(db, { migrationsFolder });
     assert.deepEqual(await ranks(), [
       ['c', 1],
       ['a', 2],
@@ -131,7 +141,7 @@ test('upgrading an existing database backfills visible ranks and restart preserv
       bookId: bookB,
       text: 'Retain across restart',
     });
-    await migrate(db, { migrationsFolder: '.drizzle/migrations' });
+    await migrate(db, { migrationsFolder });
     assert.deepEqual(await ranks(), [
       ['c', 1],
       ['a', 2],
@@ -146,7 +156,7 @@ test('upgrading an existing database backfills visible ranks and restart preserv
   }
 });
 
-test('the queue includes all 63 books, deduplicates collection access, and preserves ordered authors', async () => {
+test('the queue includes all 63 books across exclusive collections and preserves ordered authors', async () => {
   const { client, db, cleanup } = await fixture();
   try {
     await client.executeMultiple(`
@@ -156,12 +166,8 @@ test('the queue includes all 63 books, deduplicates collection access, and prese
     const ids = Array.from({ length: 60 }, (_, index) => `extra-${index}`);
     for (const id of ids) {
       await client.execute({
-        sql: 'INSERT INTO books(id,title,created_at,updated_at) VALUES (?,?,1,1)',
+        sql: "INSERT INTO books(id,title,collection_id,created_at,updated_at) VALUES (?,?,'one',1,1)",
         args: [id, id],
-      });
-      await client.execute({
-        sql: "INSERT INTO collection_books(collection_id,book_id,added_at) VALUES ('one',?,1)",
-        args: [id],
       });
     }
     await transitionBookStatuses(db, {
@@ -212,7 +218,7 @@ test('rationale is private, shared by both read surfaces, and independent of rea
       text: 'A private reason',
     });
     await client.execute(
-      "INSERT INTO collection_members(collection_id,user_id,role,created_at) VALUES ('one','other','viewer',1)",
+      "INSERT INTO collection_members(collection_id,user_id,role,created_at) VALUES ('two','other','viewer',1)",
     );
     assert.equal(
       await readRationale(db, { userId: otherId, bookId: bookA }),
@@ -296,16 +302,12 @@ test('queue and rationale enforce visibility, including restore without an inter
         statusCode: 404,
       },
     );
-    await client.execute(
-      "DELETE FROM collection_books WHERE collection_id='one' AND book_id='b'",
-    );
+    await client.execute("UPDATE books SET collection_id='away' WHERE id='b'");
     await assert.rejects(
       readRationale(db, { userId: readerId, bookId: bookB }),
       { statusCode: 404 },
     );
-    await client.execute(
-      "INSERT INTO collection_books(collection_id,book_id,added_at) VALUES ('one','b',2)",
-    );
+    await client.execute("UPDATE books SET collection_id='one' WHERE id='b'");
     assert.deepEqual(await ranks(), [
       ['a', 1],
       ['c', 2],
@@ -314,6 +316,13 @@ test('queue and rationale enforce visibility, including restore without an inter
     assert.equal(
       (await getTbrQueue(db, 'reader')).books.at(-1)?.rationale,
       'Remember this',
+    );
+    await assert.rejects(
+      client.execute("DELETE FROM collections WHERE id='one'"),
+      /empty the collection/,
+    );
+    await client.execute(
+      "UPDATE books SET collection_id='away' WHERE collection_id='one'",
     );
     await client.execute("DELETE FROM collections WHERE id='one'");
     assert.deepEqual(await ranks(), [['a', 1]]);
@@ -418,9 +427,7 @@ test('access normalization preserves reversed order and rolls back with a failed
       ['b', 2],
       ['a', 3],
     ]);
-    await client.execute(
-      "DELETE FROM collection_books WHERE collection_id='one' AND book_id='c'",
-    );
+    await client.execute("UPDATE books SET collection_id='away' WHERE id='c'");
     assert.deepEqual(await ranks(), [
       ['b', 1],
       ['a', 2],
@@ -428,7 +435,7 @@ test('access normalization preserves reversed order and rolls back with a failed
     await assert.rejects(
       db.transaction(async (tx) => {
         await tx.run(
-          sql`DELETE FROM collection_members WHERE collection_id='one'`,
+          sql`DELETE FROM collection_members WHERE collection_id='one' AND user_id='reader'`,
         );
         throw new Error('rollback');
       }),

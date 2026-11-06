@@ -50,6 +50,8 @@ Browse the [feature contracts](developing/reference/README.md) or [UI component 
 
 The architecture and core guides describe the implementation at the revision recorded in [documentation status](developing/documentation-status.md). Historical review records and future-work sections are identified separately from current behavior.
 
+The [exclusive collection model and shared default](adr/0004-exclusive-collections-and-shared-default.md) records the collection contract. Existing installations use the [administrative migration](hosting/collection-migration.md).
+
 ## Historical records
 
 Past design discussions, repair investigations, and obsolete asset instructions live in the [archive](archive/README.md). They preserve context and evidence without presenting old commands or defect status as current guidance.

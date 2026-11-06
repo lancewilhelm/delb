@@ -10,17 +10,17 @@ export type DropboxIngestSettings = {
 
   /**
    * Optional: choose the destination collection directly.
-   * If omitted, we default to a Personal collection.
+   * If omitted, use the authorized shared default at the start of the batch.
    */
   targetCollectionId?: string;
   /**
-   * Optional: add newly ingested books to these collections in addition to the owner's Personal collection.
+   * Legacy targets, accepted only when they resolve to one destination.
    */
   additionalCollectionIds?: string[];
 
   /**
    * Optional: used only when `targetCollectionId` is not provided, to select
-   * which user's Personal collection we should ingest into.
+   * the importing user whose editor access must authorize the destination.
    */
   targetUserId?: string;
   targetUserEmail?: string;

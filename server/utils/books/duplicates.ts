@@ -19,6 +19,7 @@ export type DuplicateCandidate = {
   score: number; // 0..1
   book: {
     id: string;
+    collectionId: string;
     title: string;
     coverImagePath: string | null;
     updatedAt?: string | number | Date;
@@ -104,6 +105,7 @@ async function loadBooksForCandidates(bookIds: string[]) {
   const bookRows = await cloudDb
     .select({
       id: books.id,
+      collectionId: books.collectionId,
       title: books.title,
       coverImagePath: books.coverImagePath,
       updatedAt: books.updatedAt,
@@ -151,6 +153,7 @@ async function loadBooksForCandidates(bookIds: string[]) {
   for (const b of bookRows) {
     out.set(b.id, {
       id: b.id,
+      collectionId: b.collectionId,
       title: b.title,
       coverImagePath: b.coverImagePath ?? null,
       updatedAt: b.updatedAt ?? null,

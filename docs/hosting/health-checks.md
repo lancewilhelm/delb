@@ -8,12 +8,14 @@ The checks report findings. They do not automatically repair or delete the affec
 
 | Mode    | Checks                                                                                                                       |
 | ------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `quick` | Books without a collection, empty titles, cross-book duplicate identifiers, users missing a Personal collection              |
+| `quick` | Unassigned books, empty titles, duplicate identifiers, matching titles across collections, default and owner invariants      |
 | `deep`  | Quick checks plus bounded fuzzy title/author comparisons, file existence, cover-path existence, and missing thumbnail checks |
 
 Each result includes an ID, name, `ok`, `warn`, or `error` status, a message, and optional remediation guidance, metadata, and sample rows. The response uses `sample`, not the earlier proposed `sampleIds` contract.
 
 Deep requests have bounded sampling and comparison/stat limits. A clean bounded result does not prove an unlimited scan of every file or book completed.
+
+Matching-title findings include book and collection identities. Independent copies and different editions are valid. Fuzzy results report inspected book counts, limits, and incomplete scans. A user with zero collections is valid.
 
 ## Reference-only books
 
@@ -26,7 +28,7 @@ A book with no associated file can be a valid physical-library entry. Missing-fi
 | Orphaned book                       | Check collection links and authorized import targets before reconnecting or removing a record |
 | Empty title                         | Inspect and correct the metadata                                                              |
 | Duplicate identifier or fuzzy match | Compare the books; similarity is not proof they are the same edition                          |
-| Missing Personal collection         | Inspect account initialization and existing memberships                                       |
+| Invalid default or owner            | Inspect the default designation, owner membership, and collection migration report            |
 | Missing file or cover               | Compare the database pointer with the managed library and retained operation journals         |
 | Missing thumbnail                   | Check the source cover and prior cover operation before regeneration                          |
 

@@ -15,7 +15,7 @@ function normalizeDeleteMode(raw: string | null | undefined): DeleteMode {
  *
  * Authorization:
  * - system admin/owner can delete any book
- * - the book creator (books.createdByUserId) can delete their own book
+ * - collection owners and editors can delete books in their collection
  *
  * Supports only 2 modes:
  *

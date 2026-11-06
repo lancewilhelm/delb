@@ -1,3 +1,7 @@
+import {
+  resolveBookTarget,
+  lockCollectionChanges,
+} from '~~/server/utils/collections/model';
 import path from 'node:path';
 import { mkdir, stat } from 'node:fs/promises';
 
@@ -9,7 +13,6 @@ import {
   bookAuthors,
   bookFiles,
   books,
-  collectionBooks,
   storageOperations,
 } from '~/utils/db/schema';
 import { logger } from '~/utils/logger';
@@ -208,6 +211,12 @@ export async function ingestDropboxFile(opts: {
   const publishedAt = published ? normalizePublishedAt(published) : null;
 
   await cloudDb.transaction(async (tx) => {
+    await lockCollectionChanges(tx);
+    const collectionId = await resolveBookTarget(
+      tx,
+      opts.target.ownerUserId,
+      opts.target.collectionIds,
+    );
     await tx.insert(storageOperations).values({
       id: opts.operationId,
       bookId,
@@ -216,6 +225,9 @@ export async function ingestDropboxFile(opts: {
     });
     await tx.insert(books).values({
       id: bookId,
+      collectionId,
+      addedByUserId: opts.target.ownerUserId,
+      addedAt: now,
       title,
       sortTitle: makeTitleSortKey(title),
       description: (meta.description || null) as string | null,
@@ -245,15 +257,6 @@ export async function ingestDropboxFile(opts: {
       relativePath,
       createdAt: now,
     });
-
-    for (const collectionId of opts.target.collectionIds) {
-      await tx.insert(collectionBooks).values({
-        collectionId,
-        bookId,
-        addedByUserId: opts.target.ownerUserId,
-        addedAt: now,
-      });
-    }
   });
 
   return { bookId, relativePath, title, author: authorName, format };

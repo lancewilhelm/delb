@@ -192,10 +192,14 @@ export default defineEventHandler(async (event) => {
       statusRaw && (USER_BOOK_STATUSES as readonly string[]).includes(statusRaw)
         ? statusRaw
         : null;
-    const userStatusStartedAt = userStatus ? statusRow?.startedAt ?? null : null;
-    const userStatusFinishedAt = userStatus ? statusRow?.finishedAt ?? null : null;
-    const userStatusDnfAt = userStatus ? statusRow?.dnfAt ?? null : null;
-    const userStatusTbrRank = userStatus ? statusRow?.tbrRank ?? null : null;
+    const userStatusStartedAt = userStatus
+      ? (statusRow?.startedAt ?? null)
+      : null;
+    const userStatusFinishedAt = userStatus
+      ? (statusRow?.finishedAt ?? null)
+      : null;
+    const userStatusDnfAt = userStatus ? (statusRow?.dnfAt ?? null) : null;
+    const userStatusTbrRank = userStatus ? (statusRow?.tbrRank ?? null) : null;
 
     const prefsRow =
       (
@@ -220,6 +224,19 @@ export default defineEventHandler(async (event) => {
       data: {
         book: {
           ...book,
+          canEdit: (
+            await cloudDb
+              .select({ role: collectionMembers.role })
+              .from(collectionMembers)
+              .where(
+                and(
+                  eq(collectionMembers.collectionId, book.collectionId),
+                  eq(collectionMembers.userId, userId),
+                ),
+              )
+          ).some(
+            (member) => member.role === 'owner' || member.role === 'editor',
+          ),
           publisher,
           series: seriesOut,
           tags: bookTagsOut,

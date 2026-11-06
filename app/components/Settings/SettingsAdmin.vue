@@ -19,6 +19,12 @@ interface Tab {
 }
 
 const tabs: Record<string, Tab> = {
+  collections: {
+    name: 'Collections',
+    component: resolveComponent('SettingsAdminCollections'),
+    icon: 'lucide:library',
+    path: '/settings/admin/collections',
+  },
   library: {
     name: 'Library',
     component: resolveComponent('SettingsAdminLibrary'),
@@ -51,7 +57,7 @@ const tabs: Record<string, Tab> = {
     class="flex flex-col items-center h-full overflow-hidden w-screen max-w-screen pt-0!"
   >
     <div
-      class="flex justify-center gap-4 px-4 py-2 border-b border-(--contrast-border-color) w-screen bg-(--sub-alt-color)"
+      class="flex justify-start sm:justify-center overflow-x-auto shrink-0 gap-4 px-4 py-2 border-b border-(--contrast-border-color) w-screen bg-(--sub-alt-color)"
     >
       <SettingsTabBarItem
         v-for="tab in Object.values(tabs)"

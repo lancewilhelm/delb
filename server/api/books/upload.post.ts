@@ -1,3 +1,10 @@
+import {
+  resolveBookTarget,
+  assertBookEditor,
+  lockCollectionChanges,
+  CollectionError,
+  type CollectionConnection,
+} from '~~/server/utils/collections/model';
 import path from 'node:path';
 import { mkdir, open, readFile, writeFile } from 'node:fs/promises';
 
@@ -12,7 +19,6 @@ import {
   books,
   collectionMembers,
   collectionBooks,
-  collections,
   storageOperations,
 } from '~/utils/db/schema';
 import { logger } from '~/utils/logger';
@@ -148,47 +154,10 @@ async function parseBookMetadataFromBuffer(opts: {
 /**
  * Ensure the user can add books to every target collection.
  */
-async function assertCanUploadToCollections(opts: {
-  userId: string;
-  collectionIds: string[];
-}) {
-  const uniqueIds = Array.from(new Set(opts.collectionIds)).filter(Boolean);
-  if (!uniqueIds.length) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'At least one target collection is required',
-    });
-  }
-
-  const memberships = await cloudDb
-    .select()
-    .from(collectionMembers)
-    .where(eq(collectionMembers.userId, opts.userId));
-
-  const roleByCollectionId = new Map(
-    memberships.map((m) => [m.collectionId, m.role] as const),
-  );
-
-  const forbidden = uniqueIds.filter((id) => {
-    const role = roleByCollectionId.get(id);
-    return role !== 'owner' && role !== 'editor';
-  });
-
-  if (forbidden.length) {
-    throw createError({
-      statusCode: 403,
-      statusMessage:
-        'You do not have permission to upload to one or more selected collections',
-    });
-  }
-}
-
-/**
- * Find or create an author by name (lean v1: unique by exact name).
- */
-type DbLike = Pick<typeof cloudDb, 'select' | 'insert'>;
-
-async function findOrCreateAuthorByName(db: DbLike, name: string) {
+async function findOrCreateAuthorByName(
+  db: CollectionConnection,
+  name: string,
+) {
   const existing = await db
     .select()
     .from(authors)
@@ -259,14 +228,13 @@ async function processOneBookUploadUnlocked(
       .where(eq(books.id, input.replaceBookId))
       .limit(1);
     const book = existing[0];
-    if (
-      !book ||
-      (input.userRole !== 'admin' &&
-        input.userRole !== 'owner' &&
-        book.createdByUserId !== input.userId)
-    ) {
-      throw createError({ statusCode: 404, statusMessage: 'Book not found' });
-    }
+    if (!book) throw new CollectionError(404, 'Book not found');
+    const source = await assertBookEditor(cloudDb, input.userId, book.id);
+    if (input.collectionIds.length !== 1 || source !== input.collectionIds[0])
+      throw new CollectionError(
+        409,
+        'Replacement must stay in the existing collection. Create an independent entry instead.',
+      );
     existingCoverImagePath = book.coverImagePath;
     const visible = await cloudDb
       .select({ bookId: collectionBooks.bookId })
@@ -407,6 +375,20 @@ async function processOneBookUploadUnlocked(
 
     const persist = async (operationId?: string) =>
       await cloudDb.transaction(async (tx) => {
+        await lockCollectionChanges(tx);
+        const collectionId = await resolveBookTarget(
+          tx,
+          input.userId,
+          input.collectionIds,
+        );
+        if (
+          input.replaceBookId &&
+          (await assertBookEditor(tx, input.userId, id)) !== collectionId
+        )
+          throw new CollectionError(
+            409,
+            'The source collection changed. Review the import again.',
+          );
         if (operationId)
           await tx.insert(storageOperations).values({
             id: operationId,
@@ -435,6 +417,9 @@ async function processOneBookUploadUnlocked(
         } else {
           await tx.insert(books).values({
             id,
+            collectionId,
+            addedByUserId: input.userId,
+            addedAt: now,
             title,
             sortTitle: makeTitleSortKey(title),
             description: meta.description || null,
@@ -447,10 +432,7 @@ async function processOneBookUploadUnlocked(
             updatedAt: now,
           });
         }
-        const author = await findOrCreateAuthorByName(
-          tx as unknown as DbLike,
-          authorName,
-        );
+        const author = await findOrCreateAuthorByName(tx, authorName);
         await tx
           .insert(bookAuthors)
           .values({ bookId: id, authorId: author.id, position: 1 });
@@ -468,17 +450,6 @@ async function processOneBookUploadUnlocked(
             await tx
               .insert(bookIdentifiers)
               .values({ bookId: id, type, value });
-        }
-        for (const collectionId of new Set(input.collectionIds)) {
-          await tx
-            .insert(collectionBooks)
-            .values({
-              collectionId,
-              bookId: id,
-              addedByUserId: input.userId,
-              addedAt: now,
-            })
-            .onConflictDoNothing();
         }
       });
     if (input.replaceBookId) {
@@ -588,47 +559,15 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Missing form data' });
   }
 
-  // Allow selecting one or more target collections.
-  // v1: accept one or more `collectionId` fields as part of the multipart form:
-  //   form.append("collectionId", "<id>")
-  //
-  // New behavior:
-  // - If client provides no collectionIds, default to the user's Personal collection.
-  let collectionIds = form
-    .filter((p) => p.name === 'collectionId')
-    .map((p) => (typeof p.data === 'string' ? p.data : p.data?.toString()))
-    .filter((x): x is string => typeof x === 'string' && x.length > 0);
-
-  if (!collectionIds.length) {
-    const personal = await cloudDb
-      .select({ id: collections.id })
-      .from(collectionMembers)
-      .innerJoin(
-        collections,
-        eq(collectionMembers.collectionId, collections.id),
-      )
-      .where(
-        and(
-          eq(collectionMembers.userId, userId),
-          eq(collections.isPersonal, true),
-        ),
-      )
-      .limit(1);
-
-    const personalCollectionId = personal[0]?.id;
-
-    if (!personalCollectionId) {
-      throw createError({
-        statusCode: 400,
-        statusMessage:
-          'Personal collection not found. Please try again after your Personal collection is created.',
-      });
-    }
-
-    collectionIds = [personalCollectionId];
-  }
-
-  await assertCanUploadToCollections({ userId, collectionIds });
+  const incomingTargets = form
+    .filter((part) => part.name === 'collectionId')
+    .map((part) => part.data.toString());
+  const collectionId = await resolveBookTarget(
+    cloudDb,
+    userId,
+    incomingTargets,
+  );
+  const collectionIds = [collectionId];
 
   // Find all file parts (client may send multiple "file" entries)
   const fileParts = form.filter(

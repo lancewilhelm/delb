@@ -1,196 +1,46 @@
-import { and, eq, ne } from 'drizzle-orm';
-
+import { eq } from 'drizzle-orm';
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { auth } from '~/utils/auth';
-import { logger } from '~/utils/logger';
-import { collectionMembers, collections, users } from '~/utils/db/schema';
-
-/**
- * PUT /api/collections/:id/members
- *
- * Body:
- * - email: string (required)
- * - role: "editor" | "viewer" (required)
- *
- * Permissions:
- * - must be a member with role: "owner" | "editor"
- *
- * Guardrails:
- * - personal collections are not shareable
- * - you cannot change your own role (owner/editor must transfer ownership via a dedicated flow later)
- *
- * Notes:
- * - If the member already exists, their role is updated.
- */
+import { collectionMembers, users } from '~/utils/db/schema';
+import {
+  collectionActor,
+  requiredCollectionId,
+  memberEmail,
+} from '~~/server/utils/collections/http';
+import {
+  assertCollectionManager,
+  lockCollectionChanges,
+  CollectionError,
+} from '~~/server/utils/collections/model';
 export default defineEventHandler(async (event) => {
-  const id =
-    typeof event.context?.params?.id === 'string'
-      ? event.context.params.id
-      : '';
-  logger.debug(`PUT /api/collections/${id}/members`);
-
-  const session = await auth.api.getSession({
-    headers: event.headers,
-  });
-
-  if (!session) {
-    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
-  }
-
-  if (!id) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Collection id is required',
-    });
-  }
-
-  const body = (await readBody(event).catch(() => null)) as {
-    email?: unknown;
-    role?: unknown;
-  } | null;
-
-  const emailRaw = typeof body?.email === 'string' ? body.email : '';
-  const email = emailRaw.trim().toLowerCase();
-
-  const roleRaw = typeof body?.role === 'string' ? body.role : '';
-  const role = roleRaw as 'editor' | 'viewer';
-
-  if (!email) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'email is required',
-    });
-  }
-
-  if (role !== 'editor' && role !== 'viewer') {
-    throw createError({
-      statusCode: 400,
-      statusMessage:
-        'role must be one of: editor, viewer. Use transfer ownership to assign owner.',
-    });
-  }
-
-  // Ensure collection exists and is not Personal (non-shareable)
-  const c = await cloudDb
-    .select({
-      id: collections.id,
-      isPersonal: collections.isPersonal,
-    })
-    .from(collections)
-    .where(eq(collections.id, id))
-    .limit(1);
-
-  const collection = c[0];
-  if (!collection?.id) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: 'Collection not found',
-    });
-  }
-
-  if (collection.isPersonal) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Personal collections are not shareable',
-    });
-  }
-
-  const actingUserId = session.user.id;
-
-  // Owner OR editor can manage members (minimal v1 per requirements)
-  const actingMembership = await cloudDb
-    .select({ role: collectionMembers.role })
-    .from(collectionMembers)
-    .where(
-      and(
-        eq(collectionMembers.collectionId, id),
-        eq(collectionMembers.userId, actingUserId),
-      ),
-    )
-    .limit(1);
-
-  const actingRole = actingMembership[0]?.role;
-  if (actingRole !== 'owner' && actingRole !== 'editor') {
-    throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
-  }
-
-  // Resolve email -> userId
-  const userRows = await cloudDb
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
-
-  const targetUserId = userRows[0]?.id ?? '';
-  if (!targetUserId) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: 'User not found',
-    });
-  }
-
-  // Guardrail: user cannot change their own role here.
-  if (targetUserId === actingUserId) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'You cannot change your own role',
-    });
-  }
-
-  const now = new Date();
-
-  // Upsert membership (manual upsert to stay compatible with SQLite/Drizzle setup)
-  const existing = await cloudDb
-    .select({ userId: collectionMembers.userId, role: collectionMembers.role })
-    .from(collectionMembers)
-    .where(
-      and(
-        eq(collectionMembers.collectionId, id),
-        eq(collectionMembers.userId, targetUserId),
-      ),
-    )
-    .limit(1);
-
-  if (existing[0]?.role === 'owner') {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Transfer ownership before changing the owner role',
-    });
-  }
-  if (existing[0]?.userId) {
-    const updated = await cloudDb
-      .update(collectionMembers)
-      .set({ role })
-      .where(
-        and(
-          eq(collectionMembers.collectionId, id),
-          eq(collectionMembers.userId, targetUserId),
-          ne(collectionMembers.role, 'owner'),
-        ),
-      )
-      .returning({ userId: collectionMembers.userId });
-    if (!updated.length) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: 'Transfer ownership before changing the owner role',
+  const actor = await collectionActor(event);
+  const id = requiredCollectionId(event);
+  const body = await readBody<{ email?: unknown; role?: unknown }>(event);
+  const email = memberEmail(body?.email);
+  const role = body?.role;
+  if (role !== 'editor' && role !== 'viewer')
+    throw new CollectionError(400, 'Choose editor or viewer');
+  return cloudDb.transaction(async (tx) => {
+    await lockCollectionChanges(tx);
+    const collection = await assertCollectionManager(tx, actor.id, id);
+    const [target] = await tx
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, email));
+    if (!target) throw new CollectionError(404, 'User not found');
+    if (target.id === actor.id)
+      throw new CollectionError(400, 'You cannot change your own role');
+    if (target.id === collection.ownerUserId)
+      throw new CollectionError(
+        400,
+        'Use ownership transfer to change the owner',
+      );
+    await tx
+      .insert(collectionMembers)
+      .values({ collectionId: id, userId: target.id, role })
+      .onConflictDoUpdate({
+        target: [collectionMembers.collectionId, collectionMembers.userId],
+        set: { role },
       });
-    }
-  } else {
-    await cloudDb.insert(collectionMembers).values({
-      collectionId: id,
-      userId: targetUserId,
-      role,
-      createdAt: now,
-    });
-  }
-
-  return {
-    success: true,
-    data: {
-      member: {
-        userId: targetUserId,
-        role,
-      },
-    },
-  };
+    return { success: true, data: { member: { userId: target.id, role } } };
+  });
 });

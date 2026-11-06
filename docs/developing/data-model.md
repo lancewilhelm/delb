@@ -8,8 +8,7 @@ The [Drizzle schema](../../app/utils/db/schema.ts) describes Delb's own database
 erDiagram
     users ||--o{ collection_members : joins
     collections ||--o{ collection_members : grants
-    collections ||--o{ collection_books : contains
-    books ||--o{ collection_books : appears_in
+    collections ||--o{ books : contains
     books ||--o{ book_files : stores
     books ||--o{ book_authors : credits
     authors ||--o{ book_authors : names
@@ -23,13 +22,13 @@ erDiagram
 
 `books` holds shared metadata, including title, description, publication fields, page count, publisher, series, cover pointer, and optional creator/import provenance. Its author, tag, identifier, and file records are separate tables.
 
-`collections` defines named scopes. `collection_members` grants a user an owner, editor, or viewer role. `collection_books` associates an existing book with a collection. The unique collection/book pair prevents duplicate membership links.
+`collections` defines named scopes, with one `is_default` designation. Every collection has an owner, synchronized with its required owner membership. `collection_members` grants owner, editor, or viewer access.
 
-A reader sees a book through at least one collection membership. Two collections containing the same book refer to the same catalog metadata and files. They do not hold independent copies.
+Each `books.collection_id` identifies one collection. `collection_books` is a read-only projection for collection queries, with no independent membership state. Separate entries can represent the same title and retain independent files and reading data.
 
-The Personal flag identifies a user's default collection independently of its displayed name. Auth hooks create and backfill Personal collections. The schema indexes owner/Personal lookups; the one-Personal-per-user rule also depends on application logic.
+Owner/editor membership governs book mutations. `created_by_user_id` is provenance. SQL guards protect required collection assignment and ownership through creation, transfer, leaving, deletion, and concurrent requests.
 
-`created_by_user_id` records creator provenance and participates in book mutation authorization. It can be null for legacy/imported records or after user deletion. It is not the collection access relation.
+Legacy `is_personal` values and `legacy_collection_books` provide the source for a staged [administrative migration](../hosting/collection-migration.md). Normal library traffic pauses until the retained plan commits. The migration preserves private memberships, splits entries and files, and enrolls existing users into a new shared default once.
 
 ## Records scoped to a reader
 
@@ -67,8 +66,8 @@ Read [storage recovery](../hosting/storage-recovery.md) before changing file del
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | Unique user email                                                    | Collection member lookup identifies an existing account                               |
 | Unique collection/user membership                                    | A member has one role in a collection                                                 |
-| Partial unique collection owner                                      | At most one owner membership per collection                                           |
-| Unique collection/book pair                                          | Repeated adds do not create duplicate links                                           |
+| Owner index and lifecycle triggers                                   | Exactly one owner matching the collection owner                                       |
+| Required book collection and read-only projection                    | One collection per book entry                                                         |
 | Unique non-null Calibre book ID                                      | Calibre re-import can identify an existing Delb book                                  |
 | Unique user/book status, position, preference, rating, and rationale | Personal values remain separate across readers                                        |
 | Unique book/identifier type                                          | An identifier type has one value per book; cross-book duplicates still need detection |

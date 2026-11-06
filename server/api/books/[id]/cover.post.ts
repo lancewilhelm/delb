@@ -1,3 +1,7 @@
+import {
+  assertBookEditor,
+  lockCollectionChanges,
+} from '~~/server/utils/collections/model';
 import { cacheBoundedRequestBody } from '~~/server/utils/books/storage/bounded-upload';
 import path from 'node:path';
 import { mkdir, readFile, readdir, unlink } from 'node:fs/promises';
@@ -46,7 +50,7 @@ import { auth } from '~/utils/auth';
  *
  * Security:
  * - Requires authenticated session.
- * - Only system admin/owner or the book creator (books.createdByUserId) may update the cover.
+ * - Collection owners and editors may update the cover.
  * - Ensures the requesting user can "see" the book via collection membership
  *   (same visibility model as GET /api/books/:id).
  * - Resolves and writes the cover next to the stored book file inside `library/`.
@@ -72,8 +76,6 @@ export default defineEventHandler(async (event) => {
   }
 
   const userId = session.user.id;
-  const canEditAny =
-    session.user.role === 'admin' || session.user.role === 'owner';
 
   const id = getRouterParam(event, 'id');
   if (!id) {
@@ -148,12 +150,7 @@ export default defineEventHandler(async (event) => {
           });
         }
 
-        const canEditOwn = Boolean(
-          book.createdByUserId && book.createdByUserId === userId,
-        );
-        if (!canEditAny && !canEditOwn) {
-          throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
-        }
+        await assertBookEditor(cloudDb, userId, id);
 
         const libraryBaseAbs = path.resolve(process.cwd(), 'library');
 
@@ -460,6 +457,8 @@ export default defineEventHandler(async (event) => {
           decision,
           commitDatabase: async (operationId) => {
             await cloudDb.transaction(async (tx) => {
+              await lockCollectionChanges(tx);
+              await assertBookEditor(tx, userId, id);
               await tx.insert(storageOperations).values({
                 id: operationId,
                 bookId: id,

@@ -15,10 +15,10 @@ If registration is closed, ask the installation administrator to create your acc
 ## Find your library
 
 1. Open the collection picker beside **Delb** in the header.
-2. Select **Personal** to see your default collection, or **All** to include every collection you can access.
+2. Select the shared **Default** collection, or **All** to include every collection you can access.
 3. Select **Books** in the navigation to browse books in that scope.
 
-Your Personal collection starts empty. Delb includes it when you add books through the Add book interface. You can rename it, but you cannot share or delete it.
+New users join the shared default as editors. It can already contain books. You can also create private collections, and you may leave every collection.
 
 **All** includes books in shared collections where you are a member. It does not expose every book stored on the installation.
 
@@ -48,4 +48,4 @@ If a form reports an error, correct the named field and submit again. A failed r
 
 Changes save automatically. When separate mobile settings are enabled, the slider changes the active device profile. See the [contrast reference](../developing/reference/settings.md#interface-contrast) for the text and border behavior.
 
-Continue with [adding books](add-books.md). For the implementation behind registration and Personal collections, read [account initialization](../developing/core-workflows.md#account-initialization).
+Continue with [adding books](add-books.md). For the implementation behind registration and the shared default, read [account initialization](../developing/core-workflows.md#account-initialization).
