@@ -1,12 +1,12 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Give each book one collection and use a shared default
 
-Delb's proposed collection model replaces automatic per-user Personal collections with one shared default. Each book entry belongs to exactly one collection. This gives new readers a shared starting library and replaces overlapping book memberships with exclusive collection membership.
+Delb will replace automatic per-user Personal collections with one shared default. Each book entry will belong to exactly one collection. This gives new readers a shared starting library and replaces overlapping book memberships with exclusive collection membership.
 
-The policy decisions below were confirmed during the design interview on 2026-11-05. No policy questions remain open. The consolidated design awaits final confirmation before implementation, and this document describes future behavior.
+The policy decisions and consolidated design were confirmed on 2026-11-05. This record describes accepted future behavior. The collection implementation has not changed.
 
 ## Default and membership
 

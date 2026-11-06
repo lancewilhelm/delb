@@ -50,7 +50,7 @@ Browse the [feature contracts](developing/reference/README.md) or [UI component 
 
 The architecture and core guides describe the implementation at the revision recorded in [documentation status](developing/documentation-status.md). Historical review records and future-work sections are identified separately from current behavior.
 
-The [proposed exclusive collection model and shared default](adr/0004-exclusive-collections-and-shared-default.md) records an ongoing design interview. It describes future behavior rather than the current collection implementation.
+The [accepted exclusive collection model and shared default](adr/0004-exclusive-collections-and-shared-default.md) records agreed future behavior. This decision is not yet implemented.
 
 ## Historical records
 
