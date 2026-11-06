@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { BookMoveSelection } from '~/utils/collectionActions';
 definePageMeta({
   auth: {
     only: 'user',
@@ -21,11 +22,6 @@ const route = useRoute();
 type FetchErrorLike = {
   data?: { message?: string };
   statusMessage?: string;
-  message?: string;
-};
-
-type BulkResponse = {
-  success?: boolean;
   message?: string;
 };
 
@@ -117,299 +113,33 @@ function toggleActionsDropdown() {
   actionsOpen.value = !actionsOpen.value;
 }
 
-// ------------------------------
-// Bulk manage collections (add/remove in one modal)
-// ------------------------------
 const collectionsManageOpen = ref(false);
-const collectionsSaving = ref(false);
 const collectionsSaveError = ref<string | null>(null);
-const collectionsTouched = ref(false);
-
-// Editable collections user can mutate (owner/editor). Personal can be included but cannot be removed.
-const editableCollections = computed(() => {
-  return (collectionsStore.collections ?? []).filter((c) =>
-    collectionsStore.canEditCollection(c),
-  );
-});
-
-const personalCollectionId = computed(() => {
-  return collectionsStore.collections.find((c) => c.isPersonal)?.id ?? null;
-});
-
-// For bulk selection we store membership as three-state:
-// 'in' => selected books currently all in this collection
-// 'out' => selected books currently all NOT in this collection
-// 'mixed' => selection has a mix
-type BulkDesiredMembership = 'in' | 'out' | 'mixed';
-
-const collectionMembership = ref<Record<string, BulkDesiredMembership>>({});
-const desiredMembership = ref<Record<string, BulkDesiredMembership>>({});
-
+const moveSelection = computed<BookMoveSelection>(() =>
+  selectionStore.allSelectedInScope && activeCollectionId.value
+    ? {
+        kind: 'collection',
+        collectionId: activeCollectionId.value,
+        excludedBookIds: getExcludedBookIds(),
+      }
+    : { kind: 'books', bookIds: getExplicitSelectedBookIds() },
+);
 function openCollectionsManager() {
+  if (!activeCollectionId.value && selectionStore.allSelectedInScope) {
+    collectionsSaveError.value = 'Choose individual books to move from All.';
+    return;
+  }
   collectionsSaveError.value = null;
-  collectionsTouched.value = false;
-
-  // Start from computed membership (already loaded by fetch below).
-  desiredMembership.value = { ...collectionMembership.value };
   collectionsManageOpen.value = true;
   closeActionsDropdown();
 }
-
 function closeCollectionsManager() {
   collectionsManageOpen.value = false;
-  collectionsSaveError.value = null;
-  collectionsSaving.value = false;
-  collectionsTouched.value = false;
-  desiredMembership.value = {};
 }
-
-/**
- * Toggle cycles:
- * - out -> in
- * - in -> out (unless Personal)
- * - mixed -> in (chooses "add" by default)
- */
-function onToggleDesiredMembership(collectionId: string) {
-  const pid = personalCollectionId.value;
-  const current = desiredMembership.value[collectionId] ?? 'out';
-
-  if (pid && collectionId === pid && current === 'in') return; // cannot remove Personal
-
-  const next: BulkDesiredMembership =
-    current === 'out' ? 'in' : current === 'in' ? 'out' : 'in';
-
-  desiredMembership.value = {
-    ...desiredMembership.value,
-    [collectionId]: next,
-  };
-
-  collectionsTouched.value = true;
-}
-
-const collectionsDelta = computed(() => {
-  // Only include explicit in/out changes. Mixed -> anything is considered a change only after touch,
-  // but delta only considers desired vs current dict values.
-  const addCollectionIds: string[] = [];
-  const removeCollectionIds: string[] = [];
-
-  const pid = personalCollectionId.value;
-
-  for (const c of editableCollections.value) {
-    const id = c.id;
-    const curr = collectionMembership.value[id] ?? 'out';
-    const desired = desiredMembership.value[id] ?? curr;
-
-    if (curr === desired) continue;
-
-    // Mixed can become in/out which implies add/remove for some subset.
-    // We resolve via per-book PUTs (All view) or via collection bulk endpoints (collection scope).
-    if (desired === 'in') addCollectionIds.push(id);
-    if (desired === 'out') {
-      if (!(pid && id === pid)) removeCollectionIds.push(id);
-    }
-  }
-
-  return { addCollectionIds, removeCollectionIds };
-});
-
-const collectionsDirty = computed(() => {
-  const d = collectionsDelta.value;
-  return d.addCollectionIds.length > 0 || d.removeCollectionIds.length > 0;
-});
-
-async function loadBulkCollectionMembership() {
-  collectionsSaveError.value = null;
-
-  if (selectionIsEmpty()) {
-    collectionMembership.value = {};
-    desiredMembership.value = {};
-    return;
-  }
-
-  // If "All" + allSelectedInScope, we do not have a server-backed "All scope" bulk semantic yet.
-  if (!activeCollectionId.value && selectionStore.allSelectedInScope) {
-    collectionsSaveError.value =
-      'Select all in All view is not supported for manage collections yet (needs a server-backed scope).';
-    collectionMembership.value = {};
-    desiredMembership.value = {};
-    return;
-  }
-
-  const ids = getExplicitSelectedBookIds();
-  if (!ids.length) {
-    collectionMembership.value = {};
-    desiredMembership.value = {};
-    return;
-  }
-
-  // Aggregate per-book collections to determine 'in'/'out'/'mixed' for each editable collection.
-  // Best-effort fetch to keep UI responsive.
-  const results = await Promise.allSettled(
-    ids.map((bookId) =>
-      fetch(`/api/books/${encodeURIComponent(bookId)}/collections`, {
-        method: 'GET',
-      })
-        .then(async (r) => {
-          if (!r.ok) throw new Error(`Failed (${r.status})`);
-          return (await r.json().catch(() => null)) as {
-            data?: { collections?: { id: string }[] };
-          } | null;
-        })
-        .then((json) => ({
-          bookId,
-          collectionIds: new Set(
-            (json?.data?.collections ?? []).map((c) => c.id),
-          ),
-        })),
-    ),
-  );
-
-  const ok = results
-    .filter(
-      (
-        r,
-      ): r is PromiseFulfilledResult<{
-        bookId: string;
-        collectionIds: Set<string>;
-      }> => r.status === 'fulfilled',
-    )
-    .map((r) => r.value);
-
-  if (!ok.length) {
-    collectionsSaveError.value = 'Failed to load collections for selection.';
-    collectionMembership.value = {};
-    desiredMembership.value = {};
-    return;
-  }
-
-  const counts: Record<string, number> = {};
-  for (const row of ok) {
-    for (const id of row.collectionIds) {
-      counts[id] = (counts[id] ?? 0) + 1;
-    }
-  }
-
-  const total = ok.length;
-  const membership: Record<string, BulkDesiredMembership> = {};
-
-  for (const c of editableCollections.value) {
-    const id = c.id;
-    const inCount = counts[id] ?? 0;
-
-    if (inCount === 0) membership[id] = 'out';
-    else if (inCount === total) membership[id] = 'in';
-    else membership[id] = 'mixed';
-  }
-
-  collectionMembership.value = membership;
-  desiredMembership.value = { ...membership };
-}
-
-async function saveCollections() {
-  if (collectionsSaving.value) return;
-
-  collectionsSaveError.value = null;
-
-  if (selectionIsEmpty()) {
-    collectionsSaveError.value = 'Select at least one book.';
-    return;
-  }
-
-  // If "All" + allSelectedInScope, we do not have a server-backed "All scope" bulk semantic yet.
-  if (!activeCollectionId.value && selectionStore.allSelectedInScope) {
-    collectionsSaveError.value =
-      'Select all in All view is not supported for manage collections yet (needs a server-backed scope).';
-    return;
-  }
-
-  const delta = collectionsDelta.value;
-
-  if (!delta.addCollectionIds.length && !delta.removeCollectionIds.length) {
-    closeCollectionsManager();
-    return;
-  }
-
-  collectionsSaving.value = true;
-
-  try {
-    // In collection scope, apply changes via the collection bulk endpoint so that:
-    // - add applies to selected books even if selection was made in that scope
-    // - remove-from-this-collection works for bulk selection/exclude semantics
-    if (activeCollectionId.value) {
-      const scopeId = activeCollectionId.value;
-
-      const selectedBody = selectionStore.allSelectedInScope
-        ? { allInCollection: true, excludedBookIds: getExcludedBookIds() }
-        : { allInCollection: false, bookIds: getExplicitSelectedBookIds() };
-
-      // Add to other collections (if any)
-      if (delta.addCollectionIds.length) {
-        const resAdd = await $fetch<BulkResponse>(
-          `/api/collections/${encodeURIComponent(scopeId)}/books/bulk`,
-          {
-            method: 'POST',
-            body: {
-              ...selectedBody,
-              addToCollectionIds: delta.addCollectionIds,
-            },
-          },
-        );
-
-        if (!resAdd?.success) {
-          throw new Error(resAdd?.message || 'Failed to add to collections');
-        }
-      }
-
-      // Remove from collections (including this collection, if toggled out)
-      if (delta.removeCollectionIds.length) {
-        const resRemove = await $fetch<BulkResponse>(
-          `/api/collections/${encodeURIComponent(scopeId)}/books/bulk`,
-          {
-            method: 'POST',
-            body: {
-              ...selectedBody,
-              removeFromCollectionIds: delta.removeCollectionIds,
-            },
-          },
-        );
-
-        if (!resRemove?.success) {
-          throw new Error(
-            resRemove?.message || 'Failed to remove from collections',
-          );
-        }
-      }
-    } else {
-      // All view: explicit selection only; best-effort per-book PUT with both add/remove arrays.
-      const ids = getExplicitSelectedBookIds();
-      await Promise.allSettled(
-        ids.map((bookId) =>
-          $fetch(`/api/books/${encodeURIComponent(bookId)}/collections`, {
-            method: 'PUT',
-            body: {
-              addCollectionIds: delta.addCollectionIds,
-              removeCollectionIds: delta.removeCollectionIds,
-            },
-          }),
-        ),
-      );
-    }
-
-    selectionStore.clearSelection();
-    selectionStore.setMode({ enabled: false });
-
-    closeCollectionsManager();
-    refreshBooksGrid();
-  } catch (err: unknown) {
-    const e = err as FetchErrorLike;
-    collectionsSaveError.value =
-      e?.data?.message ||
-      e?.statusMessage ||
-      e?.message ||
-      'Failed to update collections';
-  } finally {
-    collectionsSaving.value = false;
-  }
+function onBooksMoved() {
+  selectionStore.clearSelection();
+  selectionStore.setMode({ enabled: false });
+  refreshBooksGrid();
 }
 
 const statusModalOpen = ref(false);
@@ -488,7 +218,7 @@ async function applyBulkStatus() {
 }
 
 async function openManageCollectionsModal() {
-  await loadBulkCollectionMembership();
+  await Promise.resolve();
 
   // If load detected an unsupported mode, keep the modal closed and show the error inline.
   if (collectionsSaveError.value) return;
@@ -797,7 +527,7 @@ onMounted(async () => {
                         type="button"
                         @click="openManageCollectionsModal"
                       >
-                        <span class="truncate text-sm">Manage collections</span>
+                        <span class="truncate text-sm">Move to collection</span>
                       </button>
 
                       <button
@@ -874,137 +604,12 @@ onMounted(async () => {
                 {{ collectionsSaveError }}
               </p>
 
-              <!-- Manage collections modal -->
-              <ModalWindow
+              <BooksBookMoveModal
                 :open="collectionsManageOpen"
+                :selection="moveSelection"
                 @close="closeCollectionsManager"
-              >
-                <div class="flex flex-col gap-4 w-110 max-w-[90vw]">
-                  <div class="flex items-start justify-between gap-4">
-                    <div>
-                      <div class="text-lg font-semibold">
-                        Manage collections
-                      </div>
-                      <div class="text-sm opacity-80">
-                        Add or remove selected books from collections you can
-                        edit.
-                      </div>
-                    </div>
-
-                    <Icon
-                      v-tooltip="'Close'"
-                      name="lucide:x"
-                      class="scale-150 cursor-pointer opacity-80 hover:opacity-100"
-                      @click="closeCollectionsManager"
-                    />
-                  </div>
-
-                  <div
-                    v-if="collectionsSaveError"
-                    class="text-sm text-(--contrast-error-color)"
-                  >
-                    {{ collectionsSaveError }}
-                  </div>
-
-                  <div
-                    class="border border-(--contrast-border-color) rounded-lg p-3"
-                  >
-                    <div class="text-sm font-semibold mb-2">
-                      Your editable collections
-                    </div>
-
-                    <div
-                      v-if="collectionsStore.loading"
-                      class="text-sm opacity-70"
-                    >
-                      Loading…
-                    </div>
-
-                    <div
-                      v-else-if="!editableCollections.length"
-                      class="text-sm opacity-70"
-                    >
-                      You don’t have any editable collections.
-                    </div>
-
-                    <div v-else class="flex flex-col gap-3">
-                      <div class="text-xs opacity-70">
-                        Checked means “all selected books will be in this
-                        collection”. A dash means “some are in and some are
-                        out”. Personal cannot be removed.
-                      </div>
-
-                      <label
-                        v-for="c in editableCollections"
-                        :key="c.id"
-                        class="flex items-center justify-between gap-3 text-sm cursor-pointer"
-                      >
-                        <div class="flex items-center gap-2 min-w-0">
-                          <input
-                            type="checkbox"
-                            class="peer sr-only"
-                            :checked="
-                              (desiredMembership[c.id] ?? 'out') === 'in'
-                            "
-                            :disabled="
-                              collectionsSaving ||
-                              (c.isPersonal &&
-                                (desiredMembership[c.id] ?? 'out') === 'in')
-                            "
-                            @change="onToggleDesiredMembership(c.id)"
-                          />
-                          <span
-                            class="h-4 w-4 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
-                          ></span>
-
-                          <div class="min-w-0 flex items-center gap-2">
-                            <span class="truncate">{{ c.name }}</span>
-                            <span
-                              v-if="c.isPersonal"
-                              class="text-xs opacity-70 whitespace-nowrap"
-                            >
-                              (Personal)
-                            </span>
-                            <span
-                              v-if="
-                                (desiredMembership[c.id] ?? 'out') === 'mixed'
-                              "
-                              class="text-xs opacity-70 whitespace-nowrap"
-                            >
-                              (Mixed)
-                            </span>
-                          </div>
-                        </div>
-
-                        <span class="text-xs opacity-70 whitespace-nowrap">{{
-                          c.role
-                        }}</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div class="flex items-center justify-end gap-2">
-                    <button
-                      class="px-3 py-2"
-                      type="button"
-                      :disabled="collectionsSaving"
-                      @click="closeCollectionsManager"
-                    >
-                      Cancel
-                    </button>
-
-                    <button
-                      class="px-3 py-2 bg-(--main-color) text-(--contrast-inverse-color) disabled:opacity-60 disabled:cursor-not-allowed"
-                      type="button"
-                      :disabled="collectionsSaving || !collectionsDirty"
-                      @click="saveCollections"
-                    >
-                      <span v-if="collectionsSaving">Saving…</span>
-                      <span v-else>Save</span>
-                    </button>
-                  </div>
-                </div>
-              </ModalWindow>
+                @moved="onBooksMoved"
+              />
 
               <!-- Bulk status modal -->
               <ModalWindow :open="statusModalOpen" @close="closeStatusModal">

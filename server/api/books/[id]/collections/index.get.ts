@@ -87,7 +87,7 @@ export default defineEventHandler(async (event) => {
             id: collections.id,
             name: collections.name,
             ownerUserId: collections.ownerUserId,
-            isPersonal: collections.isPersonal,
+            isDefault: collections.isDefault,
           })
           .from(collections)
           .where(eq(collections.id, id))

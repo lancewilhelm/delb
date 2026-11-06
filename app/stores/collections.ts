@@ -7,14 +7,9 @@ export type Collection = {
   id: string;
   name: string;
   ownerUserId: string;
-  role: CollectionRole;
-
-  /**
-   * Marks a user's default Personal collection.
-   * - visible like any other collection
-   * - non-deletable / non-shareable (enforced by UI + API)
-   */
-  isPersonal: boolean;
+  role: CollectionRole | null;
+  isDefault: boolean;
+  canAdminister?: boolean;
 };
 
 export type CollectionMember = {
@@ -82,8 +77,7 @@ type TransferOwnershipApiResponse = {
 };
 
 export type ActiveCollectionSelection =
-  | { kind: 'all' }
-  | { kind: 'collection'; collectionId: string };
+  { kind: 'all' } | { kind: 'collection'; collectionId: string };
 
 export const useCollectionsStore = defineStore(
   'collections',
@@ -360,7 +354,7 @@ export const useCollectionsStore = defineStore(
      * Deletes a collection (owner-only on server).
      * Expected endpoint: DELETE /api/collections/:id
      *
-     * NOTE: Personal collections must not be deletable; server should enforce.
+     * NOTE: Collections must be empty and cannot be the default when deleted.
      */
     async function deleteCollection(collectionId: string) {
       const res = await $fetch<DeleteCollectionApiResponse>(
@@ -396,17 +390,29 @@ export const useCollectionsStore = defineStore(
     /**
      * Convenience for UI logic: can the current user upload/add books to this collection?
      */
-    function canEditCollection(collection: Pick<Collection, 'role'>) {
+    function canEditCollection(
+      collection: Pick<Collection, 'role' | 'canAdminister'>,
+    ) {
       // owner/editor can rename (and later: manage books)
-      return collection.role === 'owner' || collection.role === 'editor';
+      return (
+        Boolean(collection.canAdminister) ||
+        collection.role === 'owner' ||
+        collection.role === 'editor'
+      );
     }
 
     /**
      * Convenience for UI logic: can the current user manage sharing/members?
      * v1: owner and editor can add/remove members (owner role changes are transfer-only).
      */
-    function canManageMembers(collection: Pick<Collection, 'role'>) {
-      return collection.role === 'owner' || collection.role === 'editor';
+    function canManageMembers(
+      collection: Pick<Collection, 'role' | 'canAdminister'>,
+    ) {
+      return (
+        Boolean(collection.canAdminister) ||
+        collection.role === 'owner' ||
+        collection.role === 'editor'
+      );
     }
 
     /**
@@ -414,21 +420,22 @@ export const useCollectionsStore = defineStore(
      * v1: owner-only.
      */
     function canTransferOwnership(
-      collection: Pick<Collection, 'role' | 'isPersonal'>,
+      collection: Pick<Collection, 'role' | 'isDefault' | 'canAdminister'>,
     ) {
-      if (collection.isPersonal) return false;
-      return collection.role === 'owner';
+      return Boolean(collection.canAdminister) || collection.role === 'owner';
     }
 
     /**
      * Convenience for UI logic: can the current user delete this collection?
-     * v1: owner-only (Personal must be blocked server-side too).
+     * Only owners and administrators can delete an empty non-default collection.
      */
     function canDeleteCollection(
-      collection: Pick<Collection, 'role' | 'isPersonal'>,
+      collection: Pick<Collection, 'role' | 'isDefault' | 'canAdminister'>,
     ) {
-      if (collection.isPersonal) return false;
-      return collection.role === 'owner';
+      return (
+        !collection.isDefault &&
+        (Boolean(collection.canAdminister) || collection.role === 'owner')
+      );
     }
 
     function $reset() {

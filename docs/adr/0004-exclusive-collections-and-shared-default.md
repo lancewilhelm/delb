@@ -4,9 +4,9 @@ status: accepted
 
 # Give each book one collection and use a shared default
 
-Delb will replace automatic per-user Personal collections with one shared default. Each book entry will belong to exactly one collection. This gives new readers a shared starting library and replaces overlapping book memberships with exclusive collection membership.
+Delb replaces automatic per-user Personal collections with one shared default. Each book entry belongs to exactly one collection. This gives new readers a shared starting library and replaces overlapping book memberships with exclusive collection membership.
 
-The policy decisions and consolidated design were confirmed on 2026-11-05. This record describes accepted future behavior. The collection implementation has not changed.
+The policy decisions and consolidated design were confirmed on 2026-11-05. This record defines the collection contract. Existing installations require the administrative preview/apply migration.
 
 ## Default and membership
 
@@ -65,10 +65,8 @@ Collection-specific copies must not share mutable file paths that allow editing,
 
 Replace the health check that expects a Personal collection for each user. The new checks validate the default designation, required collection ownership, and exclusive book membership. A user with zero collection memberships is valid.
 
-## Current implementation
+## Implementation references
 
-The [collection access reference](../developing/reference/collections.md) describes many-to-many book membership, protected Personal collections, and separate creator permissions. The [data model](../developing/data-model.md) describes the associated catalog and reader-specific records.
+The [collection model](../../server/utils/collections/model.ts) owns target authorization, default selection, and atomic moves. The [migration engine](../../server/utils/collections/migration.ts) retains plans and verifies independent file copies. The [collection reference](../developing/reference/collections.md) documents endpoints and roles.
 
-Collection deletion currently removes memberships and book links while retaining book records and files. Exclusive membership requires an explicit replacement for that behavior.
-
-The existing [administrative health checks](../hosting/health-checks.md) already report duplicate identifiers and bounded fuzzy matches. Cross-collection review can build on those checks, but a clean bounded scan does not establish that no duplicates exist.
+The [migration guide](../hosting/collection-migration.md) covers backup, preview, apply, recovery, and verification. Administrative health checks report duplicate identifiers, cross-collection title matches, and bounded fuzzy matches without automatic repair.

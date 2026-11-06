@@ -1,7 +1,8 @@
+import { collectionHealth } from '~~/server/utils/collections/health';
 import path from 'node:path';
 import { stat } from 'node:fs/promises';
 
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 
 import { auth } from '~/utils/auth';
 import { logger } from '~/utils/logger';
@@ -205,10 +206,10 @@ export default defineEventHandler(async (event) => {
       message:
         orphanCount > 0
           ? `${orphanCount} book(s) are not in any collection`
-          : 'All books are linked to at least one collection',
+          : 'All books are linked to exactly one collection',
       howToFix:
         orphanCount > 0
-          ? 'Add each orphaned book to a collection (typically Personal) or delete the orphaned record.'
+          ? 'Restore a valid collection assignment from a matching backup and inspect the collection migration report.'
           : undefined,
       meta: { orphanCount },
       sample: sample.map((r) => ({ id: r.id, title: r.title })),
@@ -278,7 +279,7 @@ export default defineEventHandler(async (event) => {
           : 'No duplicate identifiers found',
       howToFix:
         duplicateGroupCount > 0
-          ? 'Review the referenced books and decide whether to keep both, merge, or remove incorrect identifiers.'
+          ? 'Review the referenced books. Independent entries are valid; correct identifiers only when they are wrong.'
           : undefined,
       meta: { duplicateGroupCount },
       sample: sample.map((r) => ({
@@ -289,54 +290,16 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // 4) Users missing a Personal collection
-  {
-    const countRows = await cloudDb
-      .select({ n: sql<number>`COUNT(*)` })
-      .from(users)
-      .leftJoin(
-        collections,
-        and(
-          eq(collections.ownerUserId, users.id),
-          eq(collections.isPersonal, true),
-        ),
-      )
-      .where(sql`${collections.id} IS NULL`);
-
-    const missingCount = countRows?.[0]?.n ?? 0;
-
-    const sample =
-      sampleLimit > 0 && missingCount > 0
-        ? await cloudDb
-            .select({ userId: users.id, email: users.email })
-            .from(users)
-            .leftJoin(
-              collections,
-              and(
-                eq(collections.ownerUserId, users.id),
-                eq(collections.isPersonal, true),
-              ),
-            )
-            .where(sql`${collections.id} IS NULL`)
-            .limit(sampleLimit)
-        : [];
-
+  for (const check of await collectionHealth(cloudDb, sampleLimit))
     results.push({
-      id: 'users.missing-personal-collection',
-      name: 'Users missing Personal collection',
-      status: missingCount > 0 ? 'warn' : 'ok',
-      message:
-        missingCount > 0
-          ? `${missingCount} user(s) do not have a Personal collection`
-          : 'All users have a Personal collection',
-      howToFix:
-        missingCount > 0
-          ? 'Create a Personal collection for each affected user (and ensure it is marked isPersonal=true).'
-          : undefined,
-      meta: { missingCount },
-      sample: sample.map((r) => ({ userId: r.userId, email: r.email })),
+      ...check,
+      status:
+        check.status === 'ok'
+          ? 'ok'
+          : check.status === 'warn'
+            ? 'warn'
+            : 'error',
     });
-  }
 
   if (mode === 'deep') {
     // 4.5) Possible duplicates (same fuzzy check as ingest)
@@ -360,6 +323,7 @@ export default defineEventHandler(async (event) => {
                 createdByUserId: books.createdByUserId,
               })
               .from(books)
+              .orderBy(books.id)
               .limit(maxBooksForFuzzy)
           : [];
 
@@ -492,7 +456,7 @@ export default defineEventHandler(async (event) => {
       }
 
       // Enrich sample pairs with owner + collections info (bounded by sampleLimit).
-      try {
+      {
         const ids = Array.from(
           new Set(
             samplePairs
@@ -575,24 +539,31 @@ export default defineEventHandler(async (event) => {
             }
           }
         }
-      } catch {
-        // If enrichment fails, still return the core pair list.
       }
 
+      const [{ n: totalBooks } = { n: 0 }] = await cloudDb
+        .select({ n: sql<number>`count(*)` })
+        .from(books);
+      const incomplete =
+        bookRows.length < totalBooks || comparisons >= maxFuzzyComparisons;
       results.push({
         id: 'duplicates.fuzzy-title-author',
         name: 'Possible duplicates (fuzzy title/author)',
-        status: foundPairs > 0 ? 'warn' : 'ok',
+        status: foundPairs > 0 || incomplete ? 'warn' : 'ok',
         message:
           foundPairs > 0
-            ? `${foundPairs} possible duplicate pair(s) found by fuzzy match`
-            : 'No fuzzy title/author duplicates found',
+            ? `${foundPairs} possible duplicate pair(s) found by fuzzy match${incomplete ? ' (incomplete scan)' : ''}`
+            : incomplete
+              ? 'No matches in the inspected subset. The fuzzy scan is incomplete.'
+              : 'No fuzzy title/author duplicates found',
         howToFix:
           foundPairs > 0
-            ? 'Review each pair and decide whether to keep both or de-duplicate (merge tooling is planned).'
+            ? 'Review each pair. Independent copies and different editions are valid; no automatic repair is performed.'
             : undefined,
         meta: {
           scannedBooks: bookRows.length,
+          totalBooks,
+          incomplete,
           comparisons,
           threshold: FUZZY_DUPLICATE_THRESHOLD,
           maxBooksForFuzzy,

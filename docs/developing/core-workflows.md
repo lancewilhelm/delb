@@ -6,21 +6,21 @@ These flows connect the [user guides](../README.md#use-delb) to the implementati
 
 The [registration page](../../app/pages/register.vue) validates fields and calls Better Auth email signup. The [auth configuration](../../app/utils/auth.ts) permits the first registration, applies the later registration toggle, and restricts self-registration to the normal user role.
 
-After user creation, auth creates a Personal collection and owner membership. [Owner bootstrap](../../server/utils/security/bootstrap.ts) claims a durable `system_state` marker and promotes a user in the same database transaction. Session creation also ensures a Personal collection exists for accounts created through other supported paths.
+After user creation, [owner bootstrap](../../server/utils/security/bootstrap.ts) claims its durable marker, initializes the shared Default when needed, and enrolls the new user in one transaction. Later users join the current default as editors. Session creation does not enroll users again.
 
 The page fetches the new session and pulls user/global settings before navigation. Route middleware controls navigation; API authorization remains server-side.
 
 ## Add a book
 
-The [Add book modal](../../app/components/Books/BookAddModal.vue) loads target collections, keeps Personal selected, and dispatches one of three paths.
+The [Add book modal](../../app/components/Books/BookAddModal.vue) loads writable collections, preselects the active collection or authorized default, and dispatches one of three paths.
 
-| Path     | Request                                                                                        | Database and file effects                                                                                                   |
-| -------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Upload   | `POST /api/books/upload`, multipart `file` and repeated `collectionId` fields                  | Extract metadata, review duplicates, coordinate stored-file creation/replacement, write book/file/author/collection records |
-| Metadata | `POST /api/books/metadata-import/create`, selected provider record or query and collection IDs | Resolve shared entities, create/link book metadata, optionally store a cover; no ebook download                             |
-| Manual   | `POST /api/books` from the blank editor                                                        | Validate title/authors, resolve shared entities, and write book/collection records without an ebook file                    |
+| Path     | Request                                                                                               | Database and file effects                                                                                                   |
+| -------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Upload   | `POST /api/books/upload`, multipart file and one `collectionId` field                                 | Extract metadata, review duplicates, coordinate stored-file creation/replacement, write book/file/author/collection records |
+| Metadata | `POST /api/books/metadata-import/create`, selected provider record or query and one collection target | Resolve shared entities, create book metadata, optionally store a cover; no ebook download                                  |
+| Manual   | `POST /api/books` from the blank editor                                                               | Validate title/authors, resolve shared entities, and write book/collection records without an ebook file                    |
 
-Each handler checks the session and target collection roles. The UI's Personal selection is distinct from the API's fallback behavior: these endpoints resolve Personal when no explicit target list is supplied. Do not assume every external API caller includes Personal in an explicit list.
+Each creation handler resolves one authorized target. Missing targets use the current shared default, subject to owner/editor membership. Multiple targets fail. The final database write rechecks authorization.
 
 ### Upload coordination
 
@@ -30,7 +30,7 @@ sequenceDiagram
     participant API as Upload handler
     participant FS as Library and journal
     participant DB as SQLite
-    UI->>API: File and collection targets
+    UI->>API: File and one collection target
     API->>DB: Check session visibility and target roles
     API->>API: Bound input, extract metadata, detect duplicates
     API->>FS: Stage files and record operation journal
@@ -41,7 +41,7 @@ sequenceDiagram
 
 The [upload handler](../../server/api/books/upload.post.ts) uses [stored-create operations](../../server/utils/books/storage/create-operation.ts) and database decisions to coordinate files and rows. A replacement also uses the per-book lock and preserves the existing book identity. User reading records attached to that identity remain distinct from replaced content.
 
-Batch results require per-file inspection. Duplicate review can stop an individual import and request an explicit decision. Metadata replacement requires a system administrator/owner and updates the existing catalog record. Linking an existing duplicate to a collection creates membership links instead of another book.
+Batch results require per-file inspection. Duplicate review can stop an individual import and request an explicit decision. Replacement requires collection owner/editor access and stays in the existing collection. A match in another collection creates an independent entry or cancels; a move is a separate confirmed action.
 
 The [manual handler](../../server/api/books/index.post.ts), [metadata handler](../../server/api/books/metadata-import/create.post.ts), and upload handler have different sequencing. Do not infer that all creation paths use the same database transaction or storage journal. Metadata cover fetches and canonical-directory work include best-effort steps after record creation.
 
@@ -65,9 +65,9 @@ Changing a view field updates account settings, not the book's metadata. The vir
 
 Creating a [collection](../../server/api/collections/index.post.ts) establishes the owner relation. [Member upsert](../../server/api/collections/[id]/members/index.put.ts) resolves an existing account by email and accepts editor/viewer roles. It does not deliver an email invitation.
 
-The [single-book collection handler](../../server/api/books/[id]/collections/index.put.ts) checks book visibility and target edit rights in its transaction. It reports forbidden targets and ignored Personal removals. The [bulk handler](../../server/api/collections/[id]/books/bulk.post.ts) additionally requires an editable source collection and resolves selection inside that scope.
+The [single-book handler](../../server/api/books/[id]/collections/index.put.ts), [explicit selection move](../../server/api/books/move.post.ts), and [source-scoped bulk handler](../../server/api/collections/[id]/books/bulk.post.ts) require edit rights in both source and destination. They validate expected source mappings and commit the move atomically. Readers remaining only in the source lose access.
 
-Ownership transfer establishes one owner and demotes the old owner to editor. Leave removes a non-owner membership. Collection deletion removes collection links, not book records. Book deletion is separate and invokes [book deletion](../../server/utils/books/delete-book.ts), including creator/admin authorization and storage coordination.
+Ownership transfer establishes one owner and demotes the old owner to editor. Leave removes a non-owner membership. Collection deletion requires an empty non-default collection. Account deletion is blocked while the account owns collections. Book deletion uses [collection owner/editor authorization and storage coordination](../../server/utils/books/delete-book.ts).
 
 The [collection settings dialog](../../app/components/Collections/EditCollectionModal.vue) handles member loading, immediate access saves, errors, focus, and separate confirmation states for consequential actions. Read the [permissions reference](reference/collections.md) for the role matrix.
 

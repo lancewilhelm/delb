@@ -1,3 +1,7 @@
+import {
+  assertBookEditor,
+  lockCollectionChanges,
+} from '~~/server/utils/collections/model';
 import path from 'node:path';
 import { withBookStorageLock } from '~~/server/utils/books/storage/book-lock';
 import { and, eq, inArray, sql } from 'drizzle-orm';
@@ -82,10 +86,6 @@ type PutBookBody = {
    */
   identifiers?: string | null;
 };
-
-function isAdminRole(role: unknown): boolean {
-  return role === 'admin' || role === 'owner';
-}
 
 function normalizeOptionalString(value: unknown): string | null | undefined {
   if (value === undefined) return undefined; // not provided
@@ -378,7 +378,7 @@ async function deleteSeriesIfUnreferenced(seriesId: string, db: Transaction) {
  *
  * Authorization:
  * - system admin/owner can edit any book
- * - the book creator (books.createdByUserId) can edit their own book
+ * - collection owners and editors can edit books in their collection
  *
  * Lean v1 behavior:
  * - Only updates fields present in the request body.
@@ -397,7 +397,6 @@ export default defineEventHandler(async (event) => {
   }
 
   const userId = session.user.id;
-  const canEditAny = isAdminRole(session.user.role);
 
   const id = getRouterParam(event, 'id');
   if (!id) {
@@ -446,16 +445,13 @@ export default defineEventHandler(async (event) => {
         throw createError({ statusCode: 404, statusMessage: 'Book not found' });
       }
 
-      const canEditOwn = Boolean(
-        existingBook.createdByUserId && existingBook.createdByUserId === userId,
-      );
-      if (!canEditAny && !canEditOwn) {
-        throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
-      }
+      await assertBookEditor(cloudDb, userId, id);
 
       let shouldMoveStorage = false;
       try {
         await cloudDb.transaction(async (tx) => {
+          await lockCollectionChanges(tx);
+          await assertBookEditor(tx, userId, id);
           // Capture previous references for orphan cleanup after mutations.
           const prevPublisherId = existingBook.publisherId ?? null;
           const prevSeriesId = existingBook.seriesId ?? null;
@@ -773,7 +769,13 @@ export default defineEventHandler(async (event) => {
         // This keeps the filesystem browsable for users.
         if (shouldMoveStorage) {
           try {
-            await moveBookStorageToCanonical({ bookId: id });
+            await moveBookStorageToCanonical({
+              bookId: id,
+              authorize: async (tx) => {
+                await lockCollectionChanges(tx);
+                await assertBookEditor(tx, userId, id);
+              },
+            });
           } catch (moveErr: unknown) {
             // Do not fail the edit if the move fails; log for investigation.
             logger.warn(

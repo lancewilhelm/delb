@@ -1,3 +1,11 @@
+import {
+  resolveBookTarget,
+  assertBookEditor,
+  assertCollectionEditor,
+  lockCollectionChanges,
+  type CollectionConnection,
+} from '~~/server/utils/collections/model';
+import { withBookStorageLock } from '~~/server/utils/books/storage/book-lock';
 import path from 'node:path';
 import { copyFile, mkdir, readFile, readdir, stat } from 'node:fs/promises';
 
@@ -20,8 +28,6 @@ import {
   bookIdentifiers,
   bookTags,
   books,
-  collectionBooks,
-  collectionMembers,
   publishers,
   series,
   tags,
@@ -166,47 +172,6 @@ async function assertIsAdminOrOwner(event: EventWithHeaders) {
  * Ensure the user can add books to every target collection.
  * Mirrors the behavior in `/api/books/upload`.
  */
-async function assertCanAddToCollections(opts: {
-  userId: string;
-  collectionIds: string[];
-}) {
-  const uniqueIds = uniq(opts.collectionIds).filter(Boolean);
-  if (!uniqueIds.length) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'At least one target collection is required',
-    });
-  }
-
-  const memberships = await cloudDb
-    .select()
-    .from(collectionMembers)
-    .where(eq(collectionMembers.userId, opts.userId));
-
-  const roleByCollectionId = new Map(
-    memberships.map((m) => [m.collectionId, m.role] as const),
-  );
-
-  const forbidden = uniqueIds.filter((id) => {
-    const role = roleByCollectionId.get(id);
-    return role !== 'owner' && role !== 'editor';
-  });
-
-  if (forbidden.length) {
-    throw createError({
-      statusCode: 403,
-      statusMessage:
-        'You do not have permission to add books to one or more selected collections',
-    });
-  }
-}
-
-/**
- * Try to discover book format files on disk by scanning the book directory, when
- * Calibre DB doesn't provide file info (common).
- *
- * Returns Calibre-style `<calibreRelDir>/<filename>` relative paths.
- */
 async function scanBookDirForFormats(opts: {
   calibreBook: CalibreBookRow;
   calibreRootAbs: string;
@@ -297,17 +262,11 @@ export default defineEventHandler(async (event) => {
   const calibreRootAbs = path.resolve(process.cwd(), 'calibre');
   const calibreDbPathAbs = path.resolve(calibreRootAbs, 'metadata.db');
 
-  // Collections:
-  // - Required for import
-  // - Optional for rescan
-  const requestedCollectionIds = uniq(body.collectionIds ?? []).filter(Boolean);
-
-  if (action === 'import') {
-    await assertCanAddToCollections({
-      userId,
-      collectionIds: requestedCollectionIds,
-    });
-  }
+  const targetCollectionId = await resolveBookTarget(
+    cloudDb,
+    userId,
+    body.collectionIds,
+  );
 
   const reader = new CalibreReader({
     libraryRootAbs: calibreRootAbs,
@@ -455,6 +414,7 @@ export default defineEventHandler(async (event) => {
     const seriesIdByName = new Map<string, string>();
 
     async function upsertAuthorByName(
+      db: CollectionConnection,
       name: string,
       sortName?: string | null,
     ): Promise<string> {
@@ -464,7 +424,7 @@ export default defineEventHandler(async (event) => {
       const cached = authorIdByName.get(trimmed);
       if (cached) return cached;
 
-      const found = await cloudDb
+      const found = await db
         .select()
         .from(authors)
         .where(eq(authors.name, trimmed))
@@ -478,7 +438,7 @@ export default defineEventHandler(async (event) => {
       const now = new Date();
 
       if (!dryRun) {
-        await cloudDb.insert(authors).values({
+        await db.insert(authors).values({
           id,
           name: trimmed,
           sortName: sortName?.toString() || makeAuthorSortKey(trimmed),
@@ -492,14 +452,17 @@ export default defineEventHandler(async (event) => {
       return id;
     }
 
-    async function upsertTagByName(name: string): Promise<string> {
+    async function upsertTagByName(
+      db: CollectionConnection,
+      name: string,
+    ): Promise<string> {
       const trimmed = (name ?? '').toString().trim();
       if (!trimmed) return '00000000-0000-0000-0000-000000000000'; // should never be used
 
       const cached = tagIdByName.get(trimmed);
       if (cached) return cached;
 
-      const found = await cloudDb
+      const found = await db
         .select()
         .from(tags)
         .where(eq(tags.name, trimmed))
@@ -513,7 +476,7 @@ export default defineEventHandler(async (event) => {
       const now = new Date();
 
       if (!dryRun) {
-        await cloudDb.insert(tags).values({
+        await db.insert(tags).values({
           id,
           name: trimmed,
           createdAt: now,
@@ -526,14 +489,17 @@ export default defineEventHandler(async (event) => {
       return id;
     }
 
-    async function upsertPublisherByName(name: string): Promise<string> {
+    async function upsertPublisherByName(
+      db: CollectionConnection,
+      name: string,
+    ): Promise<string> {
       const trimmed = (name ?? '').toString().trim();
       if (!trimmed) return '00000000-0000-0000-0000-000000000000'; // should never be used
 
       const cached = publisherIdByName.get(trimmed);
       if (cached) return cached;
 
-      const found = await cloudDb
+      const found = await db
         .select()
         .from(publishers)
         .where(eq(publishers.name, trimmed))
@@ -547,7 +513,7 @@ export default defineEventHandler(async (event) => {
       const now = new Date();
 
       if (!dryRun) {
-        await cloudDb.insert(publishers).values({
+        await db.insert(publishers).values({
           id,
           name: trimmed,
           createdAt: now,
@@ -560,14 +526,17 @@ export default defineEventHandler(async (event) => {
       return id;
     }
 
-    async function upsertSeriesByName(name: string): Promise<string> {
+    async function upsertSeriesByName(
+      db: CollectionConnection,
+      name: string,
+    ): Promise<string> {
       const trimmed = (name ?? '').toString().trim();
       if (!trimmed) return '00000000-0000-0000-0000-000000000000'; // should never be used
 
       const cached = seriesIdByName.get(trimmed);
       if (cached) return cached;
 
-      const found = await cloudDb
+      const found = await db
         .select()
         .from(series)
         .where(eq(series.name, trimmed))
@@ -581,7 +550,7 @@ export default defineEventHandler(async (event) => {
       const now = new Date();
 
       if (!dryRun) {
-        await cloudDb.insert(series).values({
+        await db.insert(series).values({
           id,
           name: trimmed,
           createdAt: now,
@@ -629,388 +598,358 @@ export default defineEventHandler(async (event) => {
       const now = new Date();
       const delbBookId = knownDelbBookId ?? crypto.randomUUID();
 
-      // Publisher/Series (optional)
-      const calibrePublisherId = calibrePublisherByBookId.get(
-        calibreBook.calibreBookId,
-      );
-      const calibreSeriesId = calibreSeriesByBookId.get(
-        calibreBook.calibreBookId,
-      );
-
-      const publisherName = calibrePublisherId
-        ? (calibrePublisherById.get(calibrePublisherId)?.name ?? null)
-        : null;
-      const seriesName = calibreSeriesId
-        ? (calibreSeriesById.get(calibreSeriesId)?.name ?? null)
-        : null;
-
-      const publisherId = publisherName
-        ? await upsertPublisherByName(publisherName)
-        : null;
-      const seriesId = seriesName ? await upsertSeriesByName(seriesName) : null;
-
-      const description =
-        calibreCommentByBookId.get(calibreBook.calibreBookId) ?? null;
-
-      const languageCodes =
-        calibreLanguagesByBookId.get(calibreBook.calibreBookId) ?? [];
-      const language = languageCodes.length ? languageCodes[0]! : null;
-
-      const published =
-        safeNonEmptyString(calibreBook.pubdate) ??
-        safeNonEmptyString(calibreBook.timestamp) ??
-        null;
-
-      const publishedAt = published ? normalizePublishedAt(published) : null;
-
-      const delbBookPaths = getCanonicalBookPaths({
-        authorNames: effectiveAuthorNames,
-        title: bookTitle,
-        bookId: delbBookId,
-      });
-
-      const delbBookDirRelPosix = delbBookPaths.bookDir;
-      const delbBookDirAbs = resolveDataPath(delbBookDirRelPosix);
-
-      // Cover:
-      // - Calibre typically stores a full-res `cover.jpg/png` in the book directory.
-      // - Delb should store a source cover + a lightweight `thumb.webp` in its own library.
-      //
-      // Policy here:
-      // - If a Calibre cover exists, copy it into Delb's canonical folder and generate thumb.webp.
-      // - Store `books.coverImagePath` as the thumbnail path (`library/<dir>/thumb.webp`).
-      let coverImagePath: string | null = null;
-      const coverCandidates = reader.getCoverCandidates(calibreBook);
-      summary.results.coverCandidatesFound += coverCandidates.length;
-
-      for (const c of coverCandidates) {
-        try {
-          const coverSource = await confinedCalibrePath(
-            calibreRootAbs,
-            c.absPath,
+      const perform = () =>
+        cloudDb.transaction(async (tx) => {
+          if (!dryRun) await lockCollectionChanges(tx);
+          if (knownDelbBookId)
+            await assertBookEditor(tx, userId, knownDelbBookId);
+          else await assertCollectionEditor(tx, userId, targetCollectionId);
+          // Publisher/Series (optional)
+          const calibrePublisherId = calibrePublisherByBookId.get(
+            calibreBook.calibreBookId,
           );
-          if (!(await fileExists(coverSource))) continue;
-          if (!dryRun) {
-            const srcBytes = await readFile(coverSource);
-            const ext = path
-              .extname(c.filename)
-              .replace(/^\./, '')
-              .toLowerCase();
-
-            const ensured = await ensureCoverOutputsFromBytes({
-              sourceBytes: srcBytes,
-              sourceExtensionHint: ext || null,
-              processing: {
-                outputDirAbs: delbBookDirAbs,
-                outputDirRelPosix: delbBookDirRelPosix,
-                sourceBaseName: 'cover',
-                thumbFileName: 'thumb.webp',
-                thumbMaxWidth: 320,
-                thumbWebpQuality: 80,
-              },
-            });
-
-            coverImagePath = ensured.covers.thumb.relativePath;
-          } else {
-            coverImagePath = path.posix.join(delbBookDirRelPosix, 'thumb.webp');
-          }
-        } catch (e) {
-          logger.warn(
-            e,
-            'calibre import: failed to generate Delb cover assets (continuing without cover)',
+          const calibreSeriesId = calibreSeriesByBookId.get(
+            calibreBook.calibreBookId,
           );
-          coverImagePath = null;
-        }
 
-        break;
-      }
+          const publisherName = calibrePublisherId
+            ? (calibrePublisherById.get(calibrePublisherId)?.name ?? null)
+            : null;
+          const seriesName = calibreSeriesId
+            ? (calibreSeriesById.get(calibreSeriesId)?.name ?? null)
+            : null;
 
-      if (knownDelbBookId) {
-        // Update
-        if (!dryRun) {
-          await cloudDb
-            .update(books)
-            .set({
-              title: bookTitle,
-              sortTitle:
-                safeNonEmptyString(calibreBook.sort) ??
-                makeTitleSortKey(bookTitle),
-              description,
-              language,
-              published,
-              publishedAt,
-              publisherId,
-              seriesId,
-              seriesIndex:
-                typeof calibreBook.seriesIndex === 'number'
-                  ? calibreBook.seriesIndex
-                  : null,
-              coverImagePath,
-              updatedAt: now,
-              calibreBookId: calibreBook.calibreBookId,
-            })
-            .where(eq(books.id, knownDelbBookId));
-        }
-        summary.results.booksUpdated += 1;
-      } else {
-        // Create
-        if (!dryRun) {
-          await cloudDb.insert(books).values({
-            id: delbBookId,
+          const publisherId = publisherName
+            ? await upsertPublisherByName(tx, publisherName)
+            : null;
+          const seriesId = seriesName
+            ? await upsertSeriesByName(tx, seriesName)
+            : null;
+
+          const description =
+            calibreCommentByBookId.get(calibreBook.calibreBookId) ?? null;
+
+          const languageCodes =
+            calibreLanguagesByBookId.get(calibreBook.calibreBookId) ?? [];
+          const language = languageCodes.length ? languageCodes[0]! : null;
+
+          const published =
+            safeNonEmptyString(calibreBook.pubdate) ??
+            safeNonEmptyString(calibreBook.timestamp) ??
+            null;
+
+          const publishedAt = published
+            ? normalizePublishedAt(published)
+            : null;
+
+          const delbBookPaths = getCanonicalBookPaths({
+            authorNames: effectiveAuthorNames,
             title: bookTitle,
-            sortTitle:
-              safeNonEmptyString(calibreBook.sort) ??
-              makeTitleSortKey(bookTitle),
-            description,
-            language,
-            published,
-            publishedAt,
-            publisherId,
-            seriesId,
-            seriesIndex:
-              typeof calibreBook.seriesIndex === 'number'
-                ? calibreBook.seriesIndex
-                : null,
-            coverImagePath,
-            createdByUserId: userId,
-            createdAt: now,
-            updatedAt: now,
-            calibreBookId: calibreBook.calibreBookId,
+            bookId: delbBookId,
           });
-        }
-        summary.results.booksCreated += 1;
-        delbBookIdByCalibreBookId.set(calibreBook.calibreBookId, delbBookId);
-      }
 
-      if (!delbBookId) continue;
+          const delbBookDirRelPosix = delbBookPaths.bookDir;
+          const delbBookDirAbs = resolveDataPath(delbBookDirRelPosix);
 
-      if (coverImagePath) summary.results.coverPathsSet += 1;
+          // Cover:
+          // - Calibre typically stores a full-res `cover.jpg/png` in the book directory.
+          // - Delb should store a source cover + a lightweight `thumb.webp` in its own library.
+          //
+          // Policy here:
+          // - If a Calibre cover exists, copy it into Delb's canonical folder and generate thumb.webp.
+          // - Store `books.coverImagePath` as the thumbnail path (`library/<dir>/thumb.webp`).
+          let coverImagePath: string | null = null;
+          const coverCandidates = reader.getCoverCandidates(calibreBook);
+          summary.results.coverCandidatesFound += coverCandidates.length;
 
-      // Upsert author entities and book-author links (position order)
-      const delbAuthorIds: string[] = [];
-      for (const [i, name] of effectiveAuthorNames.entries()) {
-        const calibreAuthor = calibreAuthorById.get(calibreAuthorIds[i] ?? -1);
-        const aId = await upsertAuthorByName(name, calibreAuthor?.sort ?? null);
-        delbAuthorIds.push(aId);
+          for (const c of coverCandidates) {
+            try {
+              const coverSource = await confinedCalibrePath(
+                calibreRootAbs,
+                c.absPath,
+              );
+              if (!(await fileExists(coverSource))) continue;
+              if (!dryRun) {
+                const srcBytes = await readFile(coverSource);
+                const ext = path
+                  .extname(c.filename)
+                  .replace(/^\./, '')
+                  .toLowerCase();
 
-        if (!dryRun) {
-          await cloudDb
-            .insert(bookAuthors)
-            .values({ bookId: delbBookId, authorId: aId, position: i + 1 })
-            .onConflictDoNothing();
-        }
-        summary.results.bookAuthorLinksUpserted += 1;
-      }
+                const ensured = await ensureCoverOutputsFromBytes({
+                  sourceBytes: srcBytes,
+                  sourceExtensionHint: ext || null,
+                  processing: {
+                    outputDirAbs: delbBookDirAbs,
+                    outputDirRelPosix: delbBookDirRelPosix,
+                    sourceBaseName: 'cover',
+                    thumbFileName: 'thumb.webp',
+                    thumbMaxWidth: 320,
+                    thumbWebpQuality: 80,
+                  },
+                });
 
-      // Tags
-      const calibreTagIds = uniq(
-        calibreTagsByBookId.get(calibreBook.calibreBookId) ?? [],
-      );
-      for (const tagId of calibreTagIds) {
-        const tagName = calibreTagById.get(tagId)?.name;
-        if (!tagName) continue;
+                coverImagePath = ensured.covers.thumb.relativePath;
+              } else {
+                coverImagePath = path.posix.join(
+                  delbBookDirRelPosix,
+                  'thumb.webp',
+                );
+              }
+            } catch (e) {
+              logger.warn(
+                e,
+                'calibre import: failed to generate Delb cover assets (continuing without cover)',
+              );
+              coverImagePath = null;
+            }
 
-        const tId = await upsertTagByName(tagName);
+            break;
+          }
 
-        if (!dryRun) {
-          await cloudDb
-            .insert(bookTags)
-            .values({ bookId: delbBookId, tagId: tId })
-            .onConflictDoNothing();
-        }
-        summary.results.bookTagLinksUpserted += 1;
-      }
-
-      // Publisher link (books.publisherId is the link in Delb)
-      if (publisherId) {
-        summary.results.bookPublisherLinksUpserted += 1;
-      }
-
-      // Series link (books.seriesId is the link in Delb)
-      if (seriesId) {
-        summary.results.bookSeriesLinksUpserted += 1;
-      }
-
-      // Identifiers
-      const identifiers =
-        calibreIdentifiersByBookId.get(calibreBook.calibreBookId) ?? [];
-      for (const ident of identifiers) {
-        const type = normalizeFormat(ident.type);
-        const value = (ident.value ?? '').toString().trim();
-        if (!type || !value) continue;
-
-        if (!dryRun) {
-          await cloudDb
-            .insert(bookIdentifiers)
-            .values({ bookId: delbBookId, type, value })
-            .onConflictDoUpdate({
-              target: [bookIdentifiers.bookId, bookIdentifiers.type],
-              set: { value: sql`EXCLUDED.value` },
-            });
-        }
-        summary.results.identifiersUpserted += 1;
-      }
-
-      // Files: from DB (if available) OR scan directory
-      let formatFiles =
-        calibreFormatFilesByBookId.get(calibreBook.calibreBookId) ?? [];
-      if (!formatFiles.length) {
-        const scanned = await scanBookDirForFormats({
-          calibreBook,
-          calibreRootAbs,
-        });
-        if (scanned.length) {
-          summary.results.filesDiscoveredByDirScan += scanned.length;
-          formatFiles = scanned;
-        }
-      }
-
-      for (const f of formatFiles) {
-        const format = normalizeFormat(f.format);
-        if (!format) continue;
-
-        const rawRelativePath = safeNonEmptyString(f.relativePath);
-        if (!rawRelativePath) continue;
-
-        // CalibreReader returns paths relative to the Calibre root.
-        const sourceRel = rawRelativePath
-          .replace(/^library[\\/]/, '')
-          .replace(/^calibre[\\/]/, '');
-        let sourceAbs: string;
-        try {
-          sourceAbs = await confinedCalibrePath(calibreRootAbs, sourceRel);
-        } catch {
-          summary.results.warnings.push(
-            `Invalid or missing Calibre source: ${sourceRel}`,
-          );
-          continue;
-        }
-
-        const destFileName = `${bookTitle}.${format}`;
-        const relativePath = buildBookStorageRelativePath({
-          authorNames: effectiveAuthorNames,
-          title: bookTitle,
-          bookId: delbBookId,
-          filename: destFileName,
-          baseDir: 'library',
-        });
-        const destAbs = resolveDataPath(relativePath);
-
-        if (!(await fileExists(sourceAbs))) {
-          summary.results.warnings.push(
-            `Missing source file for calibreBookId=${calibreBook.calibreBookId}: ${sourceRel}`,
-          );
-          continue;
-        }
-
-        if (!dryRun) {
-          try {
-            await copyFileIfMissing(sourceAbs, destAbs);
-          } catch (error) {
-            logger.warn(error, 'calibre import: failed to copy format file');
-            summary.results.warnings.push(
-              `Failed to copy file for calibreBookId=${calibreBook.calibreBookId}: ${sourceRel}`,
+          if (knownDelbBookId) {
+            // Update
+            if (!dryRun) {
+              await tx
+                .update(books)
+                .set({
+                  title: bookTitle,
+                  sortTitle:
+                    safeNonEmptyString(calibreBook.sort) ??
+                    makeTitleSortKey(bookTitle),
+                  description,
+                  language,
+                  published,
+                  publishedAt,
+                  publisherId,
+                  seriesId,
+                  seriesIndex:
+                    typeof calibreBook.seriesIndex === 'number'
+                      ? calibreBook.seriesIndex
+                      : null,
+                  coverImagePath,
+                  updatedAt: now,
+                  calibreBookId: calibreBook.calibreBookId,
+                })
+                .where(eq(books.id, knownDelbBookId));
+            }
+            summary.results.booksUpdated += 1;
+          } else {
+            // Create
+            if (!dryRun) {
+              await tx.insert(books).values({
+                id: delbBookId,
+                collectionId: targetCollectionId,
+                addedByUserId: userId,
+                addedAt: now,
+                title: bookTitle,
+                sortTitle:
+                  safeNonEmptyString(calibreBook.sort) ??
+                  makeTitleSortKey(bookTitle),
+                description,
+                language,
+                published,
+                publishedAt,
+                publisherId,
+                seriesId,
+                seriesIndex:
+                  typeof calibreBook.seriesIndex === 'number'
+                    ? calibreBook.seriesIndex
+                    : null,
+                coverImagePath,
+                createdByUserId: userId,
+                createdAt: now,
+                updatedAt: now,
+                calibreBookId: calibreBook.calibreBookId,
+              });
+            }
+            summary.results.booksCreated += 1;
+            delbBookIdByCalibreBookId.set(
+              calibreBook.calibreBookId,
+              delbBookId,
             );
-            continue;
           }
-        }
 
-        if (!dryRun) {
-          // Upsert, keyed by (bookId, format, relativePath) isn't enforced; we just avoid duplicates by checking
-          // existing rows quickly per book+format+path.
-          const existingFile = await cloudDb
-            .select({ id: bookFiles.id })
-            .from(bookFiles)
-            .where(
-              and(
-                eq(bookFiles.bookId, delbBookId),
-                eq(bookFiles.relativePath, relativePath),
-              ),
-            )
-            .limit(1);
+          if (!delbBookId) return;
 
-          if (!existingFile[0]?.id) {
-            await cloudDb.insert(bookFiles).values({
-              id: crypto.randomUUID(),
-              bookId: delbBookId,
-              format,
-              relativePath,
-              createdAt: now,
+          if (coverImagePath) summary.results.coverPathsSet += 1;
+
+          // Upsert author entities and book-author links (position order)
+          const delbAuthorIds: string[] = [];
+          for (const [i, name] of effectiveAuthorNames.entries()) {
+            const calibreAuthor = calibreAuthorById.get(
+              calibreAuthorIds[i] ?? -1,
+            );
+            const aId = await upsertAuthorByName(
+              tx,
+              name,
+              calibreAuthor?.sort ?? null,
+            );
+            delbAuthorIds.push(aId);
+
+            if (!dryRun) {
+              await tx
+                .insert(bookAuthors)
+                .values({ bookId: delbBookId, authorId: aId, position: i + 1 })
+                .onConflictDoNothing();
+            }
+            summary.results.bookAuthorLinksUpserted += 1;
+          }
+
+          // Tags
+          const calibreTagIds = uniq(
+            calibreTagsByBookId.get(calibreBook.calibreBookId) ?? [],
+          );
+          for (const tagId of calibreTagIds) {
+            const tagName = calibreTagById.get(tagId)?.name;
+            if (!tagName) continue;
+
+            const tId = await upsertTagByName(tx, tagName);
+
+            if (!dryRun) {
+              await tx
+                .insert(bookTags)
+                .values({ bookId: delbBookId, tagId: tId })
+                .onConflictDoNothing();
+            }
+            summary.results.bookTagLinksUpserted += 1;
+          }
+
+          // Publisher link (books.publisherId is the link in Delb)
+          if (publisherId) {
+            summary.results.bookPublisherLinksUpserted += 1;
+          }
+
+          // Series link (books.seriesId is the link in Delb)
+          if (seriesId) {
+            summary.results.bookSeriesLinksUpserted += 1;
+          }
+
+          // Identifiers
+          const identifiers =
+            calibreIdentifiersByBookId.get(calibreBook.calibreBookId) ?? [];
+          for (const ident of identifiers) {
+            const type = normalizeFormat(ident.type);
+            const value = (ident.value ?? '').toString().trim();
+            if (!type || !value) continue;
+
+            if (!dryRun) {
+              await tx
+                .insert(bookIdentifiers)
+                .values({ bookId: delbBookId, type, value })
+                .onConflictDoUpdate({
+                  target: [bookIdentifiers.bookId, bookIdentifiers.type],
+                  set: { value: sql`EXCLUDED.value` },
+                });
+            }
+            summary.results.identifiersUpserted += 1;
+          }
+
+          // Files: from DB (if available) OR scan directory
+          let formatFiles =
+            calibreFormatFilesByBookId.get(calibreBook.calibreBookId) ?? [];
+          if (!formatFiles.length) {
+            const scanned = await scanBookDirForFormats({
+              calibreBook,
+              calibreRootAbs,
             });
-            summary.results.filesUpserted += 1;
+            if (scanned.length) {
+              summary.results.filesDiscoveredByDirScan += scanned.length;
+              formatFiles = scanned;
+            }
           }
-        } else {
-          summary.results.filesUpserted += 1;
-        }
-      }
 
-      // Collections: add only if requested (import requires; rescan optional)
-      if (requestedCollectionIds.length) {
-        if (action === 'import') {
-          // Validate permission (already did once) and add.
-          for (const collectionId of requestedCollectionIds) {
+          for (const f of formatFiles) {
+            const format = normalizeFormat(f.format);
+            if (!format) continue;
+
+            const rawRelativePath = safeNonEmptyString(f.relativePath);
+            if (!rawRelativePath) continue;
+
+            // CalibreReader returns paths relative to the Calibre root.
+            const sourceRel = rawRelativePath
+              .replace(/^library[\\/]/, '')
+              .replace(/^calibre[\\/]/, '');
+            let sourceAbs: string;
+            try {
+              sourceAbs = await confinedCalibrePath(calibreRootAbs, sourceRel);
+            } catch {
+              summary.results.warnings.push(
+                `Invalid or missing Calibre source: ${sourceRel}`,
+              );
+              continue;
+            }
+
+            const destFileName = `${bookTitle}.${format}`;
+            const relativePath = buildBookStorageRelativePath({
+              authorNames: effectiveAuthorNames,
+              title: bookTitle,
+              bookId: delbBookId,
+              filename: destFileName,
+              baseDir: 'library',
+            });
+            const destAbs = resolveDataPath(relativePath);
+
+            if (!(await fileExists(sourceAbs))) {
+              summary.results.warnings.push(
+                `Missing source file for calibreBookId=${calibreBook.calibreBookId}: ${sourceRel}`,
+              );
+              continue;
+            }
+
             if (!dryRun) {
-              // Avoid duplicates by checking existence.
-              const existingLink = await cloudDb
-                .select({ collectionId: collectionBooks.collectionId })
-                .from(collectionBooks)
+              try {
+                await copyFileIfMissing(sourceAbs, destAbs);
+              } catch (error) {
+                logger.warn(
+                  error,
+                  'calibre import: failed to copy format file',
+                );
+                summary.results.warnings.push(
+                  `Failed to copy file for calibreBookId=${calibreBook.calibreBookId}: ${sourceRel}`,
+                );
+                continue;
+              }
+            }
+
+            if (!dryRun) {
+              // Upsert, keyed by (bookId, format, relativePath) isn't enforced; we just avoid duplicates by checking
+              // existing rows quickly per book+format+path.
+              const existingFile = await tx
+                .select({ id: bookFiles.id })
+                .from(bookFiles)
                 .where(
                   and(
-                    eq(collectionBooks.collectionId, collectionId),
-                    eq(collectionBooks.bookId, delbBookId),
+                    eq(bookFiles.bookId, delbBookId),
+                    eq(bookFiles.relativePath, relativePath),
                   ),
                 )
                 .limit(1);
 
-              if (!existingLink[0]?.collectionId) {
-                await cloudDb.insert(collectionBooks).values({
-                  collectionId,
+              if (!existingFile[0]?.id) {
+                await tx.insert(bookFiles).values({
+                  id: crypto.randomUUID(),
                   bookId: delbBookId,
-                  addedByUserId: userId,
-                  addedAt: now,
+                  format,
+                  relativePath,
+                  createdAt: now,
                 });
-                summary.results.collectionLinksAdded += 1;
+                summary.results.filesUpserted += 1;
               }
             } else {
-              summary.results.collectionLinksAdded += 1;
+              summary.results.filesUpserted += 1;
             }
           }
-        } else if (action === 'rescan') {
-          // Rescan: if collectionIds provided, add books to those collections too.
-          // (No permission check unless collectionIds provided.)
-          await assertCanAddToCollections({
-            userId,
-            collectionIds: requestedCollectionIds,
-          });
 
-          for (const collectionId of requestedCollectionIds) {
-            if (!dryRun) {
-              const existingLink = await cloudDb
-                .select({ collectionId: collectionBooks.collectionId })
-                .from(collectionBooks)
-                .where(
-                  and(
-                    eq(collectionBooks.collectionId, collectionId),
-                    eq(collectionBooks.bookId, delbBookId),
-                  ),
-                )
-                .limit(1);
-
-              if (!existingLink[0]?.collectionId) {
-                await cloudDb.insert(collectionBooks).values({
-                  collectionId,
-                  bookId: delbBookId,
-                  addedByUserId: userId,
-                  addedAt: now,
-                });
-                summary.results.collectionLinksAdded += 1;
-              }
-            } else {
-              summary.results.collectionLinksAdded += 1;
-            }
-          }
-        }
-      }
+          if (!knownDelbBookId) summary.results.collectionLinksAdded += 1;
+        });
+      if (dryRun) await perform();
+      else
+        await withBookStorageLock(
+          path.resolve(process.cwd(), 'library'),
+          delbBookId,
+          perform,
+        );
     }
 
     // Light sanity warnings for missing DB / common mount mistakes

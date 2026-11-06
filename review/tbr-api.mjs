@@ -58,29 +58,25 @@ try {
     args: [shared, 'TBR shared fixture', owner.id],
   });
   await db.execute({
-    sql: "INSERT INTO collection_members(collection_id,user_id,role,created_at) VALUES (?,?,'owner',1),(?,?,'viewer',1)",
-    args: [shared, owner.id, shared, reader.id],
+    sql: "INSERT INTO collection_members(collection_id,user_id,role,created_at) VALUES (?,?,'viewer',1)",
+    args: [shared, reader.id],
   });
   const personal = (
-    await db.execute({
-      sql: 'SELECT id FROM collections WHERE owner_user_id=? AND is_personal=1',
-      args: [reader.id],
+    await request('/api/collections', reader.cookie, 'POST', {
+      name: 'Reader private fixture',
     })
-  ).rows[0].id;
+  ).data.data.collection.id;
   for (const id of ids) {
     await db.execute({
-      sql: 'INSERT INTO books(id,title,created_at,updated_at,created_by_user_id) VALUES (?,?,1,1,?)',
-      args: [id, id, owner.id],
-    });
-    await db.execute({
-      sql: 'INSERT INTO collection_books(collection_id,book_id,added_at) VALUES (?,?,1)',
-      args: [shared, id],
+      sql: 'INSERT INTO books(id,title,created_at,updated_at,created_by_user_id,collection_id) VALUES (?,?,1,1,?,?)',
+      args: [id, id, owner.id, shared],
     });
   }
   await db.execute({
-    sql: 'INSERT INTO collection_books(collection_id,book_id,added_at) VALUES (?,?,1)',
+    sql: 'UPDATE books SET collection_id=? WHERE id=?',
     args: [personal, ids[0]],
   });
+
   assert.equal((await request('/api/tbr')).status, 401);
   assert.equal((await request(`/api/books/${ids[0]}/rationale`)).status, 401);
   assert.equal(

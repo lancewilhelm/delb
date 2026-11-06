@@ -1,3 +1,7 @@
+import {
+  enrollUserInDefault,
+  collectionModelState,
+} from '../collections/model';
 import { eq } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
@@ -10,19 +14,29 @@ export async function claimBootstrapOwner(userId: string): Promise<boolean> {
       .values({ key: 'owner-bootstrap', value: 'complete' })
       .onConflictDoNothing()
       .returning({ key: systemState.key });
-    if (!claimed.length) return false;
+    if (!claimed.length) {
+      if ((await collectionModelState(tx)) === 'exclusive')
+        await enrollUserInDefault(tx, userId);
+      return false;
+    }
     const existingOwner = await tx
       .select({ id: users.id })
       .from(users)
       .where(eq(users.role, 'owner'))
       .limit(1);
-    if (existingOwner.length) return false;
+    if (existingOwner.length) {
+      if ((await collectionModelState(tx)) === 'exclusive')
+        await enrollUserInDefault(tx, userId);
+      return false;
+    }
     const updated = await tx
       .update(users)
       .set({ role: 'owner' })
       .where(eq(users.id, userId))
       .returning({ id: users.id });
     if (!updated.length) throw new Error('Bootstrap user not found');
+    if ((await collectionModelState(tx)) === 'exclusive')
+      await enrollUserInDefault(tx, userId);
     return true;
   });
 }

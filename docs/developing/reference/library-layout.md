@@ -4,9 +4,9 @@ Delb separates collection scope, library navigation, and book presentation. This
 
 ## Collection scope
 
-The header collection picker chooses All or a specific accessible collection. All combines books visible through collection membership. Personal is a default collection, not a second global catalog.
+The header collection picker chooses All or a specific accessible collection. All combines books visible through collection membership. The shared default is an ordinary collection with an instance-wide default designation.
 
-A book can belong to several collections while retaining one shared metadata record. Each reader has separate ratings, status, reading position, and progress history. See [Delb's data model](../data-model.md).
+Each book entry belongs to one collection. Separate entries can represent the same title. Each reader has separate ratings, status, reading position, and progress history. See [Delb's data model](../data-model.md).
 
 ## Navigation and book views
 
@@ -28,13 +28,13 @@ The Sidebar component contains disabled shelf, tag multi-select, and rating plac
 
 ## Selection and collection changes
 
-Books selection supports explicit IDs and all-in-scope with exclusions. Collection bulk actions require a concrete editable source collection and editable target collections. Personal links cannot be removed. Single-book detail controls allow membership changes in editable targets after visibility checks.
+Books selection supports explicit IDs and all-in-scope with exclusions. Moves require editable source and destination collections and confirmation of the access change. A collection supports all-with-exclusions selection; All supports explicit selections. Entries cannot be left without a collection.
 
 Owner/editor rights govern collection membership changes. They do not by themselves grant permission to edit a book's shared metadata or delete its record. See [access control](collections.md).
 
 ## Add and edit books
 
-The header Add book dialog offers Upload files, By metadata, and Manual entry. Personal stays included while users select other targets. Uploads and metadata imports create records through different backend paths. Manual entry opens a blank editor and creates the record when the user selects Create.
+The header Add book dialog offers Upload files, By metadata, and Manual entry. The dialog selects one writable target, preferring the active collection and then the authorized default. Uploads and metadata imports create records through different backend paths. Manual entry opens a blank editor and creates the record when the user selects Create.
 
 Shared metadata changes affect the existing book across collections. A separate personal rating uses `book_ratings.rating`, with integers 1 through 10 representing half-star steps from 0.5 to 5 stars. Rating reads and writes select the current user.
 

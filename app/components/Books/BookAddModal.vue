@@ -1,10 +1,10 @@
 <script setup lang="ts">
+import { chooseBookTarget } from '~/utils/collectionActions';
 import { buildBookCoverUrl } from '~/utils/covers';
 
 defineOptions({ name: 'BookAddModal' });
 
 const uiStore = useUiStore();
-const { isAdmin } = useAuth();
 
 const emit = defineEmits<{
   /**
@@ -19,7 +19,8 @@ type Mode = 'upload' | 'metadata' | 'manual';
 type CollectionOption = {
   id: string;
   name: string;
-  isPersonal?: boolean;
+  isDefault?: boolean;
+  role: string | null;
 };
 
 type FetchErrorLike = {
@@ -35,61 +36,49 @@ const collectionsLoading = ref(false);
 const collections = ref<CollectionOption[]>([]);
 const selectedCollectionIds = ref<string[]>([]);
 
-const personalCollectionId = computed(() => {
-  return collections.value.find((c) => c.isPersonal)?.id ?? null;
-});
-
-watch(
-  () => personalCollectionId.value,
-  (id) => {
-    if (!id) return;
-    // Force Personal to always be selected across both flows.
-    if (!selectedCollectionIds.value.includes(id)) {
-      selectedCollectionIds.value = [id, ...selectedCollectionIds.value];
-    }
+const targetCollectionId = computed({
+  get: () => selectedCollectionIds.value[0] ?? '',
+  set: (id: string) => {
+    selectedCollectionIds.value = id ? [id] : [];
   },
-);
-
+});
+const newTargetName = ref('');
+const creatingTarget = ref(false);
 async function fetchCollections() {
   collectionsLoading.value = true;
   try {
-    const res = await $fetch<{
-      success: boolean;
-      data?: {
-        collections?: Array<{ id: string; name: string; isPersonal?: boolean }>;
-      };
-      message?: string;
-    }>('/api/collections', { method: 'GET' });
-
-    collections.value = (res?.data?.collections ?? []).map((c) => ({
-      id: c.id,
-      name: c.name,
-      isPersonal: Boolean(c.isPersonal),
-    }));
-
-    // Ensure we always have a sensible selection.
-    if (collections.value.length) {
-      const personal = collections.value.find((c) => c.isPersonal);
-      const pid = personal?.id ?? null;
-
-      const collectionsStore = useCollectionsStore();
-      const currentId = collectionsStore.activeCollectionId;
-
-      if (pid) {
-        if (!selectedCollectionIds.value.includes(pid)) {
-          selectedCollectionIds.value = [pid, ...selectedCollectionIds.value];
-        }
-      }
-
-      if (currentId && !selectedCollectionIds.value.includes(currentId)) {
-        selectedCollectionIds.value = [
-          ...selectedCollectionIds.value,
-          currentId,
-        ];
-      }
-    }
+    const response = await $fetch<{
+      data: { collections: CollectionOption[] };
+    }>('/api/collections');
+    const available = response.data.collections;
+    collections.value = available.filter(
+      (collection) =>
+        collection.role === 'owner' || collection.role === 'editor',
+    );
+    targetCollectionId.value =
+      chooseBookTarget(available, useCollectionsStore().activeCollectionId) ??
+      '';
   } finally {
     collectionsLoading.value = false;
+  }
+}
+async function createTarget() {
+  if (!newTargetName.value.trim() || creatingTarget.value) return;
+  creatingTarget.value = true;
+  try {
+    const response = await $fetch<{ data: { collection: { id: string } } }>(
+      '/api/collections',
+      { method: 'POST', body: { name: newTargetName.value.trim() } },
+    );
+    await fetchCollections();
+    targetCollectionId.value = response.data.collection.id;
+    newTargetName.value = '';
+    await useCollectionsStore().fetchCollections();
+  } catch (cause) {
+    errorMessage.value =
+      cause instanceof Error ? cause.message : 'Unable to create collection';
+  } finally {
+    creatingTarget.value = false;
   }
 }
 
@@ -278,7 +267,7 @@ async function uploadBooks() {
 
   const collectionIds = selectedCollectionIds.value.filter(Boolean);
   if (!collectionIds.length) {
-    errorMessage.value = 'Select at least one collection.';
+    errorMessage.value = 'Choose one collection.';
     return;
   }
 
@@ -353,6 +342,7 @@ type DuplicateCandidate = {
   score: number;
   book: {
     id: string;
+    collectionId: string;
     title: string;
     coverImagePath: string | null;
     updatedAt?: string | number | Date;
@@ -372,6 +362,13 @@ const duplicateReviewOpen = ref(false);
 const duplicateReview = ref<DuplicateReview | null>(null);
 
 const selectedDuplicateBookId = ref<string>('');
+const duplicateInTarget = computed(() =>
+  parseDuplicateCandidates(duplicateReview.value?.details).some(
+    (candidate) =>
+      candidate.book.id === selectedDuplicateBookId.value &&
+      candidate.book.collectionId === targetCollectionId.value,
+  ),
+);
 
 function defaultSelectedDuplicate(details: unknown): string {
   const candidates = parseDuplicateCandidates(details);
@@ -479,7 +476,7 @@ async function uploadAnyway() {
 
   const collectionIds = selectedCollectionIds.value.filter(Boolean);
   if (!collectionIds.length) {
-    errorMessage.value = 'Select at least one collection.';
+    errorMessage.value = 'Choose one collection.';
     return;
   }
 
@@ -576,7 +573,7 @@ async function replaceSelected() {
 
   const collectionIds = selectedCollectionIds.value.filter(Boolean);
   if (!collectionIds.length) {
-    errorMessage.value = 'Select at least one collection.';
+    errorMessage.value = 'Choose one collection.';
     return;
   }
 
@@ -653,7 +650,7 @@ async function resolveMetadataDuplicate(
 
   const collectionIds = selectedCollectionIds.value.filter(Boolean);
   if (!collectionIds.length) {
-    errorMessage.value = 'Select at least one collection.';
+    errorMessage.value = 'Choose one collection.';
     successMessage.value = null;
     return;
   }
@@ -667,7 +664,6 @@ async function resolveMetadataDuplicate(
       success: boolean;
       data?: {
         book?: { id: string; title: string };
-        addedCollectionIds?: string[];
       };
       message?: string;
     }>('/api/books/metadata-import/create', {
@@ -688,10 +684,9 @@ async function resolveMetadataDuplicate(
     }
 
     if (action === 'use_existing') {
-      const n = (res?.data?.addedCollectionIds ?? []).length;
       successMessage.value = title
-        ? `Added existing “${title}” to ${n || 'selected'} collection(s).`
-        : 'Added existing book to collections.';
+        ? `Using existing “${title}”.`
+        : 'Using existing book entry.';
     } else if (action === 'replace_existing') {
       successMessage.value = title
         ? `Replaced existing entry with “${title}”.`
@@ -736,7 +731,7 @@ async function createFromMetadataItem(opts: {
 
   const collectionIds = selectedCollectionIds.value.filter(Boolean);
   if (!collectionIds.length) {
-    errorMessage.value = 'Select at least one collection.';
+    errorMessage.value = 'Choose one collection.';
     successMessage.value = null;
     return;
   }
@@ -825,7 +820,7 @@ async function createFromMetadata() {
 
   const collectionIds = selectedCollectionIds.value.filter(Boolean);
   if (!collectionIds.length) {
-    errorMessage.value = 'Select at least one collection.';
+    errorMessage.value = 'Choose one collection.';
     successMessage.value = null;
     return;
   }
@@ -969,7 +964,7 @@ function handleMetadataSearchSelect(selection: {
 function startManualEntry() {
   const collectionIds = selectedCollectionIds.value.filter(Boolean);
   if (!collectionIds.length) {
-    errorMessage.value = 'Select at least one collection.';
+    errorMessage.value = 'Choose one collection.';
     successMessage.value = null;
     return;
   }
@@ -1052,52 +1047,47 @@ function startManualEntry() {
         </button>
       </div>
 
-      <!-- Shared collections -->
-      <div class="space-y-1">
-        <div class="text-sm font-semibold">Collections</div>
-
-        <div v-if="collectionsLoading" class="text-sm opacity-80">
-          Loading collections…
-        </div>
-
-        <div v-else-if="!collections.length" class="text-sm opacity-80">
-          No collections available.
-        </div>
-
-        <div v-else class="space-y-1">
-          <label
-            v-for="c in collections"
-            :key="c.id"
-            class="flex items-center gap-2 text-sm"
+      <div class="space-y-2">
+        <label class="flex flex-col gap-1 text-sm font-semibold"
+          >Collection
+          <select
+            v-model="targetCollectionId"
+            :disabled="busy || collectionsLoading"
+            class="border border-(--contrast-border-color) rounded p-2 bg-(--bg-color)"
           >
-            <input
-              v-model="selectedCollectionIds"
-              type="checkbox"
-              :value="c.id"
-              :disabled="busy || c.isPersonal"
-              class="peer sr-only"
-            />
-            <span
-              class="h-5 w-5 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
-              :class="
-                busy || c.isPersonal
-                  ? 'peer-checked:bg-(--sub-color) cursor-default!'
-                  : ''
-              "
-            ></span>
-            <span class="truncate">{{ c.name }}</span>
-            <span
-              v-if="c.isPersonal"
-              class="ml-1 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-(--contrast-border-color) opacity-70"
+            <option value="" disabled>Choose one collection</option>
+            <option
+              v-for="collection in collections"
+              :key="collection.id"
+              :value="collection.id"
             >
-              Personal
-            </span>
-          </label>
-
-          <div class="text-xs opacity-70">
-            Your Personal collection is always included (required). You can also
-            add to additional collections.
-          </div>
+              {{ collection.name
+              }}{{ collection.isDefault ? ' (default)' : '' }}
+            </option>
+          </select>
+        </label>
+        <div
+          v-if="!collectionsLoading && !collections.length"
+          class="space-y-2 text-sm"
+        >
+          <p>
+            You have no writable collections. Create one or ask an owner for
+            editor access.
+          </p>
+          <label class="flex flex-col gap-1"
+            >New collection name<input
+              v-model="newTargetName"
+              class="border border-(--contrast-border-color) rounded p-2"
+              :disabled="creatingTarget"
+          /></label>
+          <button
+            type="button"
+            :disabled="creatingTarget || !newTargetName.trim()"
+            class="px-3 py-2 border border-(--contrast-border-color) rounded disabled:opacity-50"
+            @click="createTarget"
+          >
+            {{ creatingTarget ? 'Creating…' : 'Create collection' }}
+          </button>
         </div>
       </div>
 
@@ -1275,20 +1265,20 @@ function startManualEntry() {
             </button>
 
             <button
-              v-if="duplicateReview?.kind === 'metadata'"
+              v-if="duplicateReview?.kind === 'metadata' && duplicateInTarget"
               type="button"
               class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
               :disabled="busy || !pendingMetadataImport"
               @click="resolveMetadataDuplicate('use_existing')"
             >
-              Add existing to collections
+              Use existing entry
             </button>
 
             <button
-              v-if="duplicateReview?.kind === 'metadata'"
+              v-if="duplicateReview?.kind === 'metadata' && duplicateInTarget"
               type="button"
               class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
-              :disabled="busy || !pendingMetadataImport || !isAdmin"
+              :disabled="busy || !pendingMetadataImport"
               @click="resolveMetadataDuplicate('replace_existing')"
             >
               Replace selected
@@ -1315,7 +1305,7 @@ function startManualEntry() {
             </button>
 
             <button
-              v-if="duplicateReview?.kind === 'upload'"
+              v-if="duplicateReview?.kind === 'upload' && duplicateInTarget"
               type="button"
               class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
               :disabled="busy || !selectedDuplicateBookId"
@@ -1391,7 +1381,7 @@ function startManualEntry() {
             <button
               v-tooltip="
                 !selectedCollectionIds.length
-                  ? 'Select at least one collection'
+                  ? 'Choose one collection'
                   : 'Upload selected books'
               "
               class="px-3 py-2 w-full disabled:opacity-50 bg-(--sub-color)/15"
@@ -1482,7 +1472,7 @@ function startManualEntry() {
         </button>
 
         <div v-if="!selectedCollectionIds.length" class="text-xs opacity-70">
-          Select at least one collection first.
+          Choose one collection first.
         </div>
       </div>
 

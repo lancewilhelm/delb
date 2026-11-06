@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'SettingsAdminDropbox' });
 
-type CollectionOption = { id: string; name: string; isPersonal?: boolean };
+type CollectionOption = { id: string; name: string; isDefault?: boolean };
 type UserOption = { id: string; email: string; role?: string };
 
 const { isAdmin } = useAuth();
@@ -22,15 +22,15 @@ async function fetchCollections() {
         collections?: Array<{
           id: string;
           name: string;
-          isPersonal?: boolean;
+          isDefault?: boolean;
         }>;
       };
-    }>('/api/collections', { method: 'GET' });
+    }>('/api/settings/admin/collections', { method: 'GET' });
 
     collections.value = (res?.data?.collections ?? []).map((c) => ({
       id: c.id,
       name: c.name,
-      isPersonal: Boolean(c.isPersonal),
+      isDefault: Boolean(c.isDefault),
     }));
   } finally {
     collectionsLoading.value = false;
@@ -135,23 +135,15 @@ const stableMaxAgeMs = computed({
   set: async (v: number) => updateDropbox({ stableMaxAgeMs: v }),
 });
 
-const additionalCollectionIdsLocal = ref<string[]>([]);
-watch(
-  () => getDropboxSettings().additionalCollectionIds,
-  (v) => {
-    additionalCollectionIdsLocal.value = Array.isArray(v)
-      ? v.map((x) => (x ?? '').toString()).filter(Boolean)
-      : [];
+const targetCollectionId = computed({
+  get: () => String(getDropboxSettings().targetCollectionId ?? ''),
+  set: async (id: string) => {
+    await updateDropbox({
+      targetCollectionId: id,
+      additionalCollectionIds: [],
+    });
   },
-  { immediate: true },
-);
-
-async function saveAdditionalCollections() {
-  const ids = Array.from(new Set(additionalCollectionIdsLocal.value))
-    .map((s) => s.trim())
-    .filter(Boolean);
-  await updateDropbox({ additionalCollectionIds: ids });
-}
+});
 
 const targetUserId = computed({
   get: () => (getDropboxSettings().targetUserId ?? '').toString(),
@@ -256,59 +248,27 @@ const targetUserId = computed({
         </div>
       </div>
 
-      <div class="space-y-2">
-        <div class="text-sm font-semibold">also add to collections</div>
-        <div v-if="collectionsLoading" class="text-sm opacity-80">
-          Loading collections…
-        </div>
-        <div v-else-if="!collections.length" class="text-sm opacity-80">
-          No collections yet.
-        </div>
-        <div
-          v-else-if="collections.filter((x) => !x.isPersonal).length === 0"
-          class="text-sm opacity-80"
+      <label class="flex flex-col gap-1 text-sm"
+        >Destination collection
+        <select
+          v-model="targetCollectionId"
+          :disabled="!isAdmin || collectionsLoading"
+          class="border border-(--contrast-border-color) rounded p-2 bg-(--bg-color)"
         >
-          No shared collections available.
-        </div>
-        <div v-else class="space-y-1">
-          <label
-            v-for="c in collections.filter((x) => !x.isPersonal)"
-            :key="c.id"
-            class="flex items-center gap-2 text-sm"
+          <option value="">Use the current shared default</option>
+          <option
+            v-for="collection in collections"
+            :key="collection.id"
+            :value="collection.id"
           >
-            <input
-              v-model="additionalCollectionIdsLocal"
-              type="checkbox"
-              :value="c.id"
-              :disabled="!isAdmin"
-              class="peer sr-only"
-            />
-            <span
-              class="h-5 w-5 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer"
-              :class="
-                !isAdmin ? 'peer-checked:bg-(--sub-color) cursor-default!' : ''
-              "
-            ></span>
-            <span class="truncate">{{ c.name }}</span>
-          </label>
-
-          <div class="flex gap-2 mt-2">
-            <button
-              type="button"
-              class="px-3 py-2 rounded-lg bg-(--main-color) text-(--contrast-inverse-color) disabled:opacity-50 disabled:cursor-not-allowed"
-              :disabled="!isAdmin"
-              @click="saveAdditionalCollections"
-            >
-              save
-            </button>
-          </div>
-        </div>
-        <div class="text-xs opacity-70">
-          The book is always added to the selected owner’s Personal collection.
-          These are additional collections (non-Personal) to also link the book
-          into.
-        </div>
-      </div>
+            {{ collection.name }}
+          </option>
+        </select>
+        <span class="text-xs opacity-70"
+          >Each batch keeps one destination. The selected importing user needs
+          owner or editor access to it.</span
+        >
+      </label>
 
       <div class="space-y-2">
         <div class="text-sm font-semibold">book owner (optional)</div>
@@ -323,9 +283,8 @@ const targetUserId = computed({
           </option>
         </select>
         <div class="text-xs opacity-70">
-          This user will be set as the uploader/adder for ingested books. If the
-          target collection is unset, the book is also added to this user’s
-          Personal collection.
+          This user is recorded as the uploader and must have owner or editor
+          access to the destination.
         </div>
       </div>
     </div>

@@ -27,7 +27,7 @@ The image runs as UID/GID 1001 by default. Ensure the mounted writable directori
 4. Open Delb and register the first account.
 5. Review global registration and ingestion settings as the system owner.
 
-Expected result: the owner can sign in, open an empty Personal collection, and add a book. Keep the service stopped if startup reports an unresolved storage recovery error.
+Expected result: the owner can sign in, open the shared Default collection, and add a book. Keep the service stopped if startup reports an unresolved storage recovery error.
 
 For development or a disposable local demonstration, use the [contributor guide](../developing/README.md). Demo fixture commands are not production initialization commands.
 
@@ -43,10 +43,12 @@ To restore, stop all writers and restore the matching database and library backu
 
 See [storage recovery](storage-recovery.md) for interrupted operations and timestamp migration caveats. A restore procedure must be rehearsed on your own deployment before it counts as verified recovery for that environment.
 
+Existing installations also require the [exclusive collection migration](collection-migration.md), with a backup, administrative preview, and confirmed apply before normal library requests resume.
+
 ## Ingestion and administration
 
 - Use [Calibre import](calibre-import.md) to migrate an existing Calibre library. Keep the source read-only and retain a source backup.
-- Configure **Settings → Admin → Dropbox** for a local ingestion directory, allowed extensions, and target collections. This is a filesystem inbox, not the Dropbox cloud service. Ingestion requires a suitable configured user/target context.
+- Configure **Settings → Admin → Dropbox** for a local ingestion directory, allowed extensions, and one target collection. This is a filesystem inbox, not the Dropbox cloud service. Ingestion requires a suitable configured user/target context.
 - Configure Hardcover through the admin metadata settings. The server stores the token and clients receive an availability flag. See [metadata providers](../developing/reference/metadata.md).
 - Run [health checks](health-checks.md) from the admin library controls. Quick checks inspect database conditions; deep checks also inspect bounded filesystem/duplicate conditions.
 

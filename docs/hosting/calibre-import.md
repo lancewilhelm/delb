@@ -81,8 +81,8 @@ You’ll see controls for:
 #### Import (`action: "import"`)
 
 - One-time import of Calibre metadata and **file copies** into Delb’s `library/`
-- Requires selecting at least one target collection
-- Adds imported books to the selected collection(s)
+- Uses one authorized target collection for newly imported entries
+- Adds new entries to that collection; existing source-linked entries keep their collection
 - Safe to run again if you need to reimport from the same Calibre library (idempotent via `calibre_book_id`)
 
 ---
@@ -249,3 +249,5 @@ Typical deployment expectation:
 Delb reads from `calibre/metadata.db` and writes to `data/delb.db`.
 
 ---
+
+Existing Calibre relationships remain attached to one designated entry during the [collection migration](collection-migration.md). Independent collection-specific copies are excluded from later rescans.

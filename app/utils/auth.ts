@@ -1,80 +1,63 @@
+import {
+  assertAccountDeletionAllowed,
+  assertCollectionAdmin,
+  CollectionError,
+  requireCollectionModel,
+} from '~~/server/utils/collections/model';
 import { betterAuth } from 'better-auth';
 import { admin as baAdmin } from 'better-auth/plugins';
-import { APIError } from 'better-auth/api';
+import {
+  APIError,
+  createAuthMiddleware,
+  getSessionFromCtx,
+} from 'better-auth/api';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import * as schema from './db/schema';
-import { and, count, eq } from 'drizzle-orm';
+import { count, eq } from 'drizzle-orm';
 import { ac, user, admin, owner } from './permissions';
 import type { GlobalSettings } from '~/stores/globalSettings';
 import { logger } from '~/utils/logger';
 import { claimBootstrapOwner } from '~~/server/utils/security/bootstrap';
-
-async function ensurePersonalCollectionForUser(userId: string) {
-  const existing = await cloudDb
-    .select({ id: schema.collections.id })
-    .from(schema.collections)
-    .where(
-      and(
-        eq(schema.collections.ownerUserId, userId),
-        eq(schema.collections.isPersonal, true),
-      ),
-    )
-    .limit(1);
-
-  if (existing[0]?.id) return;
-
-  const now = new Date();
-  const collectionId = crypto.randomUUID();
-
-  await cloudDb.insert(schema.collections).values({
-    id: collectionId,
-    name: 'Personal',
-    ownerUserId: userId,
-    isPersonal: true,
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  await cloudDb.insert(schema.collectionMembers).values({
-    collectionId,
-    userId,
-    role: 'owner',
-    createdAt: now,
-  });
-}
-
-/**
- * Backfill a Personal collection for existing users (one-time style).
- *
- * Why:
- * - Some users may exist from before we introduced personal collections.
- * - Some users may be created by an admin and never sign in, so session hooks won't run.
- *
- * Notes:
- * - This runs on module initialization, best-effort.
- * - It intentionally does not throw if it fails; auth should still boot.
- */
-(async function backfillPersonalCollectionsOnStartup() {
-  try {
-    const allUsers = await cloudDb
-      .select({ id: schema.users.id })
-      .from(schema.users);
-
-    for (const u of allUsers) {
-      if (!u?.id) continue;
-      await ensurePersonalCollectionForUser(u.id);
-    }
-  } catch {
-    // best-effort; avoid breaking auth init if db is unavailable during bootstrap
-  }
-})();
 
 export const auth = betterAuth({
   baseURL: getBaseURL(),
   trustedOrigins: getTrustedOrigins(),
   advanced: {
     cookiePrefix: 'delb',
+  },
+  hooks: {
+    before: createAuthMiddleware(async (context) => {
+      if (
+        context.path !== '/admin/remove-user' &&
+        context.path !== '/delete-user'
+      )
+        return;
+      const session = await getSessionFromCtx(context);
+      if (!session)
+        throw new APIError('UNAUTHORIZED', { message: 'Unauthorized' });
+      const body: unknown = context.body;
+      const targetId =
+        context.path === '/delete-user'
+          ? session.user.id
+          : body &&
+              typeof body === 'object' &&
+              'userId' in body &&
+              typeof body.userId === 'string'
+            ? body.userId
+            : null;
+      if (!targetId) return;
+      if (context.path === '/admin/remove-user') {
+        try {
+          await assertCollectionAdmin(cloudDb, session.user.id);
+        } catch {
+          throw new APIError('FORBIDDEN', {
+            message: 'Administrator access required',
+          });
+        }
+      }
+      await guardUserDeletion(targetId);
+    }),
   },
   plugins: [
     baAdmin({
@@ -109,15 +92,6 @@ export const auth = betterAuth({
     autoSignIn: true,
   },
   databaseHooks: {
-    session: {
-      create: {
-        after: async (session) => {
-          // Ensure Personal collection exists even for users created outside the normal
-          // registration flow (e.g. admin-created users).
-          await ensurePersonalCollectionForUser(session.userId);
-        },
-      },
-    },
     user: {
       update: {
         before: async (changes, context) => {
@@ -148,11 +122,7 @@ export const auth = betterAuth({
       },
       delete: {
         before: async (user) => {
-          if (user.role === 'owner') {
-            throw new APIError('FORBIDDEN', {
-              message: 'The system owner cannot be removed.',
-            });
-          }
+          await guardUserDeletion(user.id);
         },
       },
       create: {
@@ -177,6 +147,7 @@ export const auth = betterAuth({
             .select({ count: count() })
             .from(schema.users);
           const isFirstRegistration = (userCountRows[0]?.count ?? 0) === 0;
+          if (!isFirstRegistration) await requireCollectionModel(cloudDb);
 
           // Fetch global settings for registration checks
           const response = await cloudDb.select().from(schema.globalSettings);
@@ -220,9 +191,6 @@ export const auth = betterAuth({
           };
         },
         after: async (createdUser) => {
-          // Normal sign-up path: eagerly create Personal collection.
-          await ensurePersonalCollectionForUser(createdUser.id);
-
           // Concurrency-safe owner bootstrap claim:
           // first successful claimant becomes owner and marks completion atomically.
           const promoted = await claimBootstrapOwner(createdUser.id);
@@ -254,4 +222,17 @@ function getTrustedOrigins() {
   const origins = process.env.BETTER_AUTH_TRUSTED_ORIGINS;
   if (!origins) return [];
   return origins.split(',').map((origin) => origin.trim());
+}
+
+async function guardUserDeletion(userId: string) {
+  try {
+    await assertAccountDeletionAllowed(cloudDb, userId);
+  } catch (error) {
+    if (error instanceof CollectionError)
+      throw new APIError(
+        error.statusCode === 403 ? 'FORBIDDEN' : 'BAD_REQUEST',
+        { message: error.message },
+      );
+    throw error;
+  }
 }

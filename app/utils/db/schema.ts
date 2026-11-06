@@ -1,5 +1,6 @@
 import {
   sqliteTable,
+  sqliteView,
   text,
   integer,
   real,
@@ -98,7 +99,7 @@ export const verifications = sqliteTable('verifications', {
  * COLLECTIONS (shareable containers)
  *
  * - The entire app is the user's "library"
- * - Collections are shareable groupings of books (like photo albums)
+ * - Each book entry belongs to one collection; members collaborate through roles
  * - Users can collaborate via collection membership + roles
  */
 
@@ -111,12 +112,10 @@ export const collections = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
 
-    /**
-     * Marks a user's default "Personal" collection.
-     * - Exactly one per user (enforced at the app layer for now).
-     * - Non-deletable.
-     * - Not shareable.
-     */
+    // isPersonal is retained only to identify legacy collections in the migration preview.
+    isDefault: integer('is_default', { mode: 'boolean' })
+      .notNull()
+      .default(false),
     isPersonal: integer('is_personal', { mode: 'boolean' })
       .notNull()
       .$defaultFn(() => false),
@@ -129,6 +128,9 @@ export const collections = sqliteTable(
       .$defaultFn(() => new Date()),
   },
   (t) => ({
+    defaultCollectionUnique: uniqueIndex('collections_single_default')
+      .on(t.isDefault)
+      .where(sql`${t.isDefault} = 1`),
     // Helpful for quickly finding a user's personal collection (and enforcing uniqueness in app logic).
     collectionsOwnerIsPersonalIdx: index(
       'collections_owner_is_personal_idx',
@@ -212,11 +214,20 @@ export const tags = sqliteTable('tags', {
     .$defaultFn(() => new Date()),
 });
 
-// BOOKS TABLE (canonical metadata; shared across collections)
+// BOOKS TABLE (one exclusive collection per catalog entry)
 export const books = sqliteTable(
   'books',
   {
     id: text('id').primaryKey(),
+    collectionId: text('collection_id')
+      .notNull()
+      .references(() => collections.id, { onDelete: 'restrict' }),
+    addedByUserId: text('added_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    addedAt: integer('added_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
     title: text('title').notNull(),
 
     // Stored sort key (Calibre-style): title with a leading "The " removed (case-insensitive).
@@ -227,7 +238,7 @@ export const books = sqliteTable(
     // Used for idempotent Calibre import + re-scan when `library/metadata.db` is present.
     calibreBookId: integer('calibre_book_id'),
 
-    // Metadata (shared across collections)
+    // Metadata for this entry
     description: text('description'),
     published: text('published'), // raw string (lean v1)
     /**
@@ -273,34 +284,21 @@ export const books = sqliteTable(
   (t) => ({
     // Ensure one Delb book per Calibre book id (idempotent import/rescan).
     // SQLite UNIQUE allows multiple NULLs, so non-Calibre books remain unaffected.
+    booksCollectionIdx: index('books_collection_idx').on(t.collectionId),
     calibreBookIdUnique: uniqueIndex('books_calibre_book_id_unique').on(
       t.calibreBookId,
     ),
   }),
 );
 
-export const collectionBooks = sqliteTable(
-  'collection_books',
-  {
-    collectionId: text('collection_id')
-      .notNull()
-      .references(() => collections.id, { onDelete: 'cascade' }),
-    bookId: text('book_id')
-      .notNull()
-      .references(() => books.id, { onDelete: 'cascade' }),
-    addedByUserId: text('added_by_user_id').references(() => users.id, {
-      onDelete: 'set null',
-    }),
-    addedAt: integer('added_at', { mode: 'timestamp' })
-      .notNull()
-      .$defaultFn(() => new Date()),
-  },
-  (t) => ({
-    // Prevent duplicate (collection_id, book_id) pairs.
-    collectionIdBookIdUnique: uniqueIndex(
-      'collection_books_collection_id_book_id_unique',
-    ).on(t.collectionId, t.bookId),
-  }),
+// Read-only membership projection. The book row is the sole source of collection ownership.
+export const collectionBooks = sqliteView('collection_books', {
+  collectionId: text('collection_id').notNull(),
+  bookId: text('book_id').notNull(),
+  addedByUserId: text('added_by_user_id'),
+  addedAt: integer('added_at', { mode: 'timestamp' }).notNull(),
+}).as(
+  sql`SELECT collection_id, id AS book_id, added_by_user_id, added_at FROM books`,
 );
 
 export const bookAuthors = sqliteTable(
@@ -627,7 +625,6 @@ export type InsertGlobalSecrets = InferInsertModel<typeof globalSecrets>;
 
 export type InsertCollection = InferInsertModel<typeof collections>;
 export type InsertCollectionMember = InferInsertModel<typeof collectionMembers>;
-export type InsertCollectionBook = InferInsertModel<typeof collectionBooks>;
 
 export type InsertBook = InferInsertModel<typeof books>;
 export type InsertBookFile = InferInsertModel<typeof bookFiles>;
@@ -654,7 +651,7 @@ export type SelectGlobalSecrets = InferSelectModel<typeof globalSecrets>;
 
 export type SelectCollection = InferSelectModel<typeof collections>;
 export type SelectCollectionMember = InferSelectModel<typeof collectionMembers>;
-export type SelectCollectionBook = InferSelectModel<typeof collectionBooks>;
+export type SelectCollectionBook = typeof collectionBooks.$inferSelect;
 
 export type SelectBook = InferSelectModel<typeof books>;
 export type SelectBookFile = InferSelectModel<typeof bookFiles>;

@@ -1,4 +1,10 @@
-import { and, eq } from 'drizzle-orm';
+import {
+  resolveBookTarget,
+  assertCollectionEditor,
+  lockCollectionChanges,
+  type CollectionConnection,
+} from '~~/server/utils/collections/model';
+import { eq } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
@@ -7,9 +13,6 @@ import {
   bookIdentifiers,
   bookTags,
   books,
-  collectionBooks,
-  collectionMembers,
-  collections,
   publishers,
   series,
   tags,
@@ -135,78 +138,11 @@ function parseIdentifiersFromBody(
   return Array.from(byType.entries()).map(([type, value]) => ({ type, value }));
 }
 
-async function assertCanAddToCollections(opts: {
-  userId: string;
-  collectionIds: string[];
-}) {
-  const uniqueIds = Array.from(new Set(opts.collectionIds)).filter(Boolean);
-  if (!uniqueIds.length) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'At least one target collection is required',
-    });
-  }
-
-  const memberships = await cloudDb
-    .select()
-    .from(collectionMembers)
-    .where(eq(collectionMembers.userId, opts.userId));
-
-  const roleByCollectionId = new Map(
-    memberships.map((m) => [m.collectionId, m.role] as const),
-  );
-
-  const forbidden = uniqueIds.filter((id) => {
-    const role = roleByCollectionId.get(id);
-    return role !== 'owner' && role !== 'editor';
-  });
-
-  if (forbidden.length) {
-    throw createError({
-      statusCode: 403,
-      statusMessage:
-        'You do not have permission to add to one or more selected collections',
-    });
-  }
-}
-
-async function resolveCollectionIdsOrPersonal(opts: {
-  userId: string;
-  collectionIds?: string[];
-}): Promise<string[]> {
-  const incoming = Array.isArray(opts.collectionIds)
-    ? opts.collectionIds.filter((x) => typeof x === 'string' && x.trim())
-    : [];
-
-  if (incoming.length) return Array.from(new Set(incoming));
-
-  const personal = await cloudDb
-    .select({ id: collections.id })
-    .from(collectionMembers)
-    .innerJoin(collections, eq(collectionMembers.collectionId, collections.id))
-    .where(
-      and(
-        eq(collectionMembers.userId, opts.userId),
-        eq(collections.isPersonal, true),
-      ),
-    )
-    .limit(1);
-
-  const personalCollectionId = personal[0]?.id;
-
-  if (!personalCollectionId) {
-    throw createError({
-      statusCode: 400,
-      statusMessage:
-        'Personal collection not found. Please try again after your Personal collection is created.',
-    });
-  }
-
-  return [personalCollectionId];
-}
-
-async function findOrCreateAuthorByName(name: string) {
-  const existing = await cloudDb
+async function findOrCreateAuthorByName(
+  name: string,
+  db: CollectionConnection,
+) {
+  const existing = await db
     .select()
     .from(authors)
     .where(eq(authors.name, name))
@@ -217,7 +153,7 @@ async function findOrCreateAuthorByName(name: string) {
   const id = crypto.randomUUID();
   const now = new Date();
 
-  await cloudDb.insert(authors).values({
+  await db.insert(authors).values({
     id,
     name,
     sortName: makeAuthorSortKey(name),
@@ -228,8 +164,8 @@ async function findOrCreateAuthorByName(name: string) {
   return { id, name };
 }
 
-async function findOrCreateTagByName(name: string) {
-  const existing = await cloudDb
+async function findOrCreateTagByName(name: string, db: CollectionConnection) {
+  const existing = await db
     .select()
     .from(tags)
     .where(eq(tags.name, name))
@@ -240,7 +176,7 @@ async function findOrCreateTagByName(name: string) {
   const id = crypto.randomUUID();
   const now = new Date();
 
-  await cloudDb.insert(tags).values({
+  await db.insert(tags).values({
     id,
     name,
     createdAt: now,
@@ -250,8 +186,11 @@ async function findOrCreateTagByName(name: string) {
   return { id, name };
 }
 
-async function findOrCreatePublisherByName(name: string) {
-  const existing = await cloudDb
+async function findOrCreatePublisherByName(
+  name: string,
+  db: CollectionConnection,
+) {
+  const existing = await db
     .select()
     .from(publishers)
     .where(eq(publishers.name, name))
@@ -262,7 +201,7 @@ async function findOrCreatePublisherByName(name: string) {
   const id = crypto.randomUUID();
   const now = new Date();
 
-  await cloudDb.insert(publishers).values({
+  await db.insert(publishers).values({
     id,
     name,
     createdAt: now,
@@ -272,8 +211,11 @@ async function findOrCreatePublisherByName(name: string) {
   return { id, name };
 }
 
-async function findOrCreateSeriesByName(name: string) {
-  const existing = await cloudDb
+async function findOrCreateSeriesByName(
+  name: string,
+  db: CollectionConnection,
+) {
+  const existing = await db
     .select()
     .from(series)
     .where(eq(series.name, name))
@@ -284,7 +226,7 @@ async function findOrCreateSeriesByName(name: string) {
   const id = crypto.randomUUID();
   const now = new Date();
 
-  await cloudDb.insert(series).values({
+  await db.insert(series).values({
     id,
     name,
     createdAt: now,
@@ -328,11 +270,11 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const collectionIds = await resolveCollectionIdsOrPersonal({
+  const collectionId = await resolveBookTarget(
+    cloudDb,
     userId,
-    collectionIds: body.collectionIds,
-  });
-  await assertCanAddToCollections({ userId, collectionIds });
+    body.collectionIds,
+  );
 
   const description = normalizeOptionalString(body.description) ?? null;
   const published = normalizeOptionalString(body.published) ?? null;
@@ -355,77 +297,72 @@ export default defineEventHandler(async (event) => {
   const now = new Date();
   const bookId = crypto.randomUUID();
 
-  const publisherId = publisherName
-    ? (await findOrCreatePublisherByName(publisherName)).id
-    : null;
-  const seriesId = seriesName
-    ? (await findOrCreateSeriesByName(seriesName)).id
-    : null;
+  return cloudDb.transaction(async (tx) => {
+    await lockCollectionChanges(tx);
+    await assertCollectionEditor(tx, userId, collectionId);
+    const publisherId = publisherName
+      ? (await findOrCreatePublisherByName(publisherName, tx)).id
+      : null;
+    const seriesId = seriesName
+      ? (await findOrCreateSeriesByName(seriesName, tx)).id
+      : null;
 
-  await cloudDb.insert(books).values({
-    id: bookId,
-    title,
-    sortTitle: makeTitleSortKey(title),
-    description,
-    published,
-    publishedAt,
-    language,
-    pages,
-    publisherId,
-    seriesId,
-    seriesIndex,
-    createdByUserId: userId,
-    createdAt: now,
-    updatedAt: now,
-  });
+    await tx.insert(books).values({
+      id: bookId,
+      collectionId,
+      addedByUserId: userId,
+      addedAt: now,
+      title,
+      sortTitle: makeTitleSortKey(title),
+      description,
+      published,
+      publishedAt,
+      language,
+      pages,
+      publisherId,
+      seriesId,
+      seriesIndex,
+      createdByUserId: userId,
+      createdAt: now,
+      updatedAt: now,
+    });
 
-  let pos = 1;
-  for (const name of authorNames) {
-    const author = await findOrCreateAuthorByName(name);
-    await cloudDb
-      .insert(bookAuthors)
-      .values({ bookId, authorId: author.id, position: pos })
-      .onConflictDoNothing();
-    pos += 1;
-  }
+    let pos = 1;
+    for (const name of authorNames) {
+      const author = await findOrCreateAuthorByName(name, tx);
+      await tx
+        .insert(bookAuthors)
+        .values({ bookId, authorId: author.id, position: pos })
+        .onConflictDoNothing();
+      pos += 1;
+    }
 
-  for (const name of tagNames) {
-    const tag = await findOrCreateTagByName(name);
-    await cloudDb
-      .insert(bookTags)
-      .values({ bookId, tagId: tag.id })
-      .onConflictDoNothing();
-  }
+    for (const name of tagNames) {
+      const tag = await findOrCreateTagByName(name, tx);
+      await tx
+        .insert(bookTags)
+        .values({ bookId, tagId: tag.id })
+        .onConflictDoNothing();
+    }
 
-  for (const ident of identifiers) {
-    await cloudDb
-      .insert(bookIdentifiers)
-      .values({ bookId, type: ident.type, value: ident.value })
-      .onConflictDoUpdate({
-        target: [bookIdentifiers.bookId, bookIdentifiers.type],
-        set: { value: ident.value },
-      });
-  }
+    for (const ident of identifiers) {
+      await tx
+        .insert(bookIdentifiers)
+        .values({ bookId, type: ident.type, value: ident.value })
+        .onConflictDoUpdate({
+          target: [bookIdentifiers.bookId, bookIdentifiers.type],
+          set: { value: ident.value },
+        });
+    }
 
-  for (const collectionId of collectionIds) {
-    await cloudDb
-      .insert(collectionBooks)
-      .values({
-        collectionId,
-        bookId,
-        addedByUserId: userId,
-        addedAt: now,
-      })
-      .onConflictDoNothing();
-  }
-
-  return {
-    success: true,
-    data: {
-      book: {
-        id: bookId,
-        title,
+    return {
+      success: true,
+      data: {
+        book: {
+          id: bookId,
+          title,
+        },
       },
-    },
-  };
+    };
+  });
 });

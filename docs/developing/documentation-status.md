@@ -80,9 +80,9 @@ The full unit/component suite, typecheck, production build, documentation links,
 
 ## Product questions and evidence limits
 
-Visibility through another accessible collection survives removal from the original shared collection. The code implements that rule; earlier documentation treated the long-term re-sharing policy as unresolved. This release describes the current rule without claiming the product-policy question has been settled.
+The exclusive collection model supersedes the earlier re-sharing policy. Each entry belongs to one collection. Moving it revokes access for readers who remain only in the source. Independent entries can exist in other collections.
 
-The Add book UI includes Personal. APIs also accept explicit target lists and fall back to Personal when no list is supplied. The docs do not generalize the UI invariant to every API caller.
+The Add book UI chooses one writable collection. APIs accept exactly one target and fall back to the authorized shared default when omitted. Users can have zero memberships. Legacy Personal collections require the administrative migration.
 
 The manual-entry dialog describes saving, while the blank editor's action is labeled Create. The user guide names the actual button. Progress sync can also restore from the latest logged percentage after EPUB location generation; the reading guides distinguish this from merely storing a position.
 
@@ -111,6 +111,18 @@ The minimal PDF reader uses PDF.js 6.5.438 and the existing authenticated downlo
 - Desktop and phone-width screenshots were captured, inspected, and saved in [the image directory](../images/README.md). The demo blocks outbound connections; unrelated fallback icons remain unavailable. The initial dev browser request exceeded its 30-second first-render timeout, so the completed browser walkthrough used the production build.
 
 This is synthetic API and Chrome evidence. Calibre/Dropbox ingestion paths were inspected but not rerun; they already accept PDFs. Physical touch, other browser engines, screen readers, large or scanned/complex PDFs, and live deployment remain unverified. Canvas rendering does not expose document text, selection, search, annotations, forms, or password entry. PDF progress uses the displayed page, and one saved position is shared between formats for each user/book.
+
+## Exclusive collections, 2026-11-05
+
+The accepted [collection contract](../adr/0004-exclusive-collections-and-shared-default.md) is implemented with one collection per book, a shared default, and an administrative upgrade for legacy installations.
+
+- All 280 unit tests passed. Focused regressions cover ownership, one-time enrollment, exclusive moves, verified independent file copies, interrupted migration recovery, Calibre mapping, private reading data, and adjacent TBR copies. Two defects were reproduced before their fixes: legacy orphan insertion remained possible, and different referenced files with the same basename collided during migration.
+- Typecheck and production build passed. Lint has no errors and retains the existing `BookDescriptionEditor.vue` optional-prop warning. Committed migration generation reports no schema drift.
+- The collection production API suite passed against a disposable database. It covers permissions, moves and access revocation, future-only default changes, zero memberships, duplicate health findings, owner/account deletion, synthetic Calibre import/rescan, and administrative migration preview/apply.
+- Headless Chrome passed move confirmation, default administration, zero-membership collection creation, required migration choices and backup confirmation, and phone-width layout. Screenshots were inspected; no unhandled browser exceptions occurred.
+- [Reusable checks and manual steps](../../review/README.md#exclusive-collection-checks) separate API, browser, and operator verification. The [migration guide](../hosting/collection-migration.md) describes backup and resume requirements.
+
+This is local synthetic API and Chrome evidence. No real library was migrated. Live providers, real Dropbox/network storage, Docker, assistive technology, other browser engines, and deployment restore reliability were not exercised.
 
 ## Next documentation passes
 

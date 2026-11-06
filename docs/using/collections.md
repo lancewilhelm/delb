@@ -1,49 +1,48 @@
 # Organize and share collections
 
-Sign in before managing collections. To share with another reader, that reader needs an existing Delb account.
+Each book entry belongs to one collection. Sharing a collection exposes its books while each reader keeps private reading status, ratings, positions, notes, and history.
+
+## Use the shared default
+
+New users join the default collection as editors. It initially has the name **Default**, which can change. Open the collection picker to choose a collection or **All**, which combines only collections you can access.
+
+Administrators choose the default in **Settings → Admin → Collections**. Switching affects future registrations and uploads. Existing books and memberships stay where they are.
 
 ## Create a collection
 
-1. Open the collection picker in the header.
+1. Open the collection picker.
 2. Select **Create collection**.
 3. Enter a name and create it.
 
-You become that collection's owner. Your Personal collection remains your default Add book target.
+You become its owner. Every collection retains exactly one owner. You can belong to zero collections; create one or ask an owner for access when your library is empty.
 
-## Add or remove a book
+## Move books
 
-1. Open a book's detail page.
-2. Open its collection controls.
-3. Add the book to collections you can edit, or remove it from an editable non-Personal collection.
-4. Save the membership changes.
+1. Open a book's collection control, or select books in **Books** and choose **Actions → Move to collection**.
+2. Choose one destination you can edit.
+3. Acknowledge the access change.
+4. Select **Move books**.
 
-The same book can appear in several collections. Removing it from one collection does not delete the catalog record or ebook files. Personal membership cannot be removed through these controls.
+Owner or editor access is required in both source and destination. The move preserves book identity, files, and reading history. Readers who only belong to the source lose access. A specific collection supports all-with-exclusions selection. In **All**, select individual books.
 
-For bulk collection changes, select books while browsing a specific collection you own or edit. Open the collection action and choose the target memberships. The bulk endpoint requires an editable source collection and editable targets. The **All** view does not provide a scope-wide bulk collection operation.
+Independent entries for the same title can exist in different collections. Their book metadata, files, and subsequent reading state are independent.
 
 ## Share a collection
 
-1. Open the collection picker.
-2. Select **Collection settings** beside a non-Personal collection you own or edit.
-3. Enter the reader's email address in **Add or update a member by email**.
-4. Choose **Viewer** or **Editor** and select **Save access**.
+1. Open **Collection settings** beside a collection you own or edit.
+2. Enter an existing reader's email address.
+3. Choose **Viewer** or **Editor** and select **Save access**.
 
-Member access saves immediately. Viewers can read the collection. Editors can also rename it, manage book membership, and manage other members. An editor can share the collection further. Choose Viewer when that additional control is unnecessary.
+Access saves immediately. Viewers read books and manage their own reading data. Owners and editors also manage books, rename the collection, and manage non-owner members. Book creator is provenance rather than an extra permission.
 
-![Collection settings with member access controls](../images/collection-settings.png)
+## Leave, transfer, or delete
 
-## Leave, transfer, or delete a collection
+Open **Collection settings**, choose the action, and complete its confirmation.
 
-Open **Collection settings** for the collection, then choose the appropriate action and complete its confirmation.
+- **Leave collection** removes a non-owner's membership, including default membership. Sign-in does not restore it.
+- **Transfer ownership** makes the recipient the owner and the previous owner an editor.
+- **Delete collection** requires an empty collection. Move or explicitly delete its books first. Replace the current default before deleting it.
 
-- As a viewer or editor, choose **Leave collection** to remove your membership. Another owner or editor must add you again to restore it.
-- As owner, choose **Transfer ownership** and enter the new owner's email. The recipient becomes the sole owner and you become an editor.
-- As owner, choose **Delete collection** and type the collection's name to confirm. Delb removes the collection and its links; the books remain.
+Accounts owning collections cannot be deleted until those collections are transferred or deleted. Administrators can manage memberships and recover ownership without joining. Ordinary browsing remains membership-based.
 
-Personal collections cannot be shared, transferred, left, or deleted.
-
-If you keep a shared book in another collection you can access, removing access to the original shared collection does not revoke that other link. Delb evaluates visibility through any accessible collection. See the [current access rules](../developing/reference/collections.md#visibility-after-re-sharing).
-
-Book deletion is a separate action with creator or system administrator authorization. Deleting a book affects every collection containing that book.
-
-Continue with [reading and progress](reading.md). See the [permissions reference](../developing/reference/collections.md) and [collection request flows](../developing/core-workflows.md#collections-and-sharing).
+See the [permissions reference](../developing/reference/collections.md), [migration guide](../hosting/collection-migration.md), and [reading guide](reading.md).

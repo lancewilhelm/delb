@@ -14,7 +14,7 @@ import {
 import { ingestDropboxFile } from './ingest';
 import { finishCommittedDropboxClaim } from './claim';
 import { moveToFailed } from './failed';
-import { resolveDropboxTarget, type DropboxTarget } from './target';
+import { resolveDropboxTarget } from './target';
 import { getGlobalSettingsRow } from './settings';
 
 type SeenFile = {
@@ -47,7 +47,6 @@ export function startDropboxIngestWatcher(): DropboxWatcherState {
 
   const seen = new Map<string, SeenFile>();
   let scanning = false;
-  let targetPromise: Promise<DropboxTarget> | null = null;
   let stopRequested = false;
   let timer: NodeJS.Timeout | null = null;
 
@@ -65,18 +64,12 @@ export function startDropboxIngestWatcher(): DropboxWatcherState {
     cachedSettings = row?.settings ?? {};
     lastSettingsRefreshAt = now;
     // Re-resolve target periodically so admin settings changes take effect.
-    targetPromise = null;
     return cachedSettings;
   }
 
   async function getCfg() {
     const settings = await refreshSettingsIfNeeded();
     return getDropboxIngestConfigFromSettings(settings);
-  }
-
-  async function getTarget(): Promise<DropboxTarget> {
-    targetPromise ??= resolveDropboxTarget();
-    return await targetPromise;
   }
 
   function noteSeen(
@@ -158,7 +151,7 @@ export function startDropboxIngestWatcher(): DropboxWatcherState {
 
           if (!ready.length) return;
 
-          const target = await getTarget();
+          const target = await resolveDropboxTarget();
 
           // Process sequentially to keep things simple and avoid locking issues.
           for (const r of ready) {

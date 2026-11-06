@@ -168,32 +168,29 @@ const canEdit = computed(() => {
 const canManageMembers = computed(() => {
   const c = props.collection;
   if (!c) return false;
-  return c.role === 'owner' || c.role === 'editor';
+  return collectionsStore.canManageMembers(c);
 });
 
 // Per requirements:
 // - only owner can delete
-// - never delete personal
+// - the default requires a replacement before deletion
 const canDelete = computed(() => {
   const c = props.collection;
   if (!c) return false;
-  if (c.isPersonal) return false;
-  return c.role === 'owner';
+  return collectionsStore.canDeleteCollection(c);
 });
 
 const canTransferOwnership = computed(() => {
   const c = props.collection;
   if (!c) return false;
-  if (c.isPersonal) return false;
-  return c.role === 'owner';
+  return collectionsStore.canTransferOwnership(c);
 });
 
 const canLeave = computed(() => {
   const c = props.collection;
   if (!c) return false;
-  if (c.isPersonal) return false;
   // Only non-owners can leave (owners must delete or transfer ownership)
-  return c.role !== 'owner';
+  return c.role === 'editor' || c.role === 'viewer';
 });
 
 watch(
@@ -229,11 +226,10 @@ watch(
     deleting.value = false;
     deleteErrorMessage.value = null;
 
-    // Load members for non-personal collections.
+    // Load members for collections the actor can administer.
     // (Server permissions decide what you can see/do; UI gates for clarity.)
     const c = props.collection;
     if (!c) return;
-    if (c.isPersonal) return;
 
     if (!canManageMembers.value) return;
 
@@ -305,11 +301,6 @@ async function addOrUpdateMember() {
   const c = props.collection;
   if (!c) return;
 
-  if (c.isPersonal) {
-    membersErrorMessage.value = 'Personal collections are not shareable.';
-    return;
-  }
-
   if (!canManageMembers.value) {
     membersErrorMessage.value = 'You do not have permission to manage members.';
     return;
@@ -363,11 +354,6 @@ async function removeMember(userId: string) {
 
   const c = props.collection;
   if (!c) return;
-
-  if (c.isPersonal) {
-    membersErrorMessage.value = 'Personal collections are not shareable.';
-    return;
-  }
 
   if (!canManageMembers.value) {
     membersErrorMessage.value = 'You do not have permission to manage members.';
@@ -432,11 +418,6 @@ async function deleteThisCollection() {
   if (!c) return;
 
   deleteErrorMessage.value = null;
-
-  if (c.isPersonal) {
-    deleteErrorMessage.value = 'Personal collections cannot be deleted.';
-    return;
-  }
 
   if (!canDelete.value) {
     deleteErrorMessage.value =
@@ -604,8 +585,8 @@ function close() {
         <template v-if="confirmation === 'delete'">
           <p class="text-sm">
             Deleting <strong>{{ collection?.name }}</strong> removes the
-            collection for all members. Books are not deleted; only the
-            collection and its links are removed.
+            collection for all members. Move or delete its books first. A
+            default collection needs a replacement before deletion.
           </p>
           <div class="space-y-2">
             <label for="collection-delete-name" class="block text-sm"
@@ -634,8 +615,8 @@ function close() {
           <p class="text-sm">
             The new owner will become the sole owner of
             <strong>{{ collection?.name }}</strong
-            >, and you will become an editor. Only the new owner can transfer
-            ownership back to you.
+            >. The previous owner becomes an editor. Administrators can also
+            reassign ownership.
           </p>
           <div class="space-y-2">
             <label for="collection-transfer-email" class="block text-sm"
@@ -783,14 +764,14 @@ function close() {
               <Icon name="lucide:pencil" />
             </button>
           </div>
-          <p v-if="collection?.isPersonal" class="text-sm opacity-70">
-            Your personal collection receives uploads by default. It cannot be
-            shared or deleted.
+          <p v-if="collection?.isDefault" class="text-sm opacity-70">
+            New users join this default collection. Choose a replacement in
+            Admin settings before deleting it.
           </p>
         </section>
 
         <section
-          v-if="collection && !collection.isPersonal"
+          v-if="collection"
           class="space-y-2 border-t border-(--contrast-border-color) pt-3"
           aria-labelledby="collection-sharing-title"
         >

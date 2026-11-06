@@ -49,10 +49,21 @@ async function signup(label) {
 }
 const a = await signup('a');
 const b = await signup('b');
+const privateCollections = new Map();
+for (const account of [a, b])
+  privateCollections.set(
+    account.id,
+    (
+      await request('/api/collections', account.cookie, 'POST', {
+        name: 'Private dashboard fixture',
+      })
+    ).data.data.collection.id,
+  );
 async function createBook(user, title) {
   const result = await request('/api/books', user.cookie, 'POST', {
     title,
     authors: ['Dashboard Author'],
+    collectionIds: [privateCollections.get(user.id)],
   });
   assert.equal(result.status, 200, JSON.stringify(result.data));
   return result.data.data.book.id;
@@ -74,8 +85,8 @@ try {
   });
   for (const id of [reading, newer])
     await db.execute({
-      sql: 'INSERT INTO collection_books(collection_id,book_id,added_by_user_id,added_at) VALUES (?,?,?,0)',
-      args: [shared, id, a.id],
+      sql: 'UPDATE books SET collection_id=?,added_by_user_id=? WHERE id=?',
+      args: [shared, a.id, id],
     });
   for (const [id, change] of [
     [reading, { status: 'reading' }],
@@ -129,7 +140,7 @@ try {
   assert.equal(
     first.data.data.counts.total,
     4,
-    'books in two collections count once',
+    'books across exclusive collections are counted once',
   );
   assert.deepEqual(
     first.data.data.shelf.books.map((book) => [book.id, book.progress]),

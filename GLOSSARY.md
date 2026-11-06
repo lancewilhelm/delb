@@ -2,7 +2,7 @@
 
 Delb organizes books and their metadata in a library of shared and private collections.
 
-Collection terminology describes the [accepted collection model](docs/adr/0004-exclusive-collections-and-shared-default.md), which is not yet implemented. The [collections reference](docs/developing/reference/collections.md) describes the current implementation.
+Collection terminology follows the [accepted collection model](docs/adr/0004-exclusive-collections-and-shared-default.md). The [collections reference](docs/developing/reference/collections.md) describes the current implementation.
 
 ## Language
 

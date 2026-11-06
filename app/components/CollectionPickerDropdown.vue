@@ -256,10 +256,10 @@ onBeforeUnmount(() => {
             />
             <span class="truncate">{{ c.name }}</span>
             <span
-              v-if="c.isPersonal"
+              v-if="c.isDefault"
               class="ml-2 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-(--contrast-border-color) opacity-70 shrink-0"
             >
-              Personal
+              Default
             </span>
           </div>
 
@@ -336,7 +336,7 @@ onBeforeUnmount(() => {
             ref="newCollectionNameInput"
             v-model="newCollectionName"
             type="text"
-            placeholder="e.g. Personal, Family, Favorites…"
+            placeholder="e.g. Default, Family, Favorites…"
             class="w-full px-3 py-2 border rounded-md bg-(--bg-color)"
             :disabled="creating"
             @keyup.enter="createCollection"

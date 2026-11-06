@@ -1,3 +1,4 @@
+import { assertBookEditor, lockCollectionChanges } from '../collections/model';
 import path from 'node:path';
 import { mkdir, stat } from 'node:fs/promises';
 
@@ -13,7 +14,6 @@ import {
   bookRatings,
   bookTags,
   books,
-  collectionBooks,
   userBookStatus,
   storageOperations,
 } from '~/utils/db/schema';
@@ -57,16 +57,6 @@ function resolveUnderLibrary(
   return abs;
 }
 
-function canDeleteBook(opts: {
-  actor: DeleteBookActor;
-  bookCreatedByUserId: string | null;
-}): boolean {
-  const role = (opts.actor.role ?? '').toString();
-  if (role === 'admin' || role === 'owner') return true;
-  if (!opts.bookCreatedByUserId) return false;
-  return opts.bookCreatedByUserId === opts.actor.id;
-}
-
 async function deleteBookUnlocked(opts: {
   bookId: string;
   mode: DeleteMode;
@@ -82,9 +72,7 @@ async function deleteBookUnlocked(opts: {
     throw createError({ statusCode: 404, statusMessage: 'Book not found' });
   }
 
-  if (!canDeleteBook({ actor, bookCreatedByUserId: book.createdByUserId })) {
-    throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
-  }
+  await assertBookEditor(cloudDb, actor.id, bookId);
 
   const fileRows = await cloudDb
     .select()
@@ -130,6 +118,8 @@ async function deleteBookUnlocked(opts: {
   }
   const commit = async (operationId?: string) => {
     await cloudDb.transaction(async (tx) => {
+      await lockCollectionChanges(tx);
+      await assertBookEditor(tx, actor.id, bookId);
       if (operationId)
         await tx.insert(storageOperations).values({
           id: operationId,
@@ -137,9 +127,6 @@ async function deleteBookUnlocked(opts: {
           kind: 'delete',
           createdAt: new Date(),
         });
-      await tx
-        .delete(collectionBooks)
-        .where(eq(collectionBooks.bookId, bookId));
       await tx.delete(bookFiles).where(eq(bookFiles.bookId, bookId));
       await tx.delete(bookAuthors).where(eq(bookAuthors.bookId, bookId));
       await tx.delete(bookTags).where(eq(bookTags.bookId, bookId));

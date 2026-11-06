@@ -43,6 +43,11 @@ async function request(route, user, method = 'GET', body) {
 }
 const owner = await signup();
 const viewer = await signup();
+const initialCollections = await (
+  await request('/api/collections', viewer)
+).json();
+for (const collection of initialCollections.data.collections)
+  await request(`/api/collections/${collection.id}/leave`, viewer, 'POST');
 try {
   const bytes = pdfFixture();
   const form = new FormData();
@@ -98,8 +103,8 @@ try {
     args: [shared, viewer.id],
   });
   await db.execute({
-    sql: 'INSERT INTO collection_books(collection_id,book_id,added_by_user_id,added_at) VALUES (?,?,?,0)',
-    args: [shared, id, owner.id],
+    sql: 'UPDATE books SET collection_id=?,added_by_user_id=? WHERE id=?',
+    args: [shared, owner.id, id],
   });
   assert.equal((await request(download, viewer)).status, 200);
   const clientSessionId = randomUUID();

@@ -43,8 +43,16 @@ try {
     ).rows[0]?.value,
     'complete',
   );
+  await assert.rejects(
+    db.execute({
+      sql: 'DELETE FROM users WHERE id=?',
+      args: [owners.rows[0].id],
+    }),
+    /owned collections/,
+  );
+  // Simulate loss of the system role without deleting the required collection owner.
   await db.execute({
-    sql: 'DELETE FROM users WHERE id = ?',
+    sql: "UPDATE users SET role='user' WHERE id=?",
     args: [owners.rows[0].id],
   });
   const later = await fetchAuth(

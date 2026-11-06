@@ -57,11 +57,10 @@ await db.execute({
 });
 const collection = async (user) =>
   (
-    await db.execute({
-      sql: 'SELECT id FROM collections WHERE owner_user_id = ? AND is_personal = 1',
-      args: [user.id],
+    await request('/api/collections', user.cookie, 'POST', {
+      name: 'Private tag fixture',
     })
-  ).rows[0].id;
+  ).data.data.collection.id;
 const ownerCollection = await collection(owner);
 const memberCollection = await collection(member);
 await db.execute({
@@ -85,7 +84,7 @@ const published = [20, null, 10, 20, 30, null, 10];
 for (let i = 0; i < keys.length; i++) {
   const id = `tag-book-${i + 1}`;
   await db.execute({
-    sql: 'INSERT INTO books(id,title,sort_title,pages,published_at,created_at,updated_at,created_by_user_id) VALUES(?,?,?,?,?,?,?,?)',
+    sql: 'INSERT INTO books(id,title,sort_title,pages,published_at,created_at,updated_at,created_by_user_id,collection_id) VALUES(?,?,?,?,?,?,?,?,?)',
     args: [
       id,
       `Fixture ${i + 1} ${keys[i]}`,
@@ -95,32 +94,14 @@ for (let i = 0; i < keys.length; i++) {
       1700000000 + Math.floor(i / 2) * 100,
       1700000000,
       owner.id,
+      ownerCollection,
     ],
-  });
-  await db.execute({
-    sql: 'INSERT INTO collection_books(collection_id,book_id,added_at) VALUES(?,?,?)',
-    args: [ownerCollection, id, 1700000000],
   });
   await link(id, 'tag-sort');
 }
 await db.execute({
-  sql: "INSERT INTO collections(id,name,owner_user_id,is_personal,created_at,updated_at) VALUES('tag-extra-collection','Duplicate membership',?,0,?,?)",
-  args: [owner.id, 1700000000, 1700000000],
-});
-await db.execute({
-  sql: "INSERT INTO collection_members(collection_id,user_id,role,created_at) VALUES('tag-extra-collection',?,'owner',?)",
-  args: [owner.id, 1700000000],
-});
-await db.execute(
-  "INSERT INTO collection_books(collection_id,book_id,added_at) VALUES('tag-extra-collection','tag-book-1',1700000000)",
-);
-await db.execute({
-  sql: "INSERT INTO books(id,title,sort_title,created_at,updated_at,created_by_user_id) VALUES('tag-hidden-book','Hidden fixture','hidden',1700000000,1700000000,?)",
-  args: [member.id],
-});
-await db.execute({
-  sql: "INSERT INTO collection_books(collection_id,book_id,added_at) VALUES(?,'tag-hidden-book',1700000000)",
-  args: [memberCollection],
+  sql: "INSERT INTO books(id,title,sort_title,created_at,updated_at,created_by_user_id,collection_id) VALUES('tag-hidden-book','Hidden fixture','hidden',1700000000,1700000000,?,?)",
+  args: [member.id, memberCollection],
 });
 await db.execute(
   "INSERT INTO authors(id,name,created_at,updated_at) VALUES('sort-author','Sorting author',1700000000,1700000000),('hidden-author','Hidden author',1700000000,1700000000)",

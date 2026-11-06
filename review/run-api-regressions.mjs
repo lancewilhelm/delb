@@ -30,14 +30,23 @@ await new Promise((resolve, reject) => {
 });
 await new Promise((resolve) => probe.close(resolve));
 
-for (const suite of [
+const suites = [
   'review/audits/2026-10-27/bootstrap-regression.mjs',
   'review/audits/2026-10-27/server-regression.mjs',
   'review/tag-features-api.mjs',
   'review/dashboard-api.mjs',
   'review/tbr-api.mjs',
   'review/pdf-reader-api.mjs',
-]) {
+  'review/collections-api.mjs',
+];
+const requested = process.argv.slice(2);
+if (
+  requested.some(
+    (suite) => ![...suites, 'review/collections-browser.mjs'].includes(suite),
+  )
+)
+  throw Error('Choose a known API regression suite');
+for (const suite of requested.length ? requested : suites) {
   const directory = await mkdtemp(path.join(tmpdir(), 'delb-api-regression-'));
   let server;
   let serverOutput = '';
