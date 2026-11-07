@@ -125,6 +125,12 @@ The accepted [collection contract](../adr/0004-exclusive-collections-and-shared-
 
 This is local synthetic API and Chrome evidence. No real library was migrated. Live providers, network storage, Docker, assistive technology, other browser engines, and deployment restore reliability were not exercised.
 
+## Collection settings, 2026-11-06
+
+Collection deletion now removes contained books, managed files, covers, and reading data after two warnings and collection-name confirmation. The picker settings expose the administrative shared-default control. Members start browsing in that default on a fresh app load, and Add book uses the existing writable-target selection.
+
+All 290 automated tests, typecheck, production build, documentation links, and the full production API suite passed. Lint retains the existing optional-prop warning. Focused SQLite and filesystem checks cover atomic rollback, deletion recovery, shared-file preservation, and a concurrent book move. Headless Chrome checks cover picker default changes, reload and Add book selection, both cancellation points, wrong-name rejection, populated deletion, viewer restrictions, focus, and phone-width layout. Final screenshots were inspected. These checks use disposable local data and managed files.
+
 ## Next documentation passes
 
 Expand dedicated guides for appearance/mobile profiles, metadata editing/provider administration, Calibre migration, Dropbox claim/failure handling, health-check remediation, and deployment-specific restore drills. Keep those passes tied to code and named verification environments.

@@ -6,7 +6,7 @@ Each book entry belongs to one collection. Sharing a collection exposes its book
 
 New users join the default collection as editors. It initially has the name **Default**, which can change. Open the collection picker to choose a collection or **All**, which combines only collections you can access.
 
-Administrators choose the default in **Settings → Admin → Collections**. Switching affects future registrations and uploads. Existing books and memberships stay where they are.
+Administrators can choose **Make default** in a collection's settings from the collection picker, or in **Settings → Admin → Collections**. Delb selects the shared default when members open the app and uses it as the fallback for new books. Switching affects future registrations without moving existing books or changing memberships. Browsing another collection keeps that selection until you reopen the app.
 
 ## Create a collection
 
@@ -41,7 +41,7 @@ Open **Collection settings**, choose the action, and complete its confirmation.
 
 - **Leave collection** removes a non-owner's membership, including default membership. Sign-in does not restore it.
 - **Transfer ownership** makes the recipient the owner and the previous owner an editor.
-- **Delete collection** requires an empty collection. Move or explicitly delete its books first. Replace the current default before deleting it.
+- **Delete collection** permanently removes the collection, every book in it, their managed files and covers, and all members' reading data. Review the first warning, select **Continue to final warning**, then type the collection name and select **Delete collection and books**. You can cancel at either warning. Replace the current default before deleting it. To keep books, move them to another collection first.
 
 Accounts owning collections cannot be deleted until those collections are transferred or deleted. Administrators can manage memberships and recover ownership without joining. Ordinary browsing remains membership-based.
 

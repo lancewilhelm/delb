@@ -106,6 +106,7 @@ function openEditModal(collectionId: string) {
   const c = collectionsStore.collections.find((x) => x.id === collectionId);
   if (!c) return;
 
+  closeDropdown();
   editingCollectionId.value = collectionId;
   editModalOpen.value = true;
 }
@@ -171,6 +172,7 @@ onBeforeUnmount(() => {
     <button
       ref="anchorRef"
       v-tooltip="'Switch collection'"
+      aria-label="Switch collection"
       class="sm:pl-1 flex items-center gap-2 px-1"
       :aria-expanded="open"
       aria-haspopup="menu"

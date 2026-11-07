@@ -67,7 +67,7 @@ Creating a [collection](../../server/api/collections/index.post.ts) establishes 
 
 The [single-book handler](../../server/api/books/[id]/collections/index.put.ts), [explicit selection move](../../server/api/books/move.post.ts), and [source-scoped bulk handler](../../server/api/collections/[id]/books/bulk.post.ts) require edit rights in both source and destination. They validate expected source mappings and commit the move atomically. Readers remaining only in the source lose access.
 
-Ownership transfer establishes one owner and demotes the old owner to editor. Leave removes a non-owner membership. Collection deletion requires an empty non-default collection. Account deletion is blocked while the account owns collections. Book deletion uses [collection owner/editor authorization and storage coordination](../../server/utils/books/delete-book.ts).
+Ownership transfer establishes one owner and demotes the old owner to editor. Leave removes a non-owner membership. Collection deletion requires two warnings and the current collection name, and removes all contained books, reading data, and managed files. The default requires a replacement first. Book and collection rows are deleted atomically; the storage journal coordinates file cleanup and recovery. Account deletion is blocked while the account owns collections. Book deletion uses [collection owner/editor authorization and storage coordination](../../server/utils/books/delete-book.ts).
 
 The [collection settings dialog](../../app/components/Collections/EditCollectionModal.vue) handles member loading, immediate access saves, errors, focus, and separate confirmation states for consequential actions. Read the [permissions reference](reference/collections.md) for the role matrix.
 

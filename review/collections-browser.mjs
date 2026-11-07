@@ -247,6 +247,193 @@ try {
   );
   pass('administrative default control updates the default designation');
 
+  async function openCollectionSettings(name) {
+    await click('Switch collection');
+    await until(
+      `Boolean([...document.querySelectorAll('[role="menuitem"]')].find(row=>row.textContent.includes(${JSON.stringify(name)})))`,
+    );
+    await evaluate(
+      `[...document.querySelectorAll('[role="menuitem"]')].find(row=>row.textContent.includes(${JSON.stringify(name)})).querySelector('[aria-label="Collection settings"]').click()`,
+    );
+    await until(
+      `document.querySelector('[role="dialog"]')?.textContent.includes(${JSON.stringify(name)})`,
+    );
+  }
+  await navigate('/books');
+  await until(
+    `document.querySelector('[aria-label="Switch collection"]')?.textContent.includes('UI destination')`,
+  );
+  await openCollectionSettings('UI source');
+  await press('Make default');
+  await until(
+    `document.querySelector('[role="dialog"] [role="status"]')?.textContent.includes('UI source is now the default')`,
+  );
+  assert.equal(
+    (await api('/api/collections', owner)).collections.find(
+      (collection) => collection.isDefault,
+    ).id,
+    source,
+  );
+  assert.ok(
+    await evaluate(
+      `document.querySelector('[aria-label="Switch collection"]').textContent.includes('UI source')`,
+    ),
+  );
+  await press('Done');
+  await navigate('/books');
+  await until(
+    `document.querySelector('[aria-label="Switch collection"]')?.textContent.includes('UI source')`,
+  );
+  await click('Add book');
+  await until(
+    `Boolean([...document.querySelectorAll('label select')].find(select=>select.parentElement.textContent.trim().startsWith('Collection')))`,
+  );
+  assert.equal(
+    await evaluate(
+      `[...document.querySelectorAll('label select')].find(select=>select.parentElement.textContent.trim().startsWith('Collection')).value`,
+    ),
+    source,
+  );
+  await screenshot('picker-default-upload');
+  await call('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key: 'Escape',
+    code: 'Escape',
+  });
+  await call('Input.dispatchKeyEvent', {
+    type: 'keyUp',
+    key: 'Escape',
+    code: 'Escape',
+  });
+  await until(
+    `![...document.querySelectorAll('label select')].some(select=>select.parentElement.textContent.trim().startsWith('Collection'))`,
+  );
+  await navigate('/books');
+  await openCollectionSettings('UI destination');
+  await press('Make default');
+  await until(
+    `document.querySelector('[role="dialog"] [role="status"]')?.textContent.includes('UI destination is now the default')`,
+  );
+  await press('Done');
+  pass(
+    'picker settings set the shared default for immediate browsing, app reloads and new books',
+  );
+
+  const doomed = (
+    await api('/api/collections', owner, 'POST', {
+      name: 'Delete populated fixture',
+    })
+  ).collection.id;
+  const doomedBook = (
+    await api('/api/books', owner, 'POST', {
+      title: 'Delete fixture book',
+      authors: ['Fixture'],
+      collectionIds: [doomed],
+    })
+  ).book.id;
+  await call('Emulation.setDeviceMetricsOverride', {
+    width: 375,
+    height: 812,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await openCollectionSettings('Delete populated fixture');
+  await press('Collection actions');
+  await press('Delete collection');
+  await until(
+    `document.querySelector('[role="dialog"]')?.textContent.includes('Continue to final warning')`,
+  );
+  assert.equal(
+    await evaluate(
+      `Boolean(document.querySelector('#collection-delete-name'))`,
+    ),
+    false,
+  );
+  assert.ok(
+    await evaluate(`document.activeElement.textContent.trim()==='Cancel'`),
+  );
+  await screenshot('delete-first-warning-mobile');
+  await press('Cancel');
+  assert.equal(
+    (await api(`/api/books/${doomedBook}`, owner)).book.id,
+    doomedBook,
+  );
+  await press('Delete collection');
+  await press('Continue to final warning');
+  await until(`Boolean(document.querySelector('#collection-delete-name'))`);
+  assert.ok(
+    await evaluate(`document.activeElement.id==='collection-delete-name'`),
+  );
+  assert.ok(
+    await evaluate(
+      `[...document.querySelectorAll('button')].find(button=>button.textContent.trim()==='Delete collection and books').disabled`,
+    ),
+  );
+  await evaluate(
+    `(()=>{const input=document.querySelector('#collection-delete-name');input.value='Wrong name';input.dispatchEvent(new Event('input',{bubbles:true}));})()`,
+  );
+  assert.ok(
+    await evaluate(
+      `[...document.querySelectorAll('button')].find(button=>button.textContent.trim()==='Delete collection and books').disabled`,
+    ),
+  );
+  await screenshot('delete-final-warning-mobile');
+  assert.ok(
+    await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),
+  );
+  await press('Cancel');
+  assert.equal(
+    (await api(`/api/books/${doomedBook}`, owner)).book.id,
+    doomedBook,
+  );
+  await press('Delete collection');
+  await press('Continue to final warning');
+  await evaluate(
+    `(()=>{const input=document.querySelector('#collection-delete-name');input.value='Delete populated fixture';input.dispatchEvent(new Event('input',{bubbles:true}));})()`,
+  );
+  await press('Delete collection and books');
+  await until(`!document.querySelector('[role="dialog"]')`);
+  assert.equal(
+    (
+      await fetch(base + `/api/books/${doomedBook}`, {
+        headers: { Cookie: owner.cookie },
+      })
+    ).status,
+    404,
+  );
+  assert.ok(
+    !(await api('/api/collections', owner)).collections.some(
+      (collection) => collection.id === doomed,
+    ),
+  );
+  await call('Emulation.setDeviceMetricsOverride', {
+    width: 1280,
+    height: 900,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  pass(
+    'both deletion warnings can cancel, the final name is required, focus is managed and populated deletion works at phone width',
+  );
+
+  await authenticate(reader);
+  await openCollectionSettings('UI source');
+  assert.ok(
+    await evaluate(
+      `![...document.querySelectorAll('[role="dialog"] button')].some(button=>button.textContent.trim()==='Make default')`,
+    ),
+  );
+  await press('Collection actions');
+  assert.ok(
+    await evaluate(
+      `![...document.querySelectorAll('[role="dialog"] button')].some(button=>button.textContent.trim()==='Delete collection')`,
+    ),
+  );
+  await press('Done');
+  pass(
+    'viewer settings expose neither shared-default changes nor collection deletion',
+  );
+
   const zero = await signup('zero');
   await api(`/api/collections/${target}/leave`, zero, 'POST', {});
   await authenticate(zero);

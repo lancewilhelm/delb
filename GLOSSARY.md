@@ -13,7 +13,7 @@ The books a reader can access through their collection memberships. The All sele
 A named group of books with its own members and access roles. Each book entry belongs to exactly one collection, while separate entries for the same title can exist in different collections.
 
 **Default collection**:
-The shared collection selected for automatic enrollment of new readers and as the fallback destination when an added book has no explicit collection target. Its default designation does not grant access to users who are not members.
+The shared collection selected when members open the app, for automatic enrollment of new readers, and as the fallback destination when an added book has no explicit collection target. Its default designation does not grant access to users who are not members.
 
 **Book entry**:
 A book in Delb's catalog with its own metadata, files, and reader-specific reading data. Separate entries can represent the same title.

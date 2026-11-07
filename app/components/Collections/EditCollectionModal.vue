@@ -7,7 +7,7 @@ import type {
 
 defineOptions({ name: 'EditCollectionModal' });
 
-const { user } = useAuth();
+const { user, isAdmin } = useAuth();
 
 const props = defineProps<{
   open: boolean;
@@ -33,7 +33,9 @@ const name = ref('');
 const editingName = ref(false);
 const nameInput = ref<HTMLInputElement | null>(null);
 const actionsOpen = ref(false);
-const confirmation = ref<'delete' | 'leave' | 'transfer' | null>(null);
+const confirmation = ref<
+  'delete-warning' | 'delete' | 'leave' | 'transfer' | null
+>(null);
 const confirmationInput = ref<HTMLInputElement | HTMLButtonElement | null>(
   null,
 );
@@ -90,7 +92,8 @@ const busy = computed(
     deleting.value ||
     memberSaving.value ||
     leaving.value ||
-    transferring.value,
+    transferring.value ||
+    defaultSaving.value,
 );
 
 async function editName() {
@@ -115,12 +118,20 @@ async function cancelName() {
 
 async function showConfirmation(action: 'delete' | 'leave' | 'transfer') {
   if (busy.value) return;
-  confirmation.value = action;
+  confirmation.value = action === 'delete' ? 'delete-warning' : action;
   deleteConfirmText.value = '';
   transferEmail.value = '';
   deleteErrorMessage.value = null;
   transferErrorMessage.value = null;
   leaveErrorMessage.value = null;
+  await nextTick();
+  confirmationInput.value?.focus();
+}
+
+async function showFinalDeleteWarning() {
+  if (busy.value || confirmation.value !== 'delete-warning') return;
+  confirmation.value = 'delete';
+  deleteConfirmText.value = '';
   await nextTick();
   confirmationInput.value?.focus();
 }
@@ -155,6 +166,30 @@ const transferErrorMessage = ref<string | null>(null);
 const deleteConfirmText = ref('');
 const deleting = ref(false);
 const deleteErrorMessage = ref<string | null>(null);
+const defaultSaving = ref(false);
+const defaultErrorMessage = ref<string | null>(null);
+
+async function makeDefault() {
+  const c = props.collection;
+  if (busy.value || !c || !isAdmin.value || c.isDefault) return;
+  defaultSaving.value = true;
+  defaultErrorMessage.value = null;
+  statusMessage.value = '';
+  try {
+    await collectionsStore.setDefaultCollection(c.id);
+    statusMessage.value = `${c.name} is now the default collection.`;
+    emit('saved', { id: c.id, name: c.name });
+  } catch (err: unknown) {
+    const e = err as FetchErrorLike;
+    defaultErrorMessage.value =
+      e?.data?.message ||
+      e?.statusMessage ||
+      e?.message ||
+      'Failed to change the default collection.';
+  } finally {
+    defaultSaving.value = false;
+  }
+}
 
 const canEdit = computed(() => {
   const c = props.collection;
@@ -215,6 +250,7 @@ watch(
     editingName.value = false;
     actionsOpen.value = false;
     statusMessage.value = '';
+    defaultErrorMessage.value = null;
     leaving.value = false;
     leaveErrorMessage.value = null;
 
@@ -412,7 +448,7 @@ async function removeMember(userId: string) {
 }
 
 async function deleteThisCollection() {
-  if (busy.value) return;
+  if (busy.value || confirmation.value !== 'delete') return;
 
   const c = props.collection;
   if (!c) return;
@@ -434,7 +470,10 @@ async function deleteThisCollection() {
   deleting.value = true;
 
   try {
-    await collectionsStore.deleteCollection(c.id);
+    await collectionsStore.deleteCollection(
+      c.id,
+      deleteConfirmText.value.trim(),
+    );
 
     // Ensure UI refresh
     await collectionsStore.fetchCollections();
@@ -562,12 +601,14 @@ function close() {
         <div id="collection-settings-title" class="text-lg font-semibold">
           {{
             confirmation === 'delete'
-              ? 'Delete collection'
-              : confirmation === 'leave'
-                ? 'Leave collection'
-                : confirmation === 'transfer'
-                  ? 'Transfer ownership'
-                  : 'Collection settings'
+              ? 'Permanently delete collection'
+              : confirmation === 'delete-warning'
+                ? 'Delete collection'
+                : confirmation === 'leave'
+                  ? 'Leave collection'
+                  : confirmation === 'transfer'
+                    ? 'Transfer ownership'
+                    : 'Collection settings'
           }}
         </div>
         <button
@@ -582,15 +623,25 @@ function close() {
       </div>
 
       <template v-if="confirmation">
-        <template v-if="confirmation === 'delete'">
+        <template v-if="confirmation === 'delete-warning'">
           <p class="text-sm">
-            Deleting <strong>{{ collection?.name }}</strong> removes the
-            collection for all members. Move or delete its books first. A
-            default collection needs a replacement before deletion.
+            Deleting <strong>{{ collection?.name }}</strong> permanently deletes
+            every book in it, including ebook files, covers, and all members'
+            reading data. All members lose access.
+          </p>
+          <p class="text-sm font-semibold">
+            This cannot be undone. To keep the books, cancel and move them to
+            another collection first.
+          </p>
+        </template>
+        <template v-else-if="confirmation === 'delete'">
+          <p class="text-sm font-semibold">
+            Final warning: {{ collection?.name }} and all its books, files, and
+            reading data will be permanently deleted for everyone.
           </p>
           <div class="space-y-2">
             <label for="collection-delete-name" class="block text-sm"
-              >Type <strong>{{ collection?.name }}</strong> to confirm
+              >Type <strong>{{ collection?.name }}</strong> to confirm permanent
               deletion.</label
             >
             <input
@@ -654,7 +705,7 @@ function close() {
         </template>
         <div class="flex justify-end gap-2">
           <button
-            v-if="confirmation === 'leave'"
+            v-if="confirmation === 'leave' || confirmation === 'delete-warning'"
             ref="confirmationInput"
             type="button"
             class="px-3 py-2"
@@ -673,7 +724,16 @@ function close() {
             Cancel
           </button>
           <button
-            v-if="confirmation === 'delete'"
+            v-if="confirmation === 'delete-warning'"
+            type="button"
+            class="px-3 py-2 border rounded-md"
+            :disabled="busy"
+            @click="showFinalDeleteWarning"
+          >
+            Continue to final warning
+          </button>
+          <button
+            v-else-if="confirmation === 'delete'"
             type="button"
             class="px-3 py-2 rounded-md bg-(--error-color) text-(--contrast-text-color)"
             :disabled="
@@ -683,7 +743,7 @@ function close() {
             "
             @click="deleteThisCollection"
           >
-            {{ deleting ? 'Deleting…' : 'Delete collection' }}
+            {{ deleting ? 'Deleting…' : 'Delete collection and books' }}
           </button>
           <button
             v-else-if="confirmation === 'transfer'"
@@ -764,9 +824,41 @@ function close() {
               <Icon name="lucide:pencil" />
             </button>
           </div>
-          <p v-if="collection?.isDefault" class="text-sm opacity-70">
-            New users join this default collection. Choose a replacement in
-            Admin settings before deleting it.
+        </section>
+
+        <section
+          v-if="collection && (isAdmin || collection.isDefault)"
+          class="space-y-2 border-t border-(--contrast-border-color) pt-3"
+          aria-label="Default collection"
+        >
+          <div class="text-sm font-semibold">Default collection</div>
+          <p class="text-sm opacity-70">
+            {{
+              collection.isDefault
+                ? 'This is the shared default.'
+                : 'Make this the shared default for everyone.'
+            }}
+            Delb opens this collection for members and uses it for new books
+            when no other collection is selected. New users join it as editors.
+          </p>
+          <p v-if="collection.isDefault" class="text-xs opacity-70">
+            Choose a replacement default before deleting this collection.
+          </p>
+          <button
+            v-if="isAdmin && !collection.isDefault"
+            type="button"
+            class="px-3 py-2 border rounded-md"
+            :disabled="busy || editingName"
+            @click="makeDefault"
+          >
+            {{ defaultSaving ? 'Saving…' : 'Make default' }}
+          </button>
+          <p
+            v-if="defaultErrorMessage"
+            role="alert"
+            class="text-sm text-(--contrast-error-color)"
+          >
+            {{ defaultErrorMessage }}
           </p>
         </section>
 
