@@ -8,8 +8,8 @@ export type BookStatusChange = {
 const statusDetails = {
   to_be_read: { label: 'To be read', icon: 'lucide:bookmark' },
   reading: { label: 'Reading', icon: 'lucide:book-open' },
-  finished: { label: 'Finished', icon: 'lucide:check' },
-  dnf: { label: 'DNF', icon: 'lucide:circle-slash' },
+  finished: { label: 'Finished', icon: 'lucide:party-popper' },
+  dnf: { label: 'DNF', icon: 'lucide:skull' },
 } satisfies Record<UserBookStatusValue, { label: string; icon: string }>;
 
 export function readingStatusDetails(status: string | null | undefined) {
