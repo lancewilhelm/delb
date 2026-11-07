@@ -43,6 +43,11 @@ async function refresh() {
           '/api/settings/admin/collections',
         )
       ).data.collections;
+    if (editing.value)
+      editing.value =
+        collections.value.find(
+          (collection) => collection.id === editing.value?.id,
+        ) ?? null;
   } catch (cause) {
     error.value =
       cause instanceof Error ? cause.message : 'Unable to load collections';
@@ -89,10 +94,7 @@ async function makeDefault(collection: AdminCollection) {
   error.value = '';
   status.value = '';
   try {
-    await $fetch('/api/settings/admin/collections/default', {
-      method: 'PUT',
-      body: { collectionId: collection.id },
-    });
+    await store.setDefaultCollection(collection.id);
     await store.fetchCollections();
     await refresh();
     status.value = `${collection.name} is now the default. Existing books and memberships were kept.`;

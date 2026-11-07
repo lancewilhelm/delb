@@ -92,6 +92,9 @@ export const useCollectionsStore = defineStore(
     // "All" means: show books from all collections the user is a member of.
     // Otherwise, a specific collection governs the visible books list.
     const activeSelection = ref<ActiveCollectionSelection>({ kind: 'all' });
+    // A fresh app load starts in the shared default. Later browsing choices
+    // survive list refreshes for the rest of this session.
+    let selectionInitialized = false;
 
     const activeCollectionId = computed(() => {
       const sel = activeSelection.value;
@@ -107,10 +110,12 @@ export const useCollectionsStore = defineStore(
     });
 
     function setActiveAll() {
+      selectionInitialized = true;
       activeSelection.value = { kind: 'all' };
     }
 
     function setActiveCollection(collectionId: string) {
+      selectionInitialized = true;
       activeSelection.value = { kind: 'collection', collectionId };
     }
 
@@ -124,6 +129,12 @@ export const useCollectionsStore = defineStore(
         });
 
         collections.value = res?.data?.collections ?? [];
+
+        if (!selectionInitialized) {
+          const defaultCollection = collections.value.find((c) => c.isDefault);
+          if (defaultCollection) setActiveCollection(defaultCollection.id);
+          else setActiveAll();
+        }
 
         // If the user had a specific collection selected and it no longer exists,
         // fall back to "All".
@@ -350,16 +361,34 @@ export const useCollectionsStore = defineStore(
       return res?.data?.ownerUserId ?? null;
     }
 
-    /**
-     * Deletes a collection (owner-only on server).
-     * Expected endpoint: DELETE /api/collections/:id
-     *
-     * NOTE: Collections must be empty and cannot be the default when deleted.
-     */
-    async function deleteCollection(collectionId: string) {
+    async function setDefaultCollection(collectionId: string) {
+      const res = await $fetch<{ success: boolean; message?: string }>(
+        '/api/settings/admin/collections/default',
+        { method: 'PUT', body: { collectionId } },
+      );
+      if (!res.success)
+        throw new Error(
+          res.message || 'Failed to change the default collection',
+        );
+      collections.value = collections.value.map((collection) => ({
+        ...collection,
+        isDefault: collection.id === collectionId,
+      }));
+      if (
+        collections.value.some((collection) => collection.id === collectionId)
+      ) {
+        setActiveCollection(collectionId);
+      }
+    }
+
+    /** Deletes a non-default collection and all its books and managed files. */
+    async function deleteCollection(
+      collectionId: string,
+      confirmationName: string,
+    ) {
       const res = await $fetch<DeleteCollectionApiResponse>(
         `/api/collections/${encodeURIComponent(collectionId)}`,
-        { method: 'DELETE' },
+        { method: 'DELETE', body: { confirmationName, deleteBooks: true } },
       );
 
       if (!res?.success) {
@@ -427,7 +456,7 @@ export const useCollectionsStore = defineStore(
 
     /**
      * Convenience for UI logic: can the current user delete this collection?
-     * Only owners and administrators can delete an empty non-default collection.
+     * Only owners and administrators can delete a non-default collection.
      */
     function canDeleteCollection(
       collection: Pick<Collection, 'role' | 'isDefault' | 'canAdminister'>,
@@ -444,6 +473,7 @@ export const useCollectionsStore = defineStore(
       loading.value = false;
       errorMessage.value = null;
       activeSelection.value = { kind: 'all' };
+      selectionInitialized = false;
     }
 
     return {
@@ -469,6 +499,7 @@ export const useCollectionsStore = defineStore(
       removeCollectionMember,
       leaveCollection,
       transferCollectionOwnership,
+      setDefaultCollection,
       deleteCollection,
 
       canEditCollection,

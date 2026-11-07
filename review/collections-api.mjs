@@ -144,7 +144,10 @@ try {
     400,
   );
   await expect('/api/users/delete', owner, 'DELETE', { id: observer.id }, 409);
-  await expect(`/api/collections/${zeroOwned}`, observer, 'DELETE');
+  await expect(`/api/collections/${zeroOwned}`, observer, 'DELETE', {
+    confirmationName: 'Created from zero memberships',
+    deleteBooks: true,
+  });
   console.log(
     'PASS shared onboarding, rename, cross-creator editing, zero memberships and no sign-in re-enrollment',
   );
@@ -298,7 +301,11 @@ try {
     { title: 'Default does not grant access', authors: ['Fixture'] },
     403,
   );
-  await expect(`/api/collections/${target}`, editor, 'DELETE', undefined, 409);
+  const targetName = (
+    await expect('/api/settings/admin/collections', owner)
+  ).collections.find((collection) => collection.id === target).name;
+  const deletion = { confirmationName: targetName, deleteBooks: true };
+  await expect(`/api/collections/${target}`, editor, 'DELETE', deletion, 409);
   await expect(`/api/collections/${target}/transfer-ownership`, owner, 'POST', {
     email: newcomer.email,
   });
@@ -317,11 +324,19 @@ try {
     newcomer,
     'DELETE',
     undefined,
+    400,
+  );
+  await expect(
+    `/api/collections/${target}`,
+    owner,
+    'DELETE',
+    { ...deletion, confirmationName: 'Wrong name' },
     409,
   );
-  await expect(`/api/books/${newBook}`, newcomer, 'DELETE');
-  await expect(`/api/books/${duplicate}`, newcomer, 'DELETE');
-  await expect(`/api/collections/${target}`, newcomer, 'DELETE');
+  await expect(`/api/collections/${target}`, observer, 'DELETE', deletion, 403);
+  await expect(`/api/collections/${target}`, newcomer, 'DELETE', deletion);
+  await expect(`/api/books/${newBook}`, newcomer, 'GET', undefined, 404);
+  await expect(`/api/books/${duplicate}`, newcomer, 'GET', undefined, 404);
   assert.equal(
     (
       await db.execute(
@@ -331,7 +346,7 @@ try {
     1,
   );
   console.log(
-    'PASS administrative default changes, prospective enrollment, ownership recovery and empty-only deletion',
+    'PASS administrative default changes, prospective enrollment, ownership recovery and confirmed populated deletion',
   );
 
   await mkdir('calibre/fixture', { recursive: true });

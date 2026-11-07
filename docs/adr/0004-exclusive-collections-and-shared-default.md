@@ -25,12 +25,12 @@ The policy decisions and consolidated design were confirmed on 2026-11-05. This 
 - Each book entry belongs to exactly one collection. Separate entries for the same title can exist in different collections.
 - Collection owners and editors can edit metadata, replace files, and delete any book in their collection, including books added by another user. Book creator is provenance rather than a separate source of book-management authority.
 - Moving a book requires owner or editor access to both its source and destination. Preserve the book's identity, files, and reading history. Explain the source collection's loss of access before confirmation.
-- A collection must be empty before deletion. Its books must first be moved or explicitly deleted. The current default also requires a replacement default before deletion.
-- Block account deletion while the account owns any collections. Transfer each collection, or empty and delete it, before deleting the owner account.
+- Updated November 6, 2026: deleting a collection can permanently delete all contained books, their managed files, and reader data after two explicit warnings. The second warning requires typing the collection name. Move books first to preserve them. The current default still requires a replacement before deletion.
+- Block account deletion while the account owns any collections. Transfer or delete each collection before deleting the owner account.
 
 ## Adding books and background imports
 
-- Use the default when a book-creation request supplies no explicit collection target, subject to the caller's edit permission. Default designation grants no implicit membership.
+- Use the default when a book-creation request supplies no explicit collection target, subject to the caller's edit permission. Default designation grants no implicit membership. Updated November 6, 2026: also select the default for browsing when a member opens the app, and expose the administrative default control in the picker's collection settings.
 - The Add book UI preselects the collection being browsed when the user can edit it. Otherwise, it selects the default when editable. If neither applies, require choosing or creating a collection. A user with zero collections sees an empty library with those actions. Uploading never silently rejoins a collection.
 - When an interactive import matches an entry in another collection, offer an independent new entry or cancellation. Do not silently move or share the existing entry. Moving remains a separate confirmed action with source and destination authorization. Duplicate suggestions remain limited to books the importing user can access.
 - Dropbox and Calibre use one explicitly configured target collection. When none is supplied, resolve an authorized default when the batch starts. Retain that destination throughout the batch, even if the system default changes.

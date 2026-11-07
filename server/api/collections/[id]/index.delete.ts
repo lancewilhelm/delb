@@ -1,37 +1,29 @@
-import { eq } from 'drizzle-orm';
+import path from 'node:path';
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { books, collections } from '~/utils/db/schema';
 import {
   collectionActor,
   requiredCollectionId,
 } from '~~/server/utils/collections/http';
-import {
-  assertCollectionManager,
-  lockCollectionChanges,
-  CollectionError,
-} from '~~/server/utils/collections/model';
+import { CollectionError } from '~~/server/utils/collections/model';
+import { deleteCollection } from '~~/server/utils/collections/delete';
 export default defineEventHandler(async (event) => {
   const actor = await collectionActor(event);
   const id = requiredCollectionId(event);
-  return cloudDb.transaction(async (tx) => {
-    await lockCollectionChanges(tx);
-    const collection = await assertCollectionManager(tx, actor.id, id, true);
-    if (collection.isDefault)
-      throw new CollectionError(
-        409,
-        'Choose a replacement default before deleting this collection',
-      );
-    const contents = await tx
-      .select({ id: books.id })
-      .from(books)
-      .where(eq(books.collectionId, id))
-      .limit(1);
-    if (contents.length)
-      throw new CollectionError(
-        409,
-        'Move or delete the books before deleting this collection',
-      );
-    await tx.delete(collections).where(eq(collections.id, id));
-    return { success: true, data: { deleted: true, id } };
+  const body = await readBody<{
+    confirmationName?: unknown;
+    deleteBooks?: unknown;
+  }>(event);
+  if (typeof body?.confirmationName !== 'string' || body.deleteBooks !== true)
+    throw new CollectionError(
+      400,
+      'Confirm deletion of the collection and its books with the collection name',
+    );
+  const result = await deleteCollection({
+    db: cloudDb,
+    libraryRoot: path.resolve(process.cwd(), 'library'),
+    userId: actor.id,
+    collectionId: id,
+    confirmationName: body.confirmationName,
   });
+  return { success: true, data: { deleted: true, id, ...result } };
 });
