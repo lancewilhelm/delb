@@ -21,9 +21,11 @@ const collectionName = computed(() =>
     ? 'All'
     : (collectionsStore.activeCollection?.name ?? ''),
 );
-const selectedShelf = computed<DashboardShelf>(() =>
-  route.query.shelf === 'recent' ? route.query.shelf : 'reading',
-);
+const selectedShelf = computed<DashboardShelf>(() => {
+  const shelf = route.query.shelf;
+  if (shelf === 'finished') return 'finished';
+  return shelf === 'tbr' ? 'tbr' : 'reading';
+});
 const scope = computed(() =>
   collectionsStore.activeSelection.kind === 'collection'
     ? collectionsStore.activeSelection.collectionId
@@ -36,9 +38,14 @@ const shelves = [
     empty: 'No books marked as Reading.',
   },
   {
-    key: 'recent',
-    label: 'Recently read',
+    key: 'finished',
+    label: 'Recently finished',
     empty: 'Finished books with a date read will appear here, newest first.',
+  },
+  {
+    key: 'tbr',
+    label: 'To be read',
+    empty: 'No books marked as To be read.',
   },
 ] satisfies {
   key: DashboardShelf;
@@ -50,7 +57,9 @@ const shelfInfo = computed(
     shelves.find((shelf) => shelf.key === selectedShelf.value) ?? shelves[0]!,
 );
 const counts = ref<DashboardCounts | null>(null);
-type ShelfBook = DashboardBook & { status: 'reading' | 'finished' };
+type ShelfBook = DashboardBook & {
+  status: 'reading' | 'finished' | 'to_be_read';
+};
 const shelfBooks = ref<ShelfBook[]>([]);
 const nextOffset = ref<number | null>(null);
 const loading = ref(true);
@@ -130,7 +139,9 @@ async function loadDashboard(append = false) {
     if (request !== requestNumber) return;
     counts.value = response.data.counts;
     const status =
-      response.data.shelf.kind === 'recent' ? 'finished' : 'reading';
+      response.data.shelf.kind === 'tbr'
+        ? 'to_be_read'
+        : response.data.shelf.kind;
     const page: ShelfBook[] = response.data.shelf.books.map((book) => ({
       ...book,
       status,
@@ -256,6 +267,12 @@ onBeforeUnmount(() => {
             class="dashboard-view-all"
             >View all</NuxtLink
           >
+          <NuxtLink
+            v-else-if="selectedShelf === 'tbr'"
+            to="/to-be-read"
+            class="dashboard-view-all"
+            >View all</NuxtLink
+          >
         </div>
 
         <section
@@ -285,7 +302,7 @@ onBeforeUnmount(() => {
                 @status-change="onBookStatusChanged"
               />
               <div class="dashboard-book-meta">
-                <span v-if="selectedShelf === 'recent' && book.finishedDate"
+                <span v-if="selectedShelf === 'finished' && book.finishedDate"
                   >Read {{ readDate(book.finishedDate) }}</span
                 >
                 <span v-else-if="selectedShelf === 'reading'">{{
@@ -395,6 +412,7 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 26px;
   min-width: 0;
+  overflow-x: auto;
 }
 .dashboard-tabs button {
   font: inherit;

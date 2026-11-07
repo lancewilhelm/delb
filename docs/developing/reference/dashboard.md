@@ -6,12 +6,13 @@ The count strip stays above the shelf tabs. To be read always counts the full pe
 
 ## Shelf order
 
-| Shelf            | Included books                                             | Order                                                   |
-| ---------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
-| Continue reading | Current user's Reading status                              | Saved-position update, then status update, newest first |
-| Recently read    | Current user's Finished status with a non-null finish date | Finish date, newest first                               |
+| Shelf             | Included books                                             | Order                                                   |
+| ----------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
+| Continue reading  | Current user's Reading status                              | Saved-position update, then status update, newest first |
+| Recently finished | Current user's Finished status with a non-null finish date | Finish date, newest first                               |
+| To be read        | Current user's To be read status                           | Queue rank, then unranked books                         |
 
-Book ID resolves equal sort values. The API converts the stored finish date into a `YYYY-MM-DD` calendar date in the server's timezone, where the status endpoint parses date-only input. The browser formats that date without a timezone conversion. Finished books without a date remain in the Finished count but do not appear on Recently read.
+Book ID resolves equal sort values. The API converts the stored finish date into a `YYYY-MM-DD` calendar date in the server's timezone, where the status endpoint parses date-only input. The browser formats that date without a timezone conversion. Finished books without a date remain in the Finished count but do not appear on Recently finished.
 
 ## Dashboard API
 
@@ -19,7 +20,7 @@ Book ID resolves equal sort values. The API converts the stored finish date into
 
 | Parameter      | Values                                     | Default   |
 | -------------- | ------------------------------------------ | --------- |
-| `shelf`        | `reading`, `recent`                        | `reading` |
+| `shelf`        | `reading`, `finished`, `tbr`               | `reading` |
 | `collectionId` | Accessible collection ID, or empty for All | All       |
 | `offset`       | Non-negative safe integer                  | `0`       |
 

@@ -74,6 +74,7 @@ try {
   const newer = await createBook(a, 'Dashboard newer finished');
   const undated = await createBook(a, 'Dashboard undated finished');
   const hidden = await createBook(b, 'Dashboard private other reader');
+  const queued = await createBook(a, 'Dashboard queued');
   const shared = (
     await request('/api/collections', a.cookie, 'POST', {
       name: 'Dashboard shared',
@@ -93,6 +94,7 @@ try {
     [older, { status: 'finished', finishedAt: '2026-10-01' }],
     [newer, { status: 'finished', finishedAt: '2026-11-02' }],
     [undated, { status: 'finished' }],
+    [queued, { status: 'to_be_read' }],
   ]) {
     assert.equal(
       (await request(`/api/books/${id}/status`, a.cookie, 'POST', change))
@@ -124,6 +126,10 @@ try {
     400,
   );
   assert.equal(
+    (await request('/api/dashboard?shelf=recent', a.cookie)).status,
+    400,
+  );
+  assert.equal(
     (await request('/api/dashboard?offset=-1', a.cookie)).status,
     400,
   );
@@ -139,7 +145,7 @@ try {
   assert.equal(first.headers.get('cache-control'), 'private, no-store');
   assert.equal(
     first.data.data.counts.total,
-    4,
+    5,
     'books across exclusive collections are counted once',
   );
   assert.deepEqual(
@@ -147,15 +153,21 @@ try {
     [[reading, 42]],
   );
   assert.ok(!('userFavorite' in first.data.data.shelf.books[0]));
-  const recent = await request('/api/dashboard?shelf=recent', a.cookie);
+  const recent = await request('/api/dashboard?shelf=finished', a.cookie);
   assert.deepEqual(
     recent.data.data.shelf.books.map((book) => book.id),
     [newer, older],
   );
   assert.equal(recent.data.data.shelf.books[0].finishedDate, '2026-11-02');
   assert.deepEqual(first.data.data.counts, recent.data.data.counts);
+  const tbr = await request('/api/dashboard?shelf=tbr', a.cookie);
+  assert.equal(tbr.data.data.shelf.kind, 'tbr');
+  assert.deepEqual(
+    tbr.data.data.shelf.books.map((book) => book.id),
+    [queued],
+  );
   const scoped = await request(
-    `/api/dashboard?shelf=recent&collectionId=${shared}`,
+    `/api/dashboard?shelf=finished&collectionId=${shared}`,
     a.cookie,
   );
   assert.deepEqual(
@@ -163,7 +175,7 @@ try {
     [newer],
   );
   assert.equal(scoped.data.data.counts.total, 2);
-  const other = await request('/api/dashboard?shelf=recent', b.cookie);
+  const other = await request('/api/dashboard?shelf=finished', b.cookie);
   assert.deepEqual(
     other.data.data.shelf.books,
     [],
@@ -182,7 +194,7 @@ try {
   assert.deepEqual(
     (
       await request(
-        `/api/dashboard?shelf=recent&collectionId=${shared}`,
+        `/api/dashboard?shelf=finished&collectionId=${shared}`,
         b.cookie,
       )
     ).data.data.shelf.books,

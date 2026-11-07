@@ -307,19 +307,20 @@ test('shelf changes reject stale scope responses and loading more can retry with
   });
   assert.equal(requests.length, 1);
   assert.ok(view.text().includes('Loading…'));
-  view.button('Recently read').props.onClick();
+  view.button('Recently finished').props.onClick();
   await flush();
   assert.equal(requests[0].signal.aborted, true);
+  assert.equal(requests[1].query.shelf, 'finished');
   collections.activeSelection = {
     kind: 'collection',
     collectionId: 'new-scope',
   };
   await flush();
   assert.equal(requests[2].query.collectionId, 'new-scope');
-  requests[1].resolve(result('Old scope finished book', 'recent'));
+  requests[1].resolve(result('Old scope finished book', 'finished'));
   await flush();
   assert.ok(!view.text().includes('Old scope finished book'));
-  requests[2].resolve(result('New scope finished book', 'recent', 12));
+  requests[2].resolve(result('New scope finished book', 'finished', 12));
   await flush();
   assert.ok(view.text().includes('New scope finished book'));
   view.button('Show more').props.onClick();
@@ -332,7 +333,7 @@ test('shelf changes reject stale scope responses and loading more can retry with
   view.button('Retry').props.onClick();
   await flush();
   assert.equal(requests[4].query.offset, 12);
-  requests[4].resolve(result('Next page finished book', 'recent'));
+  requests[4].resolve(result('Next page finished book', 'finished'));
   await flush();
   assert.ok(
     view.text().includes('New scope finished book') &&
@@ -366,11 +367,22 @@ test('shelf changes reject stale scope responses and loading more can retry with
   requests[0].resolve(result('Stale initial reading', 'reading'));
   await flush();
   assert.ok(!view.text().includes('Stale initial reading'));
+  view.button('To be read').props.onClick();
+  await flush();
+  assert.equal(requests[5].query.shelf, 'tbr');
+  requests[5].resolve(result('Queued book', 'tbr'));
+  await flush();
+  const queuedBook = view
+    .all()
+    .find(
+      (element) => element.tag === 'span' && element.text === 'Queued book',
+    );
+  assert.equal(queuedBook.props['data-status'], 'to_be_read');
 });
 
-test('status changes preserve both shelves and adjust a pending page without skipping books', async (t) => {
-  for (const shelf of ['reading', 'recent']) {
-    const status = shelf === 'reading' ? 'reading' : 'finished';
+test('status changes preserve shelf contents and adjust a pending page without skipping books', async (t) => {
+  for (const shelf of ['reading', 'finished', 'tbr']) {
+    const status = shelf === 'tbr' ? 'to_be_read' : shelf;
     const requests = [];
     const view = mountedComponent('../app/pages/index.vue', {
       definePageMeta() {},
@@ -408,11 +420,24 @@ test('status changes preserve both shelves and adjust a pending page without ski
             title: id,
             updatedAt: '2026-11-04',
             progress: 10,
-            finishedDate: shelf === 'recent' ? '2026-11-04' : null,
+            finishedDate: shelf === 'finished' ? '2026-11-04' : null,
           })),
         },
       },
     });
+    assert.equal(requests[0].query.shelf, shelf);
+    if (shelf === 'tbr') {
+      assert.ok(
+        view
+          .all()
+          .some(
+            (element) =>
+              element.tag === 'a' &&
+              element.props.href === '/to-be-read' &&
+              element.props.class === 'dashboard-view-all',
+          ),
+      );
+    }
     requests[0].resolve(
       response(
         Array.from({ length: 12 }, (_, i) => `book-${i}`),
@@ -476,7 +501,10 @@ test('status changes preserve both shelves and adjust a pending page without ski
       .all()
       .filter((element) => element.props.class === 'dashboard-count-value')
       .map((element) => element.text);
-    assert.equal(countValues[status === 'reading' ? 1 : 3], '19');
+    assert.equal(
+      countValues[status === 'reading' ? 1 : status === 'to_be_read' ? 2 : 3],
+      '19',
+    );
     assert.equal(countValues[5], '1');
     view.app.unmount();
   }
@@ -499,7 +527,7 @@ test('Recently read preserves calendar dates across browser timezones', async (t
         activeSelection: { kind: 'all' },
       }),
       useBooksIndexFiltersStore: () => ({ clearAll() {} }),
-      useRoute: () => ({ query: { shelf: 'recent' } }),
+      useRoute: () => ({ query: { shelf: 'finished' } }),
       useRouter: () => ({ replace() {} }),
       $fetch: async () => ({
         success: true,
@@ -513,7 +541,7 @@ test('Recently read preserves calendar dates across browser timezones', async (t
             dnf: 0,
           },
           shelf: {
-            kind: 'recent',
+            kind: 'finished',
             nextOffset: null,
             books: [
               {

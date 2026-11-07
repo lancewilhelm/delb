@@ -81,10 +81,11 @@ export async function getDashboard(
 
   const filters = {
     reading: eq(userBookStatus.status, 'reading'),
-    recent: and(
+    finished: and(
       eq(userBookStatus.status, 'finished'),
       isNotNull(userBookStatus.finishedAt),
     ),
+    tbr: eq(userBookStatus.status, 'to_be_read'),
   };
   const order: Record<DashboardShelf, SQL[]> = {
     reading: [
@@ -92,7 +93,12 @@ export async function getDashboard(
       desc(userBookStatus.updatedAt),
       asc(books.id),
     ],
-    recent: [desc(userBookStatus.finishedAt), asc(books.id)],
+    finished: [desc(userBookStatus.finishedAt), asc(books.id)],
+    tbr: [
+      sql`${userBookStatus.tbrRank} IS NULL`,
+      asc(userBookStatus.tbrRank),
+      asc(books.id),
+    ],
   };
   const pageSize = 12;
   const rows = await db
