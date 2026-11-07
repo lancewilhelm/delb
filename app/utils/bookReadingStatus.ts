@@ -6,26 +6,11 @@ export type BookStatusChange = {
 };
 
 const statusDetails = {
-  to_be_read: {
-    label: 'To be read',
-    visual: { kind: 'icon', name: 'lucide:bookmark' },
-  },
-  reading: {
-    label: 'Reading',
-    visual: { kind: 'icon', name: 'lucide:book-open' },
-  },
-  finished: {
-    label: 'Finished',
-    visual: { kind: 'icon', name: 'lucide:party-popper' },
-  },
-  dnf: { label: 'DNF', visual: { kind: 'emoji', value: '💀' } },
-} satisfies Record<
-  UserBookStatusValue,
-  {
-    label: string;
-    visual: { kind: 'icon'; name: string } | { kind: 'emoji'; value: string };
-  }
->;
+  to_be_read: { label: 'To be read', icon: 'lucide:bookmark' },
+  reading: { label: 'Reading', icon: 'lucide:book-open' },
+  finished: { label: 'Finished', icon: 'lucide:party-popper' },
+  dnf: { label: 'DNF', icon: 'lucide:skull' },
+} satisfies Record<UserBookStatusValue, { label: string; icon: string }>;
 
 export function readingStatusDetails(status: string | null | undefined) {
   switch (status) {

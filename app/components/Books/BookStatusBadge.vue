@@ -14,14 +14,6 @@ const details = computed(() => readingStatusDetails(props.status));
     :title="details.label"
     class="absolute top-1 right-1 z-10 flex h-5 w-5 items-center justify-center rounded-full border border-(--main-color)/40 bg-(--bg-color) text-(--main-color) pointer-events-none"
   >
-    <Icon
-      v-if="details.visual.kind === 'icon'"
-      :name="details.visual.name"
-      class="text-xs"
-      aria-hidden="true"
-    />
-    <span v-else class="text-xs leading-none" aria-hidden="true">{{
-      details.visual.value
-    }}</span>
+    <Icon :name="details.icon" class="text-xs" aria-hidden="true" />
   </span>
 </template>
