@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
 
   const query = getQuery(event);
   const shelf = query.shelf ?? 'reading';
-  if (shelf !== 'reading' && shelf !== 'recent') {
+  if (shelf !== 'reading' && shelf !== 'finished' && shelf !== 'tbr') {
     throw createError({
       statusCode: 400,
       statusMessage: 'Invalid dashboard shelf',

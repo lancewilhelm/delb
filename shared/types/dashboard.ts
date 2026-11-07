@@ -1,4 +1,4 @@
-export type DashboardShelf = 'reading' | 'recent';
+export type DashboardShelf = 'reading' | 'finished' | 'tbr';
 
 export type DashboardCounts = {
   total: number;
