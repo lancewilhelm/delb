@@ -32,7 +32,7 @@ for (const sort of [
         await client.executeMultiple(`CREATE TABLE books (
           id TEXT PRIMARY KEY, collection_id TEXT NOT NULL, added_by_user_id TEXT, added_at INTEGER NOT NULL, title TEXT NOT NULL, sort_title TEXT NOT NULL,
           calibre_book_id INTEGER, description TEXT, published TEXT, published_at INTEGER,
-          language TEXT, pages INTEGER, cover_image_path TEXT, publisher_id TEXT,
+          language TEXT, has_physical_copy INTEGER NOT NULL DEFAULT 0, has_audiobook_copy INTEGER NOT NULL DEFAULT 0, pages INTEGER, cover_image_path TEXT, publisher_id TEXT,
           series_id TEXT, series_index REAL, created_by_user_id TEXT,
           created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
         )`);

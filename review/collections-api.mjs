@@ -170,6 +170,68 @@ try {
     { title: 'Creator cannot bypass viewer role' },
     403,
   );
+  // Copy indicators are shared, independent, and guarded by collection roles.
+  assert.equal(
+    (await expect(`/api/books/${movable}`, editor)).book.hasPhysicalCopy,
+    false,
+  );
+  const firstCopyUpdate = await expect(
+    '/api/books/bulk/copies',
+    editor,
+    'POST',
+    {
+      bookIds: [sharedBook, movable],
+      physical: true,
+    },
+  );
+  assert.deepEqual(firstCopyUpdate, { updated: 1, skipped: 1 });
+  assert.equal(
+    (await expect(`/api/books/${sharedBook}`, owner)).book.hasPhysicalCopy,
+    true,
+  );
+  assert.equal(
+    (await expect(`/api/books/${movable}`, owner)).book.hasPhysicalCopy,
+    false,
+  );
+  await expect('/api/books/bulk/copies', owner, 'POST', {
+    bookIds: [movable],
+    audiobook: true,
+  });
+  await expect('/api/books/bulk/copies', owner, 'POST', {
+    bookIds: [movable],
+    physical: true,
+  });
+  const bothCopies = (await expect(`/api/books/${movable}`, editor)).book;
+  assert.equal(bothCopies.hasPhysicalCopy, true);
+  assert.equal(bothCopies.hasAudiobookCopy, true);
+  const bothFiltered = (
+    await expect('/api/books?physical=marked&audiobook=marked', owner)
+  ).books;
+  assert.ok(bothFiltered.some((book) => book.id === movable));
+  assert.ok(!bothFiltered.some((book) => book.id === sharedBook));
+  const missingAudio = (
+    await expect('/api/books?physical=marked&audiobook=unmarked', owner)
+  ).books;
+  assert.ok(missingAudio.some((book) => book.id === sharedBook));
+  assert.ok(!missingAudio.some((book) => book.id === movable));
+  await expect('/api/books/bulk/copies', owner, 'POST', {
+    bookIds: [movable],
+    physical: false,
+  });
+  assert.equal(
+    (await expect(`/api/books/${movable}`, owner)).book.hasAudiobookCopy,
+    true,
+  );
+  await expect(
+    '/api/books/bulk/copies',
+    owner,
+    'POST',
+    { bookIds: [movable], physical: 'yes' },
+    400,
+  );
+  console.log(
+    'PASS shared copy indicators, combined filters, independent changes and viewer skips',
+  );
   await expect(`/api/books/${movable}`, editor, 'DELETE', undefined, 403);
   await expect(
     `/api/books/${movable}/collections`,

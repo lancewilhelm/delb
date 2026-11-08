@@ -142,6 +142,97 @@ function onBooksMoved() {
   refreshBooksGrid();
 }
 
+type CopyChange = 'keep' | 'mark' | 'clear';
+const copiesModalOpen = ref(false);
+const copiesSubmitting = ref(false);
+const copiesError = ref('');
+const copiesResult = ref('');
+const bulkPhysical = ref<CopyChange>('keep');
+const bulkAudiobook = ref<CopyChange>('keep');
+
+function openCopiesModal() {
+  copiesError.value = '';
+  copiesResult.value = '';
+  bulkPhysical.value = 'keep';
+  bulkAudiobook.value = 'keep';
+  copiesModalOpen.value = true;
+  closeActionsDropdown();
+}
+
+async function applyBulkCopies() {
+  if (copiesSubmitting.value) return;
+  if (bulkPhysical.value === 'keep' && bulkAudiobook.value === 'keep') {
+    copiesError.value = 'Choose at least one change.';
+    return;
+  }
+  copiesSubmitting.value = true;
+  copiesError.value = '';
+  try {
+    let ids = getExplicitSelectedBookIds();
+    if (selectionStore.allSelectedInScope) {
+      const excluded = new Set(getExcludedBookIds());
+      const endpoint = booksEndpoint.value;
+      const scope = activeCollectionId.value;
+      const sort = booksSortKey.value;
+      const sortDir = booksSortDir.value;
+      let cursor: string | undefined;
+      const seen = new Set<string>();
+      ids = [];
+      do {
+        const response = await $fetch<{
+          success: boolean;
+          data: { books: { id: string }[]; nextCursor: string | null };
+        }>(endpoint, {
+          query: {
+            collectionId: scope || undefined,
+            sort,
+            sortDir,
+            limit: 200,
+            cursor,
+          },
+        });
+        if (!response.success)
+          throw new Error('Could not load the full selection.');
+        ids.push(
+          ...response.data.books
+            .map((book) => book.id)
+            .filter((id) => !excluded.has(id)),
+        );
+        cursor = response.data.nextCursor || undefined;
+        if (cursor && seen.has(cursor))
+          throw new Error('Could not finish loading the selection.');
+        if (cursor) seen.add(cursor);
+      } while (cursor);
+    }
+    if (!ids.length) throw new Error('No matching books are selected.');
+    const result = await $fetch<{ data: { updated: number; skipped: number } }>(
+      '/api/books/bulk/copies',
+      {
+        method: 'POST',
+        body: {
+          bookIds: ids,
+          ...(bulkPhysical.value !== 'keep'
+            ? { physical: bulkPhysical.value === 'mark' }
+            : {}),
+          ...(bulkAudiobook.value !== 'keep'
+            ? { audiobook: bulkAudiobook.value === 'mark' }
+            : {}),
+        },
+      },
+    );
+    copiesResult.value = `Updated ${result.data.updated} book(s).${result.data.skipped ? ` Skipped ${result.data.skipped} book(s) you cannot edit or no longer have access to.` : ''}`;
+    copiesModalOpen.value = false;
+    selectionStore.clearSelection();
+    selectionStore.setMode({ enabled: false });
+    refreshBooksGrid();
+  } catch (error) {
+    copiesError.value =
+      error instanceof Error ? error.message : 'Could not update copies.';
+  } finally {
+    copiesSubmitting.value = false;
+  }
+}
+
 const statusModalOpen = ref(false);
 const statusSubmitting = ref(false);
 const statusError = ref<string | null>(null);
@@ -368,6 +459,7 @@ const booksEndpoint = computed(() => {
     ...booksFiltersStore.addedDateQuery,
     ...booksFiltersStore.statusQuery,
     ...booksFiltersStore.filesQuery,
+    ...booksFiltersStore.copyQuery,
   };
   const pairs = Object.entries(q).filter(([, v]) => typeof v === 'string' && v);
   if (!pairs.length) return '/api/books';
@@ -534,6 +626,15 @@ onMounted(async () => {
                         class="w-full px-3 py-2 text-left flex justify-between! gap-3 rounded-none! hover:bg-(--sub-color)/15"
                         role="menuitem"
                         type="button"
+                        @click="openCopiesModal"
+                      >
+                        <span class="truncate text-sm">Set copies</span>
+                      </button>
+
+                      <button
+                        class="w-full px-3 py-2 text-left flex justify-between! gap-3 rounded-none! hover:bg-(--sub-color)/15"
+                        role="menuitem"
+                        type="button"
                         @click="openStatusModal"
                       >
                         <span class="truncate text-sm">Set status</span>
@@ -610,6 +711,79 @@ onMounted(async () => {
                 @close="closeCollectionsManager"
                 @moved="onBooksMoved"
               />
+
+              <p v-if="copiesResult" class="text-sm" role="status">
+                {{ copiesResult }}
+              </p>
+              <ModalWindow
+                :open="copiesModalOpen"
+                @close="!copiesSubmitting && (copiesModalOpen = false)"
+              >
+                <div
+                  class="flex flex-col gap-4 w-110 max-w-[90vw]"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Set copies"
+                >
+                  <div class="text-lg font-semibold">Set copies</div>
+                  <p class="text-sm opacity-80">
+                    Changes apply to the selected books. Leave a field unchanged
+                    to keep its current value.
+                  </p>
+                  <label
+                    v-for="item in [
+                      { label: 'Physical', model: bulkPhysical },
+                      { label: 'Audiobook', model: bulkAudiobook },
+                    ]"
+                    :key="item.label"
+                    class="flex justify-between items-center gap-3 text-sm"
+                  >
+                    {{ item.label }}
+                    <select
+                      :value="item.model"
+                      class="px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
+                      :disabled="copiesSubmitting"
+                      @change="
+                        (event: Event) => {
+                          const value = (event.target as HTMLSelectElement)
+                            .value as CopyChange;
+                          if (item.label === 'Physical') bulkPhysical = value;
+                          else bulkAudiobook = value;
+                        }
+                      "
+                    >
+                      <option value="keep">Leave unchanged</option>
+                      <option value="mark">Mark available</option>
+                      <option value="clear">Clear mark</option>
+                    </select>
+                  </label>
+                  <p
+                    v-if="copiesError"
+                    class="text-sm text-(--contrast-error-color)"
+                    role="alert"
+                  >
+                    {{ copiesError }}
+                  </p>
+                  <div class="flex gap-2 justify-end">
+                    <button
+                      type="button"
+                      class="px-3 py-2"
+                      :disabled="copiesSubmitting"
+                      @click="copiesModalOpen = false"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      class="px-3 py-2 bg-(--main-color) text-(--contrast-inverse-color) disabled:opacity-60"
+                      :disabled="copiesSubmitting"
+                      @click="applyBulkCopies"
+                    >
+                      {{ copiesSubmitting ? 'Applying…' : 'Apply' }}
+                    </button>
+                  </div>
+                </div>
+              </ModalWindow>
 
               <!-- Bulk status modal -->
               <ModalWindow :open="statusModalOpen" @close="closeStatusModal">
@@ -877,6 +1051,37 @@ onMounted(async () => {
 
                     <div class="text-xs opacity-70">
                       Filters by whether a book has stored files.
+                    </div>
+                    <div
+                      class="pt-2 border-t border-(--contrast-border-color)"
+                    ></div>
+                    <div class="text-sm font-medium opacity-90">Copies</div>
+                    <label
+                      class="flex justify-between items-center gap-3 text-sm"
+                      >Physical
+                      <select
+                        v-model="booksFiltersStore.physicalFilter"
+                        class="px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
+                      >
+                        <option value="any">Any</option>
+                        <option value="marked">Marked</option>
+                        <option value="unmarked">Not marked</option>
+                      </select>
+                    </label>
+                    <label
+                      class="flex justify-between items-center gap-3 text-sm"
+                      >Audiobook
+                      <select
+                        v-model="booksFiltersStore.audiobookFilter"
+                        class="px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
+                      >
+                        <option value="any">Any</option>
+                        <option value="marked">Marked</option>
+                        <option value="unmarked">Not marked</option>
+                      </select>
+                    </label>
+                    <div class="text-xs opacity-70">
+                      Not marked does not necessarily mean no copy is available.
                     </div>
                   </div>
                 </div>

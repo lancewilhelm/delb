@@ -75,6 +75,19 @@ function normalizeStatusFilter(raw: unknown): {
   return { statuses, includeNone };
 }
 
+function copyFilter(raw: unknown, field: 'physical' | 'audiobook') {
+  if (raw === undefined || raw === '' || raw === 'any') return undefined;
+  if (raw !== 'marked' && raw !== 'unmarked')
+    throw createError({
+      statusCode: 400,
+      statusMessage: `Invalid ${field} copy filter`,
+    });
+  return eq(
+    field === 'physical' ? books.hasPhysicalCopy : books.hasAudiobookCopy,
+    raw === 'marked',
+  );
+}
+
 function normalizeFilesFilter(raw: unknown): 'has' | 'none' | null {
   const v = (raw ?? '').toString().trim().toLowerCase();
   if (!v) return null;
@@ -126,6 +139,8 @@ export default defineEventHandler(async (event) => {
     status?: string;
     files?: string;
     debug?: string;
+    physical?: string;
+    audiobook?: string;
   };
 
   const collectionId = q.collectionId;
@@ -138,6 +153,8 @@ export default defineEventHandler(async (event) => {
   const cursor = decodeCursor(q.cursor);
   const statusFilter = normalizeStatusFilter(q.status);
   const filesFilter = normalizeFilesFilter(q.files);
+  const physicalFilter = copyFilter(q.physical, 'physical');
+  const audiobookFilter = copyFilter(q.audiobook, 'audiobook');
 
   // Added date range filter (books.createdAt)
   // Inputs are expected as YYYY-MM-DD from <input type="date">.
@@ -284,6 +301,8 @@ export default defineEventHandler(async (event) => {
     const commonWhere = and(
       inArray(collectionBooks.collectionId, targetCollectionIds),
       ordering.where,
+      physicalFilter,
+      audiobookFilter,
       // Inclusive range (numeric compare against unix-second bounds)
       // We coerce createdAt to INTEGER to handle cases where it may be stored as TEXT.
       addedStartSec !== null

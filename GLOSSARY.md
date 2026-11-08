@@ -18,6 +18,9 @@ The shared collection selected when members open the app, for automatic enrollme
 **Book entry**:
 A book in Delb's catalog with its own metadata, files, and reader-specific reading data. Separate entries can represent the same title.
 
+**Copy indicator**:
+A mark on a book entry that the shared library has ongoing access to a physical or audiobook copy. An unmarked indicator does not establish that no copy exists.
+
 **Book move**:
 A change to a book entry's sole collection that preserves its identity and reading data. Access follows membership in the destination collection.
 

@@ -11,12 +11,12 @@ async function fixture() {
   const directory = mkdtempSync(join(tmpdir(), 'delb-dashboard-'));
   const client = createClient({ url: `file:${join(directory, 'test.db')}` });
   for (const statement of [
-    'CREATE TABLE books (id TEXT PRIMARY KEY, title TEXT, cover_image_path TEXT, updated_at INTEGER)',
+    'CREATE TABLE books (id TEXT PRIMARY KEY, title TEXT, cover_image_path TEXT, updated_at INTEGER, has_physical_copy INTEGER NOT NULL DEFAULT 0, has_audiobook_copy INTEGER NOT NULL DEFAULT 0)',
     'CREATE TABLE collection_books (collection_id TEXT, book_id TEXT)',
     'CREATE TABLE collection_members (collection_id TEXT, user_id TEXT)',
     'CREATE TABLE user_book_status (user_id TEXT, book_id TEXT, status TEXT, finished_at INTEGER, updated_at INTEGER, tbr_rank INTEGER, UNIQUE(user_id, book_id))',
     'CREATE TABLE user_book_reading_position (user_id TEXT, book_id TEXT, progress REAL, updated_at INTEGER, UNIQUE(user_id, book_id))',
-    "INSERT INTO books VALUES ('1','One',NULL,900),('2','Two',NULL,800),('3','Three',NULL,9999),('4','Four',NULL,1),('5','Undated',NULL,500),('6','Hidden',NULL,1000)",
+    "INSERT INTO books (id, title, cover_image_path, updated_at) VALUES ('1','One',NULL,900),('2','Two',NULL,800),('3','Three',NULL,9999),('4','Four',NULL,1),('5','Undated',NULL,500),('6','Hidden',NULL,1000)",
     "INSERT INTO collection_books VALUES ('x','1'),('x','2'),('x','3'),('x','4'),('x','5'),('y','1'),('y','4'),('z','6')",
     "INSERT INTO collection_members VALUES ('x','u'),('y','u'),('y','other'),('z','owner')",
     "INSERT INTO user_book_status VALUES ('u','1','reading',NULL,80,NULL),('u','2','reading',NULL,90,NULL),('u','3','finished',100,9999,NULL),('u','4','finished',200,1,NULL),('u','5','finished',NULL,500,NULL),('other','1','finished',300,300,NULL),('u','6','finished',900,900,NULL)",
@@ -168,7 +168,7 @@ test('Recently read pages stay bounded, stable at equal dates, and reachable pas
   for (let index = 0; index < 15; index++) {
     const id = `page-${String(index).padStart(2, '0')}`;
     await client.execute({
-      sql: 'INSERT INTO books VALUES (?, ?, NULL, 100)',
+      sql: 'INSERT INTO books (id, title, cover_image_path, updated_at) VALUES (?, ?, NULL, 100)',
       args: [id, id],
     });
     await client.execute({

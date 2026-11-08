@@ -194,6 +194,107 @@ try {
     })
   ).book.id;
   await authenticate(owner);
+  // Exercise filtered select-all across more than one API page, with one exclusion.
+  const defaultCollection = (
+    await api('/api/collections', owner)
+  ).collections.find((entry) => entry.isDefault).id;
+  const copyDb = createClient({ url: 'file:./review/demo/synthetic.db' });
+  const copyIds = Array.from({ length: 205 }, (_, i) => `copy-ui-${i}`);
+  await copyDb.batch(
+    copyIds.map((id, i) => ({
+      sql: 'INSERT INTO books (id, collection_id, title, sort_title, added_at, created_at, updated_at, has_audiobook_copy) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
+      args: [
+        id,
+        defaultCollection,
+        `Copy fixture ${i}`,
+        `Copy fixture ${i}`,
+        1700000000 + i,
+        1700000000 + i,
+        1700000000 + i,
+      ],
+    })),
+  );
+  await api('/api/books', owner, 'POST', {
+    title: 'Unmarked sentinel',
+    authors: ['UI Author'],
+  });
+  await navigate('/books');
+  await until(`document.body.textContent.includes('Unmarked sentinel')`);
+  await until(
+    `[...document.querySelectorAll('button')].some(button => button.textContent.trim() === 'Filters')`,
+  );
+  await press('Filters');
+  await until(
+    `[...document.querySelectorAll('label')].some(label => label.textContent.includes('Audiobook') && label.querySelector('select'))`,
+  );
+  await evaluate(
+    `(() => { const label = [...document.querySelectorAll('label')].find(label => label.textContent.includes('Audiobook') && label.querySelector('select')); const select=label.querySelector('select'); select.value='marked'; select.dispatchEvent(new Event('change',{bubbles:true})); })()`,
+  );
+  await press('Filters');
+  await until(
+    `document.body.textContent.includes('Copy fixture') && !document.body.textContent.includes('Unmarked sentinel')`,
+  );
+  await press('Select');
+  await until(
+    `[...document.querySelectorAll('button')].some(button => button.textContent.trim() === 'Select all')`,
+  );
+  await press('Select all');
+  await until(
+    `Boolean(document.querySelector('[aria-label="Deselect book"]'))`,
+  );
+  await click('Deselect book');
+  await until(
+    `[...document.querySelectorAll('button')].some(button => button.textContent.trim() === 'Actions')`,
+  );
+  await press('Actions');
+  await until(
+    `[...document.querySelectorAll('button')].some(button => button.textContent.trim() === 'Set copies')`,
+  );
+  await press('Set copies');
+  await until(`document.querySelector('[role="dialog"] select')`);
+  await evaluate(
+    `(() => { const select=document.querySelector('[role="dialog"] select');select.value='mark';select.dispatchEvent(new Event('change',{bubbles:true})); })()`,
+  );
+  await press('Apply');
+  await until(`document.body.textContent.includes('Updated 204 book(s).')`);
+  const markedCount = await copyDb.execute(
+    "SELECT count(*) AS n FROM books WHERE id LIKE 'copy-ui-%' AND has_physical_copy = 1 AND has_audiobook_copy = 1",
+  );
+  assert.equal(Number(markedCount.rows[0].n), 204);
+  await copyDb.execute("DELETE FROM books WHERE id LIKE 'copy-ui-%'");
+  copyDb.close();
+  pass(
+    'filtered select-all updates unloaded books and respects a manual exclusion',
+  );
+  await navigate(`/books/${book}`);
+  await until(
+    `[...document.querySelectorAll('button')].some(button => button.textContent.includes('Physical') && button.hasAttribute('aria-pressed'))`,
+  );
+  await evaluate(
+    `[...document.querySelectorAll('button')].find(button => button.textContent.includes('Physical') && button.hasAttribute('aria-pressed')).click()`,
+  );
+  await until(
+    `[...document.querySelectorAll('button')].some(button => button.textContent.includes('Physical') && button.getAttribute('aria-pressed') === 'true')`,
+  );
+  assert.equal(
+    (await api(`/api/books/${book}`, reader)).book.hasPhysicalCopy,
+    true,
+  );
+  await authenticate(reader);
+  await navigate(`/books/${book}`);
+  await until(
+    `[...document.querySelectorAll('button')].some(button => button.textContent.includes('Physical') && button.getAttribute('aria-pressed') === 'true')`,
+  );
+  assert.equal(
+    await evaluate(
+      `[...document.querySelectorAll('button')].find(button => button.textContent.includes('Physical') && button.hasAttribute('aria-pressed')).disabled`,
+    ),
+    true,
+  );
+  pass(
+    'detail control saves a shared mark and viewers see it without edit access',
+  );
+  await authenticate(owner);
   await navigate(`/books/${book}`);
   await until(
     'Boolean(document.querySelector(\'[aria-label="Move book to another collection"]\'))',

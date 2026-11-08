@@ -141,7 +141,19 @@ try {
     ).status,
     404,
   );
+  assert.equal(
+    (
+      await request('/api/books/bulk/copies', a.cookie, 'POST', {
+        bookIds: [reading],
+        physical: true,
+        audiobook: true,
+      })
+    ).status,
+    200,
+  );
   const first = await request('/api/dashboard', a.cookie);
+  assert.equal(first.data.data.shelf.books[0].hasPhysicalCopy, true);
+  assert.equal(first.data.data.shelf.books[0].hasAudiobookCopy, true);
   assert.equal(first.headers.get('cache-control'), 'private, no-store');
   assert.equal(
     first.data.data.counts.total,

@@ -39,6 +39,8 @@ export type BookViewBook = {
   formats?: string[];
   rating?: number | null;
   status?: string | null;
+  hasPhysicalCopy?: boolean;
+  hasAudiobookCopy?: boolean;
   coverImagePath?: string | null;
   createdAt?: string | number | Date;
   updatedAt?: string | number | Date;
