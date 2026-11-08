@@ -252,6 +252,12 @@ export const books = sqliteTable(
      */
     publishedAt: integer('published_at', { mode: 'timestamp' }),
     language: text('language'), // raw string (lean v1)
+    hasPhysicalCopy: integer('has_physical_copy', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+    hasAudiobookCopy: integer('has_audiobook_copy', { mode: 'boolean' })
+      .notNull()
+      .default(false),
 
     /**
      * Page count (optional).

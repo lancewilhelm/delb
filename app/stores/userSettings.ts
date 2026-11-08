@@ -53,6 +53,7 @@ export interface BaseUserSettings {
     roundedRight: boolean;
     grayscale: boolean;
     showReadingStatus: boolean;
+    showCopyIndicators: boolean;
     authorsMaxCovers: number;
     seriesMaxCovers: number;
     publishersMaxCovers: number;
@@ -138,6 +139,7 @@ function getBaseDefaults(): BaseUserSettings {
       roundedRight: false,
       grayscale: false,
       showReadingStatus: false,
+      showCopyIndicators: false,
       authorsMaxCovers: 8,
       seriesMaxCovers: 8,
       publishersMaxCovers: 8,

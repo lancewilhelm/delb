@@ -13,6 +13,8 @@ export type DashboardBook = {
   id: string;
   title: string;
   coverImagePath: string | null;
+  hasPhysicalCopy: boolean;
+  hasAudiobookCopy: boolean;
   updatedAt: string;
   progress: number | null;
   finishedDate: string | null;

@@ -16,6 +16,16 @@ export const useBooksIndexFiltersStore = defineStore(
     const selectedStatuses = ref<UserBookStatus[]>([]);
     const includeNoStatus = ref(false);
     const filesFilter = ref<BookFilesFilter>('any');
+    const physicalFilter = ref<'any' | 'marked' | 'unmarked'>('any');
+    const audiobookFilter = ref<'any' | 'marked' | 'unmarked'>('any');
+    const copyQuery = computed<Record<string, string>>(() => ({
+      ...(physicalFilter.value !== 'any'
+        ? { physical: physicalFilter.value }
+        : {}),
+      ...(audiobookFilter.value !== 'any'
+        ? { audiobook: audiobookFilter.value }
+        : {}),
+    }));
 
     const statusQuery = computed<Record<string, string>>(() => {
       const q: Record<string, string> = {};
@@ -43,10 +53,12 @@ export const useBooksIndexFiltersStore = defineStore(
     const isApplied = computed<boolean>(() => {
       return Boolean(
         addedStart.value ||
-          addedEnd.value ||
-          selectedStatuses.value.length ||
-          includeNoStatus.value ||
-          filesFilter.value !== 'any',
+        addedEnd.value ||
+        selectedStatuses.value.length ||
+        includeNoStatus.value ||
+        filesFilter.value !== 'any' ||
+        physicalFilter.value !== 'any' ||
+        audiobookFilter.value !== 'any',
       );
     });
 
@@ -56,6 +68,8 @@ export const useBooksIndexFiltersStore = defineStore(
       selectedStatuses.value = [];
       includeNoStatus.value = false;
       filesFilter.value = 'any';
+      physicalFilter.value = 'any';
+      audiobookFilter.value = 'any';
     }
 
     function toggleNoStatus() {
@@ -99,6 +113,9 @@ export const useBooksIndexFiltersStore = defineStore(
       selectedStatuses,
       includeNoStatus,
       filesFilter,
+      physicalFilter,
+      audiobookFilter,
+      copyQuery,
 
       statusQuery,
       addedDateQuery,

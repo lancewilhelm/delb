@@ -23,6 +23,8 @@ type Book = {
   updatedAt?: string | number | Date;
   createdByUserId?: string | null;
   canEdit?: boolean;
+  hasPhysicalCopy?: boolean;
+  hasAudiobookCopy?: boolean;
 
   /**
    * Per-user rating for this book.
@@ -528,6 +530,31 @@ const showDnfAt = computed(() => {
 });
 
 const canEditBook = computed(() => Boolean(book.value?.canEdit));
+const copiesSaving = ref(false);
+const copiesError = ref('');
+async function setCopy(kind: 'physical' | 'audiobook', value: boolean) {
+  if (!book.value || copiesSaving.value) return;
+  copiesSaving.value = true;
+  copiesError.value = '';
+  try {
+    const result = await $fetch<{ data: { updated: number } }>(
+      '/api/books/bulk/copies',
+      {
+        method: 'POST',
+        body: { bookIds: [book.value.id], [kind]: value },
+      },
+    );
+    if (result.data.updated !== 1)
+      throw new Error('You cannot edit this book.');
+    if (kind === 'physical') book.value.hasPhysicalCopy = value;
+    else book.value.hasAudiobookCopy = value;
+  } catch (error) {
+    copiesError.value =
+      error instanceof Error ? error.message : 'Could not save copies.';
+  } finally {
+    copiesSaving.value = false;
+  }
+}
 
 const showDeleteConfirm = ref(false);
 const deleting = ref(false);
@@ -1560,6 +1587,43 @@ const { copy } = useClipboard();
                   >
                     No collections.
                   </span>
+                </div>
+              </div>
+              <div class="grid grid-cols-[min-content_1fr] gap-4 items-center">
+                <div class="font-semibold">Copies</div>
+                <div class="flex flex-wrap justify-end items-center gap-1">
+                  <button
+                    v-for="item in [
+                      {
+                        key: 'physical' as const,
+                        label: 'Physical',
+                        icon: 'lucide:book',
+                        value: book.hasPhysicalCopy,
+                      },
+                      {
+                        key: 'audiobook' as const,
+                        label: 'Audiobook',
+                        icon: 'lucide:headphones',
+                        value: book.hasAudiobookCopy,
+                      },
+                    ]"
+                    :key="item.key"
+                    type="button"
+                    :aria-pressed="Boolean(item.value)"
+                    :disabled="!canEditBook || copiesSaving"
+                    class="px-2 py-1 rounded-md border border-(--contrast-border-color) text-xs inline-flex items-center gap-1 disabled:cursor-default"
+                    :class="item.value ? 'bg-(--sub-color)/25' : 'opacity-70'"
+                    @click="setCopy(item.key, !item.value)"
+                  >
+                    <Icon :name="item.icon" />{{ item.label
+                    }}<Icon v-if="item.value" name="lucide:check" />
+                  </button>
+                  <span
+                    v-if="copiesError"
+                    class="text-xs text-(--contrast-error-color)"
+                    role="alert"
+                    >{{ copiesError }}</span
+                  >
                 </div>
               </div>
             </div>

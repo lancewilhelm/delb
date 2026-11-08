@@ -41,6 +41,9 @@ const coverStyleRoundedRight = userSettingsStore.settingRef<boolean>(
   'coverStyle.roundedRight',
 );
 
+const coverCopyIndicators = userSettingsStore.settingRef<boolean>(
+  'coverStyle.showCopyIndicators',
+);
 const coverStyleGrayscale = userSettingsStore.settingRef<boolean>(
   'coverStyle.grayscale',
 );
@@ -228,6 +231,11 @@ function handleSortChange(target: string) {
         v-model="coverReadingStatus"
         title="Reading status badges"
         description="Show a small reading-status icon in the top-right corner of book covers."
+      />
+      <SettingsUIToggle
+        v-model="coverCopyIndicators"
+        title="Copy indicators"
+        description="Show physical and audiobook icons in the bottom-right corner of book covers."
       />
       <SettingsUIInput
         v-model="authorsMaxCovers"

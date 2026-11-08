@@ -29,6 +29,14 @@ This is a basic page viewer. Text selection, search, annotations, interactive fo
 
 ![PDF reader with page navigation and zoom](../images/pdf-reader.png)
 
+## Mark available copies
+
+On the book details page, select **Physical** or **Audiobook** under **Copies**. Collection owners and editors can change these marks. Everyone who can access the book sees the same marks. An unmarked copy does not mean that no copy exists. These marks do not add files or audiobook playback.
+
+To update several books, select them in **Books**, then choose **Actions → Set copies**. For each copy type, choose **Mark available**, **Clear mark**, or **Leave unchanged**, then select **Apply**. Delb reports how many books it skipped because you could not edit them.
+
+To show copy icons on covers, enable **Copy indicators** under **Settings → Appearance → Cover Style**. The setting is personal and starts disabled.
+
 ## Set a reading status
 
 1. Open the book detail page.

@@ -385,7 +385,7 @@ function onBookStatusChanged(change: BookStatusChange) {
 
 let requestGeneration = 0;
 
-function reset() {
+function reset(preserveSelection = false) {
   requestGeneration += 1;
   loading.value = false;
   books.value = [];
@@ -400,7 +400,7 @@ function reset() {
   }
 
   if (props.selectionEnabled) {
-    selectionStore.clearSelection();
+    if (!preserveSelection) selectionStore.clearSelection();
     selectionStore.setKnownBookIdsInScope([]);
   }
 }
@@ -472,8 +472,8 @@ async function fetchPage(opts: { cursor?: string | null; append: boolean }) {
   }
 }
 
-async function loadFirstPage() {
-  reset();
+async function loadFirstPage(preserveSelection = false) {
+  reset(preserveSelection);
   await fetchPage({ cursor: null, append: false });
 
   await nextTick();
@@ -508,7 +508,7 @@ watch(
     if (layoutKey.value === key) return;
     layoutKey.value = key;
 
-    await loadFirstPage();
+    await loadFirstPage(true);
   },
   { flush: 'post' },
 );
@@ -553,7 +553,10 @@ onBeforeUnmount(() => {
     @scroll="onScroll"
   >
     <div ref="contentRef" class="pb-4">
-      <div v-if="errorMessage" class="text-sm text-(--contrast-error-color) mb-3">
+      <div
+        v-if="errorMessage"
+        class="text-sm text-(--contrast-error-color) mb-3"
+      >
         {{ errorMessage }}
       </div>
 

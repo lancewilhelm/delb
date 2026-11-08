@@ -256,6 +256,10 @@ const visibleFields = computed(() =>
           :context-menu-items="props.selectable ? [] : getContextMenuItems"
           @click="onOpenBook"
         />
+        <BooksBookCopyBadges
+          :physical="props.book.hasPhysicalCopy"
+          :audiobook="props.book.hasAudiobookCopy"
+        />
         <BooksBookStatusBadge
           v-if="!props.selectable"
           :status="props.book.status"
