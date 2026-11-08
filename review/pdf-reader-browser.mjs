@@ -107,7 +107,7 @@ try {
   }
   const pageReady = (page) =>
     until(
-      `document.querySelector('canvas[aria-label="Page ${page} of 3"]') && document.querySelector('[aria-busy]')?.getAttribute('aria-busy') === 'false'`,
+      `document.querySelector('[data-pdf-page="${page}"] canvas')?.width > 100 && ${control('Page number')}.value === '${page}' && document.querySelector('[aria-busy]')?.getAttribute('aria-busy') === 'false'`,
     );
   async function screenshot(name) {
     const { data } = await call('Page.captureScreenshot', { format: 'png' });
@@ -213,7 +213,7 @@ try {
   await pageReady(2);
   assert.ok(
     await evaluate(
-      "document.querySelector('canvas').width > document.querySelector('canvas').height",
+      `document.querySelector('[data-pdf-page="2"] canvas').width > document.querySelector('[data-pdf-page="2"] canvas').height`,
     ),
   );
   await waitFor(
@@ -226,11 +226,10 @@ try {
 
   await call('Page.reload');
   await pageReady(2);
-  await evaluate(
-    `${control('PDF zoom')}.value='2'; ${control('PDF zoom')}.dispatchEvent(new Event('change',{bubbles:true}))`,
-  );
+  await click('Zoom in');
+  await until(`${control('Reset zoom')}.textContent.trim() === '125%'`);
   await until(
-    `${control('PDF zoom')}.value==='2' && document.querySelector('[aria-busy]').getAttribute('aria-busy')==='false'`,
+    'document.querySelector(\'[data-pdf-page="2"] canvas\').width > 100',
   );
   await click('Next page');
   await pageReady(3);
@@ -251,22 +250,37 @@ try {
     deviceScaleFactor: 2,
     mobile: true,
   });
-  await evaluate(
-    `${control('PDF zoom')}.value='1'; ${control('PDF zoom')}.dispatchEvent(new Event('change',{bubbles:true}))`,
-  );
+  await click('Reset zoom');
   await pageReady(1);
-  assert.ok(
-    await evaluate(
-      "document.querySelector('canvas').getBoundingClientRect().width <= innerWidth",
-    ),
+  await until(
+    "document.querySelector('canvas').getBoundingClientRect().width <= innerWidth",
   );
   assert.equal(
     await evaluate('document.documentElement.scrollWidth <= innerWidth'),
     true,
   );
+  await until(
+    `(()=>{const c=document.querySelector('[data-pdf-page="1"] canvas');return c.width > 0 && c.getContext('2d').getImageData(Math.floor(c.width/2),Math.floor(c.height/2),1,1).data[0]<255})()`,
+  );
   await screenshot('mobile');
+  await evaluate(
+    "document.querySelector('[data-pdf-page=\"2\"]').scrollIntoView({block:'start'})",
+  );
+  await pageReady(2);
+  await waitFor(
+    async () => (await position()).location?.endsWith(':2'),
+    'scroll position save',
+  );
+  await call('Page.reload');
+  await pageReady(2);
+  await click('Zoom out');
+  await until(`${control('Reset zoom')}.textContent.trim() === '75%'`);
+  await click('Reset zoom');
+  await until(`${control('Reset zoom')}.textContent.trim() === '100%'`);
+  await click('Previous page');
+  await pageReady(1);
   pass(
-    'reload resume, zoom, page entry, keyboard arrows, boundary buttons, and phone-width fit',
+    'scrolling and saved position, reload resume, zoom controls, page entry, keyboard arrows, and phone-width fit',
   );
 
   await call('Fetch.enable', {

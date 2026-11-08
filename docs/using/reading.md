@@ -25,7 +25,7 @@ For MOBI or AZW3, use **Download book** and an appropriate external reader. A re
 
 The PDF reader saves your page for your account and restores it when you return. Progress sync uses the displayed page divided by the PDF's actual page count; when enabled, the latest logged percentage can also select the opening page. Replacing the file starts at page 1 unless progress sync supplies a position. A book has one saved position, so switching between EPUB and PDF replaces that position.
 
-This is a basic page viewer. Text selection, search, annotations, interactive forms, and password-protected files are not supported. **Download PDF** opens the existing download flow for use in another reader. See the [PDF reader reference](../developing/reference/pdf-reader.md) for file access and persistence details.
+Scroll continuously between pages, use the page controls to jump, and use the plus and minus buttons to adjust zoom. Select the zoom percentage to return to fit page. Text selection, search, annotations, interactive forms, and password-protected files are not supported. **Download PDF** opens the existing download flow for use in another reader. See the [PDF reader reference](../developing/reference/pdf-reader.md) for file access and persistence details.
 
 ![PDF reader with page navigation and zoom](../images/pdf-reader.png)
 
