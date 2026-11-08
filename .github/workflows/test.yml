@@ -30,7 +30,7 @@ jobs:
         run: pnpm --filter @delb/epub fixtures:epubcheck -- "$RUNNER_TEMP/epub-fixtures"
       - name: Install EPUBCheck 5.4.0
         run: |
-          curl -fsSL https://github.com/w3c/epubcheck/releases/download/v5.4.0/epubcheck-5.4.0.zip -o "$RUNNER_TEMP/epubcheck.zip"
+          curl -fsSL --retry 3 https://github.com/w3c/epubcheck/releases/download/v5.4.0/epubcheck-5.4.0.zip -o "$RUNNER_TEMP/epubcheck.zip"
           unzip -q "$RUNNER_TEMP/epubcheck.zip" -d "$RUNNER_TEMP"
       - name: Validate generated EPUB 2 and EPUB 3 files
         run: |
