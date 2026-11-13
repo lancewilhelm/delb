@@ -310,6 +310,67 @@ try {
     (await expect(`/api/books/${duplicate}`, editor)).book.collectionId,
     target,
   );
+  const physicalMetadata = {
+    provider: 'googleBooks',
+    item: {
+      id: 'physical-scan-fixture',
+      volumeInfo: {
+        title: 'Physical scan fixture',
+        authors: ['Scan fixture author'],
+      },
+    },
+    collectionIds: [target],
+  };
+  await expect(
+    '/api/books/metadata-import/create',
+    editor,
+    'POST',
+    { ...physicalMetadata, hasPhysicalCopy: 'true' },
+    400,
+  );
+  const scanned = (
+    await expect('/api/books/metadata-import/create', editor, 'POST', {
+      ...physicalMetadata,
+      hasPhysicalCopy: true,
+    })
+  ).book.id;
+  assert.equal(
+    (await expect(`/api/books/${scanned}`, editor)).book.hasPhysicalCopy,
+    true,
+  );
+  const resolution = {
+    ...physicalMetadata,
+    existingBookId: scanned,
+    hasPhysicalCopy: false,
+  };
+  await expect('/api/books/metadata-import/create', editor, 'POST', {
+    ...resolution,
+    duplicateAction: 'replace_existing',
+  });
+  assert.equal(
+    (await expect(`/api/books/${scanned}`, editor)).book.hasPhysicalCopy,
+    true,
+  );
+  const unmarked = (
+    await expect('/api/books/metadata-import/create', editor, 'POST', {
+      ...resolution,
+      duplicateAction: 'add_new',
+    })
+  ).book.id;
+  assert.equal(
+    (await expect(`/api/books/${unmarked}`, editor)).book.hasPhysicalCopy,
+    false,
+  );
+  await expect('/api/books/metadata-import/create', editor, 'POST', {
+    ...resolution,
+    existingBookId: unmarked,
+    hasPhysicalCopy: true,
+    duplicateAction: 'use_existing',
+  });
+  assert.equal(
+    (await expect(`/api/books/${unmarked}`, editor)).book.hasPhysicalCopy,
+    true,
+  );
   const health = await expect('/api/settings/admin/health', owner, 'POST', {
     mode: 'quick',
   });

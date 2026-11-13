@@ -96,6 +96,7 @@ const uploading = ref(false);
 const metadataInputRef = ref<HTMLInputElement | null>(null);
 const query = ref('');
 const keepOpen = ref(false);
+const markPhysicalCopy = ref(false);
 const creating = ref(false);
 const metadataSearchOpen = ref(false);
 
@@ -104,6 +105,7 @@ type PendingMetadataImport = {
   provider: MetadataProviderKey;
   item: unknown;
   query: string;
+  hasPhysicalCopy: boolean;
 };
 const pendingMetadataImport = ref<PendingMetadataImport | null>(null);
 
@@ -171,6 +173,7 @@ function resetPerOpen() {
   creating.value = false;
   query.value = '';
   keepOpen.value = false;
+  markPhysicalCopy.value = false;
   metadataSearchOpen.value = false;
   pendingMetadataImport.value = null;
 }
@@ -672,6 +675,7 @@ async function resolveMetadataDuplicate(
         provider: pending.provider,
         item: pending.item,
         collectionIds,
+        hasPhysicalCopy: pending.hasPhysicalCopy,
         duplicateAction: action,
         existingBookId: selectedDuplicateBookId.value || undefined,
       },
@@ -739,6 +743,7 @@ async function createFromMetadataItem(opts: {
   creating.value = true;
   errorMessage.value = null;
   successMessage.value = null;
+  const hasPhysicalCopy = markPhysicalCopy.value;
 
   try {
     const res = await $fetch<{
@@ -751,6 +756,7 @@ async function createFromMetadataItem(opts: {
         provider: opts.provider,
         item: opts.item,
         collectionIds,
+        hasPhysicalCopy,
       },
     });
 
@@ -782,6 +788,7 @@ async function createFromMetadataItem(opts: {
         provider,
         item,
         query: query.value.trim(),
+        hasPhysicalCopy,
       };
       duplicateReview.value = {
         kind: 'metadata',
@@ -828,6 +835,7 @@ async function createFromMetadata() {
   creating.value = true;
   errorMessage.value = null;
   successMessage.value = null;
+  const hasPhysicalCopy = markPhysicalCopy.value;
 
   try {
     const res = await $fetch<{
@@ -839,6 +847,7 @@ async function createFromMetadata() {
       body: {
         query: q,
         collectionIds,
+        hasPhysicalCopy,
       },
     });
 
@@ -873,7 +882,12 @@ async function createFromMetadata() {
       const item = dup.metadata?.item;
 
       if (item) {
-        pendingMetadataImport.value = { provider, item, query: q };
+        pendingMetadataImport.value = {
+          provider,
+          item,
+          query: q,
+          hasPhysicalCopy,
+        };
       } else {
         pendingMetadataImport.value = null;
       }
@@ -1431,6 +1445,19 @@ function startManualEntry() {
             "
           ></span>
           <span>Keep open and refocus after each add</span>
+        </label>
+
+        <label class="flex items-center gap-2 text-sm select-none">
+          <input
+            v-model="markPhysicalCopy"
+            type="checkbox"
+            class="peer sr-only"
+            :disabled="creating"
+          />
+          <span
+            class="h-5 w-5 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--sub-color) cursor-pointer"
+          ></span>
+          <span>Mark as a physical copy</span>
         </label>
 
         <div class="flex gap-2">

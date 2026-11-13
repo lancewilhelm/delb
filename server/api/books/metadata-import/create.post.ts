@@ -65,6 +65,9 @@ type Body = {
    */
   collectionIds?: string[];
 
+  /** Mark the imported or selected book as a physical copy. */
+  hasPhysicalCopy?: boolean;
+
   /**
    * Duplicate-resolution behavior:
    * - When omitted, the server will block on possible duplicates (409) and return candidates.
@@ -288,6 +291,15 @@ export default defineEventHandler(async (event) => {
 
   const body = (await readBody(event)) as Partial<Body>;
   const query = (body.query ?? '').toString().trim();
+  if (
+    body.hasPhysicalCopy !== undefined &&
+    typeof body.hasPhysicalCopy !== 'boolean'
+  ) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Invalid "hasPhysicalCopy" in request body',
+    });
+  }
 
   // Resolve collections + permissions
   const collectionId = await resolveBookTarget(
@@ -448,6 +460,12 @@ export default defineEventHandler(async (event) => {
         bookId: useBookId,
         collectionIds,
       });
+      if (body.hasPhysicalCopy) {
+        await tx
+          .update(books)
+          .set({ hasPhysicalCopy: true, updatedAt: new Date() })
+          .where(eq(books.id, useBookId));
+      }
     });
 
     const row = await cloudDb
@@ -496,6 +514,7 @@ export default defineEventHandler(async (event) => {
           language,
           pages,
           updatedAt: new Date(),
+          ...(body.hasPhysicalCopy ? { hasPhysicalCopy: true } : {}),
         };
 
         await cloudDb.transaction(async (tx) => {
@@ -706,6 +725,7 @@ export default defineEventHandler(async (event) => {
     publishedAt,
     language,
     pages,
+    hasPhysicalCopy: body.hasPhysicalCopy ?? false,
     createdByUserId: userId,
     createdAt: now,
     updatedAt: now,

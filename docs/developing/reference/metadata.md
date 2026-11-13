@@ -15,6 +15,8 @@ The search modal can enable multiple providers and remembers choices in account 
 
 `POST /api/books/metadata-import/create` accepts a provider item or query and target collection IDs. The handler checks the session and target edit roles, resolves a record, detects possible duplicates, and creates or links catalog data.
 
+The optional `hasPhysicalCopy` boolean marks a newly created entry as physical. When resolving a duplicate, `true` also marks the authorized existing entry; `false` or an omitted value leaves its current mark unchanged.
+
 The current backend maps title, authors, description, identifiers, language, publication data, page count, categories/tags, publisher, and available series information. It resolves related entity rows, writes author/tag/identifier links, and can fetch a cover. These paths are implemented; older phase notes incorrectly marked backend mapping as pending.
 
 The editor's metadata modal returns the selected fields to [BookEditor](../../../app/components/Books/BookEditor.vue). Applying fields to the form is distinct from persisting the edited book through Save. Review the form before saving changes to shared metadata.

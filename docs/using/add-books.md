@@ -26,6 +26,8 @@ This mode needs outbound access to an enabled metadata provider. Google Books us
 
 This creates a catalog entry, not a downloadable ebook. A downloaded cover does not count as an ebook file. The Add book flow imports the selected record as a whole. The editor's metadata search supports selecting individual fields.
 
+To scan physical books, select **Mark as a physical copy** and **Keep open and refocus after each add**. Scan an ISBN with a barcode scanner that sends Enter, or type it and press Enter. Delb adds the top result and keeps the physical-copy option selected for the next book. The option resets when you close the dialog. It also applies when you choose a search result or resolve a duplicate; leaving it unchecked does not remove a mark from an existing book.
+
 ## Enter a book manually
 
 1. Select **Manual entry**.
