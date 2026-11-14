@@ -1458,6 +1458,8 @@ const lastOtherBookcaseId = computed(
   text-decoration: underline;
 }
 .wall-viewport {
+  display: flex;
+  align-items: safe center;
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -1476,14 +1478,14 @@ const lastOtherBookcaseId = computed(
 .wall {
   position: relative;
   display: flex;
+  flex: 0 0 auto;
   flex-wrap: nowrap;
   align-items: flex-end;
   justify-content: center;
   box-sizing: border-box;
   width: max-content;
   min-width: 100%;
-  min-height: 100%;
-  padding: 36px 28px 3px;
+  padding: 36px 28px 2px;
 }
 .wall::after {
   content: '';
@@ -1491,7 +1493,7 @@ const lastOtherBookcaseId = computed(
   bottom: 0;
   left: 0;
   right: 0;
-  height: 3px;
+  height: 2px;
   background: var(--main-color);
   pointer-events: none;
 }
