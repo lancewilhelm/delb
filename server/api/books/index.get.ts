@@ -1,4 +1,5 @@
 import { enrichBookViewPage } from '~~/server/utils/books/view-metadata';
+import { titleFilter } from '~~/server/utils/books/title-filter';
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
@@ -128,6 +129,7 @@ export default defineEventHandler(async (event) => {
   // - addedEnd=<YYYY-MM-DD> optional (inclusive)
   // - status=<csv> optional (e.g. "reading,to_be_read,none")
   // - files=<has|none> optional
+  // - title=<text> optional case-insensitive title substring
   const q = getQuery(event) as {
     collectionId?: string;
     limit?: string;
@@ -141,6 +143,7 @@ export default defineEventHandler(async (event) => {
     debug?: string;
     physical?: string;
     audiobook?: string;
+    title?: string;
   };
 
   const collectionId = q.collectionId;
@@ -155,6 +158,7 @@ export default defineEventHandler(async (event) => {
   const filesFilter = normalizeFilesFilter(q.files);
   const physicalFilter = copyFilter(q.physical, 'physical');
   const audiobookFilter = copyFilter(q.audiobook, 'audiobook');
+  const title = typeof q.title === 'string' ? q.title.trim() : '';
 
   // Added date range filter (books.createdAt)
   // Inputs are expected as YYYY-MM-DD from <input type="date">.
@@ -303,6 +307,7 @@ export default defineEventHandler(async (event) => {
       ordering.where,
       physicalFilter,
       audiobookFilter,
+      titleFilter(books.title, title),
       // Inclusive range (numeric compare against unix-second bounds)
       // We coerce createdAt to INTEGER to handle cases where it may be stored as TEXT.
       addedStartSec !== null

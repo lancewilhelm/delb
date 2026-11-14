@@ -22,7 +22,7 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
 
 <template>
   <div
-    class="z-140 flex justify-between items-center h-10 app-header bg-(--sub-alt-color) border-b border-t border-(--contrast-border-color)"
+    class="z-140 flex justify-between items-center h-10 app-header bg-(--sub-alt-color) border-b border-(--contrast-border-color)"
   >
     <!-- Left: app/home -->
     <div class="flex items-center gap-3 sm:gap-4 px-2 app-header-left">

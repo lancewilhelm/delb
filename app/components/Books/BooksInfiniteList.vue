@@ -41,6 +41,7 @@ const props = withDefaults(
      * - `/api/publishers/${id}/books`
      */
     endpoint?: string;
+    emptyMessage?: string;
     /**
      * Optional collection scope. If omitted, server returns books from all collections
      * the user is a member of.
@@ -77,6 +78,7 @@ const props = withDefaults(
   }>(),
   {
     endpoint: '/api/books',
+    emptyMessage: 'No books yet. Use Upload in the header to add one.',
     sort: 'dateAdded',
     sortDir: 'desc',
     rootMargin: '200px',
@@ -581,7 +583,7 @@ onBeforeUnmount(() => {
         v-else-if="books.length === 0 && !hasMore"
         class="text-sm opacity-80"
       >
-        No books yet. Use Upload in the header to add one.
+        {{ emptyMessage }}
       </div>
 
       <div v-else class="w-full">

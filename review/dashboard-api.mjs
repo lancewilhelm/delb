@@ -102,6 +102,44 @@ try {
       200,
     );
   }
+  const titlePage = await request(
+    '/api/books?title=dashboard&status=finished&sort=alphabetical&sortDir=asc&limit=1',
+    a.cookie,
+  );
+  assert.equal(titlePage.status, 200);
+  const matchingFinished = [
+    ...titlePage.data.data.books.map((book) => book.id),
+  ];
+  let titleCursor = titlePage.data.data.nextCursor;
+  while (titleCursor) {
+    const next = await request(
+      `/api/books?title=dashboard&status=finished&sort=alphabetical&sortDir=asc&limit=1&cursor=${encodeURIComponent(titleCursor)}`,
+      a.cookie,
+    );
+    assert.equal(next.status, 200);
+    matchingFinished.push(...next.data.data.books.map((book) => book.id));
+    titleCursor = next.data.data.nextCursor;
+  }
+  assert.deepEqual(new Set(matchingFinished), new Set([older, newer, undated]));
+  const scopedTitle = await request(
+    `/api/books?title=READING&collectionId=${shared}`,
+    a.cookie,
+  );
+  assert.deepEqual(
+    scopedTitle.data.data.books.map((book) => book.id),
+    [reading],
+  );
+  const privateTitle = await request(
+    '/api/books?title=private%20other',
+    a.cookie,
+  );
+  assert.deepEqual(privateTitle.data.data.books, []);
+  const mismatchedStatus = await request(
+    '/api/books?title=reading&status=finished',
+    a.cookie,
+  );
+  assert.deepEqual(mismatchedStatus.data.data.books, []);
+
   await db.execute({
     sql: 'UPDATE user_book_status SET finished_at=NULL WHERE book_id=? AND user_id=?',
     args: [undated, a.id],
