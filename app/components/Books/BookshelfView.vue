@@ -1089,6 +1089,7 @@ const currentShelf = computed(() =>
   opacity: 0.35;
 }
 .spine-button {
+  transition: none;
   position: absolute;
   left: 0;
   border: 0;
