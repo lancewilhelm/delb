@@ -376,6 +376,11 @@ const filterAnchorRef = ref<HTMLElement | null>(null);
 const filterPanelRef = ref<HTMLElement | null>(null);
 
 const filtersHydrated = ref(false);
+const titleFilter = ref('');
+
+watch(titleFilter, () => {
+  selectionStore.clearSelection();
+});
 
 // Avoid SSR hydration mismatches for persisted localStorage state by rendering defaults
 // until the client has mounted (unless the URL explicitly deep-links a status filter).
@@ -452,6 +457,7 @@ function toggleNoStatus() {
 
 function clearFilters() {
   booksFiltersStore.clearAll();
+  titleFilter.value = '';
 }
 
 const booksEndpoint = computed(() => {
@@ -460,6 +466,7 @@ const booksEndpoint = computed(() => {
     ...booksFiltersStore.statusQuery,
     ...booksFiltersStore.filesQuery,
     ...booksFiltersStore.copyQuery,
+    ...(titleFilter.value.trim() ? { title: titleFilter.value.trim() } : {}),
   };
   const pairs = Object.entries(q).filter(([, v]) => typeof v === 'string' && v);
   if (!pairs.length) return '/api/books';
@@ -513,7 +520,7 @@ onBeforeUnmount(() => {
 
 const isFiltersApplied = computed(() => {
   if (!shouldApplyPersistedFilters.value) return false;
-  return booksFiltersStore.isApplied;
+  return booksFiltersStore.isApplied || Boolean(titleFilter.value.trim());
 });
 
 // ------------------------------
@@ -654,8 +661,14 @@ onMounted(async () => {
                 <!-- Select All Button -->
                 <button
                   v-if="selectionStore.selectMode"
-                  class="p-1 flex items-center gap-2 h-full!"
+                  class="p-1 flex items-center gap-2 h-full! disabled:opacity-40 disabled:cursor-not-allowed"
                   type="button"
+                  :disabled="Boolean(titleFilter.trim())"
+                  :title="
+                    titleFilter.trim()
+                      ? 'Select books individually while filtering by title'
+                      : undefined
+                  "
                   :aria-pressed="
                     selectionStore.allSelectedInScope ? 'true' : 'false'
                   "
@@ -903,11 +916,11 @@ onMounted(async () => {
                 <div
                   v-if="filtersOpen"
                   ref="filterPanelRef"
-                  class="absolute right-0 mt-1 w-80 border border-(--contrast-border-color) bg-(--bg-color) rounded-md shadow-lg z-50 overflow-hidden"
+                  class="absolute right-0 mt-1 w-80 max-h-[calc(100dvh-6rem)] overflow-y-auto border border-(--contrast-border-color) bg-(--bg-color) rounded-md shadow-lg z-50"
                   role="menu"
                 >
                   <div
-                    class="px-3 py-2 border-b border-(--contrast-border-color) flex items-center justify-between gap-3"
+                    class="p-2 border-b border-(--contrast-border-color) flex items-center justify-between gap-3"
                   >
                     <div class="text-xs opacity-70">Filters</div>
 
@@ -920,15 +933,45 @@ onMounted(async () => {
                     </button>
                   </div>
 
-                  <div class="p-3 space-y-3">
+                  <div class="p-2 space-y-2">
+                    <label
+                      for="books-title-filter"
+                      class="block text-sm font-medium opacity-90"
+                      >Title</label
+                    >
+                    <div
+                      class="flex items-center gap-2 rounded-md border border-(--contrast-border-color) bg-(--sub-alt-color) px-2 focus-within:ring-2 focus-within:ring-(--main-color)"
+                    >
+                      <Icon
+                        name="lucide:search"
+                        class="shrink-0 opacity-60"
+                        aria-hidden="true"
+                      />
+                      <input
+                        id="books-title-filter"
+                        v-model="titleFilter"
+                        type="search"
+                        placeholder="Filter by title"
+                        class="min-w-0 flex-1 bg-transparent! text-sm"
+                      />
+                    </div>
+                    <div
+                      v-if="selectionStore.selectMode && titleFilter.trim()"
+                      class="text-xs opacity-70"
+                    >
+                      Select books individually while filtering by title.
+                    </div>
+                    <div
+                      class="border-t border-(--contrast-border-color)"
+                    ></div>
                     <div class="text-sm font-medium opacity-90">Added date</div>
 
-                    <div class="grid grid-cols-2 gap-3">
+                    <div class="grid grid-cols-2 gap-2">
                       <label class="space-y-1">
                         <div class="text-xs opacity-70">Start</div>
                         <input
                           v-model="addedStart"
-                          class="w-full px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
+                          class="w-full px-2 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
                           type="date"
                         />
                       </label>
@@ -943,12 +986,8 @@ onMounted(async () => {
                       </label>
                     </div>
 
-                    <div class="text-xs opacity-70">
-                      Shows books added within the selected date range.
-                    </div>
-
                     <div
-                      class="pt-2 border-t border-(--contrast-border-color)"
+                      class="border-t border-(--contrast-border-color)"
                     ></div>
 
                     <div class="text-sm font-medium opacity-90">Status</div>
@@ -994,74 +1033,32 @@ onMounted(async () => {
                     </div>
 
                     <div
-                      class="pt-2 border-t border-(--contrast-border-color)"
+                      class="border-t border-(--contrast-border-color)"
                     ></div>
 
-                    <div class="text-sm font-medium opacity-90">Files</div>
+                    <label
+                      class="flex justify-between items-center gap-2 text-sm"
+                      >Files
+                      <select
+                        v-model="filesFilter"
+                        class="px-2 py-1 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
+                      >
+                        <option value="any">Any</option>
+                        <option value="has">Has files</option>
+                        <option value="none">No files</option>
+                      </select>
+                    </label>
 
-                    <div class="space-y-2">
-                      <label class="flex items-center gap-2 cursor-pointer">
-                        <input
-                          v-model="filesFilter"
-                          type="radio"
-                          name="files-filter"
-                          value="any"
-                          class="peer sr-only"
-                        />
-                        <span
-                          class="h-4 w-4 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
-                        ></span>
-                        <div class="min-w-0">
-                          <div class="text-sm">Any</div>
-                        </div>
-                      </label>
-
-                      <label class="flex items-center gap-2 cursor-pointer">
-                        <input
-                          v-model="filesFilter"
-                          type="radio"
-                          name="files-filter"
-                          value="has"
-                          class="peer sr-only"
-                        />
-                        <span
-                          class="h-4 w-4 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
-                        ></span>
-                        <div class="min-w-0">
-                          <div class="text-sm">Has files</div>
-                        </div>
-                      </label>
-
-                      <label class="flex items-center gap-2 cursor-pointer">
-                        <input
-                          v-model="filesFilter"
-                          type="radio"
-                          name="files-filter"
-                          value="none"
-                          class="peer sr-only"
-                        />
-                        <span
-                          class="h-4 w-4 border border-(--contrast-border-color) rounded transition peer-checked:bg-(--main-color) cursor-pointer shrink-0"
-                        ></span>
-                        <div class="min-w-0">
-                          <div class="text-sm">No files</div>
-                        </div>
-                      </label>
-                    </div>
-
-                    <div class="text-xs opacity-70">
-                      Filters by whether a book has stored files.
-                    </div>
                     <div
-                      class="pt-2 border-t border-(--contrast-border-color)"
+                      class="border-t border-(--contrast-border-color)"
                     ></div>
                     <div class="text-sm font-medium opacity-90">Copies</div>
                     <label
-                      class="flex justify-between items-center gap-3 text-sm"
+                      class="flex justify-between items-center gap-2 text-sm"
                       >Physical
                       <select
                         v-model="booksFiltersStore.physicalFilter"
-                        class="px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
+                        class="px-2 py-1 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
                       >
                         <option value="any">Any</option>
                         <option value="marked">Marked</option>
@@ -1069,20 +1066,17 @@ onMounted(async () => {
                       </select>
                     </label>
                     <label
-                      class="flex justify-between items-center gap-3 text-sm"
+                      class="flex justify-between items-center gap-2 text-sm"
                       >Audiobook
                       <select
                         v-model="booksFiltersStore.audiobookFilter"
-                        class="px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
+                        class="px-2 py-1 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
                       >
                         <option value="any">Any</option>
                         <option value="marked">Marked</option>
                         <option value="unmarked">Not marked</option>
                       </select>
                     </label>
-                    <div class="text-xs opacity-70">
-                      Not marked does not necessarily mean no copy is available.
-                    </div>
                   </div>
                 </div>
               </div>
@@ -1099,22 +1093,28 @@ onMounted(async () => {
             <!-- Only the books grid scrolls (BooksInfiniteGrid owns the scroller) -->
             <BooksInfiniteGrid
               v-if="effectiveBooksViewMode === 'grid'"
-              :key="`grid-${booksGridKey}-${booksSortKey}-${booksSortDir}-${booksEndpoint}-${effectiveBooksViewMode}`"
+              :key="`grid-${booksGridKey}-${booksSortKey}-${booksSortDir}-${effectiveBooksViewMode}`"
               :collection-id="activeCollectionId"
               :sort="booksSortKey"
               :sort-dir="booksSortDir"
               :endpoint="booksEndpoint"
+              :empty-message="
+                titleFilter.trim() ? 'No books match this title.' : undefined
+              "
               :selection-enabled="true"
               class="flex-1 min-h-0"
               @error="handleBooksGridError"
             />
             <BooksInfiniteList
               v-else-if="effectiveBooksViewMode === 'list'"
-              :key="`list-${booksGridKey}-${booksSortKey}-${booksSortDir}-${booksEndpoint}-${effectiveBooksViewMode}`"
+              :key="`list-${booksGridKey}-${booksSortKey}-${booksSortDir}-${effectiveBooksViewMode}`"
               :collection-id="activeCollectionId"
               :sort="booksSortKey"
               :sort-dir="booksSortDir"
               :endpoint="booksEndpoint"
+              :empty-message="
+                titleFilter.trim() ? 'No books match this title.' : undefined
+              "
               :selection-enabled="true"
               class="flex-1 min-h-0"
               @error="handleBooksGridError"
