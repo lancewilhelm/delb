@@ -11,11 +11,13 @@ test('view metadata enriches only the supplied page and isolates personal values
     for (const sql of [
       'CREATE TABLE tags (id TEXT PRIMARY KEY, name TEXT)',
       'CREATE TABLE book_tags (book_id TEXT, tag_id TEXT)',
+      'CREATE TABLE book_spines (book_id TEXT, revision TEXT)',
       'CREATE TABLE book_identifiers (book_id TEXT, type TEXT, value TEXT)',
       'CREATE TABLE book_files (id TEXT, book_id TEXT, format TEXT)',
       'CREATE TABLE book_ratings (book_id TEXT, user_id TEXT, rating INTEGER)',
       'CREATE TABLE user_book_status (book_id TEXT, user_id TEXT, status TEXT)',
       "INSERT INTO tags VALUES ('t2', 'Zebra'), ('t1', 'Alpha')",
+      "INSERT INTO book_spines VALUES ('a', 'rev-a'), ('hidden', 'secret')",
       "INSERT INTO book_tags VALUES ('a', 't2'), ('a', 't1'), ('hidden', 't2')",
       "INSERT INTO book_identifiers VALUES ('a', 'isbn', '123'), ('hidden', 'isbn', 'secret')",
       "INSERT INTO book_files VALUES ('f1', 'a', 'epub'), ('f2', 'a', 'epub'), ('f3', 'a', 'pdf')",
@@ -35,6 +37,7 @@ test('view metadata enriches only the supplied page and isolates personal values
     assert.deepEqual(result[0], {
       id: 'a',
       title: 'A',
+      spineRevision: 'rev-a',
       tags: [
         { id: 't1', name: 'Alpha' },
         { id: 't2', name: 'Zebra' },
@@ -47,6 +50,7 @@ test('view metadata enriches only the supplied page and isolates personal values
     assert.deepEqual(result[1], {
       id: 'b',
       title: 'B',
+      spineRevision: null,
       tags: [],
       identifiers: [],
       formats: [],

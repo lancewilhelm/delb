@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import BookDescriptionEditor from '~/components/Books/BookDescriptionEditor.vue';
+import SpineArtworkEditor from '~/components/Books/SpineArtworkEditor.vue';
 import { readResponseError } from '~/utils/responseError';
 
 defineOptions({ name: 'BookEditor' });
@@ -265,6 +266,11 @@ const activeBookId = computed(() => currentBookId.value);
 
 const loading = ref(false);
 const saving = ref(false);
+const spineEditor = ref<{
+  save: () => Promise<void>;
+  reset: () => void;
+  busy: boolean;
+} | null>(null);
 const errorMessage = ref<string | null>(null);
 const successMessage = ref<string | null>(null);
 
@@ -482,7 +488,7 @@ async function uploadPendingCoverIfAny() {
       coverResetPending.value = false;
 
       // Reload so `coverImagePath` is consistent before applying a new upload.
-      await loadBook();
+      await loadBook({ silent: true });
     }
 
     // If no cover file is selected, we're done (this may have been a reset-only save).
@@ -519,8 +525,8 @@ async function uploadPendingCoverIfAny() {
 
     clearSelectedCover();
 
-    // Reload the book so `coverImagePath` refreshes
-    await loadBook();
+    // Reload without unmounting the staged spine editor.
+    await loadBook({ silent: true });
     const successMessage =
       embeddedEpubs > 0
         ? totalEpubs === 1
@@ -626,7 +632,11 @@ const authorsMissing = computed(
   () => authorChips.value.length === 0 && !authorInput.value.trim(),
 );
 const saveDisabled = computed(
-  () => saving.value || titleMissing.value || authorsMissing.value,
+  () =>
+    saving.value ||
+    spineEditor.value?.busy ||
+    titleMissing.value ||
+    authorsMissing.value,
 );
 const saveLabel = computed(() => (isCreateMode.value ? 'Create' : 'Save'));
 const backTooltip = computed(() =>
@@ -1048,7 +1058,7 @@ function bookToForm(b: Book) {
   seriesSuggestOpen.value = false;
 }
 
-async function loadBook() {
+async function loadBook({ silent = false }: { silent?: boolean } = {}) {
   if (!activeBookId.value) {
     if (isCreateMode.value) {
       const blank = makeEmptyBook();
@@ -1061,7 +1071,7 @@ async function loadBook() {
     return;
   }
 
-  loading.value = true;
+  if (!silent) loading.value = true;
   errorMessage.value = null;
   successMessage.value = null;
 
@@ -1099,7 +1109,7 @@ async function loadBook() {
   } catch (e: unknown) {
     setError(e instanceof Error ? e.message : 'Failed to load book.');
   } finally {
-    loading.value = false;
+    if (!silent) loading.value = false;
   }
 }
 
@@ -1288,8 +1298,16 @@ async function updateBook() {
       return;
     }
 
-    // Upload cover (if a new one is pending) as part of Save.
+    // Book, cover, and spine are separate writes; retain a failed spine draft for retry.
     await uploadPendingCoverIfAny();
+    try {
+      await spineEditor.value?.save();
+    } catch (error: unknown) {
+      setError(
+        `Book details and any cover changes were saved. ${error instanceof Error ? error.message : 'The spine could not be saved.'}`,
+      );
+      return;
+    }
 
     setSuccess('Saved.');
 
@@ -1318,6 +1336,7 @@ function resetForm() {
   // Global reset should revert ALL pending changes in the edit UI, including cover changes.
   coverResetPending.value = false;
   resetCoverPreview();
+  spineEditor.value?.reset();
 
   bookToForm(book.value);
 }
@@ -1726,7 +1745,7 @@ watch(
             <button
               class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm"
               type="button"
-              :disabled="saving"
+              :disabled="saving || spineEditor?.busy"
               @click="resetForm"
             >
               Reset
@@ -1748,7 +1767,7 @@ watch(
       <div v-if="loading" class="text-sm opacity-80">Loading...</div>
 
       <div
-        v-else-if="errorMessage"
+        v-else-if="errorMessage && !book"
         class="text-sm text-(--contrast-error-color) mb-4"
       >
         {{ errorMessage }}
@@ -1872,10 +1891,24 @@ watch(
             The original and thumbnail are stored next to the book. New covers
             are also embedded in every EPUB file.
           </div>
+          <SpineArtworkEditor
+            v-if="!isCreateMode && activeBookId"
+            :key="activeBookId"
+            ref="spineEditor"
+            :book-id="activeBookId"
+            :disabled="saving"
+          />
         </div>
 
         <!-- Right column: metadata fields -->
         <div class="min-w-0 flex flex-col gap-4 grow max-w-3xl">
+          <div
+            v-if="errorMessage"
+            role="alert"
+            class="text-sm text-(--contrast-error-color)"
+          >
+            {{ errorMessage }}
+          </div>
           <div
             v-if="successMessage"
             class="text-sm [--contrast-status-color:var(--color-green-600)] contrast-status"

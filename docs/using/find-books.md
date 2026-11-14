@@ -40,7 +40,9 @@ Select **Edit shelves** to move books, drag a shelf handle to change its height,
 
 Use a shelf's options menu to add a shelf or remove an empty one. The bookshelf menu adds a bookcase. Select **Done editing** to lock the arrangement. Use the zoom controls, scroll wheel, or a two-finger pinch to change its display size without changing book dimensions. Hold Shift while using the scroll wheel to scroll vertically.
 
-Delb saves your arrangement to your account. If a save fails, use **Retry save**. If another device has a newer arrangement, choose **Load newer arrangement** to discard your unsaved changes and load it. Spine artwork uses a colored title and author placeholder.
+Delb saves your arrangement to your account. If a save fails, use **Retry save**. If another device has a newer arrangement, choose **Load newer arrangement** to discard your unsaved changes and load it. Books without spine artwork use a colored title and author placeholder.
+
+To add spine artwork, open a book and select **Edit book details**. Under **Spine artwork**, upload an image, adjust the crop and optional stretch, and select **Save**. Delb keeps the original upload so you can adjust it later. The spine appears to the left of the cover on the book detail page and on the bookshelf. Collection owners and editors can change or remove it; the artwork is shared with people who can access the book.
 
 ## Change the grid or list
 

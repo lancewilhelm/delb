@@ -599,6 +599,18 @@ export const userSettings = sqliteTable('user_settings', {
     .$defaultFn(() => new Date()),
 });
 
+// Shared spine artwork retains the uploaded original and the edited rendition.
+export const bookSpines = sqliteTable('book_spines', {
+  bookId: text('book_id')
+    .primaryKey()
+    .references(() => books.id, { onDelete: 'cascade' }),
+  originalBase64: text('original_base64').notNull(),
+  originalType: text('original_type').notNull(),
+  imageBase64: text('image_base64').notNull(),
+  edits: text('edits', { mode: 'json' }).notNull(),
+  revision: text('revision').notNull(),
+});
+
 // A reader's personal arrangement is independent of shared book metadata.
 export const userBookshelves = sqliteTable('user_bookshelves', {
   userId: text('user_id')

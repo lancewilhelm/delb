@@ -4,7 +4,11 @@ import test from 'node:test';
 import ts from 'typescript';
 import { readResponseError } from './responseError.ts';
 
-async function loadEditor(response: () => Response, reset = false) {
+async function loadEditor(
+  response: () => Response,
+  reset = false,
+  spineSave?: () => Promise<void>,
+) {
   const raw = await readFile('app/components/Books/BookEditor.vue', 'utf8');
   const source = raw.slice(raw.indexOf('>') + 1, raw.indexOf('</script>'));
   const ast = ts.createSourceFile(
@@ -35,6 +39,7 @@ async function loadEditor(response: () => Response, reset = false) {
       value: new File(['image'], 'cover.png') as File | null,
     },
     saving: { value: false },
+    spineEditor: { value: spineSave ? { save: spineSave } : null },
     errorMessage: { value: null },
     successMessage: { value: null },
     setError: (s: string) => seen.push(s),
@@ -136,6 +141,21 @@ test('successful upload clears selection, reloads, and returns to book', async (
   assert.equal(state.reloaded, true);
   assert.equal(state.navigated, true);
   assert.equal(state.requests[1], 'POST /api/books/synthetic/cover');
+});
+
+test('a spine failure preserves the editor after other changes save', async () => {
+  const state = await loadEditor(
+    () => new Response(JSON.stringify({ data: {} }), { status: 200 }),
+    false,
+    async () => {
+      throw new Error('Spine draft retained.');
+    },
+  );
+  assert.equal(state.cleared, true);
+  assert.equal(state.navigated, false);
+  assert.deepEqual(state.seen, [
+    'Book details and any cover changes were saved. Spine draft retained.',
+  ]);
 });
 
 test('API error parsing supports message, plain text and empty or unreadable bodies', async () => {

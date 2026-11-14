@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import {
   bookTags,
+  bookSpines,
   tags,
   bookIdentifiers,
   bookFiles,
@@ -17,39 +18,47 @@ export async function enrichBookViewPage<T extends { id: string }>(
 ) {
   if (!page.length) return [];
   const ids = page.map((book) => book.id);
-  const [tagRows, identifiers, files, ratings, statuses] = await Promise.all([
-    db
-      .select({ bookId: bookTags.bookId, id: tags.id, name: tags.name })
-      .from(bookTags)
-      .innerJoin(tags, eq(tags.id, bookTags.tagId))
-      .where(inArray(bookTags.bookId, ids))
-      .orderBy(asc(tags.name), asc(tags.id)),
-    db
-      .select()
-      .from(bookIdentifiers)
-      .where(inArray(bookIdentifiers.bookId, ids))
-      .orderBy(asc(bookIdentifiers.type)),
-    db
-      .select({ bookId: bookFiles.bookId, format: bookFiles.format })
-      .from(bookFiles)
-      .where(inArray(bookFiles.bookId, ids))
-      .orderBy(asc(bookFiles.format)),
-    db
-      .select({ bookId: bookRatings.bookId, rating: bookRatings.rating })
-      .from(bookRatings)
-      .where(
-        and(inArray(bookRatings.bookId, ids), eq(bookRatings.userId, userId)),
-      ),
-    db
-      .select({ bookId: userBookStatus.bookId, status: userBookStatus.status })
-      .from(userBookStatus)
-      .where(
-        and(
-          inArray(userBookStatus.bookId, ids),
-          eq(userBookStatus.userId, userId),
+  const [tagRows, identifiers, files, ratings, statuses, spines] =
+    await Promise.all([
+      db
+        .select({ bookId: bookTags.bookId, id: tags.id, name: tags.name })
+        .from(bookTags)
+        .innerJoin(tags, eq(tags.id, bookTags.tagId))
+        .where(inArray(bookTags.bookId, ids))
+        .orderBy(asc(tags.name), asc(tags.id)),
+      db
+        .select()
+        .from(bookIdentifiers)
+        .where(inArray(bookIdentifiers.bookId, ids))
+        .orderBy(asc(bookIdentifiers.type)),
+      db
+        .select({ bookId: bookFiles.bookId, format: bookFiles.format })
+        .from(bookFiles)
+        .where(inArray(bookFiles.bookId, ids))
+        .orderBy(asc(bookFiles.format)),
+      db
+        .select({ bookId: bookRatings.bookId, rating: bookRatings.rating })
+        .from(bookRatings)
+        .where(
+          and(inArray(bookRatings.bookId, ids), eq(bookRatings.userId, userId)),
         ),
-      ),
-  ]);
+      db
+        .select({
+          bookId: userBookStatus.bookId,
+          status: userBookStatus.status,
+        })
+        .from(userBookStatus)
+        .where(
+          and(
+            inArray(userBookStatus.bookId, ids),
+            eq(userBookStatus.userId, userId),
+          ),
+        ),
+      db
+        .select({ bookId: bookSpines.bookId, revision: bookSpines.revision })
+        .from(bookSpines)
+        .where(inArray(bookSpines.bookId, ids)),
+    ]);
   function groupByBook<T extends { bookId: string }>(rows: T[]) {
     const groups = new Map<string, T[]>();
     for (const row of rows) {
@@ -64,8 +73,10 @@ export async function enrichBookViewPage<T extends { id: string }>(
   const filesByBook = groupByBook(files);
   const ratingsByBook = new Map(ratings.map((row) => [row.bookId, row.rating]));
   const statusByBook = new Map(statuses.map((row) => [row.bookId, row.status]));
+  const spineByBook = new Map(spines.map((row) => [row.bookId, row.revision]));
   return page.map((book) => ({
     ...book,
+    spineRevision: spineByBook.get(book.id) ?? null,
     tags: (tagsByBook.get(book.id) ?? []).map(({ id, name }) => ({ id, name })),
     identifiers: (identifiersByBook.get(book.id) ?? []).map(
       ({ type, value }) => ({ type, value }),

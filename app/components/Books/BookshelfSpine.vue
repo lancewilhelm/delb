@@ -24,6 +24,13 @@ const color = computed(() => {
     hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   return colors[hash % colors.length];
 });
+const failed = ref(false);
+watch(
+  () => [props.book.id, props.book.spineRevision],
+  () => {
+    failed.value = false;
+  },
+);
 const author = computed(
   () =>
     props.book.authorNames?.join(', ') ||
@@ -39,13 +46,29 @@ const author = computed(
     :class="{ horizontal, dimmed }"
     :style="{ background: color }"
   >
-    <span class="spine-title">{{ book.title }}</span>
-    <span class="spine-author">{{ author }}</span>
+    <img
+      v-if="book.spineRevision && !failed"
+      class="spine-art"
+      :class="{ sideways: horizontal }"
+      :style="
+        horizontal
+          ? { width: `${placement.width}px`, height: `${placement.height}px` }
+          : undefined
+      "
+      :src="`/api/books/${encodeURIComponent(book.id)}/spine?v=${encodeURIComponent(book.spineRevision)}`"
+      :alt="`Spine for ${book.title}`"
+      @error="failed = true"
+    />
+    <template v-else
+      ><span class="spine-title">{{ book.title }}</span
+      ><span class="spine-author">{{ author }}</span></template
+    >
   </span>
 </template>
 
 <style scoped>
 .shelf-spine {
+  position: relative;
   width: 100%;
   height: 100%;
   border-radius: 3px 3px 1px 1px;
@@ -67,6 +90,20 @@ const author = computed(
   writing-mode: horizontal-tb;
   padding: 2px 7px;
   white-space: nowrap;
+}
+.spine-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.spine-art.sideways {
+  inset: auto;
+  left: 0;
+  top: 100%;
+  transform-origin: top left;
+  transform: rotate(-90deg);
 }
 .spine-title {
   font:

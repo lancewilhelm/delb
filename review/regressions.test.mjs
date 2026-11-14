@@ -115,7 +115,7 @@ async function loadSource(relative) {
                 };
               if (name.endsWith('/db/schema'))
                 return {
-                  contents: `export const USER_BOOK_STATUSES = ['reading']; export const ${['authors', 'bookAuthors', 'bookFiles', 'books', 'bookTags', 'tags', 'bookIdentifiers', 'bookRatings', 'collectionBooks', 'collectionMembers', 'publishers', 'series', 'userBookStatus'].map((name) => `${name} = new Proxy({}, {get: (_, key) => String(key)})`).join(', ')};`,
+                  contents: `export const USER_BOOK_STATUSES = ['reading']; export const ${['authors', 'bookAuthors', 'bookFiles', 'books', 'bookSpines', 'bookTags', 'tags', 'bookIdentifiers', 'bookRatings', 'collectionBooks', 'collectionMembers', 'publishers', 'series', 'userBookStatus'].map((name) => `${name} = new Proxy({}, {get: (_, key) => String(key)})`).join(', ')};`,
                 };
               if (name.endsWith('/books/cover-url'))
                 return {
