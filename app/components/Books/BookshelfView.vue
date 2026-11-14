@@ -704,7 +704,14 @@ const currentShelf = computed(() =>
 <template>
   <div class="bookshelf-view">
     <div class="bookshelf-toolbar">
-      <button type="button" class="edit-button" @click="toggleEdit">
+      <button
+        type="button"
+        class="edit-button"
+        :class="{ active: editing }"
+        :aria-pressed="editing"
+        @click="toggleEdit"
+      >
+        <Icon :name="editing ? 'lucide:check' : 'lucide:pencil'" />
         {{ editing ? 'Done editing' : 'Edit shelves' }}
       </button>
       <div class="zoom-controls" role="group" aria-label="Bookshelf zoom">
@@ -714,7 +721,7 @@ const currentShelf = computed(() =>
           :disabled="zoom <= 0.5"
           @click="zoom = Math.max(0.5, +(zoom - 0.1).toFixed(1))"
         >
-          −
+          <Icon name="lucide:minus" aria-hidden="true" />
         </button>
         <button type="button" aria-label="Reset zoom" @click="zoom = 1">
           {{ Math.round(zoom * 100) }}%
@@ -725,17 +732,26 @@ const currentShelf = computed(() =>
           :disabled="zoom >= 2"
           @click="zoom = Math.min(2, +(zoom + 0.1).toFixed(1))"
         >
-          +
+          <Icon name="lucide:plus" aria-hidden="true" />
         </button>
       </div>
       <details v-if="editing" class="case-menu">
-        <summary aria-label="Bookshelf options">•••</summary>
-        <button type="button" @click="addBookcase">Add bookcase</button>
+        <summary aria-label="Bookshelf options">
+          <Icon name="lucide:ellipsis" aria-hidden="true" />
+        </summary>
+        <button type="button" @click="addBookcase">
+          <Icon name="lucide:plus" aria-hidden="true" /> Add bookcase
+        </button>
       </details>
       <span class="zoom-hint"
         >Wheel or pinch to zoom · Shift + wheel to scroll</span
       >
-      <span class="save-status" role="status">{{ status }}</span>
+      <span
+        class="save-status"
+        :class="{ problem: conflict || saveError, pending: saving || dirty }"
+        role="status"
+        >{{ status }}</span
+      >
       <button v-if="saveError" type="button" @click="retrySave">
         Retry save
       </button>
@@ -846,7 +862,7 @@ const currentShelf = computed(() =>
                   selected = null;
                 "
               >
-                •••
+                <Icon name="lucide:ellipsis" aria-hidden="true" />
               </button>
               <div
                 v-if="editing"
@@ -903,7 +919,7 @@ const currentShelf = computed(() =>
           aria-label="Close book options"
           @click="selected = null"
         >
-          ×
+          <Icon name="lucide:x" aria-hidden="true" />
         </button>
       </div>
       <label
@@ -937,7 +953,7 @@ const currentShelf = computed(() =>
           aria-label="Close shelf options"
           @click="selectedShelf = null"
         >
-          ×
+          <Icon name="lucide:x" aria-hidden="true" />
         </button>
       </div>
       <p>
@@ -988,34 +1004,103 @@ const currentShelf = computed(() =>
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 8px 2px;
+  padding: 10px 12px;
+  border: 1px solid
+    color-mix(in srgb, var(--contrast-border-color) 45%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--sub-alt-color) 55%, var(--bg-color));
 }
 .bookshelf-toolbar button,
 .shelf-panel button,
 .case-menu summary {
-  border: 1px solid var(--contrast-border-color);
-  border-radius: 6px;
-  padding: 6px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  border: 1px solid
+    color-mix(in srgb, var(--contrast-border-color) 60%, transparent);
+  border-radius: 8px;
+  padding: 6px 11px;
   background: var(--bg-color);
-  color: var(--contrast-main-color);
+  color: var(--contrast-text-color);
+  font-size: 13px;
+  font-weight: 550;
   cursor: pointer;
+  transition:
+    background-color 140ms,
+    border-color 140ms;
+}
+.bookshelf-toolbar button:not(:disabled):hover,
+.shelf-panel button:hover,
+.case-menu summary:hover {
+  background: color-mix(in srgb, var(--main-color) 10%, var(--bg-color));
+  border-color: var(--contrast-main-color);
+}
+.bookshelf-toolbar :is(button, summary):focus-visible,
+.shelf-panel :is(button, input):focus-visible,
+.spine-button:focus-visible {
+  outline: 2px solid var(--contrast-main-color);
+  outline-offset: 2px;
 }
 .bookshelf-toolbar button:disabled {
   opacity: 0.4;
   cursor: default;
 }
 .bookshelf-toolbar .edit-button {
-  background: var(--sub-color);
-  color: var(--bg-color);
+  background: var(--main-color);
+  border-color: var(--main-color);
+  color: var(--contrast-inverse-color);
+}
+.bookshelf-toolbar .edit-button:hover {
+  background: color-mix(in srgb, var(--main-color) 85%, var(--bg-color));
+}
+.bookshelf-toolbar .edit-button.active {
+  background: var(--bg-color);
+  color: var(--contrast-main-color);
 }
 .zoom-controls {
   display: flex;
-  gap: 3px;
+  align-items: center;
+  padding: 2px;
+  border: 1px solid
+    color-mix(in srgb, var(--contrast-border-color) 60%, transparent);
+  border-radius: 9px;
+  background: var(--bg-color);
+}
+.zoom-controls button {
+  min-width: 31px;
+  min-height: 28px;
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.zoom-controls button:nth-child(2) {
+  min-width: 50px;
+  font-size: 12px;
 }
 .save-status {
   color: var(--contrast-text-color);
   font-size: 12px;
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.save-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--contrast-main-color);
+}
+.save-status.pending::before {
+  opacity: 0.5;
+}
+.save-status.problem::before {
+  background: var(--contrast-error-color);
 }
 .case-menu {
   position: relative;
@@ -1024,16 +1109,23 @@ const currentShelf = computed(() =>
   list-style: none;
   cursor: pointer;
 }
+.case-menu summary::-webkit-details-marker {
+  display: none;
+}
 .case-menu button {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 5px);
   left: 0;
   z-index: 12;
   white-space: nowrap;
+  box-shadow: 0 8px 24px #0002;
 }
 .notice {
   color: var(--contrast-main-color);
   font-size: 13px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--main-color) 9%, var(--bg-color));
 }
 .notice button {
   text-decoration: underline;
@@ -1127,10 +1219,11 @@ const currentShelf = computed(() =>
   right: 3px;
   top: 3px;
   z-index: 5;
-  border-radius: 5px;
-  background: #ffffffa8;
+  border-radius: 7px;
+  background: #ffffffe0;
   color: #605c52;
-  padding: 3px 6px;
+  padding: 5px;
+  box-shadow: 0 1px 4px #0002;
   cursor: pointer;
 }
 .height-handle {
@@ -1176,9 +1269,9 @@ const currentShelf = computed(() =>
   width: 250px;
   max-height: 65%;
   overflow: auto;
-  padding: 15px;
+  padding: 16px;
   border: 1px solid var(--contrast-border-color);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--bg-color);
   color: var(--contrast-main-color);
   box-shadow: 0 5px 25px #0003;
@@ -1187,16 +1280,26 @@ const currentShelf = computed(() =>
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  align-items: start;
+  align-items: center;
+}
+.panel-heading button {
+  min-height: 30px;
+  padding: 6px;
 }
 .shelf-panel label {
   display: block;
   margin: 12px 0;
   font-size: 12px;
 }
+.shelf-panel p {
+  margin-top: 8px;
+  color: var(--contrast-text-color);
+  font-size: 12px;
+}
 .shelf-panel input {
   display: block;
   width: 100%;
+  accent-color: var(--main-color);
 }
 .panel-actions {
   display: flex;
@@ -1243,6 +1346,7 @@ const currentShelf = computed(() =>
 .stack-hint {
   font-size: 12px;
   color: var(--contrast-text-color);
+  padding: 0 4px;
 }
 .width-handle {
   position: absolute;
