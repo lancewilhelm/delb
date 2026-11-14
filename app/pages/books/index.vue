@@ -545,9 +545,12 @@ watch(
 const booksSortKey = computed(() => uiStore.booksSortKey);
 const booksSortDir = computed(() => uiStore.booksSortDirection);
 const booksViewMode = computed(() => uiStore.booksViewMode);
-const bookshelfActive = ref(false);
+const hydrated = ref(false);
+const bookshelfActive = computed(
+  () => hydrated.value && uiStore.bookshelfActive,
+);
 const bookshelfView = ref<{ canLeave: () => boolean } | null>(null);
-function setBookshelfActive(active: boolean) {
+function setBookshelfActive(active: boolean, nextMode?: 'grid' | 'list') {
   if (
     !active &&
     bookshelfActive.value &&
@@ -555,12 +558,12 @@ function setBookshelfActive(active: boolean) {
     !bookshelfView.value.canLeave()
   )
     return;
-  bookshelfActive.value = active;
+  if (nextMode) uiStore.setBooksViewMode(nextMode);
+  uiStore.setBookshelfActive(active);
 }
 watch(bookshelfActive, (active) => {
   if (active) selectionStore.setMode({ enabled: false });
 });
-const hydrated = ref(false);
 onMounted(() => {
   hydrated.value = true;
 });

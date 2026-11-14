@@ -5,7 +5,9 @@ const props = withDefaults(
   defineProps<{ showBookshelf?: boolean; bookshelf?: boolean }>(),
   { showBookshelf: false, bookshelf: false },
 );
-const emit = defineEmits<{ bookshelf: [value: boolean] }>();
+const emit = defineEmits<{
+  bookshelf: [value: boolean, nextMode?: 'grid' | 'list'];
+}>();
 const uiStore = useUiStore();
 const { booksViewMode } = storeToRefs(uiStore);
 const hydrated = ref(false);
@@ -19,7 +21,10 @@ const effectiveMode = computed(() =>
 );
 
 function setMode(mode: 'grid' | 'list') {
-  if (props.bookshelf) emit('bookshelf', false);
+  if (props.bookshelf) {
+    emit('bookshelf', false, mode);
+    return;
+  }
   if (booksViewMode.value === mode) return;
   uiStore.setBooksViewMode(mode);
 }
