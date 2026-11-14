@@ -1382,6 +1382,7 @@ const lastOtherBookcaseId = computed(
 .zoom-controls button:nth-child(2) {
   min-width: 50px;
   font-size: 12px;
+  font-weight: 400;
 }
 .save-status {
   color: var(--contrast-text-color);
@@ -1561,7 +1562,7 @@ const lastOtherBookcaseId = computed(
   transform-origin: top left;
   border: 5px solid #b99b79;
   border-bottom: 0;
-  background: linear-gradient(110deg, #e9e5db, #f4f1e9 45%, #e9e6dc);
+  background: var(--bg-color);
   box-sizing: border-box;
 }
 .shelf-canvas:after {
