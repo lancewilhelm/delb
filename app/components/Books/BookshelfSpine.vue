@@ -72,10 +72,7 @@ const author = computed(
   width: 100%;
   height: 100%;
   border-radius: 3px 3px 1px 1px;
-  box-shadow:
-    inset 2px 0 3px #ffffff38,
-    inset -3px 0 4px #0003,
-    1px 2px 3px #0003;
+  box-shadow: 1px 2px 3px #0003;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -86,17 +83,32 @@ const author = computed(
   writing-mode: vertical-rl;
   text-align: center;
 }
+.shelf-spine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    inset 2px 0 3px #ffffff38,
+    inset -3px 0 4px #0003;
+  pointer-events: none;
+}
 .shelf-spine.horizontal {
   writing-mode: horizontal-tb;
   padding: 2px 7px;
   white-space: nowrap;
+}
+.shelf-spine.horizontal::after {
+  box-shadow:
+    inset 0 2px 3px #ffffff38,
+    inset 0 -3px 4px #0003;
 }
 .spine-art {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: fill;
 }
 .spine-art.sideways {
   inset: auto;

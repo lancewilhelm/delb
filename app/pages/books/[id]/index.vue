@@ -1188,7 +1188,13 @@ const { copy } = useClipboard();
             class="detail-artwork"
             :style="{ gridTemplateColumns: `${spineRatio}fr 0.666667fr` }"
           >
-            <div class="detail-spine">
+            <div
+              class="detail-spine rounded-sm shadow-md"
+              :class="{
+                'rounded-r-2xl':
+                  userSettingsStore.activeSettings.coverStyle.roundedRight,
+              }"
+            >
               <img
                 :src="`/api/books/${encodeURIComponent(book.id)}/spine?v=${encodeURIComponent(book.spineRevision)}`"
                 :alt="`Spine for ${book.title}`"
