@@ -32,6 +32,16 @@ Clear applied filters when a book seems to be missing. Then check the collection
 
 The sidebar's shelf, tag multi-select, and rating controls marked **coming soon** are disabled placeholders. They are not active filters.
 
+## Arrange your bookshelf
+
+Select **Bookshelf View** in the Books view switcher to see all books you can access. Your bookshelf is personal. Collection and book filters dim nonmatching books without moving them.
+
+Select **Edit shelves** to move books or drag a shelf handle to change its height. A shelf cannot be shorter than the books or stacks on it. Select a book to change its displayed size or turn it sideways. Drag one sideways book onto another to make a stack. Use the stack handle to move the whole stack.
+
+Use a shelf's options menu to add a shelf or remove an empty one. The bookshelf menu adds a bookcase. Select **Done editing** to lock the arrangement. Use the zoom controls to change its display size without changing book dimensions.
+
+Delb saves your arrangement to your account. If a save fails, use **Retry save**. If another device has a newer arrangement, choose **Load newer arrangement** to discard your unsaved changes and load it. Spine artwork uses a colored title and author placeholder.
+
 ## Change the grid or list
 
 1. Use the grid/list switch in the book view.

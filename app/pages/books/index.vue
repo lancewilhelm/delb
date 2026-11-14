@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BookshelfView from '~/components/Books/BookshelfView.vue';
 import type { BookMoveSelection } from '~/utils/collectionActions';
 definePageMeta({
   auth: {
@@ -544,6 +545,21 @@ watch(
 const booksSortKey = computed(() => uiStore.booksSortKey);
 const booksSortDir = computed(() => uiStore.booksSortDirection);
 const booksViewMode = computed(() => uiStore.booksViewMode);
+const bookshelfActive = ref(false);
+const bookshelfView = ref<{ canLeave: () => boolean } | null>(null);
+function setBookshelfActive(active: boolean) {
+  if (
+    !active &&
+    bookshelfActive.value &&
+    bookshelfView.value &&
+    !bookshelfView.value.canLeave()
+  )
+    return;
+  bookshelfActive.value = active;
+}
+watch(bookshelfActive, (active) => {
+  if (active) selectionStore.setMode({ enabled: false });
+});
 const hydrated = ref(false);
 onMounted(() => {
   hydrated.value = true;
@@ -579,7 +595,11 @@ onMounted(async () => {
 
             <!-- Books sort + filters -->
             <div class="flex items-center gap-1 self-center">
-              <BooksViewToggle />
+              <BooksViewToggle
+                show-bookshelf
+                :bookshelf="bookshelfActive"
+                @bookshelf="setBookshelfActive"
+              />
 
               <span
                 class="border-r border-(--contrast-border-color) mx-1 h-6"
@@ -1081,7 +1101,7 @@ onMounted(async () => {
                 </div>
               </div>
 
-              <BooksSortDropdown />
+              <BooksSortDropdown v-if="!bookshelfActive" />
             </div>
           </div>
         </div>
@@ -1092,7 +1112,7 @@ onMounted(async () => {
           <div class="flex flex-col flex-1 min-h-0">
             <!-- Only the books grid scrolls (BooksInfiniteGrid owns the scroller) -->
             <BooksInfiniteGrid
-              v-if="effectiveBooksViewMode === 'grid'"
+              v-if="!bookshelfActive && effectiveBooksViewMode === 'grid'"
               :key="`grid-${booksGridKey}-${booksSortKey}-${booksSortDir}-${effectiveBooksViewMode}`"
               :collection-id="activeCollectionId"
               :sort="booksSortKey"
@@ -1106,7 +1126,7 @@ onMounted(async () => {
               @error="handleBooksGridError"
             />
             <BooksInfiniteList
-              v-else-if="effectiveBooksViewMode === 'list'"
+              v-else-if="!bookshelfActive && effectiveBooksViewMode === 'list'"
               :key="`list-${booksGridKey}-${booksSortKey}-${booksSortDir}-${effectiveBooksViewMode}`"
               :collection-id="activeCollectionId"
               :sort="booksSortKey"
@@ -1118,6 +1138,12 @@ onMounted(async () => {
               :selection-enabled="true"
               class="flex-1 min-h-0"
               @error="handleBooksGridError"
+            />
+            <BookshelfView
+              v-else
+              ref="bookshelfView"
+              :endpoint="booksEndpoint"
+              :collection-id="activeCollectionId"
             />
           </div>
         </div>

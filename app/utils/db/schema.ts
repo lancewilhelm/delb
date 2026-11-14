@@ -599,6 +599,15 @@ export const userSettings = sqliteTable('user_settings', {
     .$defaultFn(() => new Date()),
 });
 
+// A reader's personal arrangement is independent of shared book metadata.
+export const userBookshelves = sqliteTable('user_bookshelves', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  revision: integer('revision').notNull(),
+  arrangement: text('arrangement', { mode: 'json' }).notNull(),
+});
+
 // GLOBAL SETTINGS TABLE
 export const globalSettings = sqliteTable('global_settings', {
   id: text('user_id').primaryKey(),

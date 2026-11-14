@@ -1,0 +1,87 @@
+<script setup lang="ts">
+import type { BookViewBook } from '~/utils/bookFields';
+import type { ShelfBook } from '~~/shared/bookshelf';
+
+const props = defineProps<{
+  placement: ShelfBook;
+  book: BookViewBook;
+  horizontal: boolean;
+  dimmed?: boolean;
+}>();
+const colors = [
+  '#425d49',
+  '#a16855',
+  '#a67d45',
+  '#657b82',
+  '#9b604c',
+  '#6c765b',
+  '#455d72',
+  '#83715f',
+];
+const color = computed(() => {
+  let hash = 0;
+  for (const char of props.book.id)
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return colors[hash % colors.length];
+});
+const author = computed(
+  () =>
+    props.book.authorNames?.join(', ') ||
+    props.book.authors?.map((a) => a.name).join(', ') ||
+    props.book.author ||
+    '',
+);
+</script>
+
+<template>
+  <span
+    class="shelf-spine"
+    :class="{ horizontal, dimmed }"
+    :style="{ background: color }"
+  >
+    <span class="spine-title">{{ book.title }}</span>
+    <span class="spine-author">{{ author }}</span>
+  </span>
+</template>
+
+<style scoped>
+.shelf-spine {
+  width: 100%;
+  height: 100%;
+  border-radius: 3px 3px 1px 1px;
+  box-shadow:
+    inset 2px 0 3px #ffffff38,
+    inset -3px 0 4px #0003,
+    1px 2px 3px #0003;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  padding: 8px 3px;
+  color: white;
+  overflow: hidden;
+  writing-mode: vertical-rl;
+  text-align: center;
+}
+.shelf-spine.horizontal {
+  writing-mode: horizontal-tb;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+.spine-title {
+  font:
+    bold 12px Georgia,
+    serif;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.spine-author {
+  font-size: 8px;
+  letter-spacing: 0.05em;
+  overflow: hidden;
+}
+.dimmed {
+  filter: grayscale(1);
+  opacity: 0.24;
+}
+</style>
