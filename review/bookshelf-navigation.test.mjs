@@ -15,6 +15,7 @@ async function navigation() {
   );
   const wanted = [
     'startPan',
+    'shelfFrame',
     'onWheel',
     'onKeyDown',
     'onKeyUp',
@@ -47,7 +48,7 @@ async function navigation() {
     scrollLeft: 100,
     scrollTop: 80,
     querySelectorAll: () => cases,
-    getBoundingClientRect: () => ({ left: 0, right: 300, width: 300 }),
+    getBoundingClientRect: () => ({ left: 0, top: 0, right: 300, width: 300 }),
   };
   let frameScheduled = false;
   class TestNode {}
@@ -73,7 +74,19 @@ async function navigation() {
     spaceHeld: ref(false),
     pointerOverWall: ref(false),
     zoom: ref(1),
+    width: ref(300),
+    viewportHeight: ref(300),
+    arrangement: ref({
+      bookcases: [
+        { width: 200, shelves: [{ height: 150 }] },
+        { width: 100, shelves: [{ height: 200 }, { height: 120 }] },
+      ],
+    }),
     camera: reactive({ x: 0, y: 0 }),
+    SHELF_WIDTH: 340,
+    WALL_SIDE_PADDING: 28,
+    WALL_TOP_PADDING: 36,
+    FLOOR_LINE_HEIGHT: 2,
     MIN_ZOOM: 0.5,
     MAX_ZOOM: 4,
     nextTick: (fn) => Promise.resolve().then(fn),
@@ -265,6 +278,8 @@ test('wheel and pinch zoom reach 400 percent and clamp there', async () => {
     deltaX: 0,
     deltaY: -10000,
     shiftKey: false,
+    clientX: 150,
+    clientY: 100,
     preventDefault() {},
   };
   nav.actions.onWheel(wheel);
@@ -285,6 +300,8 @@ test('wheel and pinch zoom reach 400 percent and clamp there', async () => {
     preventDefault() {},
   });
   assert.equal(nav.state.zoom.value, 4);
+  nav.state.camera.x = 0;
+  nav.state.camera.y = 0;
   nav.actions.onWheel({
     deltaX: 25,
     deltaY: 0,
@@ -298,6 +315,58 @@ test('wheel and pinch zoom reach 400 percent and clamp there', async () => {
     preventDefault() {},
   });
   assert.deepEqual({ ...nav.state.camera }, { x: -25, y: -40 });
+});
+
+test('wheel zoom keeps the point under the cursor fixed across layout and zoom limits', async () => {
+  const nav = await navigation();
+  nav.state.width.value = 800;
+  nav.state.viewportHeight.value = 600;
+  nav.viewport.getBoundingClientRect = () => ({
+    left: 30,
+    top: 20,
+    right: 830,
+    width: 800,
+  });
+  nav.state.camera.x = 65;
+  nav.state.camera.y = -65;
+  const origin = (zoom) => {
+    const scale = zoom;
+    const contentWidth = 300 * scale;
+    const wallWidth = Math.max(800, contentWidth + 56);
+    const wallHeight = 320 * scale + 38;
+    return {
+      scale,
+      x: 28 + (wallWidth - 56 - contentWidth) / 2,
+      floor: Math.max(0, (600 - wallHeight) / 2) + wallHeight - 2,
+    };
+  };
+  const initial = origin(1);
+  const point = {
+    x: 30 + initial.x + nav.state.camera.x + 280 * initial.scale,
+    y: 20 + initial.floor + nav.state.camera.y - 180 * initial.scale,
+  };
+  for (const deltaY of [-1000, 1400, -450, -10000, -100]) {
+    nav.actions.onWheel({
+      deltaX: 0,
+      deltaY,
+      shiftKey: false,
+      clientX: point.x,
+      clientY: point.y,
+      preventDefault() {},
+    });
+    const frame = origin(nav.state.zoom.value);
+    assert.ok(
+      Math.abs(
+        30 + frame.x + nav.state.camera.x + 280 * frame.scale - point.x,
+      ) < 1e-8,
+    );
+    assert.ok(
+      Math.abs(
+        20 + frame.floor + nav.state.camera.y - 180 * frame.scale - point.y,
+      ) < 1e-8,
+    );
+  }
+  assert.equal(nav.state.zoom.value, 4);
 });
 
 test('bookcase insertion follows the pointer and ignores the dragged case', async () => {

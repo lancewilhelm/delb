@@ -106,6 +106,9 @@ const selectedShelf = ref<string | null>(null);
 const zoom = ref(1);
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 4;
+const WALL_SIDE_PADDING = 28;
+const WALL_TOP_PADDING = 36;
+const FLOOR_LINE_HEIGHT = 2;
 const width = ref(340);
 const viewportHeight = ref(0);
 const camera = reactive({ x: 0, y: 0 });
@@ -137,21 +140,30 @@ const byId = computed(
 const scale = computed(
   () => Math.min(1, width.value / SHELF_WIDTH) * zoom.value,
 );
-const floorTop = computed(() => {
-  const tallest = Math.max(
-    0,
-    ...(arrangement.value?.bookcases.map((bookcase) =>
-      bookcase.shelves.reduce(
-        (height, shelf) => height + shelf.height * scale.value,
-        0,
+function shelfFrame(atZoom: number) {
+  const scaleAtZoom = Math.min(1, width.value / SHELF_WIDTH) * atZoom;
+  const bookcases = arrangement.value?.bookcases ?? [];
+  const totalWidth =
+    bookcases.reduce((total, bookcase) => total + bookcase.width, 0) *
+    scaleAtZoom;
+  const tallest =
+    Math.max(
+      0,
+      ...bookcases.map((bookcase) =>
+        bookcase.shelves.reduce((height, shelf) => height + shelf.height, 0),
       ),
-    ) ?? []),
-  );
-  const height = tallest + 38;
-  return (
-    Math.max(0, (viewportHeight.value - height) / 2) + height - 2 + camera.y
-  );
-});
+    ) * scaleAtZoom;
+  const height = tallest + WALL_TOP_PADDING + FLOOR_LINE_HEIGHT;
+  return {
+    scale: scaleAtZoom,
+    left: Math.max(WALL_SIDE_PADDING, (width.value - totalWidth) / 2),
+    floor:
+      Math.max(0, (viewportHeight.value - height) / 2) +
+      height -
+      FLOOR_LINE_HEIGHT,
+  };
+}
+const floorTop = computed(() => shelfFrame(zoom.value).floor + camera.y);
 const status = computed(() =>
   conflict.value
     ? 'A newer arrangement exists on another device.'
@@ -354,10 +366,24 @@ function onWheel(event: WheelEvent) {
     camera.y -= event.deltaY;
     return;
   }
-  zoom.value = Math.max(
+  const nextZoom = Math.max(
     MIN_ZOOM,
     Math.min(MAX_ZOOM, zoom.value * Math.exp(-event.deltaY * 0.0015)),
   );
+  if (nextZoom === zoom.value) return;
+  if (wall.value) {
+    const before = shelfFrame(zoom.value);
+    const after = shelfFrame(nextZoom);
+    if (before.scale > 0) {
+      const bounds = wall.value.getBoundingClientRect();
+      const x = event.clientX - bounds.left;
+      const y = event.clientY - bounds.top;
+      const ratio = after.scale / before.scale;
+      camera.x = x - after.left - (x - before.left - camera.x) * ratio;
+      camera.y = y - after.floor - (y - before.floor - camera.y) * ratio;
+    }
+  }
+  zoom.value = nextZoom;
 }
 function touchDistance(touches: TouchList) {
   const first = touches.item(0),
@@ -563,8 +589,10 @@ function addBookcase() {
     if (!viewport || !last) return;
     const view = viewport.getBoundingClientRect();
     const rect = last.getBoundingClientRect();
-    if (rect.right > view.right - 28) camera.x -= rect.right - view.right + 28;
-    else if (rect.left < view.left + 28) camera.x += view.left + 28 - rect.left;
+    if (rect.right > view.right - WALL_SIDE_PADDING)
+      camera.x -= rect.right - view.right + WALL_SIDE_PADDING;
+    else if (rect.left < view.left + WALL_SIDE_PADDING)
+      camera.x += view.left + WALL_SIDE_PADDING - rect.left;
   });
 }
 function addShelf(shelf: Shelf) {
@@ -1037,7 +1065,14 @@ const lastOtherBookcaseId = computed(
 </script>
 
 <template>
-  <div class="bookshelf-view">
+  <div
+    class="bookshelf-view"
+    :style="{
+      '--wall-side-padding': `${WALL_SIDE_PADDING}px`,
+      '--wall-top-padding': `${WALL_TOP_PADDING}px`,
+      '--floor-line-height': `${FLOOR_LINE_HEIGHT}px`,
+    }"
+  >
     <div class="bookshelf-toolbar">
       <div class="toolbar-left">
         <button
@@ -1616,13 +1651,14 @@ const lastOtherBookcaseId = computed(
   box-sizing: border-box;
   width: max-content;
   min-width: 100%;
-  padding: 36px 28px 2px;
+  padding: var(--wall-top-padding) var(--wall-side-padding)
+    var(--floor-line-height);
 }
 .floor-line {
   position: absolute;
   left: 0;
   right: 0;
-  height: 2px;
+  height: var(--floor-line-height);
   background: var(--main-color);
   pointer-events: none;
 }
