@@ -174,6 +174,7 @@ describe('personal bookshelf', () => {
       100,
       15,
       10,
+      185,
     )!;
     assert.ok(drop.valid);
     assert.equal(drop.moving.horizontal, true);
@@ -266,6 +267,7 @@ describe('personal bookshelf', () => {
       210,
       15,
       10,
+      185,
     )!;
     assert.ok(drop.valid);
     assert.equal(drop.moving.horizontal, false);
@@ -391,5 +393,99 @@ describe('personal bookshelf', () => {
       slide.sourceItems[0]!.books.map((book) => book.id),
       ['a', 'b'],
     );
+  });
+  it('lays an upright book down when it is pulled toward the shelf', () => {
+    const shelf = emptyBookshelf().bookcases[0]!.shelves[0]!;
+    shelf.items = [item('upright', 2)];
+    const drop = planShelfDrop(
+      shelf,
+      shelf,
+      340,
+      'upright',
+      false,
+      110,
+      60,
+      15,
+      100,
+    )!;
+    assert.ok(drop.valid);
+    assert.equal(drop.moving.horizontal, true);
+    assert.equal(drop.items[0]!.horizontal, true);
+  });
+  it('keeps an upright book standing during a level drag and small downward movement', () => {
+    const shelf = emptyBookshelf().bookcases[0]!.shelves[0]!;
+    shelf.items = [item('upright', 2)];
+    const level = planShelfDrop(
+      shelf,
+      shelf,
+      340,
+      'upright',
+      false,
+      110,
+      100,
+      15,
+      100,
+    )!;
+    const small = planShelfDrop(
+      shelf,
+      shelf,
+      340,
+      'upright',
+      false,
+      110,
+      69,
+      15,
+      100,
+    )!;
+    const pulled = planShelfDrop(
+      shelf,
+      shelf,
+      340,
+      'upright',
+      false,
+      110,
+      68,
+      15,
+      100,
+    )!;
+    assert.equal(level.moving.horizontal, false);
+    assert.equal(small.moving.horizontal, false);
+    assert.equal(pulled.moving.horizontal, true);
+  });
+  it('allows a downward pull when a book is grabbed near its bottom', () => {
+    const shelf = emptyBookshelf().bookcases[0]!.shelves[0]!;
+    shelf.items = [item('upright', 2)];
+    const drop = planShelfDrop(
+      shelf,
+      shelf,
+      340,
+      'upright',
+      false,
+      110,
+      -3,
+      15,
+      195,
+    )!;
+    assert.ok(drop.valid);
+    assert.equal(drop.moving.horizontal, true);
+  });
+  it('does not lay a book down when the sideways position cannot fit', () => {
+    const shelf = emptyBookshelf().bookcases[0]!.shelves[0]!;
+    shelf.items = [item('upright', 2), item('neighbor', 40)];
+    const snapshot = JSON.stringify(shelf);
+    const drop = planShelfDrop(
+      shelf,
+      shelf,
+      220,
+      'upright',
+      false,
+      110,
+      60,
+      15,
+      100,
+    )!;
+    assert.equal(drop.moving.horizontal, true);
+    assert.equal(drop.valid, false);
+    assert.equal(JSON.stringify(shelf), snapshot);
   });
 });

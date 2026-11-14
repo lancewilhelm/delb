@@ -14,7 +14,6 @@ import {
   emptyShelf,
   emptyBookshelf,
   reconcileBookshelf,
-  closestPlacement,
   parseBookshelf,
   type Bookshelf,
   type Bookcase,
@@ -437,35 +436,6 @@ function changeSize(bookId: string, field: 'width' | 'height', event: Event) {
   adjustments.value = adjustments.value.filter((id) => id !== bookId);
   changed();
 }
-function rotate(bookId: string) {
-  const found = getItem(bookId);
-  if (!found) return;
-  const book = found.item.books.find((entry) => entry.id === bookId);
-  if (!book) return;
-  const others = structuredClone(toRaw(found.shelf.items));
-  const source = others.find((entry) =>
-    entry.books.some((b) => b.id === bookId),
-  )!;
-  source.books = source.books.filter((entry) => entry.id !== bookId);
-  const moving: ShelfItem = {
-    x: found.item.x,
-    horizontal: !found.item.horizontal,
-    books: [structuredClone(toRaw(book))],
-  };
-  const packed = closestPlacement(
-    others.filter((entry) => entry.books.length),
-    moving,
-    found.item.x,
-    found.shelf.height,
-    getBookcase(found.shelf.id)!.width,
-  );
-  if (!packed) {
-    notice.value = 'There is not enough room to turn this book.';
-    return;
-  }
-  found.shelf.items = packed;
-  changed();
-}
 function bookFor(id: string): BookViewBook {
   return byId.value.get(id) ?? { id, title: 'Unavailable book' };
 }
@@ -785,8 +755,8 @@ const currentShelf = computed(() =>
       {{ loadError }} <button type="button" @click="load">Try again</button>
     </div>
     <p v-if="editing" class="stack-hint">
-      Drag a book onto a sideways spine to stack it. Slide a sideways book to
-      keep it flat, or lift it to stand it upright.
+      Pull a book down to lay it flat or lift it to stand it upright. Drag a
+      book onto a sideways spine to stack it.
     </p>
     <div ref="wall" class="wall-viewport">
       <div v-if="arrangement && !loading" class="wall">
@@ -954,11 +924,6 @@ const currentShelf = computed(() =>
           :value="selectedBook.width"
           @change="changeSize(selected!, 'width', $event)"
       /></label>
-      <button type="button" @click="rotate(selected)">
-        {{
-          getItem(selected)?.item.horizontal ? 'Stand upright' : 'Lay sideways'
-        }}
-      </button>
     </aside>
     <aside
       v-if="editing && currentShelf"

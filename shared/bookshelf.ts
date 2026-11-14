@@ -170,13 +170,19 @@ export function planShelfDrop(
         .slice(0, sourceIndex)
         .reduce((sum, entry) => sum + entry.width, 0)
     : 0;
+  const sourceHeight = source.horizontal ? book.width : book.height;
   const grabHeight =
-    bookBottom + book.width - Math.max(0, Math.min(book.width, grabOffsetY));
+    bookBottom +
+    sourceHeight -
+    Math.max(0, Math.min(sourceHeight, grabOffsetY));
+  const downThreshold = Math.min(32, Math.max(8, grabHeight - 4));
   const moving: ShelfItem = whole
     ? structuredClone(source)
     : {
         x: source.x,
-        horizontal: source.horizontal && pointerY <= grabHeight + 32,
+        horizontal: source.horizontal
+          ? pointerY <= grabHeight + 32
+          : pointerY <= grabHeight - downThreshold,
         books: [structuredClone(book)],
       };
   if (whole) sourceItems.splice(sourceItems.indexOf(source), 1);
