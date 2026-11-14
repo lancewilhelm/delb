@@ -5,6 +5,9 @@ import {
   SHELF_WIDTH,
   SHELF_FLOOR,
   SHELF_MAX_HEIGHT,
+  SHELF_MAX_WIDTH,
+  minimumShelfWidth,
+  stackBooks,
   minimumShelfHeight,
   itemWidth,
   itemHeight,
@@ -56,10 +59,10 @@ type Drag = {
 };
 type Resize = {
   shelfId: string;
-  startY: number;
-  startHeight: number;
-  scale: number;
+  axis: 'width' | 'height';
+  start: number;
   original: number;
+  scale: number;
 };
 
 const arrangement = ref<Bookshelf | null>(null);
@@ -69,6 +72,7 @@ const revision = ref(0);
 const editing = ref(false);
 const selected = ref<string | null>(null);
 const selectedShelf = ref<string | null>(null);
+const stackSource = ref<string | null>(null);
 const zoom = ref(1);
 const width = ref(340);
 const wall = ref<HTMLElement | null>(null);
@@ -85,6 +89,7 @@ const resizing = ref<Resize | null>(null);
 let generation = 0;
 let dirtyVersion = 0;
 let observer: ResizeObserver | undefined;
+let pinch: { distance: number; zoom: number } | null = null;
 const byId = computed(
   () => new Map(catalog.value.map((book) => [book.id, book])),
 );
@@ -279,12 +284,53 @@ watch(
     if (arrangement.value) void loadMatches();
   },
 );
+function onWheel(event: WheelEvent) {
+  if (!event.deltaY || resizing.value || drag.value) return;
+  event.preventDefault();
+  if (event.shiftKey) {
+    if (wall.value) wall.value.scrollTop += event.deltaY;
+    return;
+  }
+  zoom.value = Math.max(
+    0.5,
+    Math.min(2, zoom.value * Math.exp(-event.deltaY * 0.0015)),
+  );
+}
+function touchDistance(touches: TouchList) {
+  const first = touches.item(0),
+    second = touches.item(1);
+  return first && second
+    ? Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY)
+    : 0;
+}
+function onTouchStart(event: TouchEvent) {
+  if (event.touches.length !== 2) return;
+  if (drag.value || resizing.value) onCancel();
+  const distance = touchDistance(event.touches);
+  if (distance) pinch = { distance, zoom: zoom.value };
+}
+function onTouchMove(event: TouchEvent) {
+  if (!pinch || event.touches.length !== 2) return;
+  if (event.cancelable) event.preventDefault();
+  zoom.value = Math.max(
+    0.5,
+    Math.min(2, (pinch.zoom * touchDistance(event.touches)) / pinch.distance),
+  );
+}
+function onTouchEnd(event: TouchEvent) {
+  if (event.touches.length < 2) pinch = null;
+}
 onMounted(() => {
   if (wall.value) {
     observer = new ResizeObserver(([entry]) => {
       if (entry) width.value = entry.contentRect.width;
     });
     observer.observe(wall.value);
+    wall.value.addEventListener('wheel', onWheel, { passive: false });
+    wall.value.addEventListener('touchstart', onTouchStart, { passive: true });
+    wall.value.addEventListener('touchmove', onTouchMove, { passive: false });
+    wall.value.addEventListener('touchend', onTouchEnd);
+    wall.value.addEventListener('touchcancel', onTouchEnd);
   }
   window.addEventListener('beforeunload', unloadWarning);
   void load();
@@ -292,6 +338,11 @@ onMounted(() => {
 onBeforeUnmount(() => {
   generation++;
   observer?.disconnect();
+  wall.value?.removeEventListener('wheel', onWheel);
+  wall.value?.removeEventListener('touchstart', onTouchStart);
+  wall.value?.removeEventListener('touchmove', onTouchMove);
+  wall.value?.removeEventListener('touchend', onTouchEnd);
+  wall.value?.removeEventListener('touchcancel', onTouchEnd);
   window.removeEventListener('beforeunload', unloadWarning);
   window.removeEventListener('pointermove', onMove);
   window.removeEventListener('pointerup', onUp);
@@ -302,6 +353,7 @@ function toggleEdit() {
   editing.value = !editing.value;
   selected.value = null;
   selectedShelf.value = null;
+  stackSource.value = null;
 }
 function addBookcase() {
   if (!arrangement.value) return;
@@ -363,7 +415,7 @@ function changeSize(bookId: string, field: 'width' | 'height', event: Event) {
     sorted.some(
       (item, index) =>
         itemHeight(item) > found.shelf.height - SHELF_FLOOR ||
-        item.x + itemWidth(item) > SHELF_WIDTH - 2 ||
+        item.x + itemWidth(item) > found.shelf.width - 2 ||
         (index > 0 &&
           sorted[index - 1]!.x + itemWidth(sorted[index - 1]!) > item.x),
     )
@@ -398,6 +450,7 @@ function rotate(bookId: string) {
     moving,
     found.item.x,
     found.shelf.height,
+    found.shelf.width,
   );
   if (!packed) {
     notice.value = 'There is not enough room to turn this book.';
@@ -418,6 +471,23 @@ function startBook(
 ) {
   if (!editing.value || event.button !== 0) return;
   stopNotice();
+  if (stackSource.value) {
+    const result =
+      arrangement.value &&
+      stackBooks(toRaw(arrangement.value), stackSource.value, book.id);
+    if (!result) {
+      notice.value =
+        'These books will not fit together here. Choose another book or make room.';
+      event.preventDefault();
+      return;
+    }
+    arrangement.value = result;
+    selected.value = book.id;
+    stackSource.value = null;
+    changed();
+    event.preventDefault();
+    return;
+  }
   const target = event.currentTarget;
   if (!(target instanceof HTMLElement)) return;
   const canvas = target.closest<HTMLElement>('[data-shelf-canvas]');
@@ -425,7 +495,7 @@ function startBook(
   const rect = (
       whole ? (target.closest<HTMLElement>('.shelf-item') ?? target) : target
     ).getBoundingClientRect(),
-    shelfScale = canvas.getBoundingClientRect().width / SHELF_WIDTH;
+    shelfScale = canvas.getBoundingClientRect().width / shelf.width;
   drag.value = {
     bookId: book.id,
     shelfId: shelf.id,
@@ -443,7 +513,11 @@ function startBook(
   event.preventDefault();
   attachPointerListeners();
 }
-function startResize(event: PointerEvent, shelf: Shelf) {
+function startResize(
+  event: PointerEvent,
+  shelf: Shelf,
+  axis: 'width' | 'height',
+) {
   if (!editing.value || event.button !== 0) return;
   const target = event.currentTarget;
   if (!(target instanceof HTMLElement)) return;
@@ -451,10 +525,10 @@ function startResize(event: PointerEvent, shelf: Shelf) {
   if (!canvas) return;
   resizing.value = {
     shelfId: shelf.id,
-    startY: event.clientY,
-    startHeight: shelf.height,
-    original: shelf.height,
-    scale: canvas.getBoundingClientRect().width / SHELF_WIDTH,
+    axis,
+    start: axis === 'width' ? event.clientX : event.clientY,
+    original: shelf[axis],
+    scale: canvas.getBoundingClientRect().width / shelf.width,
   };
   event.preventDefault();
   attachPointerListeners();
@@ -489,7 +563,7 @@ function planDrop(
     );
   if (!canvas || !destination || !origin || !source) return null;
   const rect = canvas.getBoundingClientRect(),
-    shelfScale = rect.width / SHELF_WIDTH;
+    shelfScale = rect.width / destination.width;
   const sourceItems = structuredClone(toRaw(origin.items));
   const original = sourceItems.find((item) =>
     item.books.some((book) => book.id === current.bookId),
@@ -532,15 +606,23 @@ function planDrop(
       combined,
       stack.x,
       destination.height,
+      destination.width,
     );
     bottom += itemHeight(stack);
-  } else packed = closestPlacement(others, moving, wanted, destination.height);
+  } else
+    packed = closestPlacement(
+      others,
+      moving,
+      wanted,
+      destination.height,
+      destination.width,
+    );
   const placed = packed?.find((item) =>
     item.books.some((entry) => entry.id === current.bookId),
   );
   const x =
     placed?.x ??
-    Math.max(2, Math.min(wanted, SHELF_WIDTH - itemWidth(moving) - 2));
+    Math.max(2, Math.min(wanted, destination.width - itemWidth(moving) - 2));
   return {
     shelfId: destination.id,
     originId: origin.id,
@@ -559,15 +641,20 @@ function onMove(event: PointerEvent) {
     const state = resizing.value,
       shelf = getShelf(state.shelfId);
     if (!shelf) return;
-    shelf.height = Math.max(
-      minimumShelfHeight(shelf),
-      Math.min(
-        SHELF_MAX_HEIGHT,
-        Math.round(
-          state.startHeight + (event.clientY - state.startY) / state.scale,
-        ),
-      ),
+    const coordinate = state.axis === 'width' ? event.clientX : event.clientY;
+    const proposed = Math.round(
+      state.original + (coordinate - state.start) / state.scale,
     );
+    if (state.axis === 'width')
+      shelf.width = Math.max(
+        minimumShelfWidth(shelf),
+        Math.min(SHELF_MAX_WIDTH, proposed),
+      );
+    else
+      shelf.height = Math.max(
+        minimumShelfHeight(shelf),
+        Math.min(SHELF_MAX_HEIGHT, proposed),
+      );
     return;
   }
   const state = drag.value;
@@ -586,7 +673,7 @@ function onUp(event: PointerEvent) {
     const state = resizing.value,
       shelf = getShelf(state.shelfId);
     resizing.value = null;
-    if (shelf && shelf.height !== state.original) changed();
+    if (shelf && shelf[state.axis] !== state.original) changed();
     return;
   }
   const state = drag.value;
@@ -617,7 +704,7 @@ function onCancel() {
   detachPointerListeners();
   if (resizing.value) {
     const shelf = getShelf(resizing.value.shelfId);
-    if (shelf) shelf.height = resizing.value.original;
+    if (shelf) shelf[resizing.value.axis] = resizing.value.original;
   }
   resizing.value = null;
   drag.value = null;
@@ -697,6 +784,9 @@ const currentShelf = computed(() =>
         <summary aria-label="Bookshelf options">•••</summary>
         <button type="button" @click="addBookcase">Add bookcase</button>
       </details>
+      <span class="zoom-hint"
+        >Wheel or pinch to zoom · Shift + wheel to scroll</span
+      >
       <span class="save-status" role="status">{{ status }}</span>
       <button v-if="saveError" type="button" @click="retrySave">
         Retry save
@@ -716,20 +806,27 @@ const currentShelf = computed(() =>
     <div v-else-if="loadError" role="alert">
       {{ loadError }} <button type="button" @click="load">Try again</button>
     </div>
+    <p v-if="editing && stackSource" class="stack-prompt" role="status">
+      Choose another book to stack with {{ bookFor(stackSource).title }}. Both
+      books will lie sideways.
+      <button type="button" @click="stackSource = null">Cancel</button>
+    </p>
     <div ref="wall" class="wall-viewport">
       <div v-if="arrangement && !loading" class="wall">
         <div
           v-for="(bookcase, caseIndex) in arrangement.bookcases"
           :key="bookcase.id"
           class="bookcase"
-          :style="{ width: `${SHELF_WIDTH * scale}px` }"
+          :style="{
+            width: `${Math.max(...bookcase.shelves.map((s) => s.width)) * scale}px`,
+          }"
         >
           <div
             v-for="(shelf, shelfIndex) in bookcase.shelves"
             :key="shelf.id"
             class="shelf-viewport"
             :style="{
-              width: `${SHELF_WIDTH * scale}px`,
+              width: `${shelf.width * scale}px`,
               height: `${shelf.height * scale}px`,
             }"
           >
@@ -738,6 +835,7 @@ const currentShelf = computed(() =>
               :data-shelf-canvas="shelf.id"
               :style="{
                 height: `${shelf.height}px`,
+                width: `${shelf.width}px`,
                 transform: `scale(${scale})`,
               }"
             >
@@ -807,15 +905,39 @@ const currentShelf = computed(() =>
                 v-if="editing"
                 class="height-handle"
                 :class="{
-                  active: resizing?.shelfId === shelf.id,
+                  active:
+                    resizing?.shelfId === shelf.id &&
+                    resizing.axis === 'height',
                   limit: shelf.height === minimumShelfHeight(shelf),
                 }"
                 title="Drag to change shelf height"
-                @pointerdown.stop="startResize($event, shelf)"
+                @pointerdown.stop="startResize($event, shelf, 'height')"
               >
                 <span>↕</span
-                ><output v-if="resizing?.shelfId === shelf.id"
+                ><output
+                  v-if="
+                    resizing?.shelfId === shelf.id && resizing.axis === 'height'
+                  "
                   >{{ shelf.height }} px</output
+                >
+              </div>
+              <div
+                v-if="editing"
+                class="width-handle"
+                :class="{
+                  active:
+                    resizing?.shelfId === shelf.id && resizing.axis === 'width',
+                  limit: shelf.width === minimumShelfWidth(shelf),
+                }"
+                title="Drag to change shelf width"
+                @pointerdown.stop="startResize($event, shelf, 'width')"
+              >
+                <span>↔</span
+                ><output
+                  v-if="
+                    resizing?.shelfId === shelf.id && resizing.axis === 'width'
+                  "
+                  >{{ shelf.width }} px</output
                 >
               </div>
             </div>
@@ -860,6 +982,15 @@ const currentShelf = computed(() =>
         {{
           getItem(selected)?.item.horizontal ? 'Stand upright' : 'Lay sideways'
         }}
+      </button>
+      <button
+        type="button"
+        @click="
+          stackSource = selected;
+          selected = null;
+        "
+      >
+        Stack with another book
       </button>
     </aside>
     <aside
@@ -979,11 +1110,13 @@ const currentShelf = computed(() =>
   flex: 1;
   min-height: 0;
   overflow: auto;
+  touch-action: pan-x pan-y;
 }
 .wall {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
+  justify-content: safe center;
   width: 100%;
 }
 .bookcase {
@@ -1164,6 +1297,64 @@ const currentShelf = computed(() =>
   }
   .save-status {
     margin-left: 0;
+  }
+}
+</style>
+
+<style scoped>
+.zoom-hint {
+  color: var(--contrast-text-color);
+  font-size: 11px;
+}
+.stack-prompt {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--sub-color);
+  color: var(--bg-color);
+}
+.stack-prompt button {
+  text-decoration: underline;
+  margin-left: 8px;
+}
+.width-handle {
+  position: absolute;
+  right: -5px;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: none;
+}
+.width-handle span {
+  display: block;
+  padding: 7px 2px;
+  border-radius: 4px;
+  background: #5b6f5b;
+  color: white;
+}
+.width-handle.limit span {
+  background: #9d573b;
+}
+.width-handle output {
+  position: absolute;
+  right: 23px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #314f42;
+  color: white;
+  border-radius: 5px;
+  padding: 4px 8px;
+  white-space: nowrap;
+  font-size: 11px;
+}
+@media (max-width: 600px) {
+  .zoom-hint {
+    display: none;
   }
 }
 </style>

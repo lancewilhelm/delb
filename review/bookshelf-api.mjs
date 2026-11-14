@@ -37,7 +37,10 @@ const initial = await request(a);
 assert.deepEqual(await initial.json(), { revision: 0, arrangement: null });
 const arrangement = {
   bookcases: [
-    { id: 'case', shelves: [{ id: 'shelf', height: 245, items: [] }] },
+    {
+      id: 'case',
+      shelves: [{ id: 'shelf', width: 480, height: 245, items: [] }],
+    },
   ],
 };
 let response = await request(a, 'PUT', { revision: 0, arrangement });
@@ -54,6 +57,12 @@ assert.deepEqual(await (await request(b)).json(), {
 assert.equal(
   (await request(a, 'PUT', { revision: 1, arrangement: { bookcases: [] } }))
     .status,
+  400,
+);
+const tooNarrow = structuredClone(arrangement);
+tooNarrow.bookcases[0].shelves[0].width = 20;
+assert.equal(
+  (await request(a, 'PUT', { revision: 1, arrangement: tooNarrow })).status,
   400,
 );
 const results = await Promise.all([

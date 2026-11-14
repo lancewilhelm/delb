@@ -5,6 +5,8 @@ import {
   emptyBookshelf,
   itemWidth,
   minimumShelfHeight,
+  minimumShelfWidth,
+  stackBooks,
   parseBookshelf,
   reconcileBookshelf,
   type ShelfBook,
@@ -126,5 +128,63 @@ describe('personal bookshelf', () => {
       result.bookshelf.bookcases[1]!.shelves[0]!.items[0]!.books[0]!.id,
       'b',
     );
+  });
+  it('reads older shelves with their original width and validates new widths', () => {
+    const data = emptyBookshelf();
+    const old = JSON.parse(JSON.stringify(data));
+    delete old.bookcases[0].shelves[0].width;
+    assert.equal(parseBookshelf(old)?.bookcases[0]?.shelves[0]?.width, 340);
+    const shelf = data.bookcases[0]!.shelves[0]!;
+    shelf.items = [item('a', 180, 55)];
+    assert.equal(minimumShelfWidth(shelf), 237);
+    shelf.width = 236;
+    assert.equal(parseBookshelf(data), null);
+    shelf.width = 237;
+    assert.ok(parseBookshelf(data));
+    shelf.width = 500;
+    const placed = closestPlacement(
+      shelf.items,
+      item('b', 2),
+      1000,
+      shelf.height,
+      shelf.width,
+    )!;
+    assert.equal(placed.find((entry) => entry.books[0]!.id === 'b')!.x, 468);
+    shelf.width = 701;
+    assert.equal(parseBookshelf(data), null);
+  });
+  it('stacks upright books, including across shelves, without losing either book', () => {
+    const data = emptyBookshelf();
+    const [first, second] = data.bookcases[0]!.shelves;
+    first!.items = [item('a', 2), item('other', 80)];
+    second!.items = [item('b', 2)];
+    const result = stackBooks(data, 'a', 'b')!;
+    assert.deepEqual(
+      result.bookcases[0]!.shelves[0]!.items.map((i) => i.books[0]!.id),
+      ['other'],
+    );
+    assert.deepEqual(
+      result.bookcases[0]!.shelves[1]!.items[0]!.books.map((b) => b.id),
+      ['b', 'a'],
+    );
+    assert.equal(result.bookcases[0]!.shelves[1]!.items[0]!.horizontal, true);
+    assert.ok(parseBookshelf(result));
+    assert.equal(data.bookcases[0]!.shelves[0]!.items.length, 2);
+  });
+  it('keeps both shelves unchanged when a stack cannot fit', () => {
+    const data = emptyBookshelf();
+    const [first, second] = data.bookcases[0]!.shelves;
+    first!.items = [item('a', 2, 55)];
+    second!.height = 120;
+    second!.items = [
+      {
+        x: 2,
+        horizontal: true,
+        books: [placement('b', 55), placement('c', 55)],
+      },
+    ];
+    const snapshot = JSON.stringify(data);
+    assert.equal(stackBooks(data, 'a', 'b'), null);
+    assert.equal(JSON.stringify(data), snapshot);
   });
 });
