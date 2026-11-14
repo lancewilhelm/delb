@@ -14,7 +14,14 @@ async function shelfEditor() {
     ts.ScriptTarget.Latest,
     true,
   );
-  const wanted = ['save', 'changed', 'removeShelf', 'removeBookcase'];
+  const wanted = [
+    'save',
+    'changed',
+    'removeShelf',
+    'removeBookcase',
+    'moveBookcase',
+    'moveBookcaseBy',
+  ];
   const functions = ast.statements
     .filter(
       (item) =>
@@ -61,10 +68,56 @@ async function shelfEditor() {
   }).outputText;
   const actions = new Function(
     ...Object.keys(state),
-    `let dirtyVersion = 0; ${js}; return {removeShelf, removeBookcase};`,
+    `let dirtyVersion = 0; ${js}; return {removeShelf, removeBookcase, moveBookcase, moveBookcaseBy};`,
   )(...Object.values(state));
   return { actions, state, payloads };
 }
+
+test('reordering bookcases saves their order and remains editable', async () => {
+  const { actions, state, payloads } = await shelfEditor();
+  state.arrangement.value.bookcases[0].shelves[0].items.push({
+    x: 2,
+    horizontal: false,
+    books: [
+      {
+        id: 'book',
+        width: 32,
+        height: 180,
+        manualWidth: false,
+        manualHeight: false,
+        sourcePages: null,
+      },
+    ],
+  });
+  actions.moveBookcase('first', null);
+  await new Promise(setImmediate);
+  assert.deepEqual(
+    payloads[0].bookcases.map((entry) => entry.id),
+    ['second', 'first'],
+  );
+  assert.equal(
+    payloads[0].bookcases[1].shelves[0].items[0].books[0].id,
+    'book',
+  );
+  assert.equal(state.saveError.value, '');
+  actions.moveBookcaseBy('first', -1);
+  await new Promise(setImmediate);
+  assert.deepEqual(
+    payloads[1].bookcases.map((entry) => entry.id),
+    ['first', 'second'],
+  );
+  actions.removeShelf(state.arrangement.value.bookcases[0].shelves[1]);
+  await new Promise(setImmediate);
+  assert.equal(state.saveError.value, '');
+  assert.equal(payloads[2].bookcases[0].shelves.length, 1);
+  assert.equal(
+    payloads[2].bookcases[0].shelves[0].items[0].books[0].id,
+    'book',
+  );
+  actions.moveBookcase('missing', null);
+  actions.moveBookcaseBy('first', -1);
+  assert.equal(payloads.length, 3);
+});
 
 for (const action of ['removeShelf', 'removeBookcase']) {
   test(`${action} saves the remaining arrangement`, async () => {

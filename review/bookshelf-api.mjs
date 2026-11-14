@@ -87,6 +87,19 @@ assert.equal(response.status, 200, await response.clone().text());
 const afterRemoval = await (await request(a)).json();
 assert.equal(afterRemoval.revision, 4);
 assert.deepEqual(afterRemoval.arrangement, arrangement);
+arrangement.bookcases.push({
+  id: 'second-case',
+  width: 340,
+  shelves: [{ id: 'second-shelf', height: 245, items: [] }],
+});
+response = await request(a, 'PUT', { revision: 4, arrangement });
+assert.equal(response.status, 200, await response.clone().text());
+arrangement.bookcases.reverse();
+response = await request(a, 'PUT', { revision: 5, arrangement });
+assert.equal(response.status, 200, await response.clone().text());
+const reordered = await (await request(a)).json();
+assert.equal(reordered.revision, 6);
+assert.deepEqual(reordered.arrangement, arrangement);
 console.log(
-  'Authenticated API passed: private reader state, persistence, shelf removal, invalid geometry, stale revisions and concurrent writes.',
+  'Authenticated API passed: private reader state, persistence, shelf removal, bookcase order, invalid geometry, stale revisions and concurrent writes.',
 );

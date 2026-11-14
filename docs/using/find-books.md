@@ -38,7 +38,9 @@ Select **Bookshelf View** in the Books view switcher to see all books you can ac
 
 Select the pencil button (**Edit shelves**) to move books, drag a shelf handle to change its height, or drag the side handle to change the whole bookcase width. A bookcase cannot be narrower than its books. Select a book to change its displayed size. Pull an upright book down to lay it flat when there is room. To add a book to a stack, drag it onto the center of a sideways spine. Slide a sideways book along the shelf to keep it flat. Lift it to stand it upright. Use the stack handle to move the whole stack.
 
-Use a shelf's options menu to add a shelf or remove an empty one. The bookshelf menu adds a bookcase. Select the pencil button again (**Done editing shelves**) to lock the arrangement. Use the zoom controls, scroll wheel, or a two-finger pinch to change its display size without changing book dimensions. Hold Shift while using the scroll wheel to scroll vertically.
+Use a shelf's options menu to add a shelf or remove an empty one. The bookshelf menu adds a bookcase to the right. In edit mode, drag a bookcase by its top handle to change its order, or focus that handle and use the left and right arrow keys. Select the pencil button again (**Done editing shelves**) to lock the arrangement.
+
+Bookcases sit on one continuous floor. Hold the right mouse button or hold Space and drag to move around. On a touch screen, swipe to move around. Use the zoom controls, scroll wheel, or a two-finger pinch to change the display size without changing book dimensions. Hold Shift while using the scroll wheel to scroll vertically. The question-mark button in the shelf toolbar shows these navigation tips.
 
 Delb saves your arrangement to your account. If a save fails, use **Retry save**. If another device has a newer arrangement, choose **Load newer arrangement** to discard your unsaved changes and load it. Books without spine artwork use a colored title and author placeholder.
 

@@ -71,6 +71,23 @@ type Resize =
       original: number;
       scale: number;
     };
+type Pan = {
+  pointerId: number;
+  x: number;
+  y: number;
+  scrollLeft: number;
+  scrollTop: number;
+};
+type BookcaseDrag = {
+  id: string;
+  pointerId: number;
+  startX: number;
+  x: number;
+  startScrollLeft: number;
+  scrollLeft: number;
+  beforeId: string | null;
+  moved: boolean;
+};
 
 const arrangement = ref<Bookshelf | null>(null);
 const catalog = ref<BookViewBook[]>([]);
@@ -92,10 +109,16 @@ const notice = ref('');
 const adjustments = ref<string[]>([]);
 const drag = ref<Drag | null>(null);
 const resizing = ref<Resize | null>(null);
+const pan = ref<Pan | null>(null);
+const bookcaseDrag = ref<BookcaseDrag | null>(null);
+const spaceHeld = ref(false);
+const pointerOverWall = ref(false);
 let generation = 0;
 let dirtyVersion = 0;
 let observer: ResizeObserver | undefined;
 let pinch: { distance: number; zoom: number } | null = null;
+let scrollFrame: number | null = null;
+let suppressPanClick = false;
 const byId = computed(
   () => new Map(catalog.value.map((book) => [book.id, book])),
 );
@@ -291,7 +314,8 @@ watch(
   },
 );
 function onWheel(event: WheelEvent) {
-  if (!event.deltaY || resizing.value || drag.value) return;
+  if (!event.deltaY || resizing.value || drag.value || bookcaseDrag.value)
+    return;
   event.preventDefault();
   if (event.shiftKey) {
     if (wall.value) wall.value.scrollTop += event.deltaY;
@@ -311,7 +335,8 @@ function touchDistance(touches: TouchList) {
 }
 function onTouchStart(event: TouchEvent) {
   if (event.touches.length !== 2) return;
-  if (drag.value || resizing.value) onCancel();
+  if (drag.value || resizing.value || bookcaseDrag.value || pan.value)
+    onCancel();
   const distance = touchDistance(event.touches);
   if (distance) pinch = { distance, zoom: zoom.value };
 }
@@ -326,6 +351,65 @@ function onTouchMove(event: TouchEvent) {
 function onTouchEnd(event: TouchEvent) {
   if (event.touches.length < 2) pinch = null;
 }
+function onKeyDown(event: KeyboardEvent) {
+  if (event.code !== 'Space' || event.altKey || event.ctrlKey || event.metaKey)
+    return;
+  const target = event.target;
+  if (target instanceof HTMLElement) {
+    if (target.closest('input, textarea, select, [contenteditable="true"]'))
+      return;
+    const interactive = target.closest('button, summary');
+    if (
+      interactive &&
+      (!pointerOverWall.value || wall.value?.contains(interactive))
+    )
+      return;
+  }
+  if (
+    target !== document.body &&
+    !(target instanceof Node && wall.value?.contains(target)) &&
+    !pointerOverWall.value
+  )
+    return;
+  spaceHeld.value = true;
+  event.preventDefault();
+}
+function onKeyUp(event: KeyboardEvent) {
+  if (event.code === 'Space') spaceHeld.value = false;
+}
+function onWindowBlur() {
+  spaceHeld.value = false;
+  pointerOverWall.value = false;
+  onCancel();
+}
+function startPan(event: PointerEvent) {
+  if (
+    !wall.value ||
+    event.pointerType !== 'mouse' ||
+    resizing.value ||
+    drag.value ||
+    bookcaseDrag.value
+  )
+    return;
+  if (event.button !== 2 && !(event.button === 0 && spaceHeld.value)) return;
+  pan.value = {
+    pointerId: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+    scrollLeft: wall.value.scrollLeft,
+    scrollTop: wall.value.scrollTop,
+  };
+  suppressPanClick = event.button === 0;
+  event.preventDefault();
+  event.stopPropagation();
+  attachPointerListeners();
+}
+function preventPanClick(event: MouseEvent) {
+  if (!suppressPanClick) return;
+  event.preventDefault();
+  event.stopPropagation();
+  suppressPanClick = false;
+}
 onMounted(() => {
   if (wall.value) {
     observer = new ResizeObserver(([entry]) => {
@@ -339,6 +423,9 @@ onMounted(() => {
     wall.value.addEventListener('touchcancel', onTouchEnd);
   }
   window.addEventListener('beforeunload', unloadWarning);
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+  window.addEventListener('blur', onWindowBlur);
   void load();
 });
 onBeforeUnmount(() => {
@@ -350,6 +437,10 @@ onBeforeUnmount(() => {
   wall.value?.removeEventListener('touchend', onTouchEnd);
   wall.value?.removeEventListener('touchcancel', onTouchEnd);
   window.removeEventListener('beforeunload', unloadWarning);
+  window.removeEventListener('keydown', onKeyDown);
+  window.removeEventListener('keyup', onKeyUp);
+  window.removeEventListener('blur', onWindowBlur);
+  if (scrollFrame !== null) cancelAnimationFrame(scrollFrame);
   window.removeEventListener('pointermove', onMove);
   window.removeEventListener('pointerup', onUp);
   window.removeEventListener('pointercancel', onCancel);
@@ -368,6 +459,9 @@ function addBookcase() {
     shelves: [emptyShelf(), emptyShelf(), emptyShelf()],
   });
   changed();
+  void nextTick(() => {
+    wall.value?.scrollTo({ left: wall.value.scrollWidth, behavior: 'smooth' });
+  });
 }
 function addShelf(shelf: Shelf) {
   const bookcase = getBookcase(shelf.id);
@@ -511,6 +605,92 @@ function startBookcaseResize(event: PointerEvent, bookcase: Bookcase) {
   event.preventDefault();
   attachPointerListeners();
 }
+function startBookcaseDrag(event: PointerEvent, bookcase: Bookcase) {
+  if (!editing.value || event.button !== 0 || !wall.value) return;
+  stopNotice();
+  bookcaseDrag.value = {
+    id: bookcase.id,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    x: event.clientX,
+    startScrollLeft: wall.value.scrollLeft,
+    scrollLeft: wall.value.scrollLeft,
+    beforeId: null,
+    moved: false,
+  };
+  selected.value = null;
+  selectedShelf.value = null;
+  event.preventDefault();
+  attachPointerListeners();
+}
+function moveBookcase(id: string, beforeId: string | null) {
+  if (!arrangement.value || id === beforeId) return;
+  const cases = arrangement.value.bookcases;
+  const from = cases.findIndex((entry) => entry.id === id);
+  const before =
+    beforeId === null
+      ? cases.length
+      : cases.findIndex((entry) => entry.id === beforeId);
+  if (from < 0 || before < 0) return;
+  const to = before > from ? before - 1 : before;
+  if (to === from) return;
+  const [entry] = cases.splice(from, 1);
+  if (!entry) return;
+  cases.splice(to, 0, toRaw(entry));
+  changed();
+}
+function moveBookcaseBy(id: string, direction: -1 | 1) {
+  const cases = arrangement.value?.bookcases;
+  if (!cases) return;
+  const index = cases.findIndex((entry) => entry.id === id);
+  if (index < 0 || index + direction < 0 || index + direction >= cases.length)
+    return;
+  moveBookcase(
+    id,
+    direction < 0 ? cases[index - 1]!.id : (cases[index + 2]?.id ?? null),
+  );
+}
+function updateBookcaseTarget() {
+  const state = bookcaseDrag.value;
+  if (!state?.moved || !wall.value) return;
+  const cases = [
+    ...wall.value.querySelectorAll<HTMLElement>('[data-bookcase-id]'),
+  ].filter((element) => element.dataset.bookcaseId !== state.id);
+  const next = cases.find((element) => {
+    const rect = element.getBoundingClientRect();
+    return state.x < rect.left + rect.width / 2;
+  });
+  state.beforeId = next?.dataset.bookcaseId ?? null;
+}
+function stopBookcaseScroll() {
+  if (scrollFrame !== null) cancelAnimationFrame(scrollFrame);
+  scrollFrame = null;
+}
+function scrollBookcaseDrag() {
+  scrollFrame = null;
+  const state = bookcaseDrag.value;
+  const viewport = wall.value;
+  if (!state?.moved || !viewport) return;
+  const rect = viewport.getBoundingClientRect();
+  const edge = Math.min(70, rect.width / 4);
+  const distance =
+    state.x < rect.left + edge
+      ? state.x - (rect.left + edge)
+      : state.x > rect.right - edge
+        ? state.x - (rect.right - edge)
+        : 0;
+  if (!distance) return;
+  const old = viewport.scrollLeft;
+  viewport.scrollLeft += Math.max(-18, Math.min(18, distance * 0.3));
+  state.scrollLeft = viewport.scrollLeft;
+  updateBookcaseTarget();
+  if (viewport.scrollLeft !== old)
+    scrollFrame = requestAnimationFrame(scrollBookcaseDrag);
+}
+function queueBookcaseScroll() {
+  if (scrollFrame === null)
+    scrollFrame = requestAnimationFrame(scrollBookcaseDrag);
+}
 function attachPointerListeners() {
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);
@@ -565,6 +745,25 @@ function planDrop(
   };
 }
 function onMove(event: PointerEvent) {
+  if (pan.value) {
+    if (event.pointerId !== pan.value.pointerId || !wall.value) return;
+    wall.value.scrollLeft =
+      pan.value.scrollLeft - (event.clientX - pan.value.x);
+    wall.value.scrollTop = pan.value.scrollTop - (event.clientY - pan.value.y);
+    return;
+  }
+  if (bookcaseDrag.value) {
+    const state = bookcaseDrag.value;
+    if (event.pointerId !== state.pointerId) return;
+    state.x = event.clientX;
+    state.scrollLeft = wall.value?.scrollLeft ?? state.scrollLeft;
+    if (Math.abs(state.x - state.startX) > 5) state.moved = true;
+    if (state.moved) {
+      updateBookcaseTarget();
+      queueBookcaseScroll();
+    }
+    return;
+  }
   if (resizing.value) {
     const state = resizing.value;
     const coordinate = state.axis === 'width' ? event.clientX : event.clientY;
@@ -601,7 +800,26 @@ function onMove(event: PointerEvent) {
   if (state.moved) state.plan = planDrop(state, event.clientX, event.clientY);
 }
 function onUp(event: PointerEvent) {
+  if (pan.value && event.pointerId !== pan.value.pointerId) return;
+  if (bookcaseDrag.value && event.pointerId !== bookcaseDrag.value.pointerId)
+    return;
   detachPointerListeners();
+  if (pan.value) {
+    pan.value = null;
+    setTimeout(() => {
+      suppressPanClick = false;
+    }, 0);
+    return;
+  }
+  if (bookcaseDrag.value) {
+    const state = bookcaseDrag.value;
+    state.x = event.clientX;
+    updateBookcaseTarget();
+    stopBookcaseScroll();
+    bookcaseDrag.value = null;
+    if (state.moved) moveBookcase(state.id, state.beforeId);
+    return;
+  }
   if (resizing.value) {
     const state = resizing.value;
     const current =
@@ -640,6 +858,10 @@ function onUp(event: PointerEvent) {
 }
 function onCancel() {
   detachPointerListeners();
+  stopBookcaseScroll();
+  pan.value = null;
+  bookcaseDrag.value = null;
+  suppressPanClick = false;
   if (resizing.value) {
     const state = resizing.value;
     if (state.axis === 'width') {
@@ -703,6 +925,12 @@ const selectedBook = computed(() =>
 const currentShelf = computed(() =>
   selectedShelf.value ? getShelf(selectedShelf.value) : undefined,
 );
+const lastOtherBookcaseId = computed(
+  () =>
+    arrangement.value?.bookcases
+      .filter((entry) => entry.id !== bookcaseDrag.value?.id)
+      .at(-1)?.id,
+);
 </script>
 
 <template>
@@ -727,6 +955,25 @@ const currentShelf = computed(() =>
           <button type="button" @click="addBookcase">
             <Icon name="lucide:plus" aria-hidden="true" /> Add bookcase
           </button>
+        </details>
+        <details class="navigation-help">
+          <summary aria-label="How to navigate the bookshelf">
+            <Icon name="lucide:circle-help" aria-hidden="true" />
+          </summary>
+          <div class="navigation-help-panel">
+            <strong>Move around</strong>
+            <p>
+              Drag with the right mouse button or hold Space and drag. On a
+              touch screen, swipe to pan.
+            </p>
+            <p>
+              Use the wheel or pinch to zoom. Hold Shift and use the wheel to
+              scroll vertically.
+            </p>
+            <p v-if="editing">
+              Drag a bookcase by its top handle to change its order.
+            </p>
+          </div>
         </details>
       </div>
       <div
@@ -785,16 +1032,53 @@ const currentShelf = computed(() =>
       Pull a book down to lay it flat or lift it to stand it upright. Drag a
       book onto a sideways spine to stack it.
     </p>
-    <div ref="wall" class="wall-viewport">
+    <div
+      ref="wall"
+      class="wall-viewport"
+      :class="{ 'pan-ready': spaceHeld, panning: pan }"
+      tabindex="0"
+      aria-label="Bookshelf. Swipe to pan, or hold Space and drag."
+      @pointerdown.capture="startPan"
+      @pointerenter="pointerOverWall = true"
+      @pointerleave="pointerOverWall = false"
+      @click.capture="preventPanClick"
+      @contextmenu.prevent
+    >
       <div v-if="arrangement && !loading" class="wall">
         <div
           v-for="(bookcase, caseIndex) in arrangement.bookcases"
           :key="bookcase.id"
           class="bookcase"
+          :data-bookcase-id="bookcase.id"
+          :class="{
+            dragging: bookcaseDrag?.id === bookcase.id && bookcaseDrag.moved,
+            'drop-before':
+              bookcaseDrag?.moved && bookcaseDrag.beforeId === bookcase.id,
+            'drop-after':
+              bookcaseDrag?.moved &&
+              bookcaseDrag.beforeId === null &&
+              lastOtherBookcaseId === bookcase.id,
+          }"
           :style="{
             width: `${bookcase.width * scale}px`,
+            transform:
+              bookcaseDrag?.id === bookcase.id && bookcaseDrag.moved
+                ? `translateX(${bookcaseDrag.x - bookcaseDrag.startX + bookcaseDrag.scrollLeft - bookcaseDrag.startScrollLeft}px)`
+                : undefined,
           }"
         >
+          <button
+            v-if="editing"
+            type="button"
+            class="bookcase-move-handle"
+            :aria-label="`Move bookcase ${caseIndex + 1}; drag or use left and right arrow keys`"
+            title="Drag to move this bookcase"
+            @pointerdown.stop="startBookcaseDrag($event, bookcase)"
+            @keydown.left.prevent="moveBookcaseBy(bookcase.id, -1)"
+            @keydown.right.prevent="moveBookcaseBy(bookcase.id, 1)"
+          >
+            <Icon name="lucide:grip-horizontal" aria-hidden="true" />
+          </button>
           <div
             v-for="(shelf, shelfIndex) in bookcase.shelves"
             :key="shelf.id"
@@ -1004,6 +1288,7 @@ const currentShelf = computed(() =>
 <style scoped>
 .bookshelf-view {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -1031,7 +1316,8 @@ const currentShelf = computed(() =>
 }
 .bookshelf-toolbar button,
 .shelf-panel button,
-.case-menu summary {
+.case-menu summary,
+.navigation-help summary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1052,7 +1338,8 @@ const currentShelf = computed(() =>
 }
 .bookshelf-toolbar button:not(:disabled):hover,
 .shelf-panel button:hover,
-.case-menu summary:hover {
+.case-menu summary:hover,
+.navigation-help summary:hover {
   background: color-mix(in srgb, var(--main-color) 10%, var(--bg-color));
   border-color: var(--contrast-main-color);
 }
@@ -1068,7 +1355,8 @@ const currentShelf = computed(() =>
 }
 .bookshelf-toolbar .edit-button,
 .bookshelf-toolbar .zoom-controls button,
-.bookshelf-toolbar .case-menu summary {
+.bookshelf-toolbar .case-menu summary,
+.bookshelf-toolbar .navigation-help summary {
   min-width: 30px;
   min-height: 30px;
   padding: 4px 7px;
@@ -1080,7 +1368,8 @@ const currentShelf = computed(() =>
 .bookshelf-toolbar .edit-button.active,
 .bookshelf-toolbar .edit-button:hover,
 .bookshelf-toolbar .zoom-controls button:hover:not(:disabled),
-.bookshelf-toolbar .case-menu summary:hover {
+.bookshelf-toolbar .case-menu summary:hover,
+.bookshelf-toolbar .navigation-help summary:hover {
   background: color-mix(in srgb, var(--sub-color) 25%, transparent);
 }
 .zoom-controls {
@@ -1120,14 +1409,17 @@ const currentShelf = computed(() =>
 .save-status.problem::before {
   background: var(--contrast-error-color);
 }
-.case-menu {
+.case-menu,
+.navigation-help {
   position: relative;
 }
-.case-menu summary {
+.case-menu summary,
+.navigation-help summary {
   list-style: none;
   cursor: pointer;
 }
-.case-menu summary::-webkit-details-marker {
+.case-menu summary::-webkit-details-marker,
+.navigation-help summary::-webkit-details-marker {
   display: none;
 }
 .case-menu button {
@@ -1137,6 +1429,23 @@ const currentShelf = computed(() =>
   z-index: 12;
   white-space: nowrap;
   box-shadow: 0 8px 24px #0002;
+}
+.navigation-help-panel {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  z-index: 20;
+  width: min(275px, calc(100vw - 32px));
+  padding: 12px;
+  border: 1px solid var(--contrast-border-color);
+  border-radius: 8px;
+  background: var(--bg-color);
+  color: var(--contrast-text-color);
+  box-shadow: 0 8px 24px #0002;
+  font-size: 12px;
+}
+.navigation-help-panel p {
+  margin-top: 7px;
 }
 .notice {
   color: var(--contrast-main-color);
@@ -1150,20 +1459,93 @@ const currentShelf = computed(() =>
 }
 .wall-viewport {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: auto;
   touch-action: pan-x pan-y;
 }
+.wall-viewport.pan-ready,
+.wall-viewport.pan-ready * {
+  cursor: grab;
+}
+.wall-viewport.panning,
+.wall-viewport.panning * {
+  cursor: grabbing !important;
+  user-select: none;
+}
 .wall {
+  position: relative;
   display: flex;
   flex-wrap: nowrap;
   align-items: flex-end;
-  justify-content: safe center;
-  width: 100%;
+  justify-content: center;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
+  padding: 36px 28px 3px;
+}
+.wall::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--main-color);
+  pointer-events: none;
 }
 .bookcase {
   flex: 0 0 auto;
   position: relative;
+}
+.bookcase.dragging {
+  z-index: 9;
+  opacity: 0.78;
+  pointer-events: none;
+}
+.bookcase.drop-before::before,
+.bookcase.drop-after::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  z-index: 8;
+  background: var(--main-color);
+  border-radius: 3px;
+  pointer-events: none;
+}
+.bookcase.drop-before::before {
+  left: -2px;
+}
+.bookcase.drop-after::after {
+  right: -2px;
+}
+.bookcase-move-handle {
+  position: absolute;
+  top: -29px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  display: grid;
+  place-items: center;
+  min-width: 38px;
+  height: 25px;
+  border: 1px solid var(--contrast-border-color);
+  border-radius: 6px;
+  background: var(--bg-color);
+  color: var(--contrast-main-color);
+  box-shadow: 0 2px 6px #0002;
+  cursor: grab;
+  touch-action: none;
+}
+.bookcase-move-handle:active {
+  cursor: grabbing;
+}
+.bookcase-move-handle:focus-visible {
+  outline: 2px solid var(--contrast-main-color);
+  outline-offset: 2px;
 }
 .shelf-viewport {
   position: relative;
