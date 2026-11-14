@@ -388,7 +388,9 @@ function removeShelf(shelf: Shelf) {
     notice.value = 'A bookcase needs at least one shelf.';
     return;
   }
-  bookcase.shelves = bookcase.shelves.filter((item) => item.id !== shelf.id);
+  const index = bookcase.shelves.findIndex((item) => item.id === shelf.id);
+  if (index < 0) return;
+  bookcase.shelves.splice(index, 1);
   selectedShelf.value = null;
   changed();
 }
@@ -403,9 +405,11 @@ function removeBookcase(shelf: Shelf) {
     notice.value = 'Keep at least one bookcase.';
     return;
   }
-  arrangement.value.bookcases = arrangement.value.bookcases.filter(
-    (entry) => entry.id !== bookcase.id,
+  const index = arrangement.value.bookcases.findIndex(
+    (entry) => entry.id === bookcase.id,
   );
+  if (index < 0) return;
+  arrangement.value.bookcases.splice(index, 1);
   selectedShelf.value = null;
   changed();
 }
@@ -704,17 +708,33 @@ const currentShelf = computed(() =>
 <template>
   <div class="bookshelf-view">
     <div class="bookshelf-toolbar">
-      <button
-        type="button"
-        class="edit-button"
-        :class="{ active: editing }"
-        :aria-pressed="editing"
-        @click="toggleEdit"
+      <div class="toolbar-left">
+        <button
+          type="button"
+          class="edit-button"
+          :class="{ active: editing }"
+          :aria-label="editing ? 'Done editing shelves' : 'Edit shelves'"
+          :title="editing ? 'Done editing shelves' : 'Edit shelves'"
+          :aria-pressed="editing"
+          @click="toggleEdit"
+        >
+          <Icon name="lucide:pencil" aria-hidden="true" />
+        </button>
+        <details v-if="editing" class="case-menu">
+          <summary aria-label="Bookshelf options">
+            <Icon name="lucide:ellipsis" aria-hidden="true" />
+          </summary>
+          <button type="button" @click="addBookcase">
+            <Icon name="lucide:plus" aria-hidden="true" /> Add bookcase
+          </button>
+        </details>
+      </div>
+      <div
+        class="zoom-controls"
+        role="group"
+        aria-label="Bookshelf zoom"
+        title="Wheel or pinch to zoom · Shift + wheel to scroll"
       >
-        <Icon :name="editing ? 'lucide:check' : 'lucide:pencil'" />
-        {{ editing ? 'Done editing' : 'Edit shelves' }}
-      </button>
-      <div class="zoom-controls" role="group" aria-label="Bookshelf zoom">
         <button
           type="button"
           aria-label="Zoom out"
@@ -735,29 +755,20 @@ const currentShelf = computed(() =>
           <Icon name="lucide:plus" aria-hidden="true" />
         </button>
       </div>
-      <details v-if="editing" class="case-menu">
-        <summary aria-label="Bookshelf options">
-          <Icon name="lucide:ellipsis" aria-hidden="true" />
-        </summary>
-        <button type="button" @click="addBookcase">
-          <Icon name="lucide:plus" aria-hidden="true" /> Add bookcase
+      <div class="toolbar-right" :class="{ problem: conflict || saveError }">
+        <span
+          class="save-status"
+          :class="{ problem: conflict || saveError, pending: saving || dirty }"
+          role="status"
+          >{{ status }}</span
+        >
+        <button v-if="saveError" type="button" @click="retrySave">
+          Retry save
         </button>
-      </details>
-      <span class="zoom-hint"
-        >Wheel or pinch to zoom · Shift + wheel to scroll</span
-      >
-      <span
-        class="save-status"
-        :class="{ problem: conflict || saveError, pending: saving || dirty }"
-        role="status"
-        >{{ status }}</span
-      >
-      <button v-if="saveError" type="button" @click="retrySave">
-        Retry save
-      </button>
-      <button v-if="conflict" type="button" @click="reloadNewer">
-        Load newer arrangement
-      </button>
+        <button v-if="conflict" type="button" @click="reloadNewer">
+          Load newer arrangement
+        </button>
+      </div>
     </div>
     <p v-if="notice" class="notice" role="status">
       {{ notice }} <button type="button" @click="stopNotice">Dismiss</button>
@@ -1000,15 +1011,23 @@ const currentShelf = computed(() =>
   gap: 10px;
 }
 .bookshelf-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--contrast-border-color);
+}
+.toolbar-left,
+.toolbar-right {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid
-    color-mix(in srgb, var(--contrast-border-color) 45%, transparent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--sub-alt-color) 55%, var(--bg-color));
+  gap: 4px;
+  min-width: 0;
+}
+.toolbar-right {
+  justify-content: flex-end;
 }
 .bookshelf-toolbar button,
 .shelf-panel button,
@@ -1047,33 +1066,28 @@ const currentShelf = computed(() =>
   opacity: 0.4;
   cursor: default;
 }
-.bookshelf-toolbar .edit-button {
-  background: var(--main-color);
-  border-color: var(--main-color);
-  color: var(--contrast-inverse-color);
-}
-.bookshelf-toolbar .edit-button:hover {
-  background: color-mix(in srgb, var(--main-color) 85%, var(--bg-color));
-}
-.bookshelf-toolbar .edit-button.active {
-  background: var(--bg-color);
+.bookshelf-toolbar .edit-button,
+.bookshelf-toolbar .zoom-controls button,
+.bookshelf-toolbar .case-menu summary {
+  min-width: 30px;
+  min-height: 30px;
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
   color: var(--contrast-main-color);
+}
+.bookshelf-toolbar .edit-button.active,
+.bookshelf-toolbar .edit-button:hover,
+.bookshelf-toolbar .zoom-controls button:hover:not(:disabled),
+.bookshelf-toolbar .case-menu summary:hover {
+  background: color-mix(in srgb, var(--sub-color) 25%, transparent);
 }
 .zoom-controls {
   display: flex;
   align-items: center;
-  padding: 2px;
-  border: 1px solid
-    color-mix(in srgb, var(--contrast-border-color) 60%, transparent);
-  border-radius: 9px;
-  background: var(--bg-color);
 }
 .zoom-controls button {
-  min-width: 31px;
-  min-height: 28px;
-  padding: 4px 7px;
-  border: 0;
-  border-radius: 6px;
   font-variant-numeric: tabular-nums;
 }
 .zoom-controls button:nth-child(2) {
@@ -1083,10 +1097,14 @@ const currentShelf = computed(() =>
 .save-status {
   color: var(--contrast-text-color);
   font-size: 12px;
-  margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+.toolbar-right button {
+  min-height: 28px;
+  padding: 4px 7px;
+  font-size: 12px;
 }
 .save-status::before {
   content: '';
@@ -1332,17 +1350,15 @@ const currentShelf = computed(() =>
     width: auto;
     max-height: 38vh;
   }
-  .save-status {
-    margin-left: 0;
+  .toolbar-right.problem {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    flex-wrap: wrap;
   }
 }
 </style>
 
 <style scoped>
-.zoom-hint {
-  color: var(--contrast-text-color);
-  font-size: 11px;
-}
 .stack-hint {
   font-size: 12px;
   color: var(--contrast-text-color);
@@ -1384,10 +1400,5 @@ const currentShelf = computed(() =>
   padding: 4px 8px;
   white-space: nowrap;
   font-size: 11px;
-}
-@media (max-width: 600px) {
-  .zoom-hint {
-    display: none;
-  }
 }
 </style>

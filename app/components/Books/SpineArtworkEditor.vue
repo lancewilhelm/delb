@@ -181,15 +181,7 @@ defineExpose({ save, reset, busy });
 
 <template>
   <section class="spine-editor" aria-label="Spine artwork">
-    <div class="editor-heading">
-      <span class="heading-icon"
-        ><Icon name="lucide:book-open" aria-hidden="true"
-      /></span>
-      <div>
-        <h2>Spine artwork</h2>
-        <p>Give this book a spine for your shelf.</p>
-      </div>
-    </div>
+    <h2>Spine artwork</h2>
     <p v-if="error" role="alert" class="spine-error">
       {{ error }}
       <button v-if="!changed && !busy" type="button" @click="load">
@@ -353,12 +345,6 @@ defineExpose({ save, reset, busy });
   background: color-mix(in srgb, var(--sub-alt-color) 42%, var(--bg-color));
   color: var(--contrast-text-color);
 }
-.editor-heading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.heading-icon,
 .empty-icon {
   display: grid;
   place-items: center;
@@ -370,13 +356,12 @@ defineExpose({ save, reset, busy });
   background: color-mix(in srgb, var(--main-color) 12%, var(--bg-color));
   font-size: 18px;
 }
-.editor-heading h2,
+.spine-editor h2,
 .controls-heading h3 {
   color: var(--contrast-main-color);
   font-size: 14px;
   font-weight: 650;
 }
-.editor-heading p,
 .controls-heading p {
   margin-top: 2px;
   font-size: 12px;

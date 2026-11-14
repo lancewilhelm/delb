@@ -36,9 +36,9 @@ The sidebar's shelf, tag multi-select, and rating controls marked **coming soon*
 
 Select **Bookshelf View** in the Books view switcher to see all books you can access. Your bookshelf is personal. Collection and book filters dim nonmatching books without moving them.
 
-Select **Edit shelves** to move books, drag a shelf handle to change its height, or drag the side handle to change the whole bookcase width. A bookcase cannot be narrower than its books. Select a book to change its displayed size. Pull an upright book down to lay it flat when there is room. To add a book to a stack, drag it onto the center of a sideways spine. Slide a sideways book along the shelf to keep it flat. Lift it to stand it upright. Use the stack handle to move the whole stack.
+Select the pencil button (**Edit shelves**) to move books, drag a shelf handle to change its height, or drag the side handle to change the whole bookcase width. A bookcase cannot be narrower than its books. Select a book to change its displayed size. Pull an upright book down to lay it flat when there is room. To add a book to a stack, drag it onto the center of a sideways spine. Slide a sideways book along the shelf to keep it flat. Lift it to stand it upright. Use the stack handle to move the whole stack.
 
-Use a shelf's options menu to add a shelf or remove an empty one. The bookshelf menu adds a bookcase. Select **Done editing** to lock the arrangement. Use the zoom controls, scroll wheel, or a two-finger pinch to change its display size without changing book dimensions. Hold Shift while using the scroll wheel to scroll vertically.
+Use a shelf's options menu to add a shelf or remove an empty one. The bookshelf menu adds a bookcase. Select the pencil button again (**Done editing shelves**) to lock the arrangement. Use the zoom controls, scroll wheel, or a two-finger pinch to change its display size without changing book dimensions. Hold Shift while using the scroll wheel to scroll vertically.
 
 Delb saves your arrangement to your account. If a save fails, use **Retry save**. If another device has a newer arrangement, choose **Load newer arrangement** to discard your unsaved changes and load it. Books without spine artwork use a colored title and author placeholder.
 
