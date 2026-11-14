@@ -90,6 +90,15 @@ async function loadSource(relative) {
                   loader: 'ts',
                   resolveDir: root,
                 };
+              if (name.endsWith('/books/title-filter'))
+                return {
+                  contents: await readFile(
+                    path.join(sourceRoot, 'server/utils/books/title-filter.ts'),
+                    'utf8',
+                  ),
+                  loader: 'ts',
+                  resolveDir: root,
+                };
               if (name.endsWith('/auth'))
                 return {
                   contents:
