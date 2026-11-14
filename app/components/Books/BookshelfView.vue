@@ -579,6 +579,7 @@ function planDrop(
     (clientX - rect.left) / shelfScale,
     (rect.bottom - clientY) / shelfScale - SHELF_FLOOR,
     current.offsetX,
+    current.offsetY,
   );
   if (!planned) return null;
   return {
@@ -784,8 +785,8 @@ const currentShelf = computed(() =>
       {{ loadError }} <button type="button" @click="load">Try again</button>
     </div>
     <p v-if="editing" class="stack-hint">
-      Drag a book onto the center of a sideways spine to stack it. Drag a book
-      out to stand it upright.
+      Drag a book onto a sideways spine to stack it. Slide a sideways book to
+      keep it flat, or lift it to stand it upright.
     </p>
     <div ref="wall" class="wall-viewport">
       <div v-if="arrangement && !loading" class="wall">

@@ -156,6 +156,7 @@ export function planShelfDrop(
   pointerX: number,
   pointerY: number,
   grabOffset: number,
+  grabOffsetY = 0,
 ): ShelfDrop | null {
   const sourceItems = structuredClone(origin.items);
   const source = sourceItems.find((item) =>
@@ -163,9 +164,21 @@ export function planShelfDrop(
   );
   const book = source?.books.find((entry) => entry.id === bookId);
   if (!source || !book) return null;
+  const sourceIndex = source.books.findIndex((entry) => entry.id === bookId);
+  const bookBottom = source.horizontal
+    ? source.books
+        .slice(0, sourceIndex)
+        .reduce((sum, entry) => sum + entry.width, 0)
+    : 0;
+  const grabHeight =
+    bookBottom + book.width - Math.max(0, Math.min(book.width, grabOffsetY));
   const moving: ShelfItem = whole
     ? structuredClone(source)
-    : { x: source.x, horizontal: false, books: [structuredClone(book)] };
+    : {
+        x: source.x,
+        horizontal: source.horizontal && pointerY <= grabHeight + 32,
+        books: [structuredClone(book)],
+      };
   if (whole) sourceItems.splice(sourceItems.indexOf(source), 1);
   else {
     source.books = source.books.filter((entry) => entry.id !== bookId);
@@ -178,7 +191,7 @@ export function planShelfDrop(
       : structuredClone(destination.items);
   const wantedX =
     pointerX -
-    (whole || !source.horizontal
+    (whole || moving.horizontal || !source.horizontal
       ? grabOffset
       : Math.min(book.width / 2, grabOffset));
   const target = others.find(

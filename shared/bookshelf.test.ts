@@ -314,4 +314,82 @@ describe('personal bookshelf', () => {
       true,
     );
   });
+  it('keeps a sideways book flat when it is dragged along the shelf', () => {
+    const shelf = emptyBookshelf().bookcases[0]!.shelves[0]!;
+    shelf.items = [{ x: 2, horizontal: true, books: [placement('flat')] }];
+    const drop = planShelfDrop(shelf, shelf, 340, 'flat', false, 120, 15, 50)!;
+    assert.ok(drop.valid);
+    assert.equal(drop.moving.horizontal, true);
+    assert.equal(drop.items[0]!.horizontal, true);
+    assert.equal(drop.items[0]!.x, 70);
+  });
+  it('stands a sideways book upright only after it is lifted above its grab point', () => {
+    const shelf = emptyBookshelf().bookcases[0]!.shelves[0]!;
+    shelf.items = [{ x: 2, horizontal: true, books: [placement('flat')] }];
+    const near = planShelfDrop(
+      shelf,
+      shelf,
+      340,
+      'flat',
+      false,
+      120,
+      47,
+      50,
+      15,
+    )!;
+    const lifted = planShelfDrop(
+      shelf,
+      shelf,
+      340,
+      'flat',
+      false,
+      120,
+      48,
+      50,
+      15,
+    )!;
+    assert.equal(near.moving.horizontal, true);
+    assert.equal(lifted.moving.horizontal, false);
+    assert.ok(lifted.valid);
+    assert.equal(lifted.items[0]!.horizontal, false);
+  });
+  it('uses a stacked book’s original height to distinguish sliding from lifting', () => {
+    const [origin, destination] = emptyBookshelf().bookcases[0]!.shelves;
+    origin!.items = [
+      {
+        x: 2,
+        horizontal: true,
+        books: [placement('a'), placement('b'), placement('c')],
+      },
+    ];
+    const slide = planShelfDrop(
+      origin!,
+      destination!,
+      340,
+      'c',
+      false,
+      120,
+      75,
+      50,
+      15,
+    )!;
+    const lift = planShelfDrop(
+      origin!,
+      destination!,
+      340,
+      'c',
+      false,
+      120,
+      108,
+      50,
+      15,
+    )!;
+    assert.ok(slide.valid);
+    assert.equal(slide.moving.horizontal, true);
+    assert.equal(lift.moving.horizontal, false);
+    assert.deepEqual(
+      slide.sourceItems[0]!.books.map((book) => book.id),
+      ['a', 'b'],
+    );
+  });
 });
