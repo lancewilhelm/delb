@@ -1156,8 +1156,8 @@ const currentShelf = computed(() =>
 }
 .wall {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
+  flex-wrap: nowrap;
+  align-items: flex-end;
   justify-content: safe center;
   width: 100%;
 }
