@@ -29,6 +29,7 @@ async function navigation() {
     'onTouchStart',
     'onTouchMove',
     'onTouchEnd',
+    'onBookClick',
   ];
   const declarations = ast.statements
     .filter(
@@ -51,6 +52,7 @@ async function navigation() {
     getBoundingClientRect: () => ({ left: 0, top: 0, right: 300, width: 300 }),
   };
   let frameScheduled = false;
+  let destination = '';
   class TestNode {}
   class TestElement extends TestNode {
     constructor(kind) {
@@ -71,6 +73,12 @@ async function navigation() {
     drag: ref(null),
     resizing: ref(null),
     bookcaseDrag: ref(null),
+    editing: ref(false),
+    selected: ref(null),
+    selectedShelf: ref(null),
+    navigateTo: (path) => {
+      destination = path;
+    },
     spaceHeld: ref(false),
     pointerOverWall: ref(false),
     zoom: ref(1),
@@ -115,7 +123,7 @@ async function navigation() {
   }).outputText;
   const actions = new Function(
     ...Object.keys(state),
-    `let suppressPanClick = false; let pinch = null; let touchPan = null; let scrollFrame = null; ${js}; return {startPan, onWheel, onKeyDown, onKeyUp, preventPanClick, onMove, onUp, updateBookcaseTarget, scrollBookcaseDrag, stopBookcaseScroll, onTouchStart, onTouchMove, onTouchEnd};`,
+    `let suppressPanClick = false; let pinch = null; let touchPan = null; let scrollFrame = null; ${js}; return {startPan, onWheel, onKeyDown, onKeyUp, preventPanClick, onMove, onUp, updateBookcaseTarget, scrollBookcaseDrag, stopBookcaseScroll, onTouchStart, onTouchMove, onTouchEnd, onBookClick};`,
   )(...Object.values(state));
   return {
     actions,
@@ -123,6 +131,9 @@ async function navigation() {
     viewport,
     body,
     TestElement,
+    get destination() {
+      return destination;
+    },
     get attached() {
       return attached;
     },
@@ -134,6 +145,20 @@ async function navigation() {
     },
   };
 }
+
+test('keyboard activation opens book options in edit mode', async () => {
+  const nav = await navigation();
+  nav.state.editing.value = true;
+  nav.state.selectedShelf.value = 'shelf';
+  nav.actions.onBookClick({ detail: 0 }, 'book');
+  assert.equal(nav.state.selected.value, 'book');
+  assert.equal(nav.state.selectedShelf.value, null);
+  nav.actions.onBookClick({ detail: 1 }, 'other');
+  assert.equal(nav.state.selected.value, 'book');
+  nav.state.editing.value = false;
+  nav.actions.onBookClick({ detail: 0 }, 'book');
+  assert.equal(nav.destination, '/books/book');
+});
 
 test('Space enables panning without stealing typing or focused shelf controls', async () => {
   const nav = await navigation();

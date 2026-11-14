@@ -4,6 +4,7 @@ export const SHELF_MAX_WIDTH = 700;
 export const SHELF_FLOOR = 14;
 export const SHELF_MIN_HEIGHT = 120;
 export const SHELF_MAX_HEIGHT = 500;
+export const BOOKSHELF_MAX_BOOKS = 20000;
 
 export type ShelfBook = {
   id: string;
@@ -455,7 +456,7 @@ export function parseBookshelf(value: unknown): Bookshelf | null {
           )
             return null;
           bookIds.add(rawBook.id);
-          if (++total > 20000) return null;
+          if (++total > BOOKSHELF_MAX_BOOKS) return null;
           item.books.push({
             id: rawBook.id,
             width: rawBook.width,

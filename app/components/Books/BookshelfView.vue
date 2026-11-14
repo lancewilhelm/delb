@@ -6,6 +6,7 @@ import {
   SHELF_FLOOR,
   SHELF_MAX_HEIGHT,
   SHELF_MAX_WIDTH,
+  BOOKSHELF_MAX_BOOKS,
   minimumBookcaseWidth,
   planShelfDrop,
   minimumShelfHeight,
@@ -128,6 +129,8 @@ const bookcaseDrag = ref<BookcaseDrag | null>(null);
 const spaceHeld = ref(false);
 const pointerOverWall = ref(false);
 let generation = 0;
+let catalogGeneration = 0;
+let refreshPending = false;
 let dirtyVersion = 0;
 let observer: ResizeObserver | undefined;
 let pinch: { distance: number; zoom: number } | null = null;
@@ -256,6 +259,7 @@ async function loadMatches() {
   }
 }
 async function load() {
+  catalogGeneration++;
   loading.value = true;
   loadError.value = '';
   saveError.value = '';
@@ -265,12 +269,20 @@ async function load() {
       $fetch<Saved>('/api/bookshelf'),
       fetchAll('/api/books'),
     ]);
+    if (books.length > BOOKSHELF_MAX_BOOKS)
+      throw new Error(
+        `Bookshelf supports up to ${BOOKSHELF_MAX_BOOKS.toLocaleString()} books. Use grid or list view for larger libraries.`,
+      );
     const parsed =
       saved.arrangement === null
         ? emptyBookshelf()
         : parseBookshelf(saved.arrangement);
     if (!parsed) throw new Error('Your saved bookshelf could not be read.');
     const reconciled = reconcileBookshelf(parsed, books);
+    if (!parseBookshelf(reconciled.bookshelf))
+      throw new Error(
+        'This library exceeds the supported bookshelf arrangement size. Use grid or list view.',
+      );
     revision.value = saved.revision;
     catalog.value = books;
     arrangement.value = reconciled.bookshelf;
@@ -284,6 +296,41 @@ async function load() {
     loadError.value = errorText(error);
   } finally {
     loading.value = false;
+    if (refreshPending) {
+      refreshPending = false;
+      void refreshCatalog();
+    }
+  }
+}
+async function refreshCatalog() {
+  if (loading.value) {
+    refreshPending = true;
+    return;
+  }
+  const current = ++catalogGeneration;
+  try {
+    const books = await fetchAll('/api/books');
+    if (current !== catalogGeneration || !arrangement.value) return;
+    if (books.length > BOOKSHELF_MAX_BOOKS)
+      throw new Error(
+        `Bookshelf supports up to ${BOOKSHELF_MAX_BOOKS.toLocaleString()} books.`,
+      );
+    const existing = parseBookshelf(arrangement.value);
+    if (!existing)
+      throw new Error('The current arrangement could not be read.');
+    const reconciled = reconcileBookshelf(existing, books);
+    if (!parseBookshelf(reconciled.bookshelf))
+      throw new Error(
+        'This library exceeds the supported bookshelf arrangement size.',
+      );
+    catalog.value = books;
+    arrangement.value = reconciled.bookshelf;
+    adjustments.value = reconciled.needsAdjustment;
+    if (reconciled.changed) changed();
+    await loadMatches();
+  } catch (error) {
+    if (current === catalogGeneration)
+      notice.value = `Could not refresh your bookshelf: ${errorText(error)}`;
   }
 }
 async function save() {
@@ -338,7 +385,7 @@ function canLeave() {
     confirm('Your bookshelf has unsaved changes. Leave anyway?')
   );
 }
-defineExpose({ canLeave });
+defineExpose({ canLeave, refreshCatalog });
 onBeforeRouteLeave(() => canLeave());
 function unloadWarning(event: BeforeUnloadEvent) {
   if (dirty.value || saving.value) {
@@ -552,6 +599,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   generation++;
+  catalogGeneration++;
   observer?.disconnect();
   wall.value?.removeEventListener('wheel', onWheel);
   wall.value?.removeEventListener('touchstart', onTouchStart);
@@ -668,6 +716,16 @@ function changeSize(bookId: string, field: 'width' | 'height', event: Event) {
 }
 function bookFor(id: string): BookViewBook {
   return byId.value.get(id) ?? { id, title: 'Unavailable book' };
+}
+function onBookClick(event: MouseEvent, id: string) {
+  if (!editing.value) {
+    void navigateTo(`/books/${id}`);
+    return;
+  }
+  if (event.detail === 0) {
+    selected.value = id;
+    selectedShelf.value = null;
+  }
 }
 function startBook(
   event: PointerEvent,
@@ -1287,7 +1345,7 @@ const lastOtherBookcaseId = computed(
                   :style="placementStyle(book, item, index)"
                   :aria-label="`${bookFor(book.id).title}${editing ? ', arrange book' : ', open book'}`"
                   @pointerdown.stop="startBook($event, shelf, item, book)"
-                  @click="!editing && navigateTo(`/books/${book.id}`)"
+                  @click="onBookClick($event, book.id)"
                 >
                   <BookshelfSpine
                     :placement="book"

@@ -3,7 +3,11 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import ts from 'typescript';
 import { ref, toRaw } from 'vue';
-import { parseBookshelf } from '../shared/bookshelf.ts';
+import {
+  BOOKSHELF_MAX_BOOKS,
+  parseBookshelf,
+  reconcileBookshelf,
+} from '../shared/bookshelf.ts';
 
 async function shelfEditor() {
   const raw = await readFile('app/components/Books/BookshelfView.vue', 'utf8');
@@ -21,6 +25,7 @@ async function shelfEditor() {
     'removeBookcase',
     'moveBookcase',
     'moveBookcaseBy',
+    'refreshCatalog',
   ];
   const functions = ast.statements
     .filter(
@@ -42,9 +47,20 @@ async function shelfEditor() {
     bookcases: [bookcase('first'), bookcase('second')],
   });
   const payloads = [];
+  let fetchCatalog = async () => [];
   const state = {
     arrangement,
     toRaw,
+    parseBookshelf,
+    reconcileBookshelf,
+    BOOKSHELF_MAX_BOOKS,
+    loading: ref(false),
+    catalog: ref([]),
+    adjustments: ref([]),
+    fetchAll: () => fetchCatalog(),
+    loadMatches: async () => {},
+    errorText: (error) =>
+      error instanceof Error ? error.message : 'Please try again.',
     saving: ref(false),
     dirty: ref(false),
     conflict: ref(false),
@@ -68,10 +84,86 @@ async function shelfEditor() {
   }).outputText;
   const actions = new Function(
     ...Object.keys(state),
-    `let dirtyVersion = 0; ${js}; return {removeShelf, removeBookcase, moveBookcase, moveBookcaseBy};`,
+    `let dirtyVersion = 0; let catalogGeneration = 0; let refreshPending = false; ${js}; return {removeShelf, removeBookcase, moveBookcase, moveBookcaseBy, refreshCatalog};`,
   )(...Object.values(state));
-  return { actions, state, payloads };
+  return {
+    actions,
+    state,
+    payloads,
+    setFetchCatalog: (fn) => {
+      fetchCatalog = fn;
+    },
+  };
 }
+
+test('new catalog books are added without overwriting edits made during refresh', async () => {
+  const { actions, state, payloads, setFetchCatalog } = await shelfEditor();
+  let resolveCatalog;
+  setFetchCatalog(
+    () =>
+      new Promise((resolve) => {
+        resolveCatalog = resolve;
+      }),
+  );
+  const refresh = actions.refreshCatalog();
+  actions.moveBookcase('first', null);
+  await new Promise(setImmediate);
+  resolveCatalog([{ id: 'new-book', pages: 240 }]);
+  await refresh;
+  await new Promise(setImmediate);
+  const latest = payloads.at(-1);
+  assert.deepEqual(
+    latest.bookcases.map((entry) => entry.id),
+    ['second', 'first'],
+  );
+  assert.ok(
+    latest.bookcases
+      .flatMap((entry) => entry.shelves)
+      .flatMap((shelf) => shelf.items)
+      .some((item) => item.books.some((book) => book.id === 'new-book')),
+  );
+  assert.equal(state.catalog.value[0].id, 'new-book');
+  assert.equal(state.saveError.value, '');
+});
+
+test('an oversized catalog is reported without replacing or saving the current arrangement', async () => {
+  const { actions, state, payloads, setFetchCatalog } = await shelfEditor();
+  setFetchCatalog(async () =>
+    Array(BOOKSHELF_MAX_BOOKS + 1).fill({ id: 'book' }),
+  );
+  await actions.refreshCatalog();
+  assert.match(state.notice.value, /supports up to 20,000 books/);
+  assert.deepEqual(
+    state.arrangement.value.bookcases.map((entry) => entry.id),
+    ['first', 'second'],
+  );
+  assert.equal(payloads.length, 0);
+});
+
+test('an older catalog response cannot overwrite a newer refresh', async () => {
+  const { actions, state, setFetchCatalog } = await shelfEditor();
+  const older = Promise.withResolvers();
+  const newer = Promise.withResolvers();
+  let count = 0;
+  setFetchCatalog(() => (++count === 1 ? older.promise : newer.promise));
+  const first = actions.refreshCatalog();
+  const second = actions.refreshCatalog();
+  newer.resolve([{ id: 'newer' }]);
+  await second;
+  older.resolve([{ id: 'older' }]);
+  await first;
+  assert.deepEqual(
+    state.catalog.value.map((book) => book.id),
+    ['newer'],
+  );
+  assert.deepEqual(
+    state.arrangement.value.bookcases
+      .flatMap((entry) => entry.shelves)
+      .flatMap((shelf) => shelf.items)
+      .flatMap((item) => item.books.map((book) => book.id)),
+    ['newer'],
+  );
+});
 
 test('reordering bookcases saves their order and remains editable', async () => {
   const { actions, state, payloads } = await shelfEditor();

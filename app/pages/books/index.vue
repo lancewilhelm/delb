@@ -549,7 +549,14 @@ const hydrated = ref(false);
 const bookshelfActive = computed(
   () => hydrated.value && uiStore.bookshelfActive,
 );
-const bookshelfView = ref<{ canLeave: () => boolean } | null>(null);
+const bookshelfView = ref<{
+  canLeave: () => boolean;
+  refreshCatalog: () => Promise<void>;
+} | null>(null);
+function onBookUploaded() {
+  booksGridKey.value++;
+  void bookshelfView.value?.refreshCatalog();
+}
 function setBookshelfActive(active: boolean, nextMode?: 'grid' | 'list') {
   if (
     !active &&
@@ -583,7 +590,7 @@ onMounted(async () => {
 
 <template>
   <div class="flex flex-col w-full h-full overflow-hidden">
-    <AppHeader class="w-full" @book-uploaded="booksGridKey++" />
+    <AppHeader class="w-full" @book-uploaded="onBookUploaded" />
 
     <div class="flex w-full h-full overflow-hidden">
       <!-- Sidebar intentionally removed from index page in favor of filter dropdown next to Sort -->

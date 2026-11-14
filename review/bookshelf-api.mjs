@@ -100,6 +100,13 @@ assert.equal(response.status, 200, await response.clone().text());
 const reordered = await (await request(a)).json();
 assert.equal(reordered.revision, 6);
 assert.deepEqual(reordered.arrangement, arrangement);
+response = await fetch(base + '/api/bookshelf', {
+  method: 'PUT',
+  headers: { Cookie: a, Origin: base, 'Content-Type': 'application/json' },
+  body: ' '.repeat(16 * 1024 * 1024) + '{}',
+});
+assert.equal(response.status, 413);
+assert.deepEqual(await (await request(a)).json(), reordered);
 console.log(
-  'Authenticated API passed: private reader state, persistence, shelf removal, bookcase order, invalid geometry, stale revisions and concurrent writes.',
+  'Authenticated API passed: private reader state, persistence, shelf removal, bookcase order, request size, invalid geometry, stale revisions and concurrent writes.',
 );

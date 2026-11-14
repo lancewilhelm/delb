@@ -3,11 +3,17 @@ import { auth } from '~/utils/auth';
 import { userBookshelves } from '~/utils/db/schema';
 import { parseBookshelf } from '~~/shared/bookshelf';
 import { cloudDb } from '~~/server/utils/db/cloud';
+import { cacheBoundedRequestBody } from '~~/server/utils/books/storage/bounded-upload';
 
 export default defineEventHandler(async (event) => {
   const session = await auth.api.getSession({ headers: event.headers });
   if (!session)
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
+  await cacheBoundedRequestBody(
+    event.node.req,
+    event.node.res,
+    16 * 1024 * 1024,
+  );
   const body: unknown = await readBody(event);
   if (
     !body ||
