@@ -42,6 +42,7 @@ export type BookViewBook = {
   hasPhysicalCopy?: boolean;
   hasAudiobookCopy?: boolean;
   coverImagePath?: string | null;
+  spineRevision?: string | null;
   createdAt?: string | number | Date;
   updatedAt?: string | number | Date;
 };

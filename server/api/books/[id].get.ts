@@ -3,6 +3,7 @@ import { cloudDb } from '~~/server/utils/db/cloud';
 import {
   authors,
   bookAuthors,
+  bookSpines,
   bookFiles,
   bookIdentifiers,
   bookTags,
@@ -219,11 +220,17 @@ export default defineEventHandler(async (event) => {
 
     const userProgressSyncEnabled = prefsRow?.progressSyncEnabled ?? false;
 
+    const [spine] = await cloudDb
+      .select({ revision: bookSpines.revision })
+      .from(bookSpines)
+      .where(eq(bookSpines.bookId, id))
+      .limit(1);
     return {
       success: true,
       data: {
         book: {
           ...book,
+          spineRevision: spine?.revision ?? null,
           canEdit: (
             await cloudDb
               .select({ role: collectionMembers.role })

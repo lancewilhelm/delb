@@ -1,6 +1,13 @@
 <script setup lang="ts">
 defineOptions({ name: 'BooksViewToggle' });
 
+const props = withDefaults(
+  defineProps<{ showBookshelf?: boolean; bookshelf?: boolean }>(),
+  { showBookshelf: false, bookshelf: false },
+);
+const emit = defineEmits<{
+  bookshelf: [value: boolean, nextMode?: 'grid' | 'list'];
+}>();
 const uiStore = useUiStore();
 const { booksViewMode } = storeToRefs(uiStore);
 const hydrated = ref(false);
@@ -14,6 +21,10 @@ const effectiveMode = computed(() =>
 );
 
 function setMode(mode: 'grid' | 'list') {
+  if (props.bookshelf) {
+    emit('bookshelf', false, mode);
+    return;
+  }
   if (booksViewMode.value === mode) return;
   uiStore.setBooksViewMode(mode);
 }
@@ -31,11 +42,11 @@ function setMode(mode: 'grid' | 'list') {
       type="button"
       class="flex items-center gap-1 px-2 py-1 rounded text-sm transition text-(--contrast-main-color)"
       :class="
-        effectiveMode === 'grid'
+        effectiveMode === 'grid' && !bookshelf
           ? 'bg-(--sub-color)/25'
           : 'opacity-70 hover:opacity-100'
       "
-      :aria-pressed="effectiveMode === 'grid' ? 'true' : 'false'"
+      :aria-pressed="effectiveMode === 'grid' && !bookshelf ? 'true' : 'false'"
       @click="setMode('grid')"
     >
       <Icon name="lucide:layout-grid" class="text-base" />
@@ -48,16 +59,30 @@ function setMode(mode: 'grid' | 'list') {
       type="button"
       class="flex items-center gap-1 px-2 py-1 rounded text-sm transition text-(--contrast-main-color)"
       :class="
-        effectiveMode === 'list'
+        effectiveMode === 'list' && !bookshelf
           ? 'bg-(--sub-color)/25'
           : 'opacity-70 hover:opacity-100'
       "
-      :aria-pressed="effectiveMode === 'list' ? 'true' : 'false'"
+      :aria-pressed="effectiveMode === 'list' && !bookshelf ? 'true' : 'false'"
       @click="setMode('list')"
     >
       <Icon name="lucide:list" class="text-base" />
       <!-- <span class="hidden sm:inline">List</span> -->
     </button>
-    <BooksViewSettings :mode="effectiveMode" />
+    <button
+      v-if="showBookshelf"
+      v-tooltip="'Bookshelf View'"
+      aria-label="Bookshelf View"
+      type="button"
+      class="flex items-center gap-1 px-2 py-1 rounded text-sm transition text-(--contrast-main-color)"
+      :class="
+        bookshelf ? 'bg-(--sub-color)/25' : 'opacity-70 hover:opacity-100'
+      "
+      :aria-pressed="bookshelf"
+      @click="emit('bookshelf', true)"
+    >
+      <Icon name="lucide:library-big" class="text-base" />
+    </button>
+    <BooksViewSettings v-if="!bookshelf" :mode="effectiveMode" />
   </div>
 </template>

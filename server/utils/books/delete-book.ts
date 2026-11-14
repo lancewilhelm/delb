@@ -10,6 +10,7 @@ import {
   bookFiles,
   bookIdentifiers,
   bookNotes,
+  bookSpines,
   userBookRationale,
   bookRatings,
   bookTags,
@@ -127,6 +128,7 @@ async function deleteBookUnlocked(opts: {
           kind: 'delete',
           createdAt: new Date(),
         });
+      await tx.delete(bookSpines).where(eq(bookSpines.bookId, bookId));
       await tx.delete(bookFiles).where(eq(bookFiles.bookId, bookId));
       await tx.delete(bookAuthors).where(eq(bookAuthors.bookId, bookId));
       await tx.delete(bookTags).where(eq(bookTags.bookId, bookId));

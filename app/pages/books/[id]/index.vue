@@ -20,6 +20,7 @@ type Book = {
   id: string;
   title: string;
   coverImagePath?: string | null;
+  spineRevision?: string | null;
   updatedAt?: string | number | Date;
   createdByUserId?: string | null;
   canEdit?: boolean;
@@ -739,6 +740,23 @@ const safeDescriptionHtml = computed(() => {
   return sanitizeDescriptionHtml(desc);
 });
 
+const spineFailed = ref(false);
+const spineRatio = ref(1 / 3);
+watch(
+  () => [book.value?.id, book.value?.spineRevision],
+  () => {
+    spineFailed.value = false;
+    spineRatio.value = 1 / 3;
+  },
+);
+function onSpineLoaded(event: Event) {
+  if (
+    event.target instanceof HTMLImageElement &&
+    event.target.naturalWidth &&
+    event.target.naturalHeight
+  )
+    spineRatio.value = event.target.naturalWidth / event.target.naturalHeight;
+}
 const coverCacheKey = computed(() => {
   const raw = book.value?.updatedAt;
   if (!raw) return null;
@@ -1165,7 +1183,35 @@ const { copy } = useClipboard();
       >
         <div class="flex flex-col items-center gap-4">
           <!-- Keep a consistent aspect ratio; cover itself is max 320px wide -->
+          <div
+            v-if="book.spineRevision && !spineFailed"
+            class="detail-artwork"
+            :style="{ gridTemplateColumns: `${spineRatio}fr 0.666667fr` }"
+          >
+            <div
+              class="detail-spine rounded-sm shadow-md"
+              :class="{
+                'rounded-r-2xl':
+                  userSettingsStore.activeSettings.coverStyle.roundedRight,
+              }"
+            >
+              <img
+                :src="`/api/books/${encodeURIComponent(book.id)}/spine?v=${encodeURIComponent(book.spineRevision)}`"
+                :alt="`Spine for ${book.title}`"
+                @load="onSpineLoaded"
+                @error="spineFailed = true"
+              />
+            </div>
+            <BookCover
+              :src="coverThumbUrl"
+              :alt="`Cover for ${book.title}`"
+              :title="book.title"
+              class="cursor-pointer w-full! h-auto! aspect-2/3"
+              @click="openCoverViewer"
+            />
+          </div>
           <BookCover
+            v-else
             :src="coverThumbUrl"
             :alt="`Cover for ${book.title}`"
             :title="book.title"
@@ -2037,6 +2083,30 @@ const { copy } = useClipboard();
 </template>
 
 <style scoped>
+.detail-artwork {
+  display: grid;
+  align-items: stretch;
+  gap: 4px;
+  width: min(300px, calc(100vw - 3rem));
+}
+.detail-spine {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+.detail-spine img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+@media (min-width: 640px) {
+  .detail-artwork {
+    width: min(440px, calc(100vw - 3rem));
+  }
+}
+
 .book-description {
   line-height: 1.55;
 }

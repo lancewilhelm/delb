@@ -55,3 +55,26 @@ test('page sort defaults, direction toggling and actual preference persistence',
   assert.equal(hydrated.booksSortKey, 'dateAdded');
   assert.equal(hydrated.booksSortDirection, 'desc');
 });
+
+test('bookshelf choice survives leaving and reopening the library', () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+  };
+  const library = createStore(storage);
+  assert.equal(library.bookshelfActive, false);
+  library.setBookshelfActive(true);
+  library.$persist();
+  const returned = createStore(storage);
+  assert.equal(returned.bookshelfActive, true);
+  returned.setBookshelfActive(false);
+  returned.setBooksViewMode('list');
+  returned.$persist();
+  const list = createStore(storage);
+  assert.equal(list.bookshelfActive, false);
+  assert.equal(list.booksViewMode, 'list');
+  list.setBookshelfActive(true);
+  list.$reset();
+  assert.equal(list.bookshelfActive, false);
+});

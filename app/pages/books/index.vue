@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BookshelfView from '~/components/Books/BookshelfView.vue';
 import type { BookMoveSelection } from '~/utils/collectionActions';
 definePageMeta({
   auth: {
@@ -545,6 +546,31 @@ const booksSortKey = computed(() => uiStore.booksSortKey);
 const booksSortDir = computed(() => uiStore.booksSortDirection);
 const booksViewMode = computed(() => uiStore.booksViewMode);
 const hydrated = ref(false);
+const bookshelfActive = computed(
+  () => hydrated.value && uiStore.bookshelfActive,
+);
+const bookshelfView = ref<{
+  canLeave: () => boolean;
+  refreshCatalog: () => Promise<void>;
+} | null>(null);
+function onBookUploaded() {
+  booksGridKey.value++;
+  void bookshelfView.value?.refreshCatalog();
+}
+function setBookshelfActive(active: boolean, nextMode?: 'grid' | 'list') {
+  if (
+    !active &&
+    bookshelfActive.value &&
+    bookshelfView.value &&
+    !bookshelfView.value.canLeave()
+  )
+    return;
+  if (nextMode) uiStore.setBooksViewMode(nextMode);
+  uiStore.setBookshelfActive(active);
+}
+watch(bookshelfActive, (active) => {
+  if (active) selectionStore.setMode({ enabled: false });
+});
 onMounted(() => {
   hydrated.value = true;
 });
@@ -564,7 +590,7 @@ onMounted(async () => {
 
 <template>
   <div class="flex flex-col w-full h-full overflow-hidden">
-    <AppHeader class="w-full" @book-uploaded="booksGridKey++" />
+    <AppHeader class="w-full" @book-uploaded="onBookUploaded" />
 
     <div class="flex w-full h-full overflow-hidden">
       <!-- Sidebar intentionally removed from index page in favor of filter dropdown next to Sort -->
@@ -579,7 +605,11 @@ onMounted(async () => {
 
             <!-- Books sort + filters -->
             <div class="flex items-center gap-1 self-center">
-              <BooksViewToggle />
+              <BooksViewToggle
+                show-bookshelf
+                :bookshelf="bookshelfActive"
+                @bookshelf="setBookshelfActive"
+              />
 
               <span
                 class="border-r border-(--contrast-border-color) mx-1 h-6"
@@ -1081,7 +1111,7 @@ onMounted(async () => {
                 </div>
               </div>
 
-              <BooksSortDropdown />
+              <BooksSortDropdown v-if="!bookshelfActive" />
             </div>
           </div>
         </div>
@@ -1092,7 +1122,7 @@ onMounted(async () => {
           <div class="flex flex-col flex-1 min-h-0">
             <!-- Only the books grid scrolls (BooksInfiniteGrid owns the scroller) -->
             <BooksInfiniteGrid
-              v-if="effectiveBooksViewMode === 'grid'"
+              v-if="!bookshelfActive && effectiveBooksViewMode === 'grid'"
               :key="`grid-${booksGridKey}-${booksSortKey}-${booksSortDir}-${effectiveBooksViewMode}`"
               :collection-id="activeCollectionId"
               :sort="booksSortKey"
@@ -1106,7 +1136,7 @@ onMounted(async () => {
               @error="handleBooksGridError"
             />
             <BooksInfiniteList
-              v-else-if="effectiveBooksViewMode === 'list'"
+              v-else-if="!bookshelfActive && effectiveBooksViewMode === 'list'"
               :key="`list-${booksGridKey}-${booksSortKey}-${booksSortDir}-${effectiveBooksViewMode}`"
               :collection-id="activeCollectionId"
               :sort="booksSortKey"
@@ -1118,6 +1148,12 @@ onMounted(async () => {
               :selection-enabled="true"
               class="flex-1 min-h-0"
               @error="handleBooksGridError"
+            />
+            <BookshelfView
+              v-else
+              ref="bookshelfView"
+              :endpoint="booksEndpoint"
+              :collection-id="activeCollectionId"
             />
           </div>
         </div>
