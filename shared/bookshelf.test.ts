@@ -104,6 +104,14 @@ describe('personal bookshelf', () => {
       30,
     );
   });
+  it('fills the existing empty shelves in order for a new bookshelf', () => {
+    const result = reconcileBookshelf(emptyBookshelf(), [{ id: 'first' }]);
+    assert.equal(
+      result.bookshelf.bookcases[0]!.shelves[0]!.items[0]!.books[0]!.id,
+      'first',
+    );
+    assert.equal(result.bookshelf.bookcases[0]!.shelves[2]!.items.length, 0);
+  });
   it('adds new shelves for books that do not fit, without disturbing prior positions', () => {
     const data = emptyBookshelf();
     const shelf = data.bookcases[0]!.shelves.at(-1)!;
@@ -112,10 +120,10 @@ describe('personal bookshelf', () => {
       { id: 'a' },
       { id: 'b', pages: 875 },
     ]);
-    assert.equal(result.bookshelf.bookcases[0]!.shelves.length, 4);
+    assert.equal(result.bookshelf.bookcases.length, 2);
     assert.equal(result.bookshelf.bookcases[0]!.shelves[2]!.items[0]!.x, 300);
     assert.equal(
-      result.bookshelf.bookcases[0]!.shelves[3]!.items[0]!.books[0]!.id,
+      result.bookshelf.bookcases[1]!.shelves[0]!.items[0]!.books[0]!.id,
       'b',
     );
   });

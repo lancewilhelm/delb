@@ -165,6 +165,11 @@ export function reconcileBookshelf(
       }
       shelf.items = shelf.items.filter((item) => item.books.length);
     }
+  const shelves = bookshelf.bookcases.flatMap((bookcase) => bookcase.shelves);
+  let appendIndex = Math.max(
+    0,
+    shelves.findLastIndex((shelf) => shelf.items.length > 0),
+  );
   for (const catalogBook of catalog) {
     if (found.has(catalogBook.id)) continue;
     const newBook: ShelfBook = {
@@ -176,19 +181,29 @@ export function reconcileBookshelf(
       sourcePages: normalizedPages(catalogBook.pages),
     };
     const item: ShelfItem = { x: 2, horizontal: false, books: [newBook] };
-    const bookcase = bookshelf.bookcases.at(-1)!;
-    let shelf = bookcase.shelves.at(-1)!;
+    let shelf = shelves[appendIndex]!;
     let lastX = Math.max(
       2,
       ...shelf.items.map((entry) => entry.x + itemWidth(entry)),
     );
-    if (
+    while (
       lastX + itemWidth(item) > SHELF_WIDTH - 2 ||
       itemHeight(item) > shelf.height - SHELF_FLOOR
     ) {
-      shelf = emptyShelf();
-      bookcase.shelves.push(shelf);
-      lastX = 2;
+      appendIndex++;
+      if (!shelves[appendIndex]) {
+        const next = {
+          id: crypto.randomUUID(),
+          shelves: [emptyShelf(), emptyShelf(), emptyShelf()],
+        };
+        bookshelf.bookcases.push(next);
+        shelves.push(...next.shelves);
+      }
+      shelf = shelves[appendIndex]!;
+      lastX = Math.max(
+        2,
+        ...shelf.items.map((entry) => entry.x + itemWidth(entry)),
+      );
     }
     item.x = lastX;
     shelf.items.push(item);
