@@ -5,8 +5,8 @@ import {
   emptyBookshelf,
   itemWidth,
   minimumShelfHeight,
-  minimumShelfWidth,
-  stackBooks,
+  minimumBookcaseWidth,
+  planShelfDrop,
   parseBookshelf,
   reconcileBookshelf,
   type ShelfBook,
@@ -129,54 +129,109 @@ describe('personal bookshelf', () => {
       'b',
     );
   });
-  it('reads older shelves with their original width and validates new widths', () => {
+
+  it('converts older individual widths into one safe bookcase width', () => {
     const data = emptyBookshelf();
     const old = JSON.parse(JSON.stringify(data));
-    delete old.bookcases[0].shelves[0].width;
-    assert.equal(parseBookshelf(old)?.bookcases[0]?.shelves[0]?.width, 340);
-    const shelf = data.bookcases[0]!.shelves[0]!;
-    shelf.items = [item('a', 180, 55)];
-    assert.equal(minimumShelfWidth(shelf), 237);
-    shelf.width = 236;
-    assert.equal(parseBookshelf(data), null);
-    shelf.width = 237;
-    assert.ok(parseBookshelf(data));
-    shelf.width = 500;
+    delete old.bookcases[0].width;
+    old.bookcases[0].shelves[0].width = 250;
+    old.bookcases[0].shelves[1].width = 480;
+    old.bookcases[0].shelves[2].width = 300;
+    old.bookcases[0].shelves[0].items = [item('a', 180, 55)];
+    const converted = parseBookshelf(old)!;
+    assert.equal(converted.bookcases[0]!.width, 480);
+    assert.equal(converted.bookcases[0]!.shelves[0]!.items[0]!.x, 180);
+    const bookcase = converted.bookcases[0]!;
+    assert.equal(minimumBookcaseWidth(bookcase), 237);
+    bookcase.width = 236;
+    assert.equal(parseBookshelf(converted), null);
+    bookcase.width = 237;
+    assert.ok(parseBookshelf(converted));
+    bookcase.width = 500;
     const placed = closestPlacement(
-      shelf.items,
+      bookcase.shelves[0]!.items,
       item('b', 2),
       1000,
-      shelf.height,
-      shelf.width,
+      245,
+      bookcase.width,
     )!;
     assert.equal(placed.find((entry) => entry.books[0]!.id === 'b')!.x, 468);
-    shelf.width = 701;
-    assert.equal(parseBookshelf(data), null);
+    bookcase.width = 701;
+    assert.equal(parseBookshelf(converted), null);
   });
-  it('stacks upright books, including across shelves, without losing either book', () => {
+  it('lays an upright book sideways when dropped near the center of a horizontal book', () => {
     const data = emptyBookshelf();
-    const [first, second] = data.bookcases[0]!.shelves;
-    first!.items = [item('a', 2), item('other', 80)];
-    second!.items = [item('b', 2)];
-    const result = stackBooks(data, 'a', 'b')!;
+    const [origin, destination] = data.bookcases[0]!.shelves;
+    origin!.items = [item('a', 2), item('other', 80)];
+    destination!.items = [{ x: 2, horizontal: true, books: [placement('b')] }];
+    const snapshot = JSON.stringify(data);
+    const drop = planShelfDrop(
+      origin!,
+      destination!,
+      340,
+      'a',
+      false,
+      100,
+      15,
+      10,
+    )!;
+    assert.ok(drop.valid);
+    assert.equal(drop.moving.horizontal, true);
+    assert.equal(drop.bottom, 44);
     assert.deepEqual(
-      result.bookcases[0]!.shelves[0]!.items.map((i) => i.books[0]!.id),
-      ['other'],
-    );
-    assert.deepEqual(
-      result.bookcases[0]!.shelves[1]!.items[0]!.books.map((b) => b.id),
+      drop.items[0]!.books.map((b) => b.id),
       ['b', 'a'],
     );
-    assert.equal(result.bookcases[0]!.shelves[1]!.items[0]!.horizontal, true);
-    assert.ok(parseBookshelf(result));
-    assert.equal(data.bookcases[0]!.shelves[0]!.items.length, 2);
+    assert.deepEqual(
+      drop.sourceItems.map((i) => i.books[0]!.id),
+      ['other'],
+    );
+    assert.equal(JSON.stringify(data), snapshot);
   });
-  it('keeps both shelves unchanged when a stack cannot fit', () => {
+  it('stands an individual book upright when it is dragged out of a stack', () => {
     const data = emptyBookshelf();
-    const [first, second] = data.bookcases[0]!.shelves;
-    first!.items = [item('a', 2, 55)];
-    second!.height = 120;
-    second!.items = [
+    const [origin, destination] = data.bookcases[0]!.shelves;
+    origin!.items = [
+      { x: 2, horizontal: true, books: [placement('a'), placement('b')] },
+    ];
+    const drop = planShelfDrop(
+      origin!,
+      destination!,
+      340,
+      'b',
+      false,
+      110,
+      100,
+      80,
+    )!;
+    assert.ok(drop.valid);
+    assert.equal(drop.moving.horizontal, false);
+    assert.equal(drop.items[0]!.horizontal, false);
+    assert.equal(drop.items[0]!.books[0]!.id, 'b');
+    assert.deepEqual(
+      drop.sourceItems[0]!.books.map((b) => b.id),
+      ['a'],
+    );
+    const whole = planShelfDrop(
+      origin!,
+      destination!,
+      340,
+      'a',
+      true,
+      110,
+      100,
+      80,
+    )!;
+    assert.ok(whole.valid);
+    assert.equal(whole.moving.horizontal, true);
+    assert.equal(whole.items[0]!.books.length, 2);
+  });
+  it('rejects a stack that exceeds shelf height and preserves the original books', () => {
+    const data = emptyBookshelf();
+    const [origin, destination] = data.bookcases[0]!.shelves;
+    origin!.items = [item('a', 2, 55)];
+    destination!.height = 130;
+    destination!.items = [
       {
         x: 2,
         horizontal: true,
@@ -184,7 +239,79 @@ describe('personal bookshelf', () => {
       },
     ];
     const snapshot = JSON.stringify(data);
-    assert.equal(stackBooks(data, 'a', 'b'), null);
+    const drop = planShelfDrop(
+      origin!,
+      destination!,
+      340,
+      'a',
+      false,
+      100,
+      15,
+      10,
+    )!;
+    assert.equal(drop.valid, false);
     assert.equal(JSON.stringify(data), snapshot);
+  });
+  it('does not stack when the pointer is outside the center of the horizontal spine', () => {
+    const data = emptyBookshelf();
+    const [origin, destination] = data.bookcases[0]!.shelves;
+    origin!.items = [item('a', 2)];
+    destination!.items = [{ x: 2, horizontal: true, books: [placement('b')] }];
+    const drop = planShelfDrop(
+      origin!,
+      destination!,
+      340,
+      'a',
+      false,
+      210,
+      15,
+      10,
+    )!;
+    assert.ok(drop.valid);
+    assert.equal(drop.moving.horizontal, false);
+    assert.equal(
+      drop.items.find((i) => i.books.some((b) => b.id === 'a'))!.horizontal,
+      false,
+    );
+  });
+  it('stacks and unstacks books within the same shelf without duplicates', () => {
+    const shelf = emptyBookshelf().bookcases[0]!.shelves[0]!;
+    shelf.items = [
+      item('a', 2),
+      { x: 80, horizontal: true, books: [placement('b')] },
+    ];
+    const stacked = planShelfDrop(shelf, shelf, 340, 'a', false, 180, 15, 10)!;
+    assert.ok(stacked.valid);
+    assert.deepEqual(
+      stacked.items.flatMap((i) => i.books.map((b) => b.id)).sort(),
+      ['a', 'b'],
+    );
+    assert.equal(stacked.items.length, 1);
+    shelf.items = stacked.items;
+    const unstacked = planShelfDrop(
+      shelf,
+      shelf,
+      340,
+      'a',
+      false,
+      280,
+      100,
+      30,
+    )!;
+    assert.ok(unstacked.valid);
+    assert.deepEqual(
+      unstacked.items.flatMap((i) => i.books.map((b) => b.id)).sort(),
+      ['a', 'b'],
+    );
+    assert.equal(
+      unstacked.items.find((i) => i.books.some((b) => b.id === 'a'))!
+        .horizontal,
+      false,
+    );
+    assert.equal(
+      unstacked.items.find((i) => i.books.some((b) => b.id === 'b'))!
+        .horizontal,
+      true,
+    );
   });
 });

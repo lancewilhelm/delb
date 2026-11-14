@@ -6,8 +6,8 @@ import {
   SHELF_FLOOR,
   SHELF_MAX_HEIGHT,
   SHELF_MAX_WIDTH,
-  minimumShelfWidth,
-  stackBooks,
+  minimumBookcaseWidth,
+  planShelfDrop,
   minimumShelfHeight,
   itemWidth,
   itemHeight,
@@ -15,9 +15,9 @@ import {
   emptyBookshelf,
   reconcileBookshelf,
   closestPlacement,
-  packShelf,
   parseBookshelf,
   type Bookshelf,
+  type Bookcase,
   type Shelf,
   type ShelfItem,
   type ShelfBook,
@@ -57,13 +57,21 @@ type Drag = {
   x: number;
   y: number;
 };
-type Resize = {
-  shelfId: string;
-  axis: 'width' | 'height';
-  start: number;
-  original: number;
-  scale: number;
-};
+type Resize =
+  | {
+      axis: 'height';
+      shelfId: string;
+      start: number;
+      original: number;
+      scale: number;
+    }
+  | {
+      axis: 'width';
+      bookcaseId: string;
+      start: number;
+      original: number;
+      scale: number;
+    };
 
 const arrangement = ref<Bookshelf | null>(null);
 const catalog = ref<BookViewBook[]>([]);
@@ -72,7 +80,6 @@ const revision = ref(0);
 const editing = ref(false);
 const selected = ref<string | null>(null);
 const selectedShelf = ref<string | null>(null);
-const stackSource = ref<string | null>(null);
 const zoom = ref(1);
 const width = ref(340);
 const wall = ref<HTMLElement | null>(null);
@@ -353,12 +360,12 @@ function toggleEdit() {
   editing.value = !editing.value;
   selected.value = null;
   selectedShelf.value = null;
-  stackSource.value = null;
 }
 function addBookcase() {
   if (!arrangement.value) return;
   arrangement.value.bookcases.push({
     id: crypto.randomUUID(),
+    width: SHELF_WIDTH,
     shelves: [emptyShelf(), emptyShelf(), emptyShelf()],
   });
   changed();
@@ -415,7 +422,7 @@ function changeSize(bookId: string, field: 'width' | 'height', event: Event) {
     sorted.some(
       (item, index) =>
         itemHeight(item) > found.shelf.height - SHELF_FLOOR ||
-        item.x + itemWidth(item) > found.shelf.width - 2 ||
+        item.x + itemWidth(item) > getBookcase(found.shelf.id)!.width - 2 ||
         (index > 0 &&
           sorted[index - 1]!.x + itemWidth(sorted[index - 1]!) > item.x),
     )
@@ -450,7 +457,7 @@ function rotate(bookId: string) {
     moving,
     found.item.x,
     found.shelf.height,
-    found.shelf.width,
+    getBookcase(found.shelf.id)!.width,
   );
   if (!packed) {
     notice.value = 'There is not enough room to turn this book.';
@@ -471,23 +478,6 @@ function startBook(
 ) {
   if (!editing.value || event.button !== 0) return;
   stopNotice();
-  if (stackSource.value) {
-    const result =
-      arrangement.value &&
-      stackBooks(toRaw(arrangement.value), stackSource.value, book.id);
-    if (!result) {
-      notice.value =
-        'These books will not fit together here. Choose another book or make room.';
-      event.preventDefault();
-      return;
-    }
-    arrangement.value = result;
-    selected.value = book.id;
-    stackSource.value = null;
-    changed();
-    event.preventDefault();
-    return;
-  }
   const target = event.currentTarget;
   if (!(target instanceof HTMLElement)) return;
   const canvas = target.closest<HTMLElement>('[data-shelf-canvas]');
@@ -495,7 +485,8 @@ function startBook(
   const rect = (
       whole ? (target.closest<HTMLElement>('.shelf-item') ?? target) : target
     ).getBoundingClientRect(),
-    shelfScale = canvas.getBoundingClientRect().width / shelf.width;
+    shelfScale =
+      canvas.getBoundingClientRect().width / getBookcase(shelf.id)!.width;
   drag.value = {
     bookId: book.id,
     shelfId: shelf.id,
@@ -513,22 +504,35 @@ function startBook(
   event.preventDefault();
   attachPointerListeners();
 }
-function startResize(
-  event: PointerEvent,
-  shelf: Shelf,
-  axis: 'width' | 'height',
-) {
+function startResize(event: PointerEvent, shelf: Shelf) {
   if (!editing.value || event.button !== 0) return;
   const target = event.currentTarget;
   if (!(target instanceof HTMLElement)) return;
   const canvas = target.closest<HTMLElement>('[data-shelf-canvas]');
-  if (!canvas) return;
+  const bookcase = getBookcase(shelf.id);
+  if (!canvas || !bookcase) return;
   resizing.value = {
+    axis: 'height',
     shelfId: shelf.id,
-    axis,
-    start: axis === 'width' ? event.clientX : event.clientY,
-    original: shelf[axis],
-    scale: canvas.getBoundingClientRect().width / shelf.width,
+    start: event.clientY,
+    original: shelf.height,
+    scale: canvas.getBoundingClientRect().width / bookcase.width,
+  };
+  event.preventDefault();
+  attachPointerListeners();
+}
+function startBookcaseResize(event: PointerEvent, bookcase: Bookcase) {
+  if (!editing.value || event.button !== 0) return;
+  const target = event.currentTarget;
+  if (!(target instanceof HTMLElement)) return;
+  const element = target.closest<HTMLElement>('.bookcase');
+  if (!element) return;
+  resizing.value = {
+    axis: 'width',
+    bookcaseId: bookcase.id,
+    start: event.clientX,
+    original: bookcase.width,
+    scale: element.getBoundingClientRect().width / bookcase.width,
   };
   event.preventDefault();
   attachPointerListeners();
@@ -562,99 +566,53 @@ function planDrop(
       item.books.some((book) => book.id === current.bookId),
     );
   if (!canvas || !destination || !origin || !source) return null;
+  const bookcase = getBookcase(destination.id);
+  if (!bookcase) return null;
   const rect = canvas.getBoundingClientRect(),
-    shelfScale = rect.width / destination.width;
-  const sourceItems = structuredClone(toRaw(origin.items));
-  const original = sourceItems.find((item) =>
-    item.books.some((book) => book.id === current.bookId),
-  )!;
-  const book = original.books.find((entry) => entry.id === current.bookId)!;
-  const moving: ShelfItem = current.whole
-    ? structuredClone(original)
-    : {
-        x: original.x,
-        horizontal: original.horizontal,
-        books: [structuredClone(book)],
-      };
-  if (current.whole) sourceItems.splice(sourceItems.indexOf(original), 1);
-  else {
-    original.books = original.books.filter(
-      (entry) => entry.id !== current.bookId,
-    );
-    if (!original.books.length)
-      sourceItems.splice(sourceItems.indexOf(original), 1);
-  }
-  const others =
-    destination.id === origin.id
-      ? sourceItems
-      : structuredClone(toRaw(destination.items));
-  const wanted = (clientX - rect.left) / shelfScale - current.offsetX;
-  const stack = others.find(
-    (item) =>
-      item.horizontal &&
-      moving.horizontal &&
-      wanted + itemWidth(moving) / 2 >= item.x &&
-      wanted + itemWidth(moving) / 2 <= item.x + itemWidth(item) &&
-      (rect.bottom - clientY) / shelfScale > SHELF_FLOOR + 5,
+    shelfScale = rect.width / bookcase.width;
+  const planned = planShelfDrop(
+    toRaw(origin),
+    toRaw(destination),
+    bookcase.width,
+    current.bookId,
+    current.whole,
+    (clientX - rect.left) / shelfScale,
+    (rect.bottom - clientY) / shelfScale - SHELF_FLOOR,
+    current.offsetX,
   );
-  let packed: ShelfItem[] | null;
-  let bottom = SHELF_FLOOR;
-  if (stack) {
-    const combined = { ...stack, books: [...stack.books, ...moving.books] };
-    packed = packShelf(
-      others.filter((item) => item !== stack),
-      combined,
-      stack.x,
-      destination.height,
-      destination.width,
-    );
-    bottom += itemHeight(stack);
-  } else
-    packed = closestPlacement(
-      others,
-      moving,
-      wanted,
-      destination.height,
-      destination.width,
-    );
-  const placed = packed?.find((item) =>
-    item.books.some((entry) => entry.id === current.bookId),
-  );
-  const x =
-    placed?.x ??
-    Math.max(2, Math.min(wanted, destination.width - itemWidth(moving) - 2));
+  if (!planned) return null;
   return {
+    ...planned,
     shelfId: destination.id,
     originId: origin.id,
-    sourceItems,
-    items: packed ?? [],
-    x,
-    bottom,
-    valid: !!packed,
     rect,
     scale: shelfScale,
-    moving,
   };
 }
 function onMove(event: PointerEvent) {
   if (resizing.value) {
-    const state = resizing.value,
-      shelf = getShelf(state.shelfId);
-    if (!shelf) return;
+    const state = resizing.value;
     const coordinate = state.axis === 'width' ? event.clientX : event.clientY;
     const proposed = Math.round(
       state.original + (coordinate - state.start) / state.scale,
     );
-    if (state.axis === 'width')
-      shelf.width = Math.max(
-        minimumShelfWidth(shelf),
-        Math.min(SHELF_MAX_WIDTH, proposed),
+    if (state.axis === 'width') {
+      const bookcase = arrangement.value?.bookcases.find(
+        (entry) => entry.id === state.bookcaseId,
       );
-    else
-      shelf.height = Math.max(
-        minimumShelfHeight(shelf),
-        Math.min(SHELF_MAX_HEIGHT, proposed),
-      );
+      if (bookcase)
+        bookcase.width = Math.max(
+          minimumBookcaseWidth(bookcase),
+          Math.min(SHELF_MAX_WIDTH, proposed),
+        );
+    } else {
+      const shelf = getShelf(state.shelfId);
+      if (shelf)
+        shelf.height = Math.max(
+          minimumShelfHeight(shelf),
+          Math.min(SHELF_MAX_HEIGHT, proposed),
+        );
+    }
     return;
   }
   const state = drag.value;
@@ -670,10 +628,15 @@ function onMove(event: PointerEvent) {
 function onUp(event: PointerEvent) {
   detachPointerListeners();
   if (resizing.value) {
-    const state = resizing.value,
-      shelf = getShelf(state.shelfId);
+    const state = resizing.value;
+    const current =
+      state.axis === 'width'
+        ? arrangement.value?.bookcases.find(
+            (entry) => entry.id === state.bookcaseId,
+          )?.width
+        : getShelf(state.shelfId)?.height;
     resizing.value = null;
-    if (shelf && shelf[state.axis] !== state.original) changed();
+    if (current !== undefined && current !== state.original) changed();
     return;
   }
   const state = drag.value;
@@ -703,8 +666,16 @@ function onUp(event: PointerEvent) {
 function onCancel() {
   detachPointerListeners();
   if (resizing.value) {
-    const shelf = getShelf(resizing.value.shelfId);
-    if (shelf) shelf[resizing.value.axis] = resizing.value.original;
+    const state = resizing.value;
+    if (state.axis === 'width') {
+      const bookcase = arrangement.value?.bookcases.find(
+        (entry) => entry.id === state.bookcaseId,
+      );
+      if (bookcase) bookcase.width = state.original;
+    } else {
+      const shelf = getShelf(state.shelfId);
+      if (shelf) shelf.height = state.original;
+    }
   }
   resizing.value = null;
   drag.value = null;
@@ -716,11 +687,17 @@ const ghost = computed(() => {
   if (!found) return null;
   const chosen = found.item.books.find((book) => book.id === state.bookId);
   if (!chosen) return null;
-  const moving = state.whole
-    ? found.item
-    : { x: found.item.x, horizontal: found.item.horizontal, books: [chosen] };
-  const plan = state.plan,
-    currentScale = plan?.scale ?? state.scale;
+  const plan = state.plan;
+  const moving =
+    plan?.moving ??
+    (state.whole
+      ? found.item
+      : {
+          x: found.item.x,
+          horizontal: found.item.horizontal,
+          books: [chosen],
+        });
+  const currentScale = plan?.scale ?? state.scale;
   const left = plan
     ? plan.rect.left + plan.x * currentScale
     : state.x - state.offsetX * currentScale;
@@ -806,10 +783,9 @@ const currentShelf = computed(() =>
     <div v-else-if="loadError" role="alert">
       {{ loadError }} <button type="button" @click="load">Try again</button>
     </div>
-    <p v-if="editing && stackSource" class="stack-prompt" role="status">
-      Choose another book to stack with {{ bookFor(stackSource).title }}. Both
-      books will lie sideways.
-      <button type="button" @click="stackSource = null">Cancel</button>
+    <p v-if="editing" class="stack-hint">
+      Drag a book onto the center of a sideways spine to stack it. Drag a book
+      out to stand it upright.
     </p>
     <div ref="wall" class="wall-viewport">
       <div v-if="arrangement && !loading" class="wall">
@@ -818,7 +794,7 @@ const currentShelf = computed(() =>
           :key="bookcase.id"
           class="bookcase"
           :style="{
-            width: `${Math.max(...bookcase.shelves.map((s) => s.width)) * scale}px`,
+            width: `${bookcase.width * scale}px`,
           }"
         >
           <div
@@ -826,7 +802,7 @@ const currentShelf = computed(() =>
             :key="shelf.id"
             class="shelf-viewport"
             :style="{
-              width: `${shelf.width * scale}px`,
+              width: `${bookcase.width * scale}px`,
               height: `${shelf.height * scale}px`,
             }"
           >
@@ -835,7 +811,7 @@ const currentShelf = computed(() =>
               :data-shelf-canvas="shelf.id"
               :style="{
                 height: `${shelf.height}px`,
-                width: `${shelf.width}px`,
+                width: `${bookcase.width}px`,
                 transform: `scale(${scale})`,
               }"
             >
@@ -906,41 +882,40 @@ const currentShelf = computed(() =>
                 class="height-handle"
                 :class="{
                   active:
-                    resizing?.shelfId === shelf.id &&
-                    resizing.axis === 'height',
+                    resizing?.axis === 'height' &&
+                    resizing.shelfId === shelf.id,
                   limit: shelf.height === minimumShelfHeight(shelf),
                 }"
                 title="Drag to change shelf height"
-                @pointerdown.stop="startResize($event, shelf, 'height')"
+                @pointerdown.stop="startResize($event, shelf)"
               >
                 <span>↕</span
                 ><output
                   v-if="
-                    resizing?.shelfId === shelf.id && resizing.axis === 'height'
+                    resizing?.axis === 'height' && resizing.shelfId === shelf.id
                   "
                   >{{ shelf.height }} px</output
                 >
               </div>
-              <div
-                v-if="editing"
-                class="width-handle"
-                :class="{
-                  active:
-                    resizing?.shelfId === shelf.id && resizing.axis === 'width',
-                  limit: shelf.width === minimumShelfWidth(shelf),
-                }"
-                title="Drag to change shelf width"
-                @pointerdown.stop="startResize($event, shelf, 'width')"
-              >
-                <span>↔</span
-                ><output
-                  v-if="
-                    resizing?.shelfId === shelf.id && resizing.axis === 'width'
-                  "
-                  >{{ shelf.width }} px</output
-                >
-              </div>
             </div>
+          </div>
+          <div
+            v-if="editing"
+            class="width-handle"
+            :class="{
+              limit: bookcase.width === minimumBookcaseWidth(bookcase),
+            }"
+            title="Drag to change bookcase width"
+            @pointerdown.stop="startBookcaseResize($event, bookcase)"
+          >
+            <span>↔</span
+            ><output
+              v-if="
+                resizing?.axis === 'width' &&
+                resizing.bookcaseId === bookcase.id
+              "
+              >{{ bookcase.width }} px</output
+            >
           </div>
         </div>
       </div>
@@ -982,15 +957,6 @@ const currentShelf = computed(() =>
         {{
           getItem(selected)?.item.horizontal ? 'Stand upright' : 'Lay sideways'
         }}
-      </button>
-      <button
-        type="button"
-        @click="
-          stackSource = selected;
-          selected = null;
-        "
-      >
-        Stack with another book
       </button>
     </aside>
     <aside
@@ -1121,6 +1087,7 @@ const currentShelf = computed(() =>
 }
 .bookcase {
   flex: 0 0 auto;
+  position: relative;
 }
 .shelf-viewport {
   position: relative;
@@ -1306,21 +1273,16 @@ const currentShelf = computed(() =>
   color: var(--contrast-text-color);
   font-size: 11px;
 }
-.stack-prompt {
-  padding: 8px 12px;
-  border-radius: 6px;
-  background: var(--sub-color);
-  color: var(--bg-color);
-}
-.stack-prompt button {
-  text-decoration: underline;
-  margin-left: 8px;
+.stack-hint {
+  font-size: 12px;
+  color: var(--contrast-text-color);
 }
 .width-handle {
   position: absolute;
   right: -5px;
-  top: 0;
-  bottom: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 44px;
   width: 20px;
   z-index: 7;
   display: flex;

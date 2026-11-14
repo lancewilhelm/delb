@@ -14,13 +14,8 @@ export type ShelfBook = {
   sourcePages: number | null;
 };
 export type ShelfItem = { x: number; horizontal: boolean; books: ShelfBook[] };
-export type Shelf = {
-  id: string;
-  width: number;
-  height: number;
-  items: ShelfItem[];
-};
-export type Bookcase = { id: string; shelves: Shelf[] };
+export type Shelf = { id: string; height: number; items: ShelfItem[] };
+export type Bookcase = { id: string; width: number; shelves: Shelf[] };
 export type Bookshelf = { bookcases: Bookcase[] };
 export type ShelfCatalogBook = { id: string; pages?: number | null };
 
@@ -40,10 +35,12 @@ export function minimumShelfHeight(shelf: Shelf): number {
     ...shelf.items.map((item) => itemHeight(item) + SHELF_FLOOR),
   );
 }
-export function minimumShelfWidth(shelf: Shelf): number {
+export function minimumBookcaseWidth(bookcase: Bookcase): number {
   return Math.max(
     SHELF_MIN_WIDTH,
-    ...shelf.items.map((item) => item.x + itemWidth(item) + 2),
+    ...bookcase.shelves.flatMap((shelf) =>
+      shelf.items.map((item) => item.x + itemWidth(item) + 2),
+    ),
   );
 }
 function normalizedPages(pages: number | null | undefined): number | null {
@@ -67,7 +64,6 @@ function stableHeight(id: string): number {
 export function emptyShelf(): Shelf {
   return {
     id: crypto.randomUUID(),
-    width: SHELF_WIDTH,
     height: 245,
     items: [],
   };
@@ -77,6 +73,7 @@ export function emptyBookshelf(): Bookshelf {
     bookcases: [
       {
         id: crypto.randomUUID(),
+        width: SHELF_WIDTH,
         shelves: [emptyShelf(), emptyShelf(), emptyShelf()],
       },
     ],
@@ -140,48 +137,96 @@ export function closestPlacement(
   return best;
 }
 
-// Stack one selected book on a second book, retaining both shelf arrangements on failure.
-export function stackBooks(
-  value: Bookshelf,
-  sourceId: string,
-  targetId: string,
-): Bookshelf | null {
-  if (sourceId === targetId) return null;
-  const result = structuredClone(value);
-  const shelves = result.bookcases.flatMap((bookcase) => bookcase.shelves);
-  const sourceShelf = shelves.find((shelf) =>
-    shelf.items.some((item) => item.books.some((book) => book.id === sourceId)),
+export type ShelfDrop = {
+  sourceItems: ShelfItem[];
+  items: ShelfItem[];
+  moving: ShelfItem;
+  x: number;
+  bottom: number;
+  valid: boolean;
+};
+
+// Pointer coordinates are in unscaled shelf units, with y measured from the shelf floor.
+export function planShelfDrop(
+  origin: Shelf,
+  destination: Shelf,
+  destinationWidth: number,
+  bookId: string,
+  whole: boolean,
+  pointerX: number,
+  pointerY: number,
+  grabOffset: number,
+): ShelfDrop | null {
+  const sourceItems = structuredClone(origin.items);
+  const source = sourceItems.find((item) =>
+    item.books.some((book) => book.id === bookId),
   );
-  const targetShelf = shelves.find((shelf) =>
-    shelf.items.some((item) => item.books.some((book) => book.id === targetId)),
+  const book = source?.books.find((entry) => entry.id === bookId);
+  if (!source || !book) return null;
+  const moving: ShelfItem = whole
+    ? structuredClone(source)
+    : { x: source.x, horizontal: false, books: [structuredClone(book)] };
+  if (whole) sourceItems.splice(sourceItems.indexOf(source), 1);
+  else {
+    source.books = source.books.filter((entry) => entry.id !== bookId);
+    if (!source.books.length)
+      sourceItems.splice(sourceItems.indexOf(source), 1);
+  }
+  const others =
+    destination.id === origin.id
+      ? sourceItems
+      : structuredClone(destination.items);
+  const wantedX =
+    pointerX -
+    (whole || !source.horizontal
+      ? grabOffset
+      : Math.min(book.width / 2, grabOffset));
+  const target = others.find(
+    (item) =>
+      item.horizontal &&
+      pointerX >= item.x + itemWidth(item) * 0.25 &&
+      pointerX <= item.x + itemWidth(item) * 0.75 &&
+      pointerY >= 0 &&
+      pointerY <= itemHeight(item) + 12,
   );
-  const source = sourceShelf?.items.find((item) =>
-    item.books.some((book) => book.id === sourceId),
+  let items: ShelfItem[] | null;
+  let bottom = SHELF_FLOOR;
+  if (target) {
+    moving.horizontal = true;
+    const combined: ShelfItem = {
+      ...target,
+      books: [...target.books, ...moving.books],
+    };
+    items = packShelf(
+      others.filter((item) => item !== target),
+      combined,
+      target.x,
+      destination.height,
+      destinationWidth,
+    );
+    bottom += itemHeight(target);
+  } else {
+    items = closestPlacement(
+      others,
+      moving,
+      wantedX,
+      destination.height,
+      destinationWidth,
+    );
+  }
+  const placed = items?.find((item) =>
+    item.books.some((entry) => entry.id === bookId),
   );
-  const target = targetShelf?.items.find((item) =>
-    item.books.some((book) => book.id === targetId),
-  );
-  if (!sourceShelf || !targetShelf || !source || !target || source === target)
-    return null;
-  const book = source.books.find((entry) => entry.id === sourceId)!;
-  source.books = source.books.filter((entry) => entry.id !== sourceId);
-  if (!source.books.length)
-    sourceShelf.items = sourceShelf.items.filter((item) => item !== source);
-  const combined: ShelfItem = {
-    x: target.x,
-    horizontal: true,
-    books: [...target.books, book],
+  return {
+    sourceItems,
+    items: items ?? [],
+    moving,
+    x:
+      placed?.x ??
+      Math.max(2, Math.min(wantedX, destinationWidth - itemWidth(moving) - 2)),
+    bottom,
+    valid: !!items,
   };
-  const packed = closestPlacement(
-    targetShelf.items.filter((item) => item !== target),
-    combined,
-    target.x,
-    targetShelf.height,
-    targetShelf.width,
-  );
-  if (!packed) return null;
-  targetShelf.items = packed;
-  return result;
 }
 
 // Called only after the complete accessible catalog has loaded successfully.
@@ -213,7 +258,7 @@ export function reconcileBookshelf(
               itemHeight(item) <= shelf.height - SHELF_FLOOR &&
               sorted.every(
                 (current, i) =>
-                  current.x + itemWidth(current) <= shelf.width - 2 &&
+                  current.x + itemWidth(current) <= bookcase.width - 2 &&
                   (!i ||
                     sorted[i - 1]!.x + itemWidth(sorted[i - 1]!) <= current.x),
               );
@@ -229,10 +274,12 @@ export function reconcileBookshelf(
       }
       shelf.items = shelf.items.filter((item) => item.books.length);
     }
-  const shelves = bookshelf.bookcases.flatMap((bookcase) => bookcase.shelves);
+  const shelves = bookshelf.bookcases.flatMap((bookcase) =>
+    bookcase.shelves.map((shelf) => ({ shelf, bookcase })),
+  );
   let appendIndex = Math.max(
     0,
-    shelves.findLastIndex((shelf) => shelf.items.length > 0),
+    shelves.findLastIndex(({ shelf }) => shelf.items.length > 0),
   );
   for (const catalogBook of catalog) {
     if (found.has(catalogBook.id)) continue;
@@ -245,25 +292,28 @@ export function reconcileBookshelf(
       sourcePages: normalizedPages(catalogBook.pages),
     };
     const item: ShelfItem = { x: 2, horizontal: false, books: [newBook] };
-    let shelf = shelves[appendIndex]!;
+    let { shelf, bookcase } = shelves[appendIndex]!;
     let lastX = Math.max(
       2,
       ...shelf.items.map((entry) => entry.x + itemWidth(entry)),
     );
     while (
-      lastX + itemWidth(item) > shelf.width - 2 ||
+      lastX + itemWidth(item) > bookcase.width - 2 ||
       itemHeight(item) > shelf.height - SHELF_FLOOR
     ) {
       appendIndex++;
       if (!shelves[appendIndex]) {
         const next = {
           id: crypto.randomUUID(),
+          width: SHELF_WIDTH,
           shelves: [emptyShelf(), emptyShelf(), emptyShelf()],
         };
         bookshelf.bookcases.push(next);
-        shelves.push(...next.shelves);
+        shelves.push(
+          ...next.shelves.map((shelf) => ({ shelf, bookcase: next })),
+        );
       }
-      shelf = shelves[appendIndex]!;
+      ({ shelf, bookcase } = shelves[appendIndex]!);
       lastX = Math.max(
         2,
         ...shelf.items.map((entry) => entry.x + itemWidth(entry)),
@@ -314,31 +364,51 @@ export function parseBookshelf(value: unknown): Bookshelf | null {
     )
       return null;
     ids.add(rawCase.id);
-    const bookcase: Bookcase = { id: rawCase.id, shelves: [] };
+    const legacyWidths: number[] = [];
+    for (const legacy of rawCase.shelves) {
+      if (
+        !record(legacy) ||
+        !(
+          legacy.width === undefined ||
+          integer(legacy.width, SHELF_MIN_WIDTH, SHELF_MAX_WIDTH)
+        )
+      )
+        return null;
+      legacyWidths.push(
+        legacy.width === undefined ? SHELF_WIDTH : legacy.width,
+      );
+    }
+    if (!(
+      rawCase.width === undefined ||
+      integer(rawCase.width, SHELF_MIN_WIDTH, SHELF_MAX_WIDTH)
+    ))
+      return null;
+    const caseWidth =
+      rawCase.width === undefined ? Math.max(...legacyWidths) : rawCase.width;
+    const bookcase: Bookcase = {
+      id: rawCase.id,
+      width: caseWidth,
+      shelves: [],
+    };
     for (const rawShelf of rawCase.shelves) {
       if (
         !record(rawShelf) ||
         !id(rawShelf.id) ||
         ids.has(rawShelf.id) ||
         !integer(rawShelf.height, SHELF_MIN_HEIGHT, SHELF_MAX_HEIGHT) ||
-        !(
-          rawShelf.width === undefined ||
-          integer(rawShelf.width, SHELF_MIN_WIDTH, SHELF_MAX_WIDTH)
-        ) ||
         !Array.isArray(rawShelf.items)
       )
         return null;
       ids.add(rawShelf.id);
       const shelf: Shelf = {
         id: rawShelf.id,
-        width: rawShelf.width === undefined ? SHELF_WIDTH : rawShelf.width,
         height: rawShelf.height,
         items: [],
       };
       for (const rawItem of rawShelf.items) {
         if (
           !record(rawItem) ||
-          !integer(rawItem.x, 2, shelf.width - 2) ||
+          !integer(rawItem.x, 2, bookcase.width - 2) ||
           typeof rawItem.horizontal !== 'boolean' ||
           !Array.isArray(rawItem.books) ||
           !rawItem.books.length ||
@@ -377,7 +447,7 @@ export function parseBookshelf(value: unknown): Bookshelf | null {
           });
         }
         if (
-          item.x + itemWidth(item) > shelf.width - 2 ||
+          item.x + itemWidth(item) > bookcase.width - 2 ||
           itemHeight(item) > shelf.height - SHELF_FLOOR
         )
           return null;

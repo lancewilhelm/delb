@@ -39,7 +39,8 @@ const arrangement = {
   bookcases: [
     {
       id: 'case',
-      shelves: [{ id: 'shelf', width: 480, height: 245, items: [] }],
+      width: 480,
+      shelves: [{ id: 'shelf', height: 245, items: [] }],
     },
   ],
 };
@@ -60,7 +61,7 @@ assert.equal(
   400,
 );
 const tooNarrow = structuredClone(arrangement);
-tooNarrow.bookcases[0].shelves[0].width = 20;
+tooNarrow.bookcases[0].width = 20;
 assert.equal(
   (await request(a, 'PUT', { revision: 1, arrangement: tooNarrow })).status,
   400,
