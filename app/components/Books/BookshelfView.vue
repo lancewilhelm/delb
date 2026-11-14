@@ -75,16 +75,23 @@ type Pan = {
   pointerId: number;
   x: number;
   y: number;
-  scrollLeft: number;
-  scrollTop: number;
+  cameraX: number;
+  cameraY: number;
+};
+type TouchPan = {
+  x: number;
+  y: number;
+  cameraX: number;
+  cameraY: number;
+  moved: boolean;
 };
 type BookcaseDrag = {
   id: string;
   pointerId: number;
   startX: number;
   x: number;
-  startScrollLeft: number;
-  scrollLeft: number;
+  startCameraX: number;
+  cameraX: number;
   beforeId: string | null;
   moved: boolean;
 };
@@ -97,7 +104,11 @@ const editing = ref(false);
 const selected = ref<string | null>(null);
 const selectedShelf = ref<string | null>(null);
 const zoom = ref(1);
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 4;
 const width = ref(340);
+const viewportHeight = ref(0);
+const camera = reactive({ x: 0, y: 0 });
 const wall = ref<HTMLElement | null>(null);
 const loading = ref(true);
 const loadError = ref('');
@@ -117,6 +128,7 @@ let generation = 0;
 let dirtyVersion = 0;
 let observer: ResizeObserver | undefined;
 let pinch: { distance: number; zoom: number } | null = null;
+let touchPan: TouchPan | null = null;
 let scrollFrame: number | null = null;
 let suppressPanClick = false;
 const byId = computed(
@@ -125,6 +137,21 @@ const byId = computed(
 const scale = computed(
   () => Math.min(1, width.value / SHELF_WIDTH) * zoom.value,
 );
+const floorTop = computed(() => {
+  const tallest = Math.max(
+    0,
+    ...(arrangement.value?.bookcases.map((bookcase) =>
+      bookcase.shelves.reduce(
+        (height, shelf) => height + shelf.height * scale.value,
+        0,
+      ),
+    ) ?? []),
+  );
+  const height = tallest + 38;
+  return (
+    Math.max(0, (viewportHeight.value - height) / 2) + height - 2 + camera.y
+  );
+});
 const status = computed(() =>
   conflict.value
     ? 'A newer arrangement exists on another device.'
@@ -314,16 +341,22 @@ watch(
   },
 );
 function onWheel(event: WheelEvent) {
-  if (!event.deltaY || resizing.value || drag.value || bookcaseDrag.value)
-    return;
+  if (resizing.value || drag.value || bookcaseDrag.value) return;
+  if (!event.deltaY && !event.deltaX) return;
   event.preventDefault();
   if (event.shiftKey) {
-    if (wall.value) wall.value.scrollTop += event.deltaY;
+    camera.y -= event.deltaY;
+    camera.x -= event.deltaX;
+    return;
+  }
+  if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+    camera.x -= event.deltaX;
+    camera.y -= event.deltaY;
     return;
   }
   zoom.value = Math.max(
-    0.5,
-    Math.min(2, zoom.value * Math.exp(-event.deltaY * 0.0015)),
+    MIN_ZOOM,
+    Math.min(MAX_ZOOM, zoom.value * Math.exp(-event.deltaY * 0.0015)),
   );
 }
 function touchDistance(touches: TouchList) {
@@ -334,22 +367,81 @@ function touchDistance(touches: TouchList) {
     : 0;
 }
 function onTouchStart(event: TouchEvent) {
-  if (event.touches.length !== 2) return;
-  if (drag.value || resizing.value || bookcaseDrag.value || pan.value)
-    onCancel();
-  const distance = touchDistance(event.touches);
-  if (distance) pinch = { distance, zoom: zoom.value };
+  if (event.touches.length === 2) {
+    touchPan = null;
+    if (drag.value || resizing.value || bookcaseDrag.value || pan.value)
+      onCancel();
+    const distance = touchDistance(event.touches);
+    if (distance) pinch = { distance, zoom: zoom.value };
+    return;
+  }
+  if (
+    event.touches.length !== 1 ||
+    drag.value ||
+    resizing.value ||
+    bookcaseDrag.value
+  )
+    return;
+  const touch = event.touches.item(0);
+  if (touch)
+    touchPan = {
+      x: touch.clientX,
+      y: touch.clientY,
+      cameraX: camera.x,
+      cameraY: camera.y,
+      moved: false,
+    };
 }
 function onTouchMove(event: TouchEvent) {
-  if (!pinch || event.touches.length !== 2) return;
+  if (pinch && event.touches.length === 2) {
+    if (event.cancelable) event.preventDefault();
+    zoom.value = Math.max(
+      MIN_ZOOM,
+      Math.min(
+        MAX_ZOOM,
+        (pinch.zoom * touchDistance(event.touches)) / pinch.distance,
+      ),
+    );
+    return;
+  }
+  if (
+    !touchPan ||
+    event.touches.length !== 1 ||
+    drag.value ||
+    resizing.value ||
+    bookcaseDrag.value
+  )
+    return;
+  const touch = event.touches.item(0);
+  if (!touch) return;
+  if (Math.hypot(touch.clientX - touchPan.x, touch.clientY - touchPan.y) > 5)
+    touchPan.moved = true;
+  if (!touchPan.moved) return;
   if (event.cancelable) event.preventDefault();
-  zoom.value = Math.max(
-    0.5,
-    Math.min(2, (pinch.zoom * touchDistance(event.touches)) / pinch.distance),
-  );
+  camera.x = touchPan.cameraX + touch.clientX - touchPan.x;
+  camera.y = touchPan.cameraY + touch.clientY - touchPan.y;
+  suppressPanClick = true;
 }
 function onTouchEnd(event: TouchEvent) {
-  if (event.touches.length < 2) pinch = null;
+  if (event.touches.length < 2 && pinch) {
+    pinch = null;
+    const touch = event.touches.item(0);
+    if (touch)
+      touchPan = {
+        x: touch.clientX,
+        y: touch.clientY,
+        cameraX: camera.x,
+        cameraY: camera.y,
+        moved: false,
+      };
+  }
+  if (event.touches.length === 0) {
+    if (touchPan?.moved)
+      setTimeout(() => {
+        suppressPanClick = false;
+      }, 500);
+    touchPan = null;
+  }
 }
 function onKeyDown(event: KeyboardEvent) {
   if (event.code !== 'Space' || event.altKey || event.ctrlKey || event.metaKey)
@@ -383,6 +475,7 @@ function onWindowBlur() {
   onCancel();
 }
 function startPan(event: PointerEvent) {
+  if (event.pointerType === 'touch' && !touchPan) suppressPanClick = false;
   if (
     !wall.value ||
     event.pointerType !== 'mouse' ||
@@ -396,8 +489,8 @@ function startPan(event: PointerEvent) {
     pointerId: event.pointerId,
     x: event.clientX,
     y: event.clientY,
-    scrollLeft: wall.value.scrollLeft,
-    scrollTop: wall.value.scrollTop,
+    cameraX: camera.x,
+    cameraY: camera.y,
   };
   suppressPanClick = event.button === 0;
   event.preventDefault();
@@ -413,7 +506,10 @@ function preventPanClick(event: MouseEvent) {
 onMounted(() => {
   if (wall.value) {
     observer = new ResizeObserver(([entry]) => {
-      if (entry) width.value = entry.contentRect.width;
+      if (entry) {
+        width.value = entry.contentRect.width;
+        viewportHeight.value = entry.contentRect.height;
+      }
     });
     observer.observe(wall.value);
     wall.value.addEventListener('wheel', onWheel, { passive: false });
@@ -460,7 +556,15 @@ function addBookcase() {
   });
   changed();
   void nextTick(() => {
-    wall.value?.scrollTo({ left: wall.value.scrollWidth, behavior: 'smooth' });
+    const viewport = wall.value;
+    const last = viewport?.querySelector<HTMLElement>(
+      '[data-bookcase-id]:last-child',
+    );
+    if (!viewport || !last) return;
+    const view = viewport.getBoundingClientRect();
+    const rect = last.getBoundingClientRect();
+    if (rect.right > view.right - 28) camera.x -= rect.right - view.right + 28;
+    else if (rect.left < view.left + 28) camera.x += view.left + 28 - rect.left;
   });
 }
 function addShelf(shelf: Shelf) {
@@ -613,8 +717,8 @@ function startBookcaseDrag(event: PointerEvent, bookcase: Bookcase) {
     pointerId: event.pointerId,
     startX: event.clientX,
     x: event.clientX,
-    startScrollLeft: wall.value.scrollLeft,
-    scrollLeft: wall.value.scrollLeft,
+    startCameraX: camera.x,
+    cameraX: camera.x,
     beforeId: null,
     moved: false,
   };
@@ -680,12 +784,11 @@ function scrollBookcaseDrag() {
         ? state.x - (rect.right - edge)
         : 0;
   if (!distance) return;
-  const old = viewport.scrollLeft;
-  viewport.scrollLeft += Math.max(-18, Math.min(18, distance * 0.3));
-  state.scrollLeft = viewport.scrollLeft;
+  camera.x -= Math.max(-18, Math.min(18, distance * 0.3));
+  state.cameraX = camera.x;
   updateBookcaseTarget();
-  if (viewport.scrollLeft !== old)
-    scrollFrame = requestAnimationFrame(scrollBookcaseDrag);
+  void nextTick(updateBookcaseTarget);
+  scrollFrame = requestAnimationFrame(scrollBookcaseDrag);
 }
 function queueBookcaseScroll() {
   if (scrollFrame === null)
@@ -747,16 +850,15 @@ function planDrop(
 function onMove(event: PointerEvent) {
   if (pan.value) {
     if (event.pointerId !== pan.value.pointerId || !wall.value) return;
-    wall.value.scrollLeft =
-      pan.value.scrollLeft - (event.clientX - pan.value.x);
-    wall.value.scrollTop = pan.value.scrollTop - (event.clientY - pan.value.y);
+    camera.x = pan.value.cameraX + event.clientX - pan.value.x;
+    camera.y = pan.value.cameraY + event.clientY - pan.value.y;
     return;
   }
   if (bookcaseDrag.value) {
     const state = bookcaseDrag.value;
     if (event.pointerId !== state.pointerId) return;
     state.x = event.clientX;
-    state.scrollLeft = wall.value?.scrollLeft ?? state.scrollLeft;
+    state.cameraX = camera.x;
     if (Math.abs(state.x - state.startX) > 5) state.moved = true;
     if (state.moved) {
       updateBookcaseTarget();
@@ -860,6 +962,7 @@ function onCancel() {
   detachPointerListeners();
   stopBookcaseScroll();
   pan.value = null;
+  touchPan = null;
   bookcaseDrag.value = null;
   suppressPanClick = false;
   if (resizing.value) {
@@ -966,27 +1069,41 @@ const lastOtherBookcaseId = computed(
               Drag with the right mouse button or hold Space and drag. On a
               touch screen, swipe to pan.
             </p>
+            <p>Use Center bookshelf to return to the starting position.</p>
             <p>
               Use the wheel or pinch to zoom. Hold Shift and use the wheel to
-              scroll vertically.
+              move vertically.
             </p>
             <p v-if="editing">
               Drag a bookcase by its top handle to change its order.
             </p>
           </div>
         </details>
+        <button
+          v-if="camera.x || camera.y"
+          type="button"
+          class="center-button"
+          aria-label="Center bookshelf"
+          title="Center bookshelf"
+          @click="
+            camera.x = 0;
+            camera.y = 0;
+          "
+        >
+          <Icon name="lucide:locate-fixed" aria-hidden="true" />
+        </button>
       </div>
       <div
         class="zoom-controls"
         role="group"
         aria-label="Bookshelf zoom"
-        title="Wheel or pinch to zoom · Shift + wheel to scroll"
+        title="Wheel or pinch to zoom · Shift + wheel to pan vertically"
       >
         <button
           type="button"
           aria-label="Zoom out"
-          :disabled="zoom <= 0.5"
-          @click="zoom = Math.max(0.5, +(zoom - 0.1).toFixed(1))"
+          :disabled="zoom <= MIN_ZOOM"
+          @click="zoom = Math.max(MIN_ZOOM, +(zoom - 0.1).toFixed(1))"
         >
           <Icon name="lucide:minus" aria-hidden="true" />
         </button>
@@ -996,8 +1113,8 @@ const lastOtherBookcaseId = computed(
         <button
           type="button"
           aria-label="Zoom in"
-          :disabled="zoom >= 2"
-          @click="zoom = Math.min(2, +(zoom + 0.1).toFixed(1))"
+          :disabled="zoom >= MAX_ZOOM"
+          @click="zoom = Math.min(MAX_ZOOM, +(zoom + 0.1).toFixed(1))"
         >
           <Icon name="lucide:plus" aria-hidden="true" />
         </button>
@@ -1044,7 +1161,16 @@ const lastOtherBookcaseId = computed(
       @click.capture="preventPanClick"
       @contextmenu.prevent
     >
-      <div v-if="arrangement && !loading" class="wall">
+      <div
+        v-if="arrangement && !loading"
+        class="floor-line"
+        :style="{ top: `${floorTop}px` }"
+      />
+      <div
+        v-if="arrangement && !loading"
+        class="wall"
+        :style="{ transform: `translate(${camera.x}px, ${camera.y}px)` }"
+      >
         <div
           v-for="(bookcase, caseIndex) in arrangement.bookcases"
           :key="bookcase.id"
@@ -1063,7 +1189,7 @@ const lastOtherBookcaseId = computed(
             width: `${bookcase.width * scale}px`,
             transform:
               bookcaseDrag?.id === bookcase.id && bookcaseDrag.moved
-                ? `translateX(${bookcaseDrag.x - bookcaseDrag.startX + bookcaseDrag.scrollLeft - bookcaseDrag.startScrollLeft}px)`
+                ? `translateX(${bookcaseDrag.x - bookcaseDrag.startX - bookcaseDrag.cameraX + bookcaseDrag.startCameraX}px)`
                 : undefined,
           }"
         >
@@ -1354,6 +1480,7 @@ const lastOtherBookcaseId = computed(
   cursor: default;
 }
 .bookshelf-toolbar .edit-button,
+.bookshelf-toolbar .center-button,
 .bookshelf-toolbar .zoom-controls button,
 .bookshelf-toolbar .case-menu summary,
 .bookshelf-toolbar .navigation-help summary {
@@ -1367,6 +1494,7 @@ const lastOtherBookcaseId = computed(
 }
 .bookshelf-toolbar .edit-button.active,
 .bookshelf-toolbar .edit-button:hover,
+.bookshelf-toolbar .center-button:hover,
 .bookshelf-toolbar .zoom-controls button:hover:not(:disabled),
 .bookshelf-toolbar .case-menu summary:hover,
 .bookshelf-toolbar .navigation-help summary:hover {
@@ -1459,13 +1587,15 @@ const lastOtherBookcaseId = computed(
   text-decoration: underline;
 }
 .wall-viewport {
+  position: relative;
   display: flex;
   align-items: safe center;
   flex: 1;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
-  touch-action: pan-x pan-y;
+  overflow: hidden;
+  overflow: clip;
+  touch-action: none;
 }
 .wall-viewport.pan-ready,
 .wall-viewport.pan-ready * {
@@ -1488,10 +1618,8 @@ const lastOtherBookcaseId = computed(
   min-width: 100%;
   padding: 36px 28px 2px;
 }
-.wall::after {
-  content: '';
+.floor-line {
   position: absolute;
-  bottom: 0;
   left: 0;
   right: 0;
   height: 2px;

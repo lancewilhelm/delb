@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import ts from 'typescript';
-import { ref } from 'vue';
+import { reactive, ref } from 'vue';
 
 async function navigation() {
   const raw = await readFile('app/components/Books/BookshelfView.vue', 'utf8');
@@ -15,6 +15,7 @@ async function navigation() {
   );
   const wanted = [
     'startPan',
+    'onWheel',
     'onKeyDown',
     'onKeyUp',
     'preventPanClick',
@@ -72,6 +73,10 @@ async function navigation() {
     spaceHeld: ref(false),
     pointerOverWall: ref(false),
     zoom: ref(1),
+    camera: reactive({ x: 0, y: 0 }),
+    MIN_ZOOM: 0.5,
+    MAX_ZOOM: 4,
+    nextTick: (fn) => Promise.resolve().then(fn),
     HTMLElement: TestElement,
     Node: TestNode,
     document: { body },
@@ -97,7 +102,7 @@ async function navigation() {
   }).outputText;
   const actions = new Function(
     ...Object.keys(state),
-    `let suppressPanClick = false; let pinch = null; let scrollFrame = null; ${js}; return {startPan, onKeyDown, onKeyUp, preventPanClick, onMove, onUp, updateBookcaseTarget, scrollBookcaseDrag, stopBookcaseScroll, onTouchStart, onTouchMove, onTouchEnd};`,
+    `let suppressPanClick = false; let pinch = null; let touchPan = null; let scrollFrame = null; ${js}; return {startPan, onWheel, onKeyDown, onKeyUp, preventPanClick, onMove, onUp, updateBookcaseTarget, scrollBookcaseDrag, stopBookcaseScroll, onTouchStart, onTouchMove, onTouchEnd};`,
   )(...Object.values(state));
   return {
     actions,
@@ -171,18 +176,21 @@ test('right-drag and Space-drag pan without starting a book interaction', async 
   const nav = await navigation();
   for (const button of [2, 0]) {
     nav.state.spaceHeld.value = button === 0;
-    nav.viewport.scrollLeft = 100;
-    nav.viewport.scrollTop = 80;
+    nav.state.camera.x = 100;
+    nav.state.camera.y = 80;
     const down = pointer(button);
     nav.actions.startPan(down);
     assert.equal(down.prevented, true);
     assert.equal(down.stopped, true);
     assert.equal(nav.attached, true);
     nav.actions.onMove({ pointerId: 8, clientX: 500, clientY: 500 });
-    assert.equal(nav.viewport.scrollLeft, 100);
+    assert.equal(nav.state.camera.x, 100);
     nav.actions.onMove({ pointerId: 7, clientX: 120, clientY: 100 });
-    assert.equal(nav.viewport.scrollLeft, 130);
-    assert.equal(nav.viewport.scrollTop, 100);
+    assert.equal(nav.state.camera.x, 70);
+    assert.equal(nav.state.camera.y, 60);
+    nav.actions.onMove({ pointerId: 7, clientX: -10000, clientY: 10000 });
+    assert.equal(nav.state.camera.x, -10050);
+    assert.equal(nav.state.camera.y, 9960);
     nav.actions.onUp({ pointerId: 7 });
     assert.equal(nav.attached, false);
     if (button === 0) {
@@ -228,6 +236,70 @@ test('pinching cancels an in-progress drag and changes zoom', async () => {
   assert.equal(nav.state.zoom.value, 1.5);
 });
 
+test('touch swipe pans beyond the bookcases without activating a book', async () => {
+  const nav = await navigation();
+  nav.actions.onTouchStart({
+    touches: touches([{ clientX: 100, clientY: 100 }]),
+  });
+  const move = {
+    touches: touches([{ clientX: -2000, clientY: 1500 }]),
+    cancelable: true,
+    prevented: false,
+    preventDefault() {
+      this.prevented = true;
+    },
+  };
+  nav.actions.onTouchMove(move);
+  assert.equal(move.prevented, true);
+  assert.equal(nav.state.camera.x, -2100);
+  assert.equal(nav.state.camera.y, 1400);
+  nav.actions.onTouchEnd({ touches: touches([]) });
+  const click = pointer(0);
+  nav.actions.preventPanClick(click);
+  assert.equal(click.prevented, true);
+});
+
+test('wheel and pinch zoom reach 400 percent and clamp there', async () => {
+  const nav = await navigation();
+  const wheel = {
+    deltaX: 0,
+    deltaY: -10000,
+    shiftKey: false,
+    preventDefault() {},
+  };
+  nav.actions.onWheel(wheel);
+  assert.equal(nav.state.zoom.value, 4);
+  nav.state.zoom.value = 1;
+  nav.actions.onTouchStart({
+    touches: touches([
+      { clientX: 0, clientY: 0 },
+      { clientX: 100, clientY: 0 },
+    ]),
+  });
+  nav.actions.onTouchMove({
+    touches: touches([
+      { clientX: 0, clientY: 0 },
+      { clientX: 700, clientY: 0 },
+    ]),
+    cancelable: true,
+    preventDefault() {},
+  });
+  assert.equal(nav.state.zoom.value, 4);
+  nav.actions.onWheel({
+    deltaX: 25,
+    deltaY: 0,
+    shiftKey: false,
+    preventDefault() {},
+  });
+  nav.actions.onWheel({
+    deltaX: 0,
+    deltaY: 40,
+    shiftKey: true,
+    preventDefault() {},
+  });
+  assert.deepEqual({ ...nav.state.camera }, { x: -25, y: -40 });
+});
+
 test('bookcase insertion follows the pointer and ignores the dragged case', async () => {
   const nav = await navigation();
   nav.state.bookcaseDrag.value = {
@@ -253,14 +325,11 @@ test('dragging near the edge scrolls the floor and stops cleanly', async () => {
     moved: true,
     x: 299,
     beforeId: null,
-    scrollLeft: 100,
+    cameraX: 0,
   };
   nav.actions.scrollBookcaseDrag();
-  assert.ok(nav.viewport.scrollLeft > 100);
-  assert.equal(
-    nav.state.bookcaseDrag.value.scrollLeft,
-    nav.viewport.scrollLeft,
-  );
+  assert.ok(nav.state.camera.x < 0);
+  assert.equal(nav.state.bookcaseDrag.value.cameraX, nav.state.camera.x);
   assert.equal(nav.frameScheduled, true);
   nav.actions.stopBookcaseScroll();
   assert.equal(nav.frameScheduled, false);

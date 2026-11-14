@@ -40,7 +40,7 @@ Select the pencil button (**Edit shelves**) to move books, drag a shelf handle t
 
 Use a shelf's options menu to add a shelf or remove an empty one. The bookshelf menu adds a bookcase to the right. In edit mode, drag a bookcase by its top handle to change its order, or focus that handle and use the left and right arrow keys. Select the pencil button again (**Done editing shelves**) to lock the arrangement.
 
-Bookcases sit on one continuous floor. Hold the right mouse button or hold Space and drag to move around. On a touch screen, swipe to move around. Use the zoom controls, scroll wheel, or a two-finger pinch to change the display size without changing book dimensions. Hold Shift while using the scroll wheel to scroll vertically. The question-mark button in the shelf toolbar shows these navigation tips.
+Bookcases sit on one continuous floor. Hold the right mouse button or hold Space and drag to move freely around the view. On a touch screen, swipe to move around. Select **Center bookshelf** to return to the starting position. Use the zoom controls, scroll wheel, or a two-finger pinch to change the display size without changing book dimensions. Hold Shift while using the scroll wheel to move vertically. The question-mark button in the shelf toolbar shows these navigation tips.
 
 Delb saves your arrangement to your account. If a save fails, use **Retry save**. If another device has a newer arrangement, choose **Load newer arrangement** to discard your unsaved changes and load it. Books without spine artwork use a colored title and author placeholder.
 
