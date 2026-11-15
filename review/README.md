@@ -1,7 +1,5 @@
 # Security and performance review fixtures
 
-This file records the earlier four-fix review. The subsequent full-repository audit and completed repair verification are in [the audit repair record](audits/2026-10-27/repair-verification.md). Statements below about unchanged reader settings, dependency counts, and publishing scope describe that earlier review.
-
 This branch proposes four bounded fixes from baseline `dd7a0fcbc4d1e0e51a6b98a36b10ef06b2ee0d1e`. The EPUB reader's scripting configuration is unchanged pending compatibility tests. These fixtures use synthetic data and are not a deployment configuration.
 
 ## Candidate changes
@@ -135,3 +133,26 @@ Chrome uses a temporary profile. On macOS the runner uses the standard Google Ch
 For manual exploration, use the reusable synthetic demo described above. Register an owner and a second reader in separate browser sessions. Both should see **Default**. Create another collection and add both readers as editors. Upload `review/demo/ordinary.epub`, move it using **Move collection**, and confirm the source access warning. Its ID and reading history should stay the same. Remove the second reader from all collections and sign in again: the library should stay empty, and Add book should offer choosing or creating a collection. As the owner, choose another default in **Settings > Admin > Collections** and register a third reader: only the new account should join the new default automatically.
 
 For the collection settings follow-up, sign in as the system owner in the synthetic demo. In the collection picker, open a collection's settings and select **Make default**. Reload and open Add book; both should select that collection. Create a separate disposable collection with a test EPUB. Open its settings, expand **Collection actions**, and choose **Delete collection**. Cancel each warning once and verify the book remains. Repeat, continue to the final warning, type the collection name, and select **Delete collection and books**. The collection and book should disappear. A current default must be replaced before it can be deleted.
+
+## Bookshelf loading and panning
+
+Build the app with `pnpm build`. To create, run, and remove a fresh 800-book production fixture:
+
+```sh
+node review/run-api-regressions.mjs review/bookshelf-load-browser.mjs
+```
+
+For repeated measurements or live control checks, use the reusable synthetic demo described below and start `node review/start-demo.mjs --production`. In another terminal:
+
+```sh
+node review/bookshelf-load-browser.mjs --runs=6 --latency=100
+node review/bookshelf-load-browser.mjs --runs=2 --artwork=800 --controls
+```
+
+The runner creates a private synthetic library and launches headless Chrome with a temporary profile. It checks rendered books, successful API responses, a single catalog pass, saved arrangements, repeat-load timing, and actual pointer panning. `--controls` also checks book dimensions, live shelf and case resizing, keyboard case order, shelf add/remove, title filters, and collection dimming.
+
+`--books` defaults to 800. `--artwork` sets how many entries have invented 180-by-1000-pixel WebP artwork, distributed across the library. `--latency` adds simulated browser network latency in milliseconds; the default is zero. `--budget` sets the repeat-load budget in milliseconds; the default is 1000. `--profile` records a separate panning CPU profile. Set `CHROME_BIN` for a different Chrome executable. Generated measurements and profiles stay under `review/demo/` and are ignored by Git. Synthetic credentials stay in memory and the temporary browser profile is removed.
+
+These are local synthetic checks. See the [bookshelf performance investigation](bookshelf-performance.md) for measured conditions, results, and deployment limits.
+
+This file records the earlier four-fix review. The subsequent full-repository audit and completed repair verification are in [the audit repair record](audits/2026-10-27/repair-verification.md). Statements below about unchanged reader settings, dependency counts, and publishing scope describe that earlier review.

@@ -1,0 +1,302 @@
+{
+  "date": "2026-11-14",
+  "baseline": "1797c41369d8f253a1d870b576611adc0679c109",
+  "environment": {
+    "build": "production",
+    "node": "22.22.3",
+    "pnpm": "12.10.1",
+    "chrome": "157.0.8103.51",
+    "platform": "macOS arm64",
+    "logicalCores": 14,
+    "viewport": "1440x900",
+    "books": 800,
+    "runsPerSidePerFixture": 5,
+    "order": "before, after, repeated five times",
+    "bandwidthLimit": "none",
+    "artwork": "invented 180x1000 WebP, distributed across library"
+  },
+  "cases": [
+    {
+      "fixture": "placeholders-100ms",
+      "artworkBooks": 0,
+      "simulatedLatencyMs": 100,
+      "before": [
+        {
+          "warmSwitchMs": 949.7,
+          "warmReloadMs": 1041.5,
+          "coldReloadMs": 1593,
+          "panFrameP95Ms": 50,
+          "initialSpineRequests": 0,
+          "catalogRequests": 8
+        },
+        {
+          "warmSwitchMs": 919.7,
+          "warmReloadMs": 1064.9,
+          "coldReloadMs": 1563.8,
+          "panFrameP95Ms": 66.7,
+          "initialSpineRequests": 0,
+          "catalogRequests": 8
+        },
+        {
+          "warmSwitchMs": 967.3,
+          "warmReloadMs": 1040.3,
+          "coldReloadMs": 1576.9,
+          "panFrameP95Ms": 50.1,
+          "initialSpineRequests": 0,
+          "catalogRequests": 8
+        },
+        {
+          "warmSwitchMs": 906,
+          "warmReloadMs": 1071.7,
+          "coldReloadMs": 1574.9,
+          "panFrameP95Ms": 50.1,
+          "initialSpineRequests": 0,
+          "catalogRequests": 8
+        },
+        {
+          "warmSwitchMs": 970.1,
+          "warmReloadMs": 1061.5,
+          "coldReloadMs": 1593.3,
+          "panFrameP95Ms": 50,
+          "initialSpineRequests": 0,
+          "catalogRequests": 8
+        }
+      ],
+      "after": [
+        {
+          "warmSwitchMs": 471.5,
+          "warmReloadMs": 627.6,
+          "coldReloadMs": 1157.9,
+          "panFrameP95Ms": 16.8,
+          "initialSpineRequests": 0,
+          "catalogRequests": 4
+        },
+        {
+          "warmSwitchMs": 485.9,
+          "warmReloadMs": 610.6,
+          "coldReloadMs": 1159.3,
+          "panFrameP95Ms": 16.7,
+          "initialSpineRequests": 0,
+          "catalogRequests": 4
+        },
+        {
+          "warmSwitchMs": 487.9,
+          "warmReloadMs": 627.4,
+          "coldReloadMs": 1160,
+          "panFrameP95Ms": 16.7,
+          "initialSpineRequests": 0,
+          "catalogRequests": 4
+        },
+        {
+          "warmSwitchMs": 506.2,
+          "warmReloadMs": 627.2,
+          "coldReloadMs": 1175.2,
+          "panFrameP95Ms": 16.8,
+          "initialSpineRequests": 0,
+          "catalogRequests": 4
+        },
+        {
+          "warmSwitchMs": 471.5,
+          "warmReloadMs": 626.9,
+          "coldReloadMs": 1159.3,
+          "panFrameP95Ms": 16.7,
+          "initialSpineRequests": 0,
+          "catalogRequests": 4
+        }
+      ]
+    },
+    {
+      "fixture": "mixed-artwork",
+      "artworkBooks": 200,
+      "simulatedLatencyMs": 0,
+      "before": [
+        {
+          "warmSwitchMs": 181.3,
+          "warmReloadMs": 193.5,
+          "coldReloadMs": 226.1,
+          "panFrameP95Ms": 50,
+          "initialSpineRequests": 200,
+          "catalogRequests": 8
+        },
+        {
+          "warmSwitchMs": 151.2,
+          "warmReloadMs": 193.3,
+          "coldReloadMs": 237.5,
+          "panFrameP95Ms": 50.1,
+          "initialSpineRequests": 200,
+          "catalogRequests": 8
+        },
+        {
+          "warmSwitchMs": 180.5,
+          "warmReloadMs": 265,
+          "coldReloadMs": 233.4,
+          "panFrameP95Ms": 50.1,
+          "initialSpineRequests": 200,
+          "catalogRequests": 8
+        },
+        {
+          "warmSwitchMs": 149.3,
+          "warmReloadMs": 194.1,
+          "coldReloadMs": 250.5,
+          "panFrameP95Ms": 50,
+          "initialSpineRequests": 200,
+          "catalogRequests": 8
+        },
+        {
+          "warmSwitchMs": 148,
+          "warmReloadMs": 211,
+          "coldReloadMs": 207.6,
+          "panFrameP95Ms": 50.1,
+          "initialSpineRequests": 200,
+          "catalogRequests": 8
+        }
+      ],
+      "after": [
+        {
+          "warmSwitchMs": 103.3,
+          "warmReloadMs": 141.6,
+          "coldReloadMs": 138.4,
+          "panFrameP95Ms": 16.7,
+          "initialSpineRequests": 36,
+          "catalogRequests": 4
+        },
+        {
+          "warmSwitchMs": 89.1,
+          "warmReloadMs": 132.3,
+          "coldReloadMs": 142.9,
+          "panFrameP95Ms": 16.8,
+          "initialSpineRequests": 36,
+          "catalogRequests": 4
+        },
+        {
+          "warmSwitchMs": 118,
+          "warmReloadMs": 157.8,
+          "coldReloadMs": 172.3,
+          "panFrameP95Ms": 16.7,
+          "initialSpineRequests": 36,
+          "catalogRequests": 4
+        },
+        {
+          "warmSwitchMs": 104.6,
+          "warmReloadMs": 141.7,
+          "coldReloadMs": 138.8,
+          "panFrameP95Ms": 16.7,
+          "initialSpineRequests": 36,
+          "catalogRequests": 4
+        },
+        {
+          "warmSwitchMs": 105.1,
+          "warmReloadMs": 158,
+          "coldReloadMs": 159.2,
+          "panFrameP95Ms": 16.7,
+          "initialSpineRequests": 36,
+          "catalogRequests": 4
+        }
+      ]
+    },
+    {
+      "fixture": "all-artwork",
+      "artworkBooks": 800,
+      "simulatedLatencyMs": 0,
+      "before": [
+        {
+          "warmSwitchMs": 221.1,
+          "warmReloadMs": 287.5,
+          "coldReloadMs": 345.4,
+          "panFrameP95Ms": 50.0,
+          "initialSpineRequests": 800,
+          "catalogRequests": 8
+        },
+        {
+          "warmSwitchMs": 187.7,
+          "warmReloadMs": 291.3,
+          "coldReloadMs": 295.9,
+          "panFrameP95Ms": 50.1,
+          "initialSpineRequests": 800,
+          "catalogRequests": 8
+        },
+        {
+          "warmSwitchMs": 173.9,
+          "warmReloadMs": 302.4,
+          "coldReloadMs": 314.2,
+          "panFrameP95Ms": 50,
+          "initialSpineRequests": 800,
+          "catalogRequests": 8
+        },
+        {
+          "warmSwitchMs": 189.6,
+          "warmReloadMs": 302,
+          "coldReloadMs": 312.9,
+          "panFrameP95Ms": 50.1,
+          "initialSpineRequests": 800,
+          "catalogRequests": 8
+        },
+        {
+          "warmSwitchMs": 165.8,
+          "warmReloadMs": 284.8,
+          "coldReloadMs": 302.3,
+          "panFrameP95Ms": 50.1,
+          "initialSpineRequests": 800,
+          "catalogRequests": 8
+        }
+      ],
+      "after": [
+        {
+          "warmSwitchMs": 111.4,
+          "warmReloadMs": 175.2,
+          "coldReloadMs": 180.8,
+          "panFrameP95Ms": 16.8,
+          "initialSpineRequests": 147,
+          "catalogRequests": 4
+        },
+        {
+          "warmSwitchMs": 136.7,
+          "warmReloadMs": 148.9,
+          "coldReloadMs": 142.4,
+          "panFrameP95Ms": 16.7,
+          "initialSpineRequests": 147,
+          "catalogRequests": 4
+        },
+        {
+          "warmSwitchMs": 117.7,
+          "warmReloadMs": 171.8,
+          "coldReloadMs": 175.7,
+          "panFrameP95Ms": 16.8,
+          "initialSpineRequests": 147,
+          "catalogRequests": 4
+        },
+        {
+          "warmSwitchMs": 127.2,
+          "warmReloadMs": 156.3,
+          "coldReloadMs": 152,
+          "panFrameP95Ms": 16.7,
+          "initialSpineRequests": 147,
+          "catalogRequests": 4
+        },
+        {
+          "warmSwitchMs": 142.3,
+          "warmReloadMs": 170.9,
+          "coldReloadMs": 155,
+          "panFrameP95Ms": 16.8,
+          "initialSpineRequests": 147,
+          "catalogRequests": 4
+        }
+      ]
+    }
+  ],
+  "additionalStressCheck": {
+    "artworkBooks": 800,
+    "simulatedLatencyMs": 100,
+    "protocol": "local HTTP/1.1",
+    "warmReloads": [
+      {
+        "geometryMs": 646.6,
+        "visibleArtworkDecodedMs": 3280
+      },
+      {
+        "geometryMs": 640.6,
+        "visibleArtworkDecodedMs": 3260.7
+      }
+    ]
+  }
+}

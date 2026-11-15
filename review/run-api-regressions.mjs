@@ -5,7 +5,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const root = process.cwd();
-const environment = { PATH: process.env.PATH, NUXT_TELEMETRY_DISABLED: '1' };
+const environment = {
+  PATH: process.env.PATH,
+  NUXT_TELEMETRY_DISABLED: '1',
+  ...(process.env.CHROME_BIN ? { CHROME_BIN: process.env.CHROME_BIN } : {}),
+};
 async function run(args, cwd) {
   const child = spawn(process.execPath, args, { cwd, env: environment });
   let output = '';
@@ -44,7 +48,12 @@ const suites = [
 const requested = process.argv.slice(2);
 if (
   requested.some(
-    (suite) => ![...suites, 'review/collections-browser.mjs'].includes(suite),
+    (suite) =>
+      ![
+        ...suites,
+        'review/collections-browser.mjs',
+        'review/bookshelf-load-browser.mjs',
+      ].includes(suite),
   )
 )
   throw Error('Choose a known API regression suite');

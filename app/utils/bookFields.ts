@@ -24,6 +24,7 @@ type Named = { id: string; name: string };
 export type BookViewBook = {
   id: string;
   title: string;
+  collectionId?: string;
   authors?: Named[];
   authorNames?: string[];
   author?: string;
