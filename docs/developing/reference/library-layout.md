@@ -18,11 +18,11 @@ Grid cards keep selected values on one line and omit missing metadata. List cell
 
 Grid/list components virtualize rendered items while the server paginates records with stable sort keys and cursors. Those are different limits. Virtualization does not mean the client downloads the entire library.
 
-### Personal bookshelf
+### Collection bookshelf
 
-Bookshelf view loads the complete accessible catalog before reconciling the reader's saved arrangement. Without additional book filters, collection dimming uses each entry's collection ID from that catalog. Applied book filters fetch matching entries through the authorized Books endpoint.
+Bookshelf view is available for one selected collection. A compact authorized response supplies the complete collection catalog and shared arrangement. Applied book filters fetch matching IDs through the authorized Books endpoint without changing the arrangement. Each book's precomputed spine dimensions belong to the book entry and follow it between collections.
 
-[BookshelfView](../../../app/components/Books/BookshelfView.vue) owns loading, personal arrangements, saves, and camera controls. Each [bookcase](../../../app/components/Books/BookshelfBookcase.vue) renders its shelves and books independently, so camera movement does not rerender all book contents. The wall uses a compositor layer for panning. Spine images use browser lazy loading and asynchronous decoding. Geometry and drop targets remain mounted, including offscreen bookcases.
+[BookshelfView](../../../app/components/Books/BookshelfView.vue) owns loading, local edits, saves, and camera controls. Collection owners and editors can save; viewers can browse. Each [bookcase](../../../app/components/Books/BookshelfBookcase.vue) retains shelf geometry and drop targets while rendering nearby books. Spine artwork loads asynchronously, with title text visible while an image is pending.
 
 ## Filters and search
 
@@ -36,7 +36,7 @@ The Sidebar component contains disabled shelf, tag multi-select, and rating plac
 
 Books selection supports explicit IDs and all-in-scope with exclusions. Moves require editable source and destination collections and confirmation of the access change. A collection supports all-with-exclusions selection; All supports explicit selections. Entries cannot be left without a collection.
 
-Owner/editor rights govern collection membership changes. They do not by themselves grant permission to edit a book's shared metadata or delete its record. See [access control](collections.md).
+Owners and editors can manage collection membership and edit or delete its book entries. See [access control](collections.md).
 
 ## Add and edit books
 

@@ -70,7 +70,13 @@ A book's position in a reader's TBR queue, starting at 1 for the book they most 
 A reader's optional, private note explaining a book's place in their TBR queue. The note remains associated with the reader and book after the book leaves the queue.
 
 **Book view**:
-A presentation of a set of books as a grid of cover cards or a list of rows.
+A presentation of books as a grid of cover cards, a list of rows, or a collection bookshelf.
+
+**Collection bookshelf**:
+The shared arrangement of a collection's books, visible to its members. Each collection has its own bookshelf.
+
+**Spine dimensions**:
+The shared width and height of a book entry as it appears on a bookshelf.
 
 **Book field**:
 A piece of book metadata that can be selected for display in a book view, such as title, authors, or tags.

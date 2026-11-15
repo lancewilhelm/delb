@@ -43,6 +43,7 @@ const suites = [
   'review/pdf-reader-api.mjs',
   'review/collections-api.mjs',
   'review/bookshelf-api.mjs',
+  'review/collection-bookshelf-api.mjs',
   'review/spine-artwork-api.mjs',
 ];
 const requested = process.argv.slice(2);

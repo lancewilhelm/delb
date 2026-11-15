@@ -7,6 +7,7 @@ import {
   users,
 } from '../../../app/utils/db/schema';
 import type { cloudDb } from '../db/cloud';
+import { recordShelfBookMove } from '../bookshelf/move';
 
 export type CollectionDatabase = typeof cloudDb;
 export type CollectionConnection = Pick<
@@ -297,6 +298,20 @@ export async function moveCollectionBooks(
       );
     for (const sourceId of new Set(rows.map((row) => row.collectionId)))
       await assertCollectionEditor(tx, userId, sourceId);
+    for (const sourceId of new Set(rows.map((row) => row.collectionId))) {
+      if (sourceId === targetId) continue;
+      await recordShelfBookMove(
+        tx,
+        sourceId,
+        new Set(
+          rows
+            .filter((row) => row.collectionId === sourceId)
+            .map((row) => row.id),
+        ),
+      );
+    }
+    if (rows.some((row) => row.collectionId !== targetId))
+      await recordShelfBookMove(tx, targetId, new Set());
     await tx
       .update(books)
       .set({

@@ -34,17 +34,17 @@ The sidebar's shelf, tag multi-select, and rating controls marked **coming soon*
 
 ## Arrange your bookshelf
 
-Select **Bookshelf View** in the Books view switcher to see all books you can access. Your bookshelf is personal. Collection and book filters dim nonmatching books without moving them.
+Choose an individual collection, then select **Bookshelf View** in the Books view switcher. Each collection has one shared bookshelf. The All selection offers grid and list views. Book filters dim nonmatching books without moving them.
 
-Bookshelf view supports up to 20,000 accessible books. Larger libraries can use grid or list view.
+Bookshelf view supports up to 20,000 books in a collection. Larger collections can use grid or list view.
 
-Select the pencil button (**Edit shelves**) to move books, drag a shelf handle to change its height, or drag the side handle to change the whole bookcase width. A bookcase cannot be narrower than its books. Select a book to change its displayed size. Pull an upright book down to lay it flat when there is room. To add a book to a stack, drag it onto the center of a sideways spine. Slide a sideways book along the shelf to keep it flat. Lift it to stand it upright. Use the stack handle to move the whole stack.
+Collection owners and editors can select the pencil button (**Edit shelves**) to move books, drag a shelf handle to change its height, or drag the side handle to change the whole bookcase width. Viewers can browse the shelf. A bookcase cannot be narrower than its books. Select a book to change its shared spine size. Pull an upright book down to lay it flat when there is room. To add a book to a stack, drag it onto the center of a sideways spine. Slide a sideways book along the shelf to keep it flat. Lift it to stand it upright. Use the stack handle to move the whole stack.
 
 Use a shelf's options menu to add a shelf or remove an empty one. The bookshelf menu adds a bookcase to the right. In edit mode, drag a bookcase by its top handle to change its order, or focus that handle and use the left and right arrow keys. Select the pencil button again (**Done editing shelves**) to lock the arrangement.
 
-Bookcases sit on one continuous floor. Hold the right mouse button or hold Space and drag to move freely around the view. On a touch screen, swipe to move around. Select **Center bookshelf** to return to the starting position. Use the zoom controls, scroll wheel, or a two-finger pinch to change the display size without changing book dimensions. Scroll-wheel zoom centers on the pointer. Hold Shift while using the scroll wheel to move vertically. The question-mark button in the shelf toolbar shows these navigation tips.
+Bookcases sit on one continuous floor. Hold the right mouse button or hold Space and drag to move freely around the view. On a touch screen, swipe to move around. Focus the bookshelf and use the arrow keys to pan; while a book is focused, use Alt and an arrow key. Select **Center bookshelf** to return to the starting position. Use the zoom controls, scroll wheel, or a two-finger pinch to change the display size without changing book dimensions. Scroll-wheel zoom centers on the pointer. Hold Shift while using the scroll wheel to move vertically. The question-mark button in the shelf toolbar shows these navigation tips.
 
-Delb saves your arrangement to your account. If a save fails, use **Retry save**. If another device has a newer arrangement, choose **Load newer arrangement** to discard your unsaved changes and load it. Books without spine artwork use a colored title and author placeholder. Offscreen artwork loads as you pan toward it.
+Delb saves the arrangement for everyone in the collection. If a save fails, use **Retry save**. If another editor has a newer arrangement, choose **Load newer arrangement** to discard your unsaved changes and load it. Books without spine artwork use a colored title and author placeholder. Artwork loads as you pan toward it.
 
 To add spine artwork, open a book and select **Edit book details**. Under **Spine artwork**, upload an image, adjust the crop and optional stretch, and select **Save**. Delb keeps the original upload so you can adjust it later. The spine appears to the left of the cover on the book detail page and on the bookshelf. Collection owners and editors can change or remove it; the artwork is shared with people who can access the book.
 

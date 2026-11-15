@@ -147,9 +147,10 @@ For repeated measurements or live control checks, use the reusable synthetic dem
 ```sh
 node review/bookshelf-load-browser.mjs --runs=6 --latency=100
 node review/bookshelf-load-browser.mjs --runs=2 --artwork=800 --controls
+node review/bookshelf-load-browser.mjs --books=100 --runs=2 --move-controls
 ```
 
-The runner creates a private synthetic library and launches headless Chrome with a temporary profile. It checks rendered books, successful API responses, a single catalog pass, saved arrangements, repeat-load timing, and actual pointer panning. `--controls` also checks book dimensions, live shelf and case resizing, keyboard case order, shelf add/remove, title filters, and collection dimming.
+The runner creates a synthetic collection and launches headless Chrome with a temporary profile. It checks rendered books, successful API responses, one compact shelf request, saved arrangements, repeat-load timing, viewport rendering, and actual pointer panning. `--controls` also checks book dimensions, live shelf and case resizing, keyboard navigation and case order, shelf add/remove, title filters, and collection switching. `--move-controls` moves the synthetic collection's books and checks that the open shelf refreshes. With artwork enabled, it holds image requests to check that titles remain visible while images load.
 
 `--books` defaults to 800. `--artwork` sets how many entries have invented 180-by-1000-pixel WebP artwork, distributed across the library. `--latency` adds simulated browser network latency in milliseconds; the default is zero. `--budget` sets the repeat-load budget in milliseconds; the default is 1000. `--profile` records a separate panning CPU profile. Set `CHROME_BIN` for a different Chrome executable. Generated measurements and profiles stay under `review/demo/` and are ignored by Git. Synthetic credentials stay in memory and the temporary browser profile is removed.
 

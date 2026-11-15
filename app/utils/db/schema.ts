@@ -620,6 +620,27 @@ export const userBookshelves = sqliteTable('user_bookshelves', {
   arrangement: text('arrangement', { mode: 'json' }).notNull(),
 });
 
+// The shared arrangement belongs to the collection, not to a reader.
+export const collectionBookshelves = sqliteTable('collection_bookshelves', {
+  collectionId: text('collection_id')
+    .primaryKey()
+    .references(() => collections.id, { onDelete: 'cascade' }),
+  revision: integer('revision').notNull(),
+  arrangement: text('arrangement', { mode: 'json' }).notNull(),
+});
+
+// Book dimensions follow the entry when it moves between collections.
+export const bookShelfDimensions = sqliteTable('book_shelf_dimensions', {
+  bookId: text('book_id')
+    .primaryKey()
+    .references(() => books.id, { onDelete: 'cascade' }),
+  width: integer('width').notNull(),
+  height: integer('height').notNull(),
+  manualWidth: integer('manual_width', { mode: 'boolean' }).notNull(),
+  manualHeight: integer('manual_height', { mode: 'boolean' }).notNull(),
+  sourcePages: integer('source_pages'),
+});
+
 // GLOBAL SETTINGS TABLE
 export const globalSettings = sqliteTable('global_settings', {
   id: text('user_id').primaryKey(),
