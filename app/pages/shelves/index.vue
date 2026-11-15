@@ -53,20 +53,29 @@ onMounted(load);
         <ViewSelectorDropdown />
       </div>
     </div>
-    <main class="flex-1 min-h-0 overflow-auto p-4 sm:p-6">
+    <main class="w-full flex-1 min-h-0 p-4 overflow-auto">
       <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
-          <h1 class="text-2xl font-semibold">My Shelves</h1>
-          <p class="opacity-70 mt-1">
-            Personal groups of books from your library.
+          <h1
+            class="text-2xl sm:text-3xl font-serif text-(--contrast-main-color)"
+          >
+            Shelves
+          </h1>
+          <p
+            v-if="!loading"
+            class="text-sm italic text-(--contrast-sub-color) mt-1"
+          >
+            {{ shelves.length }}
+            {{ shelves.length === 1 ? 'shelf' : 'shelves' }}
           </p>
         </div>
         <button
           type="button"
-          class="px-3 py-2 border rounded"
+          class="p-1 flex items-center gap-2 opacity-80 hover:opacity-100"
           @click="creating = true"
         >
-          <Icon name="lucide:plus" /> Create Shelf
+          <Icon name="lucide:plus" class="text-lg" />
+          <span class="text-sm">Create Shelf</span>
         </button>
       </div>
       <p v-if="loading" role="status">Loading your Shelves…</p>
