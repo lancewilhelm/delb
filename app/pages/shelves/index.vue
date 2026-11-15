@@ -48,8 +48,10 @@ onMounted(load);
 <template>
   <div class="flex flex-col w-full h-full overflow-hidden">
     <AppHeader class="w-full" />
-    <div class="p-2 border-b border-(--contrast-border-color)">
-      <ViewSelectorDropdown />
+    <div class="px-2 shrink-0 border-b border-(--contrast-border-color)">
+      <div class="flex items-center justify-between gap-4">
+        <ViewSelectorDropdown />
+      </div>
     </div>
     <main class="flex-1 min-h-0 overflow-auto p-4 sm:p-6">
       <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
