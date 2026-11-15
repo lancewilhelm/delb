@@ -7,10 +7,13 @@ import {
   authors,
   bookAuthors,
   bookFiles,
+  bookIdentifiers,
   books,
   collectionBooks,
   collectionMembers,
   publishers,
+  personalShelfBooks,
+  personalShelves,
   series,
   userBookStatus,
   USER_BOOK_STATUSES,
@@ -146,6 +149,8 @@ export default defineEventHandler(async (event) => {
     audiobook?: string;
     title?: string;
     idsOnly?: string;
+    shelfId?: string;
+    search?: string;
   };
 
   const collectionId = q.collectionId;
@@ -166,6 +171,9 @@ export default defineEventHandler(async (event) => {
   const physicalFilter = copyFilter(q.physical, 'physical');
   const audiobookFilter = copyFilter(q.audiobook, 'audiobook');
   const title = typeof q.title === 'string' ? q.title.trim() : '';
+  const search = typeof q.search === 'string' ? q.search.trim() : '';
+  const shelfId = typeof q.shelfId === 'string' ? q.shelfId : '';
+  const identifier = search.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
 
   // Added date range filter (books.createdAt)
   // Inputs are expected as YYYY-MM-DD from <input type="date">.
@@ -257,6 +265,23 @@ export default defineEventHandler(async (event) => {
     );
   }
 
+  if (shelfId) {
+    const [shelf] = await cloudDb
+      .select({ id: personalShelves.id })
+      .from(personalShelves)
+      .where(
+        and(
+          eq(personalShelves.id, shelfId),
+          eq(personalShelves.ownerId, userId),
+        ),
+      )
+      .limit(1);
+    if (!shelf)
+      throw createError({
+        statusCode: 404,
+        statusMessage: 'Shelf not found',
+      });
+  }
   try {
     // Find collections the user is a member of
     const memberships = await cloudDb
@@ -315,6 +340,18 @@ export default defineEventHandler(async (event) => {
       physicalFilter,
       audiobookFilter,
       titleFilter(books.title, title),
+      shelfId
+        ? sql`EXISTS (SELECT 1 FROM ${personalShelfBooks} WHERE ${personalShelfBooks.shelfId} = ${shelfId} AND ${personalShelfBooks.bookId} = ${books.id})`
+        : undefined,
+      search
+        ? or(
+            titleFilter(books.title, search),
+            sql`EXISTS (SELECT 1 FROM ${bookAuthors} INNER JOIN ${authors} ON ${authors.id} = ${bookAuthors.authorId} WHERE ${bookAuthors.bookId} = ${books.id} AND ${titleFilter(authors.name, search)})`,
+            identifier
+              ? sql`EXISTS (SELECT 1 FROM ${bookIdentifiers} WHERE ${bookIdentifiers.bookId} = ${books.id} AND UPPER(REPLACE(REPLACE(${bookIdentifiers.value}, '-', ''), ' ', '')) LIKE ${`%${identifier}%`})`
+              : undefined,
+          )
+        : undefined,
       // Inclusive range (numeric compare against unix-second bounds)
       // We coerce createdAt to INTEGER to handle cases where it may be stored as TEXT.
       addedStartSec !== null

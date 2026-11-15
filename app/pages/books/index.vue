@@ -103,6 +103,96 @@ const showActions = computed(() => {
   return selectionStore.selectedBookIds.size > 0;
 });
 
+async function resolveSelectedBookIds() {
+  let ids = getExplicitSelectedBookIds();
+  if (selectionStore.allSelectedInScope) {
+    const excluded = new Set(getExcludedBookIds());
+    const endpoint = booksEndpoint.value;
+    const scope = activeCollectionId.value;
+    const sort = booksSortKey.value;
+    const sortDir = booksSortDir.value;
+    let cursor: string | undefined;
+    const seen = new Set<string>();
+    ids = [];
+    do {
+      const response = await $fetch<{
+        success: boolean;
+        data: { books: { id: string }[]; nextCursor: string | null };
+      }>(endpoint, {
+        query: {
+          collectionId: scope || undefined,
+          sort,
+          sortDir,
+          limit: 200,
+          cursor,
+        },
+      });
+      if (!response.success)
+        throw new Error('Could not load the full selection.');
+      ids.push(
+        ...response.data.books
+          .map((book) => book.id)
+          .filter((id) => !excluded.has(id)),
+      );
+      cursor = response.data.nextCursor || undefined;
+      if (cursor && seen.has(cursor))
+        throw new Error('Could not finish loading the selection.');
+      if (cursor) seen.add(cursor);
+    } while (cursor);
+  }
+  return ids;
+}
+
+const addToShelfOpen = ref(false);
+const addToShelfBusy = ref(false);
+const addToShelfLoading = ref(false);
+const addToShelfError = ref('');
+const addToShelfResult = ref('');
+const availableShelves = ref<Array<{ id: string; name: string }>>([]);
+const chosenShelf = ref('');
+async function openAddToShelf() {
+  closeActionsDropdown();
+  addToShelfError.value = '';
+  addToShelfResult.value = '';
+  addToShelfLoading.value = true;
+  availableShelves.value = [];
+  chosenShelf.value = '';
+  addToShelfOpen.value = true;
+  try {
+    const response = await $fetch<{
+      data: { shelves: Array<{ id: string; name: string }> };
+    }>('/api/shelves');
+    availableShelves.value = response.data.shelves;
+    chosenShelf.value = response.data.shelves[0]?.id ?? '';
+  } catch {
+    addToShelfError.value = 'Could not load your Shelves.';
+  } finally {
+    addToShelfLoading.value = false;
+  }
+}
+async function addSelectionToShelf() {
+  if (!chosenShelf.value || addToShelfBusy.value) return;
+  addToShelfBusy.value = true;
+  addToShelfError.value = '';
+  try {
+    const ids = await resolveSelectedBookIds();
+    if (!ids.length) throw new Error('No matching books are selected.');
+    await $fetch(
+      `/api/shelves/${encodeURIComponent(chosenShelf.value)}/books`,
+      { method: 'POST', body: { action: 'add', bookIds: ids } },
+    );
+    addToShelfOpen.value = false;
+    selectionStore.clearSelection();
+    selectionStore.setMode({ enabled: false });
+    addToShelfResult.value = 'Added the selected books to your Shelf.';
+  } catch {
+    addToShelfError.value =
+      'Could not add these books. Check access and try again.';
+  } finally {
+    addToShelfBusy.value = false;
+  }
+}
+
 const actionsOpen = ref(false);
 const actionsAnchorRef = ref<HTMLElement | null>(null);
 const actionsPanelRef = ref<HTMLElement | null>(null);
@@ -170,42 +260,7 @@ async function applyBulkCopies() {
   copiesSubmitting.value = true;
   copiesError.value = '';
   try {
-    let ids = getExplicitSelectedBookIds();
-    if (selectionStore.allSelectedInScope) {
-      const excluded = new Set(getExcludedBookIds());
-      const endpoint = booksEndpoint.value;
-      const scope = activeCollectionId.value;
-      const sort = booksSortKey.value;
-      const sortDir = booksSortDir.value;
-      let cursor: string | undefined;
-      const seen = new Set<string>();
-      ids = [];
-      do {
-        const response = await $fetch<{
-          success: boolean;
-          data: { books: { id: string }[]; nextCursor: string | null };
-        }>(endpoint, {
-          query: {
-            collectionId: scope || undefined,
-            sort,
-            sortDir,
-            limit: 200,
-            cursor,
-          },
-        });
-        if (!response.success)
-          throw new Error('Could not load the full selection.');
-        ids.push(
-          ...response.data.books
-            .map((book) => book.id)
-            .filter((id) => !excluded.has(id)),
-        );
-        cursor = response.data.nextCursor || undefined;
-        if (cursor && seen.has(cursor))
-          throw new Error('Could not finish loading the selection.');
-        if (cursor) seen.add(cursor);
-      } while (cursor);
-    }
+    const ids = await resolveSelectedBookIds();
     if (!ids.length) throw new Error('No matching books are selected.');
     const result = await $fetch<{ data: { updated: number; skipped: number } }>(
       '/api/books/bulk/copies',
@@ -681,6 +736,14 @@ onMounted(async () => {
                         class="w-full px-3 py-2 text-left flex justify-between! gap-3 rounded-none! hover:bg-(--sub-color)/15"
                         role="menuitem"
                         type="button"
+                        @click="openAddToShelf"
+                      >
+                        <span class="truncate text-sm">Add to Shelf</span>
+                      </button>
+                      <button
+                        class="w-full px-3 py-2 text-left flex justify-between! gap-3 rounded-none! hover:bg-(--sub-color)/15"
+                        role="menuitem"
+                        type="button"
                         @click="openManageCollectionsModal"
                       >
                         <span class="truncate text-sm">Move to collection</span>
@@ -1144,6 +1207,54 @@ onMounted(async () => {
         </div>
 
         <!-- Body -->
+        <p v-if="addToShelfResult" role="status" class="px-3 py-1">
+          {{ addToShelfResult }}
+        </p>
+        <ModalWindow :open="addToShelfOpen" @close="addToShelfOpen = false"
+          ><div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Add to Shelf"
+            class="flex flex-col gap-3 w-80 max-w-full"
+          >
+            <h2 class="font-semibold text-xl">Add to Shelf</h2>
+            <p v-if="addToShelfLoading" role="status">Loading your Shelves…</p>
+            <p v-else-if="!availableShelves.length && !addToShelfError">
+              You don't have a Shelf yet.
+              <NuxtLink to="/shelves" class="underline"
+                >Create a Shelf</NuxtLink
+              >
+              first.
+            </p>
+            <label v-else-if="availableShelves.length"
+              >Shelf
+              <select
+                v-model="chosenShelf"
+                class="block w-full p-2 border rounded"
+              >
+                <option
+                  v-for="shelf in availableShelves"
+                  :key="shelf.id"
+                  :value="shelf.id"
+                >
+                  {{ shelf.name }}
+                </option>
+              </select></label
+            >
+            <p v-if="addToShelfError" role="alert">{{ addToShelfError }}</p>
+            <div class="flex justify-end gap-3">
+              <button type="button" @click="addToShelfOpen = false">
+                Cancel</button
+              ><button
+                type="button"
+                :disabled="!chosenShelf || addToShelfBusy"
+                @click="addSelectionToShelf"
+              >
+                {{ addToShelfBusy ? 'Adding…' : 'Add books' }}
+              </button>
+            </div>
+          </div></ModalWindow
+        >
         <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
           <!-- Render per-view. -->
           <div class="flex flex-col flex-1 min-h-0">

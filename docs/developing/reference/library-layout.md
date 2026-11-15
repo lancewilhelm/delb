@@ -24,6 +24,10 @@ Bookshelf view is available for one selected collection. A compact authorized re
 
 [BookshelfView](../../../app/components/Books/BookshelfView.vue) owns loading, local edits, saves, and camera controls. Collection owners and editors can save; viewers can browse. Each [bookcase](../../../app/components/Books/BookshelfBookcase.vue) retains shelf geometry and drop targets while rendering nearby books. Spine artwork loads asynchronously, with title text visible while an image is pending.
 
+### Personal Shelves
+
+A Shelf is a private selection of book entries across collections. Its owner can add, remove, and arrange accessible books. [Personal Shelf operations](../../../server/utils/shelves/model.ts) store membership and placement separately from shelf geometry. Reads project only currently accessible members and retain hidden placements for later restoration. Global spine dimensions remain subject to the book's collection role. The grid, list, and visual bookshelf reuse the existing book view components.
+
 ## Filters and search
 
 The Books page exposes a filter dropdown for personal reading status, date added, and file presence. Dashboard status counts navigate to the corresponding Books filters.

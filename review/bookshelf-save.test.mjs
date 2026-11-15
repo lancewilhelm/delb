@@ -74,6 +74,7 @@ async function shelfEditor() {
     catalogToken: ref('token'),
     canEdit: ref(true),
     props: { collectionId: 'collection' },
+    shelfPath: ref('/api/collections/collection/bookshelf'),
     selectedShelf: ref(null),
     getBookcase: (id) =>
       arrangement.value.bookcases.find((item) =>

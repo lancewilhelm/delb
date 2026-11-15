@@ -75,6 +75,9 @@ A presentation of books as a grid of cover cards, a list of rows, or a collectio
 **Collection bookshelf**:
 The shared arrangement of a collection's books, visible to its members. Each collection has its own bookshelf.
 
+**Shelf**:
+A reader's private, named selection of book entries from the collections they can access. A book can appear on several Shelves without leaving its collection.
+
 **Spine dimensions**:
 The shared width and height of a book entry as it appears on a bookshelf.
 
