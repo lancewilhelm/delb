@@ -49,32 +49,6 @@ type SearchApiResponse = {
 };
 
 const uiStore = useUiStore();
-const dialogRef = ref<HTMLElement | null>(null);
-let previousFocus: HTMLElement | null = null;
-function containFocus(event: KeyboardEvent) {
-  if (event.key !== 'Tab') return;
-  const controls = Array.from(
-    dialogRef.value?.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), input:not([disabled]), [tabindex="0"]',
-    ) ?? [],
-  );
-  if (!controls.length) {
-    event.preventDefault();
-    return;
-  }
-  const index = controls.indexOf(document.activeElement as HTMLElement);
-  if (event.shiftKey && index <= 0) {
-    event.preventDefault();
-    controls[controls.length - 1]?.focus();
-  } else if (
-    !event.shiftKey &&
-    (index === -1 || index === controls.length - 1)
-  ) {
-    event.preventDefault();
-    controls[0]?.focus();
-  }
-}
-
 const query = ref('');
 let searchGeneration = 0;
 const inputRef = ref<HTMLInputElement | null>(null);
@@ -325,11 +299,8 @@ watch(
   (open) => {
     searchGeneration += 1;
     if (open) {
-      previousFocus = document.activeElement as HTMLElement;
       nextTick(() => inputRef.value?.focus());
     } else {
-      previousFocus?.focus();
-      previousFocus = null;
       query.value = '';
       errorMessage.value = null;
       loading.value = false;
@@ -413,143 +384,133 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div
-    v-if="uiStore.globalSearchVisible"
-    class="fixed top-0 left-0 w-full h-full flex items-center justify-center z-5000 bg-black/20"
-    @click="closeModal"
+  <SearchDialogFrame
+    :open="uiStore.globalSearchVisible"
+    label="Search library"
+    @close="closeModal"
   >
     <div
-      ref="dialogRef"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Search library"
-      class="flex flex-col backdrop-blur-lg bg-(--bg-color)/80 w-180 h-150 m-4 md:max-w-[80%] lg:max-w-[60%] rounded-lg shadow-lg border border-(--contrast-border-color) overflow-hidden"
-      @keydown="containFocus"
-      @click.stop
+      class="h-12 flex items-center px-3 py-2 border-b border-(--contrast-border-color)"
     >
+      <Icon name="lucide:search" class="scale-125" />
+      <input
+        ref="inputRef"
+        v-model="query"
+        type="text"
+        role="combobox"
+        aria-label="Search library"
+        aria-expanded="true"
+        aria-controls="global-search-options"
+        :aria-activedescendant="
+          highlightedIndex >= 0
+            ? `global-search-option-${highlightedIndex}`
+            : undefined
+        "
+        placeholder="search library (title, author, ISBN)"
+        class="w-full bg-transparent! px-2! rounded-t-lg! rounded-b-none! focus:outline-none"
+      />
+    </div>
+
+    <div class="h-full overflow-hidden">
       <div
-        class="h-12 flex items-center px-3 py-2 border-b border-(--contrast-border-color)"
+        id="global-search-options"
+        ref="optionsRef"
+        role="listbox"
+        class="h-full overflow-y-auto"
       >
-        <Icon name="lucide:search" class="scale-125" />
-        <input
-          ref="inputRef"
-          v-model="query"
-          type="text"
-          role="combobox"
-          aria-label="Search library"
-          aria-expanded="true"
-          aria-controls="global-search-options"
-          :aria-activedescendant="
-            highlightedIndex >= 0
-              ? `global-search-option-${highlightedIndex}`
-              : undefined
-          "
-          placeholder="search library (title, author, ISBN)"
-          class="w-full bg-transparent! px-2! rounded-t-lg! rounded-b-none! focus:outline-none"
-        />
-      </div>
-
-      <div class="h-full overflow-hidden">
         <div
-          id="global-search-options"
-          ref="optionsRef"
-          role="listbox"
-          class="h-full overflow-y-auto"
+          class="px-3 py-2 text-xs opacity-70 border-b border-(--contrast-border-color)"
         >
-          <div
-            class="px-3 py-2 text-xs opacity-70 border-b border-(--contrast-border-color)"
+          <span v-if="loading">searching…</span>
+          <span v-else-if="errorMessage">{{ errorMessage }}</span>
+          <span v-else-if="query.trim().length === 0"
+            >type to search everything</span
           >
-            <span v-if="loading">searching…</span>
-            <span v-else-if="errorMessage">{{ errorMessage }}</span>
-            <span v-else-if="query.trim().length === 0"
-              >type to search everything</span
+          <span v-else>
+            {{ totalResults }} result{{ totalResults === 1 ? '' : 's' }}
+          </span>
+        </div>
+
+        <div
+          v-if="!loading && query.trim().length > 0 && totalResults === 0"
+          class="p-3"
+        >
+          no results
+        </div>
+
+        <template v-for="group in results" :key="group.kind">
+          <div v-if="group.items.length > 0" class="pb-2">
+            <div
+              class="px-3 pt-3 pb-1 text-xs uppercase tracking-wide opacity-70"
             >
-            <span v-else>
-              {{ totalResults }} result{{ totalResults === 1 ? '' : 's' }}
-            </span>
-          </div>
+              {{ group.label }}
+            </div>
 
-          <div
-            v-if="!loading && query.trim().length > 0 && totalResults === 0"
-            class="p-3"
-          >
-            no results
-          </div>
-
-          <template v-for="group in results" :key="group.kind">
-            <div v-if="group.items.length > 0" class="pb-2">
-              <div
-                class="px-3 pt-3 pb-1 text-xs uppercase tracking-wide opacity-70"
-              >
-                {{ group.label }}
-              </div>
-
-              <div
-                v-for="item in group.items"
-                :id="`global-search-option-${flatResults.findIndex((x) => x.item.id === item.id && x.item.kind === item.kind)}`"
-                :key="`${item.kind}:${item.id}`"
-                :ref="
-                  (el: Element | null) =>
-                    setRowRef(
-                      el as HTMLElement,
-                      flatResults.findIndex(
-                        (x) =>
-                          x.item.id === item.id && x.item.kind === item.kind,
-                      ),
-                    )
-                "
-                role="option"
-                :aria-selected="
-                  flatResults[highlightedIndex]?.item?.id === item.id &&
-                  flatResults[highlightedIndex]?.item?.kind === item.kind
-                "
-                class="h-9 cursor-pointer px-3 py-1 hover:bg-(--sub-alt-color) flex items-center gap-2"
-                :class="[
-                  flatResults[highlightedIndex]?.item?.id === item.id &&
-                  flatResults[highlightedIndex]?.item?.kind === item.kind
-                    ? 'bg-(--sub-color) text-(--contrast-text-color)'
-                    : '',
-                  item.kind === 'book' ? 'h-12' : 'h-9',
-                ]"
-                @mouseenter="
-                  () => {
-                    const idx = flatResults.findIndex(
+            <div
+              v-for="item in group.items"
+              :id="`global-search-option-${flatResults.findIndex((x) => x.item.id === item.id && x.item.kind === item.kind)}`"
+              :key="`${item.kind}:${item.id}`"
+              :ref="
+                (el: Element | null) =>
+                  setRowRef(
+                    el as HTMLElement,
+                    flatResults.findIndex(
                       (x) => x.item.id === item.id && x.item.kind === item.kind,
-                    );
-                    if (idx >= 0) highlightedIndex = idx;
-                  }
-                "
-                @click="goToResult(item)"
-              >
-                <Icon
-                  v-if="item.kind !== 'book' && item.icon"
-                  :name="item.icon"
-                  class="scale-125 text-(--contrast-main-color)"
-                />
-                <BookCover
-                  v-else
-                  class="w-auto! aspect-2/3! shrink-0"
-                  :src="coverThumbUrl(item.id, item.updatedAt ?? undefined)"
-                />
-                <div class="flex flex-col min-w-0">
-                  <div class="truncate">{{ item.title }}</div>
-                  <div v-if="item.subtitle" class="text-xs opacity-70 truncate">
-                    {{ item.subtitle }}
-                  </div>
+                    ),
+                  )
+              "
+              role="option"
+              :aria-selected="
+                flatResults[highlightedIndex]?.item?.id === item.id &&
+                flatResults[highlightedIndex]?.item?.kind === item.kind
+              "
+              class="h-9 cursor-pointer px-3 py-1 hover:bg-(--sub-alt-color) flex items-center gap-2"
+              :class="[
+                flatResults[highlightedIndex]?.item?.id === item.id &&
+                flatResults[highlightedIndex]?.item?.kind === item.kind
+                  ? 'bg-(--sub-color) text-(--contrast-text-color)'
+                  : '',
+                item.kind === 'book' ? 'h-12' : 'h-9',
+              ]"
+              @mouseenter="
+                () => {
+                  const idx = flatResults.findIndex(
+                    (x) => x.item.id === item.id && x.item.kind === item.kind,
+                  );
+                  if (idx >= 0) highlightedIndex = idx;
+                }
+              "
+              @click="goToResult(item)"
+            >
+              <Icon
+                v-if="item.kind !== 'book' && item.icon"
+                :name="item.icon"
+                class="scale-125 text-(--contrast-main-color)"
+              />
+              <SearchBookResult
+                v-else
+                :title="item.title"
+                :subtitle="item.subtitle"
+                :cover-src="coverThumbUrl(item.id, item.updatedAt ?? undefined)"
+              />
+              <div v-if="item.kind !== 'book'" class="flex flex-col min-w-0">
+                <div class="truncate">{{ item.title }}</div>
+                <div v-if="item.subtitle" class="text-xs opacity-70 truncate">
+                  {{ item.subtitle }}
                 </div>
               </div>
             </div>
-          </template>
-        </div>
-      </div>
-      <div
-        v-if="query.trim().length > 0"
-        class="px-3 py-2 text-xs opacity-60 border-t border-(--contrast-border-color) hidden sm:block"
-      >
-        <span class="opacity-80">enter</span> to open •
-        <span class="opacity-80">esc</span> to close •
-        <span class="opacity-80">↑/↓</span> to navigate
+          </div>
+        </template>
       </div>
     </div>
-  </div>
+    <div
+      v-if="query.trim().length > 0"
+      class="px-3 py-2 text-xs opacity-60 border-t border-(--contrast-border-color) hidden sm:block"
+    >
+      <span class="opacity-80">enter</span> to open •
+      <span class="opacity-80">esc</span> to close •
+      <span class="opacity-80">↑/↓</span> to navigate
+    </div>
+  </SearchDialogFrame>
 </template>

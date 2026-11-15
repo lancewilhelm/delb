@@ -12,6 +12,7 @@ const props = withDefaults(
 const emit = defineEmits<{ close: []; added: [] }>();
 const collections = useCollectionsStore();
 const query = ref('');
+const inputRef = ref<HTMLInputElement | null>(null);
 const collectionId = ref('');
 const books = ref<BookViewBook[]>([]);
 const selected = ref(new Set<string>());
@@ -59,6 +60,7 @@ watch(
       collectionId.value = '';
       void collections.fetchCollections();
       void load();
+      void nextTick(() => inputRef.value?.focus());
     } else {
       sequence++;
       if (timer) clearTimeout(timer);
@@ -99,35 +101,42 @@ async function add() {
 }
 </script>
 <template>
-  <ModalWindow :open="open" width-full @close="emit('close')">
+  <SearchDialogFrame
+    :open="open"
+    :label="mode === 'add' ? 'Add books to Shelf' : 'Remove books from Shelf'"
+    @close="emit('close')"
+  >
     <div
-      role="dialog"
-      aria-modal="true"
-      :aria-label="
-        mode === 'add' ? 'Add books to Shelf' : 'Remove books from Shelf'
-      "
-      class="flex flex-col gap-3 max-h-[80vh]"
+      class="h-12 shrink-0 flex items-center px-3 py-2 border-b border-(--contrast-border-color)"
     >
-      <div class="flex items-center justify-between">
-        <h2 class="text-xl font-semibold">
-          {{ mode === 'add' ? 'Add books' : 'Remove books' }}
-        </h2>
-        <button type="button" aria-label="Close" @click="emit('close')">
-          ✕
-        </button>
-      </div>
-      <label
-        >Search by title, author, or ISBN
-        <input
-          v-model="query"
-          type="search"
-          placeholder="Search your library"
-          class="w-full mt-1 p-2 border rounded"
-      /></label>
-      <label
+      <Icon name="lucide:search" class="scale-125" aria-hidden="true" />
+      <input
+        ref="inputRef"
+        v-model="query"
+        type="search"
+        aria-label="Search books"
+        placeholder="search library (title, author, ISBN)"
+        class="w-full bg-transparent! px-2! rounded-t-lg! rounded-b-none! focus:outline-none"
+      />
+      <button
+        type="button"
+        aria-label="Close"
+        class="p-1 opacity-70 hover:opacity-100"
+        @click="emit('close')"
+      >
+        <Icon name="lucide:x" />
+      </button>
+    </div>
+    <div
+      class="px-3 py-2 flex items-center justify-between gap-3 text-xs opacity-70 border-b border-(--contrast-border-color)"
+    >
+      <span>{{
+        mode === 'add' ? 'Add books to Shelf' : 'Remove books from Shelf'
+      }}</span>
+      <label class="flex items-center gap-2"
         >Collection
-        <select v-model="collectionId" class="ml-2 p-1 border rounded">
-          <option value="">All accessible collections</option>
+        <select v-model="collectionId" class="bg-transparent! max-w-48">
+          <option value="">All collections</option>
           <option
             v-for="collection in collections.collections"
             :key="collection.id"
@@ -137,69 +146,74 @@ async function add() {
           </option>
         </select></label
       >
-      <p v-if="error" role="alert">{{ error }}</p>
+    </div>
+    <p v-if="error" role="alert" class="px-3 py-2">{{ error }}</p>
+    <div
+      class="flex-1 min-h-0 overflow-y-auto"
+      :aria-label="mode === 'add' ? 'Books to add' : 'Books to remove'"
+      :aria-busy="loading"
+    >
       <div
-        class="overflow-auto flex-1 min-h-32 border rounded"
-        :aria-label="mode === 'add' ? 'Books to add' : 'Books to remove'"
-        :aria-busy="loading"
+        class="px-3 py-2 text-xs opacity-70 border-b border-(--contrast-border-color)"
       >
-        <p v-if="loading && !books.length" class="p-3">Loading books…</p>
-        <p v-else-if="!books.length" class="p-3">No books found.</p>
+        <span v-if="loading">searching…</span
+        ><span v-else
+          >{{ books.length }} {{ books.length === 1 ? 'book' : 'books'
+          }}{{ cursor ? ' loaded' : '' }}</span
+        >
+      </div>
+      <p v-if="!loading && !books.length" class="p-3">no books found</p>
+      <div v-if="books.length" class="pb-2">
+        <div class="px-3 pt-3 pb-1 text-xs uppercase tracking-wide opacity-70">
+          Books
+        </div>
         <label
           v-for="book in books"
           :key="book.id"
-          class="flex items-center gap-3 p-2 border-b cursor-pointer"
+          class="h-12 cursor-pointer px-3 py-1 hover:bg-(--sub-alt-color) flex items-center gap-2"
+          :class="selected.has(book.id) ? 'bg-(--sub-color)' : ''"
         >
-          <input
-            type="checkbox"
-            :checked="
-              (mode === 'add' && existingIds.has(book.id)) ||
-              selected.has(book.id)
-            "
-            :disabled="mode === 'add' && existingIds.has(book.id)"
-            @change="toggle(book.id)"
-          />
-          <BookCover
-            :src="
+          <SearchBookResult
+            :title="book.title"
+            :subtitle="`${book.authorNames?.join(', ') || book.author || 'Unknown author'} · ${collections.collections.find((c) => c.id === book.collectionId)?.name || 'Collection'}${mode === 'add' && existingIds.has(book.id) ? ' · Already on Shelf' : ''}`"
+            :cover-src="
               book.coverImagePath
                 ? `/api/books/${encodeURIComponent(book.id)}/cover?variant=thumb`
                 : null
             "
-            :title="book.title"
-            :alt="`Cover for ${book.title}`"
-            class="w-10 h-14 shrink-0"
-          />
-          <span class="min-w-0"
-            ><strong class="block truncate">{{ book.title }}</strong
-            ><span class="text-sm opacity-70"
-              >{{
-                book.authorNames?.join(', ') || book.author || 'Unknown author'
-              }}
-              ·
-              {{
-                collections.collections.find((c) => c.id === book.collectionId)
-                  ?.name || 'Collection'
-              }}<template v-if="mode === 'add' && existingIds.has(book.id)">
-                · Already on Shelf</template
-              ></span
-            ></span
           >
+            <input
+              type="checkbox"
+              :checked="
+                (mode === 'add' && existingIds.has(book.id)) ||
+                selected.has(book.id)
+              "
+              :disabled="mode === 'add' && existingIds.has(book.id)"
+              :aria-label="`Select ${book.title}`"
+              @change="toggle(book.id)"
+            />
+          </SearchBookResult>
         </label>
         <button
           v-if="cursor"
           type="button"
-          class="p-3 underline"
+          class="px-3 py-2 text-sm underline"
           :disabled="loading"
           @click="load(true)"
         >
           {{ loading ? 'Loading…' : 'Load more' }}
         </button>
       </div>
-      <div class="flex justify-end gap-3">
+    </div>
+    <div
+      class="px-3 py-2 border-t border-(--contrast-border-color) flex justify-between items-center gap-3"
+    >
+      <span class="text-xs opacity-70">{{ selected.size }} selected</span>
+      <div class="flex gap-3">
         <button type="button" @click="emit('close')">Cancel</button
         ><button
           type="button"
-          class="px-3 py-2 border rounded"
+          class="px-3 py-1 border border-(--contrast-border-color) rounded"
           :disabled="!selected.size || saving"
           @click="add"
         >
@@ -211,5 +225,5 @@ async function add() {
         </button>
       </div>
     </div>
-  </ModalWindow>
+  </SearchDialogFrame>
 </template>

@@ -160,8 +160,29 @@ try {
     "[...document.querySelectorAll('button')].some(b=>b.textContent.includes('Add books'))",
   );
   const shelfId = await evaluate('location.pathname.split("/").pop()');
+  await evaluate(
+    "window.dispatchEvent(new KeyboardEvent('keydown', {key:'k', metaKey:true, ctrlKey:true, bubbles:true}))",
+  );
+  await until(
+    '!!document.querySelector(\'[role="dialog"][aria-label="Search library"] input\')',
+  );
+  const searchDialogClass = await evaluate(
+    'document.querySelector(\'[role="dialog"][aria-label="Search library"]\').className',
+  );
+  await fill('[role="dialog"] input', 'Shelf first book');
+  await until(
+    'document.querySelector(\'[role="dialog"]\')?.textContent.includes("Shelf first book")',
+  );
+  await evaluate(
+    "document.querySelector('[role=dialog] input').dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}))",
+  );
+  await until("!document.querySelector('[role=dialog]')");
   await clickText('Add books');
   await until("!!document.querySelector('[role=dialog] input[type=search]')");
+  assert.equal(
+    await evaluate("document.querySelector('[role=dialog]').className"),
+    searchDialogClass,
+  );
   await fill('[role=dialog] input[type=search]', 'Example Writer');
   await until(
     "document.querySelector('[role=dialog] [aria-label=\"Books to add\"]')?.getAttribute('aria-busy')==='false' && document.querySelectorAll('[role=dialog] input[type=checkbox]').length===1 && document.querySelector('[role=dialog]')?.textContent.includes('Shelf first book')",
@@ -173,14 +194,28 @@ try {
   await until("!document.querySelector('[role=dialog]')");
   await until("document.body.textContent.includes('1 book')");
   assert.equal((await api(`/api/shelves/${shelfId}`)).books[0].id, first);
-  await clickText('list');
+  await until('!!document.querySelector(\'[aria-label="Books view mode"]\')');
+  await clickText('Filters');
   await until(
-    "document.querySelector('[aria-label=\"list view\"]')?.getAttribute('aria-pressed')==='true'",
+    '!!document.querySelector(\'input[placeholder="Filter by title"]\')',
   );
-  await clickText('bookshelf');
+  await fill('input[placeholder="Filter by title"]', 'not on this shelf');
+  await until("!document.body.textContent.includes('Shelf first book')");
+  await fill('input[placeholder="Filter by title"]', '');
+  await clickText('Filters');
+  await evaluate(
+    'document.querySelector(\'[aria-label="List View"]\').click()',
+  );
+  await until(
+    "document.querySelector('[aria-label=\"List View\"]')?.getAttribute('aria-pressed')==='true'",
+  );
+  await evaluate(
+    'document.querySelector(\'[aria-label="Bookshelf View"]\').click()',
+  );
   await until("!!document.querySelector('.spine-button')");
   await call('Page.navigate', { url: `${base}/books` });
   await until("document.body.textContent.includes('Shelf first book')");
+  await evaluate('document.querySelector(\'[aria-label="Grid View"]\').click()');
   await clickText('Select');
   await until('!!document.querySelector(\'[aria-label="Select book"]\')');
   await evaluate(
