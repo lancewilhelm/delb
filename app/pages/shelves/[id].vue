@@ -72,8 +72,11 @@ onMounted(load);
       <div
         class="px-3 py-2 border-b border-(--contrast-border-color) flex flex-wrap gap-3 items-center"
       >
-        <NuxtLink to="/shelves" aria-label="Back to Shelves"
-          ><Icon name="lucide:arrow-left"
+        <NuxtLink
+          to="/shelves"
+          aria-label="Back to Shelves"
+          class="p-1 flex items-center opacity-80 hover:opacity-100"
+          ><Icon name="lucide:arrow-left" class="text-lg"
         /></NuxtLink>
         <form v-if="editingName" class="flex gap-2" @submit.prevent="rename">
           <input
@@ -84,19 +87,26 @@ onMounted(load);
           /><button type="submit">Save</button
           ><button type="button" @click="editingName = false">Cancel</button>
         </form>
-        <h1 v-else class="font-semibold text-xl">{{ shelf.name }}</h1>
-        <details class="relative">
-          <summary aria-label="Shelf options" class="cursor-pointer">
-            <Icon name="lucide:ellipsis" />
-          </summary>
-          <div
-            class="absolute z-50 min-w-40 bg-(--bg-color) border rounded p-2 flex flex-col"
-          >
-            <button type="button" @click="editingName = true">
-              Rename Shelf</button
-            ><button type="button" @click="removeShelf">Delete Shelf</button>
-          </div>
-        </details>
+        <h1 v-else class="font-semibold text-sm">{{ shelf.name }}</h1>
+        <button
+          v-if="!editingName"
+          v-tooltip="'Rename Shelf'"
+          type="button"
+          aria-label="Rename Shelf"
+          class="p-1 flex items-center opacity-70 hover:opacity-100"
+          @click="editingName = true"
+        >
+          <Icon name="lucide:pencil" class="text-base" />
+        </button>
+        <button
+          v-tooltip="'Delete Shelf'"
+          type="button"
+          aria-label="Delete Shelf"
+          class="p-1 flex items-center opacity-70 hover:opacity-100"
+          @click="removeShelf"
+        >
+          <Icon name="lucide:trash-2" class="text-base" />
+        </button>
         <span class="text-sm opacity-70"
           >{{ shelf.books.length }}
           {{ shelf.books.length === 1 ? 'book' : 'books' }}</span
@@ -104,18 +114,20 @@ onMounted(load);
         <div class="flex-1" />
         <button
           type="button"
-          class="px-2 py-1 border rounded"
+          class="p-1 flex items-center gap-2 opacity-80 hover:opacity-100"
           @click="openPicker('add')"
         >
-          <Icon name="lucide:plus" /> Add books
+          <Icon name="lucide:plus" class="text-lg" />
+          <span class="text-sm">Add books</span>
         </button>
         <button
           v-if="shelf.books.length"
           type="button"
-          class="px-2 py-1 border rounded"
+          class="p-1 flex items-center gap-2 opacity-80 hover:opacity-100"
           @click="openPicker('remove')"
         >
-          Remove books
+          <Icon name="lucide:minus" class="text-lg" />
+          <span class="text-sm">Remove books</span>
         </button>
       </div>
       <p v-if="error" role="alert" class="p-2">{{ error }}</p>
