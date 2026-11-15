@@ -60,3 +60,7 @@ review/check-results.json
 # Cover status browser-check evidence
 review/demo/book-status-*.png
 review/demo/book-status-results.json
+
+# Bookshelf browser measurements
+review/demo/bookshelf-*.json
+review/demo/bookshelf-*.cpuprofile

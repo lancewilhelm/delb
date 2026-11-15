@@ -44,7 +44,7 @@ Use a shelf's options menu to add a shelf or remove an empty one. The bookshelf 
 
 Bookcases sit on one continuous floor. Hold the right mouse button or hold Space and drag to move freely around the view. On a touch screen, swipe to move around. Select **Center bookshelf** to return to the starting position. Use the zoom controls, scroll wheel, or a two-finger pinch to change the display size without changing book dimensions. Scroll-wheel zoom centers on the pointer. Hold Shift while using the scroll wheel to move vertically. The question-mark button in the shelf toolbar shows these navigation tips.
 
-Delb saves your arrangement to your account. If a save fails, use **Retry save**. If another device has a newer arrangement, choose **Load newer arrangement** to discard your unsaved changes and load it. Books without spine artwork use a colored title and author placeholder.
+Delb saves your arrangement to your account. If a save fails, use **Retry save**. If another device has a newer arrangement, choose **Load newer arrangement** to discard your unsaved changes and load it. Books without spine artwork use a colored title and author placeholder. Offscreen artwork loads as you pan toward it.
 
 To add spine artwork, open a book and select **Edit book details**. Under **Spine artwork**, upload an image, adjust the crop and optional stretch, and select **Save**. Delb keeps the original upload so you can adjust it later. The spine appears to the left of the cover on the book detail page and on the bookshelf. Collection owners and editors can change or remove it; the artwork is shared with people who can access the book.
 

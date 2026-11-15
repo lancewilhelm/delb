@@ -18,6 +18,12 @@ Grid cards keep selected values on one line and omit missing metadata. List cell
 
 Grid/list components virtualize rendered items while the server paginates records with stable sort keys and cursors. Those are different limits. Virtualization does not mean the client downloads the entire library.
 
+### Personal bookshelf
+
+Bookshelf view loads the complete accessible catalog before reconciling the reader's saved arrangement. Without additional book filters, collection dimming uses each entry's collection ID from that catalog. Applied book filters fetch matching entries through the authorized Books endpoint.
+
+[BookshelfView](../../../app/components/Books/BookshelfView.vue) owns loading, personal arrangements, saves, and camera controls. Each [bookcase](../../../app/components/Books/BookshelfBookcase.vue) renders its shelves and books independently, so camera movement does not rerender all book contents. The wall uses a compositor layer for panning. Spine images use browser lazy loading and asynchronous decoding. Geometry and drop targets remain mounted, including offscreen bookcases.
+
 ## Filters and search
 
 The Books page exposes a filter dropdown for personal reading status, date added, and file presence. Dashboard status counts navigate to the corresponding Books filters.

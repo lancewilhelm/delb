@@ -49,6 +49,8 @@ const author = computed(
     <img
       v-if="book.spineRevision && !failed"
       class="spine-art"
+      loading="lazy"
+      decoding="async"
       :class="{ sideways: horizontal }"
       :style="
         horizontal
