@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import {
   bookShelfDimensions,
-  bookSpines,
   books,
   collectionBookshelves,
   collectionMembers,
@@ -25,7 +24,10 @@ async function readCatalog(db: Db, collectionId: string) {
       title: books.title,
       pages: books.pages,
       collectionId: books.collectionId,
-      spineRevision: bookSpines.revision,
+      // The artwork row contains large images; read the revision from the covering index.
+      spineRevision: sql<
+        string | null
+      >`(select revision from book_spines indexed by book_spines_book_revision_idx where book_id=${books.id})`,
       dimensions: {
         width: bookShelfDimensions.width,
         height: bookShelfDimensions.height,
@@ -36,7 +38,6 @@ async function readCatalog(db: Db, collectionId: string) {
       authorNames: sql<string>`coalesce((select json_group_array(name) from (select a.name as name from book_authors ba join authors a on a.id=ba.author_id where ba.book_id=${books.id} order by coalesce(ba.position,10000), a.id)), '[]')`,
     })
     .from(books)
-    .leftJoin(bookSpines, eq(bookSpines.bookId, books.id))
     .leftJoin(bookShelfDimensions, eq(bookShelfDimensions.bookId, books.id))
     .where(eq(books.collectionId, collectionId))
     .orderBy(asc(books.createdAt), asc(books.id))

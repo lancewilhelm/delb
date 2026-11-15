@@ -84,6 +84,16 @@ const created = await request('/api/books', owner, 'POST', {
 assert.equal(created.status, 200, await created.clone().text());
 const id = (await created.json()).data.book.id,
   path = `/api/books/${id}/spine`;
+async function shelfRevision() {
+  const response = await request(
+    `/api/collections/${collection}/bookshelf`,
+    viewer,
+  );
+  assert.equal(response.status, 200, await response.clone().text());
+  const shelf = await response.json();
+  return shelf.books.find((book) => book.id === id).spineRevision;
+}
+assert.equal(await shelfRevision(), null);
 const edits = { left: 0, right: 0, top: 0, bottom: 0, stretch: false };
 const original = await sharp({
   create: { width: 60, height: 240, channels: 3, background: '#247e5b' },
@@ -99,6 +109,7 @@ assert.equal(
 let response = await request(path, editor, 'POST', upload(original, '', edits));
 assert.equal(response.status, 200, await response.clone().text());
 let revision = (await response.json()).revision;
+assert.equal(await shelfRevision(), revision);
 assert.equal((await request(`${path}?variant=source`, viewer)).status, 403);
 response = await request(`${path}?variant=source`, owner);
 assert.equal(response.status, 200);
@@ -142,6 +153,7 @@ assert.equal(response.status, 200, await response.clone().text());
 const previous = revision;
 revision = (await response.json()).revision;
 assert.notEqual(revision, previous);
+assert.equal(await shelfRevision(), revision);
 response = await request(path, viewer);
 const metadata = await sharp(
   Buffer.from(await response.arrayBuffer()),
@@ -173,6 +185,7 @@ assert.equal(
   409,
 );
 assert.equal((await request(path, owner, 'DELETE', { revision })).status, 200);
+assert.equal(await shelfRevision(), null);
 assert.equal((await request(path, viewer)).status, 404);
 assert.equal(
   (await (await request(`${path}?variant=metadata`, viewer)).json()).exists,
