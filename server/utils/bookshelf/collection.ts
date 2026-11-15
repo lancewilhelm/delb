@@ -14,6 +14,11 @@ import {
 } from '~~/shared/bookshelf';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { lockCollectionChanges } from '~~/server/utils/collections/model';
+import {
+  composeBookshelfLayout,
+  bookshelfGeometry,
+  type BookLayoutEntry,
+} from '~~/shared/bookshelf-layout';
 
 type Db = Parameters<Parameters<typeof cloudDb.transaction>[0]>[0];
 
@@ -105,14 +110,42 @@ export async function readCollectionShelf(
     const dimensions = new Map(
       catalog.map((book) => [book.id, book.dimensions]),
     );
+    const visible = new Set(catalog.map((book) => book.id));
+    const placements: BookLayoutEntry[] = [];
     for (const bookcase of layout.bookcases)
       for (const shelf of bookcase.shelves)
-        for (const item of shelf.items)
-          for (const book of item.books) {
+        for (const [index, item] of shelf.items.entries())
+          for (const [order, book] of item.books.entries()) {
+            const oldWidth = book.width;
+            const oldHeight = book.height;
             const storedDimensions = dimensions.get(book.id);
             if (storedDimensions) Object.assign(book, storedDimensions);
+            if (visible.has(book.id))
+              placements.push({
+                book,
+                placement: {
+                  caseId: bookcase.id,
+                  shelfId: shelf.id,
+                  stackId: `${bookcase.id}/${shelf.id}/${index}`,
+                  x: item.x,
+                  horizontal: item.horizontal,
+                  order,
+                  width: oldWidth,
+                  height: oldHeight,
+                },
+              });
           }
-    const reconciled = reconcileBookshelf(layout, catalog);
+    const repaired = parseBookshelf(layout)
+      ? null
+      : composeBookshelfLayout(
+          bookshelfGeometry(layout),
+          placements,
+          collectionId,
+        );
+    const reconciled = reconcileBookshelf(
+      repaired?.arrangement ?? layout,
+      catalog,
+    );
     if (!parseBookshelf(reconciled.bookshelf))
       throw createError({
         statusCode: 400,
@@ -123,7 +156,12 @@ export async function readCollectionShelf(
       revision: stored?.revision ?? 0,
       token: catalogToken(catalog),
       arrangement: reconciled.bookshelf,
-      adjustments: reconciled.needsAdjustment,
+      adjustments: [
+        ...new Set([
+          ...(repaired?.adjustments ?? []),
+          ...reconciled.needsAdjustment,
+        ]),
+      ],
       books: catalog.map(({ dimensions: _dimensions, ...book }) => book),
       canEdit: role === 'owner' || role === 'editor',
     };

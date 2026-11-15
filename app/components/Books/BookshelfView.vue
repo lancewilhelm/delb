@@ -23,7 +23,16 @@ import {
 } from '~~/shared/bookshelf';
 
 defineOptions({ name: 'BookshelfView' });
-const props = defineProps<{ endpoint: string; collectionId: string }>();
+const props = defineProps<{
+  endpoint: string;
+  collectionId?: string;
+  personalShelfId?: string;
+}>();
+const shelfPath = computed(() =>
+  props.personalShelfId
+    ? `/api/shelves/${encodeURIComponent(props.personalShelfId)}`
+    : `/api/collections/${encodeURIComponent(props.collectionId!)}/bookshelf`,
+);
 type BooksResponse = {
   success?: boolean;
   message?: string;
@@ -33,7 +42,7 @@ type Saved = {
   revision: number;
   token: string;
   arrangement: unknown;
-  books: BookViewBook[];
+  books: (BookViewBook & { canResize?: boolean })[];
   canEdit: boolean;
   adjustments: string[];
 };
@@ -104,7 +113,7 @@ type BookcaseDrag = {
 };
 
 const arrangement = ref<Bookshelf | null>(null);
-const catalog = ref<BookViewBook[]>([]);
+const catalog = ref<(BookViewBook & { canResize?: boolean })[]>([]);
 const matches = ref<Set<string>>(new Set());
 const revision = ref(0);
 const catalogToken = ref('');
@@ -310,7 +319,12 @@ async function fetchAll(
 }
 async function loadMatches() {
   const current = ++generation;
-  if (props.endpoint === '/api/books') {
+  if (
+    props.endpoint === '/api/books' ||
+    (props.personalShelfId &&
+      props.endpoint ===
+        `/api/books?shelfId=${encodeURIComponent(props.personalShelfId)}`)
+  ) {
     matches.value = new Set(
       catalog.value
         .filter(
@@ -337,9 +351,7 @@ async function load() {
   saveError.value = '';
   conflict.value = false;
   try {
-    const saved = await $fetch<Saved>(
-      `/api/collections/${encodeURIComponent(props.collectionId)}/bookshelf`,
-    );
+    const saved = await $fetch<Saved>(shelfPath.value);
     const books = saved.books;
     const parsed = parseBookshelf(saved.arrangement);
     if (!parsed) throw new Error('Your saved bookshelf could not be read.');
@@ -375,9 +387,7 @@ async function refreshCatalog() {
   const current = ++catalogGeneration;
   const startingVersion = dirtyVersion;
   try {
-    const saved = await $fetch<Saved>(
-      `/api/collections/${encodeURIComponent(props.collectionId)}/bookshelf`,
-    );
+    const saved = await $fetch<Saved>(shelfPath.value);
     if (current !== catalogGeneration || !arrangement.value) return;
     if (dirtyVersion !== startingVersion || dirty.value || saving.value) {
       refreshPending = true;
@@ -421,7 +431,7 @@ async function save() {
     const version = dirtyVersion;
     try {
       const response = await $fetch<{ revision: number; token: string }>(
-        `/api/collections/${encodeURIComponent(props.collectionId)}/bookshelf`,
+        shelfPath.value,
         {
           method: 'PUT',
           body: {
@@ -479,7 +489,7 @@ function unloadWarning(event: BeforeUnloadEvent) {
   }
 }
 watch(
-  () => [props.endpoint, props.collectionId],
+  () => [props.endpoint, props.collectionId, props.personalShelfId],
   () => {
     if (arrangement.value) void loadMatches();
   },
@@ -774,6 +784,7 @@ function removeBookcase(shelf: Shelf) {
   changed();
 }
 function changeSize(bookId: string, field: 'width' | 'height', event: Event) {
+  if (props.personalShelfId && !bookFor(bookId).canResize) return;
   const found = getItem(bookId);
   if (!found || !(event.target instanceof HTMLInputElement)) return;
   const book = found.item.books.find((entry) => entry.id === bookId);
@@ -800,7 +811,7 @@ function changeSize(bookId: string, field: 'width' | 'height', event: Event) {
   adjustments.value = adjustments.value.filter((id) => id !== bookId);
   changed();
 }
-function bookFor(id: string): BookViewBook {
+function bookFor(id: string): BookViewBook & { canResize?: boolean } {
   return byId.value.get(id) ?? { id, title: 'Unavailable book' };
 }
 function onBookClick(event: MouseEvent, id: string) {
@@ -1427,7 +1438,10 @@ const lastOtherBookcaseId = computed(
           <Icon name="lucide:x" aria-hidden="true" />
         </button>
       </div>
-      <label
+      <p v-if="personalShelfId && !bookFor(selected).canResize">
+        Only an editor of this book's collection can change its size.
+      </p>
+      <label v-if="!personalShelfId || bookFor(selected).canResize"
         >Height · {{ selectedBook.height }}
         <input
           type="range"
@@ -1436,7 +1450,7 @@ const lastOtherBookcaseId = computed(
           :value="selectedBook.height"
           @change="changeSize(selected!, 'height', $event)"
       /></label>
-      <label
+      <label v-if="!personalShelfId || bookFor(selected).canResize"
         >Thickness · {{ selectedBook.width }}
         <input
           type="range"

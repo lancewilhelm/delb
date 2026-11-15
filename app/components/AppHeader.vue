@@ -38,7 +38,9 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
               route.path === '/series' ||
               route.path === '/publishers' ||
               route.path === '/tags' ||
-              route.path === '/to-be-read'
+              route.path === '/to-be-read' ||
+              route.path === '/shelves' ||
+              route.path.startsWith('/shelves/')
             ) {
               uiStore.setLibraryView('books');
               navigateTo('/');
@@ -52,7 +54,13 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
       >
         Delb
       </div>
-      <ClientOnly v-if="route.path !== '/to-be-read'">
+      <ClientOnly
+        v-if="
+          route.path !== '/to-be-read' &&
+          route.path !== '/shelves' &&
+          !route.path.startsWith('/shelves/')
+        "
+      >
         <CollectionPickerDropdown />
         <template #fallback>
           <button

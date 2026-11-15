@@ -15,6 +15,7 @@ import {
   bookRatings,
   bookTags,
   books,
+  personalShelfBooks,
   userBookStatus,
   storageOperations,
 } from '~/utils/db/schema';
@@ -129,6 +130,9 @@ async function deleteBookUnlocked(opts: {
           createdAt: new Date(),
         });
       await tx.delete(bookSpines).where(eq(bookSpines.bookId, bookId));
+      await tx
+        .delete(personalShelfBooks)
+        .where(eq(personalShelfBooks.bookId, bookId));
       await tx.delete(bookFiles).where(eq(bookFiles.bookId, bookId));
       await tx.delete(bookAuthors).where(eq(bookAuthors.bookId, bookId));
       await tx.delete(bookTags).where(eq(bookTags.bookId, bookId));

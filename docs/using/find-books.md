@@ -48,6 +48,16 @@ Delb saves the arrangement for everyone in the collection. If a save fails, use 
 
 To add spine artwork, open a book and select **Edit book details**. Under **Spine artwork**, upload an image, adjust the crop and optional stretch, and select **Save**. Delb keeps the original upload so you can adjust it later. The spine appears to the left of the cover on the book detail page and on the bookshelf. Collection owners and editors can change or remove it; the artwork is shared with people who can access the book.
 
+## Make a personal Shelf
+
+Select **Shelves** in the navigation, then select **Create Shelf** and enter a name. Your Shelves are private. A Shelf starts empty and can contain books from any collection you can access. The same book can appear on more than one Shelf.
+
+Open a Shelf and select **Add books**. Search by title, author, or ISBN, or browse your library. You can filter by collection and select books across searches before adding them. Books already on the Shelf are marked. You can also select books in the Books view and choose **Actions > Add to Shelf**.
+
+Use the view controls to switch between a grid, a list, and a visual bookshelf. New books are placed after the existing books in the visual view. Select **Edit shelves** to arrange them. Positions and orientations belong to the Shelf. A book's spine size and artwork belong to the book and are shared wherever it appears. Only an owner or editor of the book's collection can change its size.
+
+Select **Remove books** to remove entries from a Shelf. The books remain in their collections. If you lose access to a book, the book is hidden from your Shelves and its placement is remembered. When access returns, Delb restores the position if it fits; otherwise it places the book in the next available space.
+
 ## Change the grid or list
 
 1. Use the grid/list switch in the book view.

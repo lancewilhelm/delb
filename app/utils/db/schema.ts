@@ -638,6 +638,40 @@ export const collectionBookshelves = sqliteTable('collection_bookshelves', {
   arrangement: text('arrangement', { mode: 'json' }).notNull(),
 });
 
+// Personal Shelves select books without changing their collection ownership.
+export const personalShelves = sqliteTable(
+  'personal_shelves',
+  {
+    id: text('id').primaryKey(),
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    revision: integer('revision').notNull().default(0),
+    geometry: text('geometry', { mode: 'json' }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => ({ owner: index('personal_shelves_owner_idx').on(t.ownerId) }),
+);
+
+export const personalShelfBooks = sqliteTable(
+  'personal_shelf_books',
+  {
+    shelfId: text('shelf_id')
+      .notNull()
+      .references(() => personalShelves.id, { onDelete: 'cascade' }),
+    bookId: text('book_id')
+      .notNull()
+      .references(() => books.id, { onDelete: 'cascade' }),
+    placement: text('placement', { mode: 'json' }),
+    addedAt: integer('added_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => ({
+    key: primaryKey({ columns: [t.shelfId, t.bookId] }),
+    book: index('personal_shelf_books_book_idx').on(t.bookId),
+  }),
+);
+
 // Book dimensions follow the entry when it moves between collections.
 export const bookShelfDimensions = sqliteTable('book_shelf_dimensions', {
   bookId: text('book_id')

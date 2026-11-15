@@ -45,6 +45,7 @@ const suites = [
   'review/bookshelf-api.mjs',
   'review/collection-bookshelf-api.mjs',
   'review/spine-artwork-api.mjs',
+  'review/personal-shelves-api.mjs',
 ];
 const requested = process.argv.slice(2);
 if (
@@ -54,6 +55,7 @@ if (
         ...suites,
         'review/collections-browser.mjs',
         'review/bookshelf-load-browser.mjs',
+        'review/personal-shelves-browser.mjs',
       ].includes(suite),
   )
 )
