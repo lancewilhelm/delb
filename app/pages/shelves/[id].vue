@@ -87,7 +87,7 @@ onMounted(load);
           /><button type="submit">Save</button
           ><button type="button" @click="editingName = false">Cancel</button>
         </form>
-        <h1 v-else class="font-semibold text-sm">{{ shelf.name }}</h1>
+        <h1 v-else class="font-semibold text-sm!">{{ shelf.name }}</h1>
         <button
           v-if="!editingName"
           v-tooltip="'Rename Shelf'"

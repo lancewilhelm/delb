@@ -159,6 +159,12 @@ try {
   await until(
     "[...document.querySelectorAll('button')].some(b=>b.textContent.includes('Add books'))",
   );
+  assert.ok(
+    (await evaluate(
+      "parseFloat(getComputedStyle(document.querySelector('h1')).fontSize)",
+    )) <= 16,
+    'Shelf title should be toolbar-sized',
+  );
   const shelfId = await evaluate('location.pathname.split("/").pop()');
   await evaluate(
     "window.dispatchEvent(new KeyboardEvent('keydown', {key:'k', metaKey:true, ctrlKey:true, bubbles:true}))",
@@ -215,7 +221,9 @@ try {
   await until("!!document.querySelector('.spine-button')");
   await call('Page.navigate', { url: `${base}/books` });
   await until("document.body.textContent.includes('Shelf first book')");
-  await evaluate('document.querySelector(\'[aria-label="Grid View"]\').click()');
+  await evaluate(
+    'document.querySelector(\'[aria-label="Grid View"]\').click()',
+  );
   await clickText('Select');
   await until('!!document.querySelector(\'[aria-label="Select book"]\')');
   await evaluate(
