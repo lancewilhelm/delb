@@ -43,6 +43,7 @@ type BulkStatusResponse = {
 
 function refreshBooksGrid() {
   booksGridKey.value += 1;
+  void bookshelfView.value?.refreshCatalog();
 }
 
 function toggleSelectMode() {
@@ -547,15 +548,41 @@ const booksSortDir = computed(() => uiStore.booksSortDirection);
 const booksViewMode = computed(() => uiStore.booksViewMode);
 const hydrated = ref(false);
 const bookshelfActive = computed(
-  () => hydrated.value && uiStore.bookshelfActive,
+  () => hydrated.value && uiStore.bookshelfActive && !!activeCollectionId.value,
 );
 const bookshelfView = ref<{
   canLeave: () => boolean;
   refreshCatalog: () => Promise<void>;
 } | null>(null);
+let revertingShelfSelection = false;
+watch(
+  () => collectionsStore.activeSelection,
+  (next, previous) => {
+    if (
+      revertingShelfSelection ||
+      !hydrated.value ||
+      !uiStore.bookshelfActive ||
+      !bookshelfView.value ||
+      !previous ||
+      (next.kind === 'collection' &&
+        previous.kind === 'collection' &&
+        next.collectionId === previous.collectionId) ||
+      (next.kind === 'all' && previous.kind === 'all')
+    )
+      return;
+    if (!bookshelfView.value.canLeave()) {
+      revertingShelfSelection = true;
+      if (previous.kind === 'all') collectionsStore.setActiveAll();
+      else collectionsStore.setActiveCollection(previous.collectionId);
+      revertingShelfSelection = false;
+      return;
+    }
+    if (next.kind === 'all') uiStore.setBookshelfActive(false);
+  },
+  { flush: 'sync' },
+);
 function onBookUploaded() {
-  booksGridKey.value++;
-  void bookshelfView.value?.refreshCatalog();
+  refreshBooksGrid();
 }
 function setBookshelfActive(active: boolean, nextMode?: 'grid' | 'list') {
   if (
@@ -606,7 +633,7 @@ onMounted(async () => {
             <!-- Books sort + filters -->
             <div class="flex items-center gap-1 self-center">
               <BooksViewToggle
-                show-bookshelf
+                :show-bookshelf="!!activeCollectionId"
                 :bookshelf="bookshelfActive"
                 @bookshelf="setBookshelfActive"
               />
@@ -1151,9 +1178,10 @@ onMounted(async () => {
             />
             <BookshelfView
               v-else
+              :key="activeCollectionId"
               ref="bookshelfView"
               :endpoint="booksEndpoint"
-              :collection-id="activeCollectionId"
+              :collection-id="activeCollectionId!"
             />
           </div>
         </div>

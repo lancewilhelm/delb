@@ -26,6 +26,7 @@ async function shelfEditor() {
     'moveBookcase',
     'moveBookcaseBy',
     'refreshCatalog',
+    'resumePendingRefresh',
   ];
   const functions = ast.statements
     .filter(
@@ -47,6 +48,9 @@ async function shelfEditor() {
     bookcases: [bookcase('first'), bookcase('second')],
   });
   const payloads = [];
+  let serverArrangement = structuredClone(toRaw(arrangement.value));
+  let serverRevision = 1;
+  let beforeSave = async () => {};
   let fetchCatalog = async () => [];
   const state = {
     arrangement,
@@ -67,16 +71,34 @@ async function shelfEditor() {
     saveError: ref(''),
     notice: ref(''),
     revision: ref(1),
+    catalogToken: ref('token'),
+    canEdit: ref(true),
+    props: { collectionId: 'collection' },
     selectedShelf: ref(null),
     getBookcase: (id) =>
       arrangement.value.bookcases.find((item) =>
         item.shelves.some((shelf) => shelf.id === id),
       ),
     $fetch: async (_url, options) => {
+      if (!options) {
+        const books = await fetchCatalog();
+        if (books.length > BOOKSHELF_MAX_BOOKS)
+          throw new Error('Bookshelf supports up to 20,000 books.');
+        return {
+          revision: serverRevision,
+          token: 'token',
+          books,
+          canEdit: true,
+          adjustments: [],
+          arrangement: reconcileBookshelf(serverArrangement, books).bookshelf,
+        };
+      }
       const parsed = parseBookshelf(options.body.arrangement);
       assert.ok(parsed, 'the saved arrangement must be valid');
       payloads.push(parsed);
-      return { revision: 2 };
+      await beforeSave();
+      serverArrangement = structuredClone(parsed);
+      return { revision: ++serverRevision, token: 'token' };
     },
   };
   const js = ts.transpileModule(functions, {
@@ -84,7 +106,7 @@ async function shelfEditor() {
   }).outputText;
   const actions = new Function(
     ...Object.keys(state),
-    `let dirtyVersion = 0; let catalogGeneration = 0; let refreshPending = false; ${js}; return {removeShelf, removeBookcase, moveBookcase, moveBookcaseBy, refreshCatalog};`,
+    `let dirtyVersion = 0; let catalogGeneration = 0; let refreshPending = false; let disposed = false; ${js}; return {removeShelf, removeBookcase, moveBookcase, moveBookcaseBy, refreshCatalog};`,
   )(...Object.values(state));
   return {
     actions,
@@ -93,18 +115,23 @@ async function shelfEditor() {
     setFetchCatalog: (fn) => {
       fetchCatalog = fn;
     },
+    setBeforeSave: (fn) => {
+      beforeSave = fn;
+    },
   };
 }
 
-test('new catalog books are added without overwriting edits made during refresh', async () => {
+test('a refresh retries after edits made while its request is pending', async () => {
   const { actions, state, payloads, setFetchCatalog } = await shelfEditor();
   let resolveCatalog;
-  setFetchCatalog(
-    () =>
-      new Promise((resolve) => {
-        resolveCatalog = resolve;
-      }),
-  );
+  let requests = 0;
+  setFetchCatalog(() => {
+    if (++requests > 1)
+      return Promise.resolve([{ id: 'new-book', pages: 240 }]);
+    return new Promise((resolve) => {
+      resolveCatalog = resolve;
+    });
+  });
   const refresh = actions.refreshCatalog();
   actions.moveBookcase('first', null);
   await new Promise(setImmediate);
@@ -116,14 +143,43 @@ test('new catalog books are added without overwriting edits made during refresh'
     latest.bookcases.map((entry) => entry.id),
     ['second', 'first'],
   );
+  assert.equal(state.catalog.value[0].id, 'new-book');
+  assert.deepEqual(
+    state.arrangement.value.bookcases.map((entry) => entry.id),
+    ['second', 'first'],
+  );
   assert.ok(
-    latest.bookcases
+    state.arrangement.value.bookcases
       .flatMap((entry) => entry.shelves)
       .flatMap((shelf) => shelf.items)
-      .some((item) => item.books.some((book) => book.id === 'new-book')),
+      .some((entry) => entry.books.some((book) => book.id === 'new-book')),
   );
-  assert.equal(state.catalog.value[0].id, 'new-book');
   assert.equal(state.saveError.value, '');
+});
+
+test('a refresh requested during a save runs after the save and keeps the edit', async () => {
+  const { actions, state, setFetchCatalog, setBeforeSave } =
+    await shelfEditor();
+  const pending = Promise.withResolvers();
+  let reads = 0;
+  setBeforeSave(() => pending.promise);
+  setFetchCatalog(async () => {
+    reads++;
+    return [{ id: 'added' }];
+  });
+  actions.moveBookcase('first', null);
+  await actions.refreshCatalog();
+  assert.equal(reads, 0);
+  pending.resolve();
+  await new Promise(setImmediate);
+  await new Promise(setImmediate);
+  assert.equal(reads, 1);
+  assert.deepEqual(
+    state.arrangement.value.bookcases.map((entry) => entry.id),
+    ['second', 'first'],
+  );
+  assert.equal(state.catalog.value[0].id, 'added');
+  assert.equal(state.dirty.value, false);
 });
 
 test('an oversized catalog is reported without replacing or saving the current arrangement', async () => {

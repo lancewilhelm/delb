@@ -25,10 +25,12 @@ const color = computed(() => {
   return colors[hash % colors.length];
 });
 const failed = ref(false);
+const loaded = ref(false);
 watch(
   () => [props.book.id, props.book.spineRevision],
   () => {
     failed.value = false;
+    loaded.value = false;
   },
 );
 const author = computed(
@@ -49,9 +51,9 @@ const author = computed(
     <img
       v-if="book.spineRevision && !failed"
       class="spine-art"
+      :class="{ sideways: horizontal, pending: !loaded }"
       loading="lazy"
       decoding="async"
-      :class="{ sideways: horizontal }"
       :style="
         horizontal
           ? { width: `${placement.width}px`, height: `${placement.height}px` }
@@ -59,9 +61,10 @@ const author = computed(
       "
       :src="`/api/books/${encodeURIComponent(book.id)}/spine?v=${encodeURIComponent(book.spineRevision)}`"
       :alt="`Spine for ${book.title}`"
+      @load="loaded = true"
       @error="failed = true"
     />
-    <template v-else
+    <template v-if="!book.spineRevision || failed || !loaded"
       ><span class="spine-title">{{ book.title }}</span
       ><span class="spine-author">{{ author }}</span></template
     >
@@ -111,6 +114,9 @@ const author = computed(
   width: 100%;
   height: 100%;
   object-fit: fill;
+}
+.spine-art.pending {
+  visibility: hidden;
 }
 .spine-art.sideways {
   inset: auto;

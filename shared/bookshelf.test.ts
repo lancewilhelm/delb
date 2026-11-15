@@ -114,6 +114,31 @@ describe('personal bookshelf', () => {
     );
     assert.equal(result.bookshelf.bookcases[0]!.shelves[2]!.items.length, 0);
   });
+  it('updates stale automatic dimensions before placing an unshelved book', () => {
+    const dimensions = {
+      width: 24,
+      height: 200,
+      manualWidth: false,
+      manualHeight: false,
+      sourcePages: 100,
+    };
+    const result = reconcileBookshelf(emptyBookshelf(), [
+      { id: 'auto', pages: 900, dimensions },
+      {
+        id: 'manual',
+        pages: 900,
+        dimensions: { ...dimensions, manualWidth: true },
+      },
+    ]);
+    const books = result.bookshelf.bookcases[0]!.shelves[0]!.items.map(
+      (entry) => entry.books[0]!,
+    );
+    assert.equal(books[0]!.width, 55);
+    assert.equal(books[0]!.sourcePages, 900);
+    assert.equal(books[1]!.width, 24);
+    assert.equal(books[1]!.manualWidth, true);
+    assert.ok(parseBookshelf(result.bookshelf));
+  });
   it('adds new shelves for books that do not fit, without disturbing prior positions', () => {
     const data = emptyBookshelf();
     const shelf = data.bookcases[0]!.shelves.at(-1)!;

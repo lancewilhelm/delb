@@ -8,15 +8,12 @@ import {
   SHELF_FLOOR,
   SHELF_MAX_HEIGHT,
   SHELF_MAX_WIDTH,
-  BOOKSHELF_MAX_BOOKS,
   minimumBookcaseWidth,
   planShelfDrop,
   minimumShelfHeight,
   itemWidth,
   itemHeight,
   emptyShelf,
-  emptyBookshelf,
-  reconcileBookshelf,
   parseBookshelf,
   type Bookshelf,
   type Bookcase,
@@ -26,13 +23,20 @@ import {
 } from '~~/shared/bookshelf';
 
 defineOptions({ name: 'BookshelfView' });
-const props = defineProps<{ endpoint: string; collectionId?: string }>();
+const props = defineProps<{ endpoint: string; collectionId: string }>();
 type BooksResponse = {
   success?: boolean;
   message?: string;
-  data?: { books?: BookViewBook[]; nextCursor?: string | null };
+  data?: { books?: Pick<BookViewBook, 'id'>[]; nextCursor?: string | null };
 };
-type Saved = { revision: number; arrangement: unknown };
+type Saved = {
+  revision: number;
+  token: string;
+  arrangement: unknown;
+  books: BookViewBook[];
+  canEdit: boolean;
+  adjustments: string[];
+};
 type DropPlan = {
   shelfId: string;
   originId: string;
@@ -103,6 +107,8 @@ const arrangement = ref<Bookshelf | null>(null);
 const catalog = ref<BookViewBook[]>([]);
 const matches = ref<Set<string>>(new Set());
 const revision = ref(0);
+const catalogToken = ref('');
+const canEdit = ref(false);
 const editing = ref(false);
 const selected = ref<string | null>(null);
 const selectedShelf = ref<string | null>(null);
@@ -133,6 +139,7 @@ const pointerOverWall = ref(false);
 let generation = 0;
 let catalogGeneration = 0;
 let refreshPending = false;
+let disposed = false;
 let dirtyVersion = 0;
 let observer: ResizeObserver | undefined;
 let pinch: { distance: number; zoom: number } | null = null;
@@ -142,6 +149,41 @@ let suppressPanClick = false;
 const byId = computed(
   () => new Map(catalog.value.map((book) => [book.id, book])),
 );
+const focusedCaseId = ref<string | null>(null);
+const focusedShelfId = ref<string | null>(null);
+function onWallFocus(event: FocusEvent) {
+  if (!(event.target instanceof HTMLElement)) return;
+  focusedCaseId.value =
+    event.target.closest<HTMLElement>('[data-bookcase-id]')?.dataset
+      .bookcaseId ?? null;
+  focusedShelfId.value =
+    event.target.closest<HTMLElement>('[data-shelf-canvas]')?.dataset
+      .shelfCanvas ?? null;
+}
+function onWallKeydown(event: KeyboardEvent) {
+  if (
+    (event.target !== wall.value &&
+      !(
+        event.altKey &&
+        event.target instanceof HTMLElement &&
+        event.target.closest('.spine-button')
+      )) ||
+    event.ctrlKey ||
+    event.metaKey
+  )
+    return;
+  const directions: Record<string, [number, number]> = {
+    ArrowLeft: [100, 0],
+    ArrowRight: [-100, 0],
+    ArrowUp: [0, 100],
+    ArrowDown: [0, -100],
+  };
+  const direction = directions[event.key];
+  if (!direction) return;
+  event.preventDefault();
+  camera.x += direction[0];
+  camera.y += direction[1];
+}
 const scale = computed(
   () => Math.min(1, width.value / SHELF_WIDTH) * zoom.value,
 );
@@ -169,6 +211,32 @@ function shelfFrame(atZoom: number) {
   };
 }
 const floorTop = computed(() => shelfFrame(zoom.value).floor + camera.y);
+const visibleCaseIds = computed(() => {
+  const cases = arrangement.value?.bookcases ?? [];
+  const result = new Set<string>();
+  let left = shelfFrame(zoom.value).left + camera.x;
+  for (const bookcase of cases) {
+    const right = left + bookcase.width * scale.value;
+    const active =
+      bookcase.shelves.some(
+        (shelf) =>
+          shelf.id === drag.value?.shelfId ||
+          (resizing.value?.axis === 'height' &&
+            resizing.value.shelfId === shelf.id),
+      ) ||
+      (resizing.value?.axis === 'width' &&
+        resizing.value.bookcaseId === bookcase.id);
+    if (
+      (right >= -600 && left <= width.value + 600) ||
+      active ||
+      bookcase.id === focusedCaseId.value ||
+      bookcase.id === bookcaseDrag.value?.id
+    )
+      result.add(bookcase.id);
+    left = right;
+  }
+  return result;
+});
 const status = computed(() =>
   conflict.value
     ? 'A newer arrangement exists on another device.'
@@ -210,15 +278,16 @@ function errorText(error: unknown) {
 async function fetchAll(
   endpoint: string,
   collectionId?: string,
-): Promise<BookViewBook[]> {
-  const books: BookViewBook[] = [];
+): Promise<Pick<BookViewBook, 'id'>[]> {
+  const books: Pick<BookViewBook, 'id'>[] = [];
   let cursor: string | null = null;
   const seen = new Set<string>();
   do {
     const response: BooksResponse = await $fetch<BooksResponse>(endpoint, {
       method: 'GET',
       query: {
-        limit: 200,
+        limit: 20000,
+        idsOnly: '1',
         sort: 'dateAdded',
         sortDir: 'asc',
         ...(collectionId ? { collectionId } : {}),
@@ -268,38 +337,27 @@ async function load() {
   saveError.value = '';
   conflict.value = false;
   try {
-    const [saved, books] = await Promise.all([
-      $fetch<Saved>('/api/bookshelf'),
-      fetchAll('/api/books'),
-    ]);
-    if (books.length > BOOKSHELF_MAX_BOOKS)
-      throw new Error(
-        `Bookshelf supports up to ${BOOKSHELF_MAX_BOOKS.toLocaleString()} books. Use grid or list view for larger libraries.`,
-      );
-    const parsed =
-      saved.arrangement === null
-        ? emptyBookshelf()
-        : parseBookshelf(saved.arrangement);
+    const saved = await $fetch<Saved>(
+      `/api/collections/${encodeURIComponent(props.collectionId)}/bookshelf`,
+    );
+    const books = saved.books;
+    const parsed = parseBookshelf(saved.arrangement);
     if (!parsed) throw new Error('Your saved bookshelf could not be read.');
-    const reconciled = reconcileBookshelf(parsed, books);
-    if (!parseBookshelf(reconciled.bookshelf))
-      throw new Error(
-        'This library exceeds the supported bookshelf arrangement size. Use grid or list view.',
-      );
     revision.value = saved.revision;
+    catalogToken.value = saved.token;
+    canEdit.value = saved.canEdit;
     catalog.value = books;
-    arrangement.value = reconciled.bookshelf;
-    adjustments.value = reconciled.needsAdjustment;
+    arrangement.value = parsed;
+    adjustments.value = saved.adjustments;
     matches.value = new Set(books.map((book) => book.id));
     dirty.value = false;
     dirtyVersion = 0;
     await loadMatches();
-    if (reconciled.changed || saved.arrangement === null) changed();
   } catch (error) {
     loadError.value = errorText(error);
   } finally {
     loading.value = false;
-    if (refreshPending) {
+    if (refreshPending && !disposed) {
       refreshPending = false;
       void refreshCatalog();
     }
@@ -310,31 +368,49 @@ async function refreshCatalog() {
     refreshPending = true;
     return;
   }
+  if (dirty.value || saving.value) {
+    refreshPending = true;
+    return;
+  }
   const current = ++catalogGeneration;
+  const startingVersion = dirtyVersion;
   try {
-    const books = await fetchAll('/api/books');
+    const saved = await $fetch<Saved>(
+      `/api/collections/${encodeURIComponent(props.collectionId)}/bookshelf`,
+    );
     if (current !== catalogGeneration || !arrangement.value) return;
-    if (books.length > BOOKSHELF_MAX_BOOKS)
-      throw new Error(
-        `Bookshelf supports up to ${BOOKSHELF_MAX_BOOKS.toLocaleString()} books.`,
-      );
-    const existing = parseBookshelf(arrangement.value);
-    if (!existing)
-      throw new Error('The current arrangement could not be read.');
-    const reconciled = reconcileBookshelf(existing, books);
-    if (!parseBookshelf(reconciled.bookshelf))
-      throw new Error(
-        'This library exceeds the supported bookshelf arrangement size.',
-      );
-    catalog.value = books;
-    arrangement.value = reconciled.bookshelf;
-    adjustments.value = reconciled.needsAdjustment;
-    if (reconciled.changed) changed();
+    if (dirtyVersion !== startingVersion || dirty.value || saving.value) {
+      refreshPending = true;
+      return;
+    }
+    const parsed = parseBookshelf(saved.arrangement);
+    if (!parsed) throw new Error('The current arrangement could not be read.');
+    catalog.value = saved.books;
+    arrangement.value = parsed;
+    revision.value = saved.revision;
+    catalogToken.value = saved.token;
+    canEdit.value = saved.canEdit;
+    adjustments.value = saved.adjustments;
     await loadMatches();
   } catch (error) {
     if (current === catalogGeneration)
       notice.value = `Could not refresh your bookshelf: ${errorText(error)}`;
+  } finally {
+    if (current === catalogGeneration) resumePendingRefresh();
   }
+}
+function resumePendingRefresh() {
+  if (
+    disposed ||
+    !refreshPending ||
+    loading.value ||
+    saving.value ||
+    dirty.value ||
+    conflict.value
+  )
+    return;
+  refreshPending = false;
+  void refreshCatalog();
 }
 async function save() {
   if (saving.value || !arrangement.value || !dirty.value || conflict.value)
@@ -344,14 +420,19 @@ async function save() {
   while (dirty.value && !conflict.value) {
     const version = dirtyVersion;
     try {
-      const response = await $fetch<{ revision: number }>('/api/bookshelf', {
-        method: 'PUT',
-        body: {
-          revision: revision.value,
-          arrangement: structuredClone(toRaw(arrangement.value)),
+      const response = await $fetch<{ revision: number; token: string }>(
+        `/api/collections/${encodeURIComponent(props.collectionId)}/bookshelf`,
+        {
+          method: 'PUT',
+          body: {
+            revision: revision.value,
+            token: catalogToken.value,
+            arrangement: structuredClone(toRaw(arrangement.value)),
+          },
         },
-      });
+      );
       revision.value = response.revision;
+      catalogToken.value = response.token;
       if (version === dirtyVersion) dirty.value = false;
     } catch (error: unknown) {
       if (
@@ -368,6 +449,7 @@ async function save() {
     }
   }
   saving.value = false;
+  resumePendingRefresh();
 }
 function changed() {
   dirtyVersion++;
@@ -601,6 +683,7 @@ onMounted(() => {
   void load();
 });
 onBeforeUnmount(() => {
+  disposed = true;
   generation++;
   catalogGeneration++;
   observer?.disconnect();
@@ -1137,6 +1220,7 @@ const lastOtherBookcaseId = computed(
     <div class="bookshelf-toolbar">
       <div class="toolbar-left">
         <button
+          v-if="canEdit"
           type="button"
           class="edit-button"
           :class="{ active: editing }"
@@ -1163,7 +1247,9 @@ const lastOtherBookcaseId = computed(
             <strong>Move around</strong>
             <p>
               Drag with the right mouse button or hold Space and drag. On a
-              touch screen, swipe to pan.
+              touch screen, swipe to pan. Focus the bookshelf and use the arrow
+              keys to pan with a keyboard. While focused on a book, use Alt with
+              an arrow key.
             </p>
             <p>Use Center bookshelf to return to the starting position.</p>
             <p>
@@ -1250,12 +1336,18 @@ const lastOtherBookcaseId = computed(
       class="wall-viewport"
       :class="{ 'pan-ready': spaceHeld, panning: pan }"
       tabindex="0"
-      aria-label="Bookshelf. Swipe to pan, or hold Space and drag."
+      aria-label="Bookshelf. Swipe, use arrow keys, or hold Space and drag to pan. Use Alt and an arrow key while focused on a book."
+      @keydown="onWallKeydown"
       @pointerdown.capture="startPan"
       @pointerenter="pointerOverWall = true"
       @pointerleave="pointerOverWall = false"
       @click.capture="preventPanClick"
       @contextmenu.prevent
+      @focusin="onWallFocus"
+      @focusout="
+        focusedCaseId = null;
+        focusedShelfId = null;
+      "
     >
       <div
         v-if="arrangement && !loading"
@@ -1278,6 +1370,10 @@ const lastOtherBookcaseId = computed(
           :adjustments="adjustments"
           :matches="matches"
           :books-by-id="byId"
+          :render-books="visibleCaseIds.has(bookcase.id)"
+          :floor-top="floorTop"
+          :viewport-height="viewportHeight"
+          :focused-shelf-id="focusedShelfId"
           :moving-shelf-id="drag?.moved ? drag.shelfId : null"
           :moving-book-id="drag?.moved ? drag.bookId : null"
           :resize-shelf-id="

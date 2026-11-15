@@ -22,6 +22,10 @@ const props = defineProps<{
   adjustments: string[];
   matches: Set<string>;
   booksById: Map<string, BookViewBook>;
+  renderBooks: boolean;
+  floorTop: number;
+  viewportHeight: number;
+  focusedShelfId: string | null;
   movingShelfId: string | null;
   movingBookId: string | null;
   resizeShelfId: string | null;
@@ -48,6 +52,28 @@ const emit = defineEmits<{
 }>();
 function bookFor(id: string): BookViewBook {
   return props.booksById.get(id) ?? { id, title: 'Unavailable book' };
+}
+const shelfOffsets = computed(() => {
+  let total = 0;
+  const offsets = props.bookcase.shelves.map((shelf) => {
+    const offset = total;
+    total += shelf.height;
+    return offset;
+  });
+  return { total, offsets };
+});
+function renderShelf(shelfIndex: number) {
+  const shelf = props.bookcase.shelves[shelfIndex];
+  if (!shelf) return false;
+  if (props.movingShelfId === shelf.id || props.focusedShelfId === shelf.id)
+    return true;
+  if (!props.renderBooks) return false;
+  const top =
+    props.floorTop -
+    (shelfOffsets.value.total - (shelfOffsets.value.offsets[shelfIndex] ?? 0)) *
+      props.scale;
+  const bottom = top + shelf.height * props.scale;
+  return bottom >= -600 && top <= props.viewportHeight + 600;
 }
 </script>
 
@@ -93,7 +119,7 @@ function bookFor(id: string): BookViewBook {
         }"
       >
         <div
-          v-for="item in shelf.items"
+          v-for="item in renderShelf(shelfIndex) ? shelf.items : []"
           :key="item.books[0]?.id"
           class="shelf-item"
           :class="{
@@ -112,6 +138,7 @@ function bookFor(id: string): BookViewBook {
             :key="book.id"
             type="button"
             class="spine-button"
+            :data-book-id="book.id"
             :class="{
               selected: selected === book.id,
               needs: adjustments.includes(book.id),

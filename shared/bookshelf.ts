@@ -18,7 +18,14 @@ export type ShelfItem = { x: number; horizontal: boolean; books: ShelfBook[] };
 export type Shelf = { id: string; height: number; items: ShelfItem[] };
 export type Bookcase = { id: string; width: number; shelves: Shelf[] };
 export type Bookshelf = { bookcases: Bookcase[] };
-export type ShelfCatalogBook = { id: string; pages?: number | null };
+export type ShelfCatalogBook = {
+  id: string;
+  pages?: number | null;
+  dimensions?: Pick<
+    ShelfBook,
+    'width' | 'height' | 'manualWidth' | 'manualHeight' | 'sourcePages'
+  > | null;
+};
 
 export function itemWidth(item: ShelfItem): number {
   return Math.max(
@@ -303,14 +310,24 @@ export function reconcileBookshelf(
   );
   for (const catalogBook of catalog) {
     if (found.has(catalogBook.id)) continue;
-    const newBook: ShelfBook = {
-      id: catalogBook.id,
-      width: estimatedWidth(normalizedPages(catalogBook.pages)),
-      height: stableHeight(catalogBook.id),
-      manualWidth: false,
-      manualHeight: false,
-      sourcePages: normalizedPages(catalogBook.pages),
-    };
+    const newBook: ShelfBook = catalogBook.dimensions
+      ? {
+          id: catalogBook.id,
+          ...catalogBook.dimensions,
+        }
+      : {
+          id: catalogBook.id,
+          width: estimatedWidth(normalizedPages(catalogBook.pages)),
+          height: stableHeight(catalogBook.id),
+          manualWidth: false,
+          manualHeight: false,
+          sourcePages: normalizedPages(catalogBook.pages),
+        };
+    const pages = normalizedPages(catalogBook.pages);
+    if (!newBook.manualWidth && newBook.sourcePages !== pages) {
+      newBook.width = estimatedWidth(pages);
+      newBook.sourcePages = pages;
+    }
     const item: ShelfItem = { x: 2, horizontal: false, books: [newBook] };
     let { shelf, bookcase } = shelves[appendIndex]!;
     let lastX = Math.max(

@@ -130,6 +130,7 @@ export default defineEventHandler(async (event) => {
   // - status=<csv> optional (e.g. "reading,to_be_read,none")
   // - files=<has|none> optional
   // - title=<text> optional case-insensitive title substring
+  // - idsOnly=1 returns matching IDs without book metadata (limit up to 20,000)
   const q = getQuery(event) as {
     collectionId?: string;
     limit?: string;
@@ -144,11 +145,17 @@ export default defineEventHandler(async (event) => {
     physical?: string;
     audiobook?: string;
     title?: string;
+    idsOnly?: string;
   };
 
   const collectionId = q.collectionId;
   // Allow smaller page sizes for dev/testing (small libraries, observer/manual pagination verification).
-  const limit = clampInt(q.limit, { min: 1, max: 200, fallback: 48 });
+  const idsOnly = q.idsOnly === '1';
+  const limit = clampInt(q.limit, {
+    min: 1,
+    max: idsOnly ? 20000 : 200,
+    fallback: 48,
+  });
 
   const sort = normalizeSortKey(q.sort);
   const sortDir = normalizeSortDir(q.sortDir, sort);
@@ -413,6 +420,18 @@ export default defineEventHandler(async (event) => {
     const rows = pageRows
       .map((r) => r.book)
       .filter((b): b is NonNullable<(typeof books)['$inferSelect']> => !!b);
+
+    if (idsOnly) {
+      const hasMore = rows.length > limit;
+      const page = hasMore ? rows.slice(0, limit) : rows;
+      return {
+        success: true,
+        data: {
+          books: page.map(({ id }) => ({ id })),
+          nextCursor: nextBookCursor(sort, hasMore, page[page.length - 1]),
+        },
+      };
+    }
 
     const bookIds = rows.map((b) => b.id).filter(Boolean);
 
