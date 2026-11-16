@@ -4,12 +4,54 @@ import {
   parseSpineEdits,
   type SpineEdits,
 } from '~~/shared/spine-artwork';
+import type { SeriesSpineReference } from '~~/shared/spine-series-references';
 const props = defineProps<{
   bookId: string;
   hasCover: boolean;
   coverPending: boolean;
+  open: boolean;
   disabled?: boolean;
 }>();
+const emit = defineEmits<{ close: [] }>();
+const dialog = ref<HTMLElement | null>(null);
+const closeButton = ref<HTMLButtonElement | null>(null);
+let previousFocus: HTMLElement | null = null;
+watch(
+  () => props.open,
+  async (open) => {
+    if (open) {
+      previousFocus =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+      await nextTick();
+      closeButton.value?.focus();
+    } else {
+      previousFocus?.focus();
+      previousFocus = null;
+    }
+  },
+  { flush: 'sync' },
+);
+function trapFocus(event: KeyboardEvent) {
+  if (event.key !== 'Tab') return;
+  const controls = Array.from(
+    dialog.value?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]):not([type="file"]), textarea:not([disabled]), [tabindex="0"]',
+    ) ?? [],
+  ).filter((element) => element.getClientRects().length > 0);
+  if (!controls.length) return;
+  const index = controls.findIndex(
+    (element) => element === document.activeElement,
+  );
+  if (event.shiftKey && index <= 0) {
+    event.preventDefault();
+    controls.at(-1)?.focus();
+  } else if (!event.shiftKey && (index < 0 || index === controls.length - 1)) {
+    event.preventDefault();
+    controls[0]?.focus();
+  }
+}
 const picker = ref<HTMLInputElement | null>(null);
 const file = ref<File | null>(null);
 const fileUrl = ref<string | null>(null);
@@ -24,6 +66,33 @@ const dimensions = ref<{ width: number; height: number } | null>(null);
 const connection = ref(false);
 const generated = ref(false);
 const instructions = ref('');
+const zoom = ref(100);
+const cropMode = ref(false);
+const cropCanvas = ref<HTMLElement | null>(null);
+const seriesSpines = ref<SeriesSpineReference[]>([]);
+const selectedSeriesIds = ref<string[]>([]);
+const referencesLoading = ref(true);
+const referencesError = ref(false);
+type CropEdge = 'left' | 'right' | 'top' | 'bottom';
+const cropHandles: { name: string; edges: CropEdge[] }[] = [
+  { name: 'top-left', edges: ['top', 'left'] },
+  { name: 'top', edges: ['top'] },
+  { name: 'top-right', edges: ['top', 'right'] },
+  { name: 'right', edges: ['right'] },
+  { name: 'bottom-right', edges: ['bottom', 'right'] },
+  { name: 'bottom', edges: ['bottom'] },
+  { name: 'bottom-left', edges: ['bottom', 'left'] },
+  { name: 'left', edges: ['left'] },
+];
+let drag: {
+  pointerId: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  initial: SpineEdits;
+  edges: CropEdge[];
+} | null = null;
 let selection = 0;
 const connectionUrl = computed(
   () =>
@@ -52,6 +121,26 @@ const aspect = computed(() => {
     (size.height * (100 - edits.value.top - edits.value.bottom))
   );
 });
+const sourceAspect = computed(() =>
+  dimensions.value ? dimensions.value.width / dimensions.value.height : 1 / 3,
+);
+const displayAspect = computed(() =>
+  cropMode.value ? sourceAspect.value : aspect.value,
+);
+const displayWidth = computed(() =>
+  Math.max(
+    1,
+    (Math.min(cropMode.value ? 240 : 150, 450 * displayAspect.value) *
+      zoom.value) /
+      100,
+  ),
+);
+const cropBoxStyle = computed(() => ({
+  left: `${edits.value.left}%`,
+  right: `${edits.value.right}%`,
+  top: `${edits.value.top}%`,
+  bottom: `${edits.value.bottom}%`,
+}));
 const previewStyle = computed(() => {
   const cropWidth = 100 - edits.value.left - edits.value.right;
   const cropHeight = 100 - edits.value.top - edits.value.bottom;
@@ -62,6 +151,17 @@ const previewStyle = computed(() => {
     height: `${10000 / cropHeight}%`,
   };
 });
+function zoomWithWheel(event: WheelEvent) {
+  if (event.shiftKey || !source.value || !event.deltaY) return;
+  event.preventDefault();
+  const delta =
+    event.deltaY *
+    (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 400 : 1);
+  zoom.value = Math.max(
+    50,
+    Math.min(800, zoom.value * Math.exp(-delta * 0.002)),
+  );
+}
 function clearFile() {
   if (fileUrl.value) URL.revokeObjectURL(fileUrl.value);
   fileUrl.value = null;
@@ -75,6 +175,85 @@ function reset() {
   removePending.value = false;
   error.value = '';
   generated.value = false;
+  cropMode.value = false;
+}
+function adjustCrop(
+  initial: SpineEdits,
+  edges: CropEdge[],
+  dx: number,
+  dy: number,
+) {
+  const next = { ...initial };
+  const clamp = (value: number, opposite: number) =>
+    Math.max(0, Math.min(90, 95 - opposite, Math.round(value)));
+  if (edges.includes('left'))
+    next.left = clamp(initial.left + dx, initial.right);
+  if (edges.includes('right'))
+    next.right = clamp(initial.right - dx, initial.left);
+  if (edges.includes('top')) next.top = clamp(initial.top + dy, initial.bottom);
+  if (edges.includes('bottom'))
+    next.bottom = clamp(initial.bottom - dy, initial.top);
+  edits.value = next;
+}
+function startCrop(event: PointerEvent, edges: CropEdge[]) {
+  if (event.button !== 0 || props.disabled || busy.value || !cropCanvas.value)
+    return;
+  const rect = cropCanvas.value.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  drag = {
+    pointerId: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+    width: rect.width,
+    height: rect.height,
+    initial: { ...edits.value },
+    edges,
+  };
+  cropCanvas.value.setPointerCapture(event.pointerId);
+  event.preventDefault();
+}
+function moveCrop(event: PointerEvent) {
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  adjustCrop(
+    drag.initial,
+    drag.edges,
+    ((event.clientX - drag.x) * 100) / drag.width,
+    ((event.clientY - drag.y) * 100) / drag.height,
+  );
+}
+function stopCrop(event: PointerEvent) {
+  if (drag?.pointerId === event.pointerId) drag = null;
+}
+function keyCrop(event: KeyboardEvent, edges: CropEdge[]) {
+  const amount = event.shiftKey ? 5 : 1;
+  const dx =
+    event.key === 'ArrowRight'
+      ? amount
+      : event.key === 'ArrowLeft'
+        ? -amount
+        : 0;
+  const dy =
+    event.key === 'ArrowDown' ? amount : event.key === 'ArrowUp' ? -amount : 0;
+  if ((!dx && !dy) || props.disabled || busy.value) return;
+  event.preventDefault();
+  adjustCrop(edits.value, edges, dx, dy);
+}
+async function loadSeriesSpines() {
+  referencesLoading.value = true;
+  referencesError.value = false;
+  try {
+    const refs = await $fetch<SeriesSpineReference[]>(
+      `/api/books/${encodeURIComponent(props.bookId)}/spine-generate/series-references`,
+    );
+    seriesSpines.value = refs;
+    selectedSeriesIds.value = refs.map((item) => item.bookId);
+  } catch {
+    seriesSpines.value = [];
+    selectedSeriesIds.value = [];
+    referencesError.value = true;
+  } finally {
+    referencesLoading.value = false;
+  }
 }
 async function loadConnection() {
   try {
@@ -162,6 +341,14 @@ async function generate() {
   try {
     const body = new FormData();
     body.append('prompt', instructions.value);
+    body.append(
+      'seriesReferences',
+      JSON.stringify(
+        seriesSpines.value
+          .filter((item) => selectedSeriesIds.value.includes(item.bookId))
+          .map(({ bookId, revision }) => ({ bookId, revision })),
+      ),
+    );
     if (generated.value && file.value) body.append('previous', file.value);
     const blob = await $fetch<Blob>(
       `/api/books/${encodeURIComponent(props.bookId)}/spine-generate`,
@@ -258,242 +445,444 @@ async function save() {
 onMounted(() => {
   load();
   loadConnection();
+  loadSeriesSpines();
 });
 onBeforeUnmount(() => {
   selection++;
   clearFile();
 });
-defineExpose({ save, reset, busy, generating });
+defineExpose({
+  save,
+  reset,
+  busy,
+  generating,
+  source,
+  previewStyle,
+  aspect,
+  imageLoaded,
+});
 </script>
 
 <template>
-  <section class="spine-editor" aria-label="Spine artwork">
-    <h2>Spine artwork</h2>
-    <p v-if="error" role="alert" class="spine-error">
-      {{ error }}
-      <button v-if="!changed && !busy" type="button" @click="load">
-        Retry
-      </button>
-    </p>
-    <input
-      ref="picker"
-      type="file"
-      class="hidden"
-      accept="image/jpeg,image/png,image/webp,image/avif"
-      :disabled="disabled || busy"
-      @change="chooseFile"
-    />
-    <div class="preview-stage" :class="{ empty: !source }">
-      <div v-if="generating" class="generation-overlay" role="status">
-        <Icon
-          name="lucide:loader-circle"
-          class="text-3xl motion-safe:animate-spin"
-          aria-hidden="true"
-        />
-        <span>Generating spine…</span>
-      </div>
-      <template v-if="source">
-        <div
-          class="crop-preview"
-          :style="{
-            aspectRatio: String(aspect),
-            width: `min(90px, ${280 * aspect}px)`,
-          }"
-        >
-          <img
-            :src="source"
-            :style="previewStyle"
-            alt="Spine artwork preview"
-            @load="imageLoaded"
-            @error="error = 'Could not load the spine preview.'"
-          />
-        </div>
-        <span class="preview-label">Preview</span>
-      </template>
-      <template v-else>
-        <span class="empty-icon"
-          ><Icon name="lucide:image-plus" aria-hidden="true"
-        /></span>
-        <strong>{{
-          busy
-            ? 'Preparing preview…'
-            : error
-              ? 'Spine image unavailable'
-              : removePending
-                ? 'Spine will be removed'
-                : 'No spine image yet'
-        }}</strong>
-        <span>{{
-          busy
-            ? 'Just a moment.'
-            : error
-              ? 'Check the message above and try again.'
-              : removePending
-                ? 'Save to apply this change.'
-                : 'Add an image to make this book your own.'
-        }}</span>
-      </template>
-    </div>
-    <div class="actions">
-      <button
-        class="upload-action"
-        type="button"
-        :disabled="disabled || busy"
-        @click="picker?.click()"
-      >
-        <Icon name="lucide:image-up" aria-hidden="true" />
-        {{ source ? 'Replace image' : 'Upload spine' }}
-      </button>
-      <button
-        v-if="source"
-        type="button"
-        :disabled="disabled || busy"
-        @click="
-          removePending = true;
-          clearFile();
-        "
-      >
-        <Icon name="lucide:trash-2" aria-hidden="true" /> Remove
-      </button>
-      <button
-        v-if="changed"
-        class="undo-action"
-        type="button"
-        :disabled="disabled || busy"
-        @click="reset"
-      >
-        Undo changes
-      </button>
-    </div>
-    <div class="generation">
-      <div class="controls-heading">
+  <ModalWindow :open="open" :width-full="true" @close="emit('close')">
+    <section
+      ref="dialog"
+      class="spine-editor"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="spine-dialog-title"
+      @keydown="trapFocus"
+    >
+      <header class="spine-dialog-header">
         <div>
-          <h3>Generate a spine</h3>
-          <p>
-            Experimental · Uses the saved cover and the connected ChatGPT
-            account.
-          </p>
+          <h2 id="spine-dialog-title">Edit spine</h2>
+          <p>Changes apply when you save the book.</p>
         </div>
-        <Icon name="lucide:sparkles" aria-hidden="true" />
-      </div>
-      <p v-if="!connection" class="generation-note">
-        Spine generation is not configured. Ask an administrator to connect
-        ChatGPT in Admin settings.
-      </p>
-      <template v-else>
-        <label class="generation-label"
-          >{{
-            generated
-              ? 'How should the preview change?'
-              : 'Extra instructions (optional)'
-          }}<textarea
-            v-model="instructions"
-            maxlength="2000"
-            rows="3"
-            :disabled="disabled || busy"
-            placeholder="For example, make the title larger"
-          />
-        </label>
-        <div class="actions">
-          <button
-            class="generate-action"
-            type="button"
-            :disabled="disabled || busy || !hasCover || coverPending"
-            @click="generate"
+        <button
+          ref="closeButton"
+          type="button"
+          aria-label="Close spine editor"
+          @click="emit('close')"
+        >
+          <Icon name="lucide:x" aria-hidden="true" />
+        </button>
+      </header>
+      <div class="spine-layout">
+        <div class="spine-preview-column">
+          <div
+            class="preview-stage"
+            :class="{ empty: !source }"
+            @wheel="zoomWithWheel"
           >
-            <Icon
-              :name="generating ? 'lucide:loader-circle' : 'lucide:sparkles'"
-              :class="{ 'motion-safe:animate-spin': generating }"
-              aria-hidden="true"
-            />
-            {{
-              busy
-                ? 'Generating…'
-                : generated
-                  ? 'Update preview'
-                  : 'Generate preview'
-            }}
-          </button>
+            <div v-if="generating" class="generation-overlay" role="status">
+              <Icon
+                name="lucide:loader-circle"
+                class="text-3xl motion-safe:animate-spin"
+                aria-hidden="true"
+              />
+              <span>Generating spine…</span>
+            </div>
+            <template v-if="source">
+              <div
+                class="preview-viewport"
+                tabindex="0"
+                aria-label="Spine image viewport"
+              >
+                <div
+                  v-if="cropMode"
+                  ref="cropCanvas"
+                  class="crop-canvas"
+                  :style="{
+                    aspectRatio: String(sourceAspect),
+                    width: `${displayWidth}px`,
+                  }"
+                  @pointermove="moveCrop"
+                  @pointerup="stopCrop"
+                  @pointercancel="stopCrop"
+                >
+                  <img
+                    :src="source"
+                    alt="Spine image with crop handles"
+                    @load="imageLoaded"
+                    @error="error = 'Could not load the spine preview.'"
+                  />
+                  <div class="crop-selection" :style="cropBoxStyle">
+                    <button
+                      v-for="handle in cropHandles"
+                      :key="handle.name"
+                      type="button"
+                      class="crop-handle"
+                      :class="`handle-${handle.name}`"
+                      :aria-label="`Drag ${handle.name} crop handle`"
+                      :disabled="disabled || busy"
+                      @pointerdown="startCrop($event, handle.edges)"
+                      @keydown="keyCrop($event, handle.edges)"
+                    />
+                  </div>
+                </div>
+                <div
+                  v-else
+                  class="crop-preview"
+                  :style="{
+                    aspectRatio: String(aspect),
+                    width: `${displayWidth}px`,
+                  }"
+                >
+                  <img
+                    :src="source"
+                    :style="previewStyle"
+                    alt="Spine artwork preview"
+                    @load="imageLoaded"
+                    @error="error = 'Could not load the spine preview.'"
+                  />
+                </div>
+              </div>
+              <span class="preview-label">{{
+                cropMode ? 'Drag handles to crop' : 'Preview'
+              }}</span>
+            </template>
+            <template v-else>
+              <span class="empty-icon"
+                ><Icon name="lucide:image-plus" aria-hidden="true"
+              /></span>
+              <strong>{{
+                busy
+                  ? 'Preparing preview…'
+                  : error
+                    ? 'Spine image unavailable'
+                    : removePending
+                      ? 'Spine will be removed'
+                      : 'No spine image yet'
+              }}</strong>
+              <span>{{
+                busy
+                  ? 'Just a moment.'
+                  : error
+                    ? 'Check the message above and try again.'
+                    : removePending
+                      ? 'Save to apply this change.'
+                      : 'Add an image to make this book your own.'
+              }}</span>
+            </template>
+          </div>
+          <div v-if="source" class="preview-tools">
+            <button
+              type="button"
+              :disabled="disabled || busy"
+              @click="cropMode = !cropMode"
+            >
+              {{ cropMode ? 'Done cropping' : 'Crop image' }}
+            </button>
+            <div class="zoom-controls" aria-label="Spine preview zoom">
+              <button
+                type="button"
+                aria-label="Zoom out"
+                :disabled="zoom <= 50"
+                @click="zoom = Math.max(50, zoom - 25)"
+              >
+                <Icon name="lucide:minus" aria-hidden="true" />
+              </button>
+              <button type="button" aria-label="Reset zoom" @click="zoom = 100">
+                {{ Math.round(zoom) }}%
+              </button>
+              <button
+                type="button"
+                aria-label="Zoom in"
+                :disabled="zoom >= 800"
+                @click="zoom = Math.min(800, zoom + 25)"
+              >
+                <Icon name="lucide:plus" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
         </div>
-        <p v-if="!hasCover" class="generation-note">
-          Add and save a cover before generating a spine.
-        </p>
-        <p v-else-if="coverPending" class="generation-note">
-          Save your cover change before generating a spine.
-        </p>
-        <p class="generation-note">
-          {{
-            generated
-              ? 'Your current preview and the saved cover will be sent to ChatGPT.'
-              : 'The saved cover will be sent to ChatGPT. Save a new cover first if you want to use it.'
-          }}
-          Preview the result and save the book to apply it.
-        </p>
-      </template>
-    </div>
-    <div v-if="source" class="crop-controls">
-      <div class="controls-heading">
-        <div>
-          <h3>Adjust image</h3>
-          <p>Crop the edges to fit your spine.</p>
+        <div class="spine-control-column">
+          <p v-if="error" role="alert" class="spine-error">
+            {{ error }}
+            <button v-if="!changed && !busy" type="button" @click="load">
+              Retry
+            </button>
+          </p>
+          <input
+            ref="picker"
+            type="file"
+            class="hidden"
+            accept="image/jpeg,image/png,image/webp,image/avif"
+            :disabled="disabled || busy"
+            @change="chooseFile"
+          />
+          <div class="actions">
+            <button
+              class="upload-action"
+              type="button"
+              :disabled="disabled || busy"
+              @click="picker?.click()"
+            >
+              <Icon name="lucide:image-up" aria-hidden="true" />
+              {{ source ? 'Replace image' : 'Upload spine' }}
+            </button>
+            <button
+              v-if="source"
+              type="button"
+              :disabled="disabled || busy"
+              @click="
+                removePending = true;
+                clearFile();
+              "
+            >
+              <Icon name="lucide:trash-2" aria-hidden="true" /> Remove
+            </button>
+            <button
+              v-if="changed"
+              class="undo-action"
+              type="button"
+              :disabled="disabled || busy"
+              @click="reset"
+            >
+              Undo changes
+            </button>
+          </div>
+          <div class="generation">
+            <div class="controls-heading">
+              <div>
+                <h3>Generate a spine</h3>
+                <p>
+                  Experimental · Uses the saved cover and the connected ChatGPT
+                  account.
+                </p>
+              </div>
+              <Icon name="lucide:sparkles" aria-hidden="true" />
+            </div>
+            <p v-if="!connection" class="generation-note">
+              Spine generation is not configured. Ask an administrator to
+              connect ChatGPT in Admin settings.
+            </p>
+            <template v-else>
+              <div v-if="referencesLoading" class="generation-note">
+                Looking for other spines in the saved series…
+              </div>
+              <div v-else-if="referencesError" class="generation-note">
+                Could not load series spines.
+                <button
+                  type="button"
+                  class="reference-retry"
+                  @click="loadSeriesSpines"
+                >
+                  Try again</button
+                >, or generate without them.
+              </div>
+              <fieldset
+                v-else-if="seriesSpines.length"
+                class="series-references"
+              >
+                <legend>Match other spines in this series</legend>
+                <p>
+                  Selected spines from the saved series will be sent to ChatGPT
+                  as visual references.
+                </p>
+                <label
+                  v-for="item in seriesSpines"
+                  :key="item.bookId"
+                  class="series-reference"
+                >
+                  <input
+                    v-model="selectedSeriesIds"
+                    type="checkbox"
+                    :value="item.bookId"
+                    :disabled="disabled || busy"
+                  />
+                  <img
+                    :src="`/api/books/${encodeURIComponent(item.bookId)}/spine?v=${encodeURIComponent(item.revision)}`"
+                    alt=""
+                  />
+                  <span
+                    >{{ item.title
+                    }}<small v-if="item.seriesIndex !== null"
+                      >Book {{ item.seriesIndex }}</small
+                    ></span
+                  >
+                </label>
+                <button
+                  type="button"
+                  class="reference-retry"
+                  :disabled="disabled || busy"
+                  @click="loadSeriesSpines"
+                >
+                  Refresh series spines
+                </button>
+              </fieldset>
+              <label class="generation-label"
+                >{{
+                  generated
+                    ? 'How should the preview change?'
+                    : 'Extra instructions (optional)'
+                }}<textarea
+                  v-model="instructions"
+                  maxlength="2000"
+                  rows="3"
+                  :disabled="disabled || busy"
+                  placeholder="For example, make the title larger"
+                />
+              </label>
+              <div class="actions">
+                <button
+                  class="generate-action"
+                  type="button"
+                  :disabled="
+                    disabled ||
+                    busy ||
+                    !hasCover ||
+                    coverPending ||
+                    referencesLoading
+                  "
+                  @click="generate"
+                >
+                  <Icon
+                    :name="
+                      generating ? 'lucide:loader-circle' : 'lucide:sparkles'
+                    "
+                    :class="{ 'motion-safe:animate-spin': generating }"
+                    aria-hidden="true"
+                  />
+                  {{
+                    busy
+                      ? 'Generating…'
+                      : generated
+                        ? 'Update preview'
+                        : 'Generate preview'
+                  }}
+                </button>
+              </div>
+              <p v-if="!hasCover" class="generation-note">
+                Add and save a cover before generating a spine.
+              </p>
+              <p v-else-if="coverPending" class="generation-note">
+                Save your cover change before generating a spine.
+              </p>
+              <p class="generation-note">
+                {{
+                  generated
+                    ? 'Your current preview and the saved cover will be sent to ChatGPT.'
+                    : 'The saved cover will be sent to ChatGPT. Save a new cover first if you want to use it.'
+                }}
+                Preview the result and save the book to apply it.
+              </p>
+            </template>
+          </div>
+          <div class="editor-footer">
+            <p>JPEG, PNG, WebP or AVIF · Up to 10 MB</p>
+            <p>
+              {{
+                changed
+                  ? 'Save the book to apply these changes.'
+                  : 'Your original image is kept for later edits.'
+              }}
+            </p>
+          </div>
         </div>
-        <Icon name="lucide:crop" aria-hidden="true" />
       </div>
-      <label
-        v-for="edge in ['left', 'right', 'top', 'bottom'] as const"
-        :key="edge"
-        class="crop-control"
-      >
-        <span class="crop-label"
-          ><span>{{ edge }}</span
-          ><output>{{ edits[edge] }}%</output></span
-        >
-        <input
-          v-model.number="edits[edge]"
-          type="range"
-          min="0"
-          :max="
-            Math.min(
-              90,
-              95 -
-                edits[
-                  edge === 'left'
-                    ? 'right'
-                    : edge === 'right'
-                      ? 'left'
-                      : edge === 'top'
-                        ? 'bottom'
-                        : 'top'
-                ],
-            )
-          "
-          :disabled="disabled || busy"
-        />
-      </label>
-    </div>
-    <div class="editor-footer">
-      <p>JPEG, PNG, WebP or AVIF · Up to 10 MB</p>
-      <p>
-        {{
-          changed
-            ? 'Save the book to apply these changes.'
-            : 'Your original image is kept for later edits.'
-        }}
-      </p>
-    </div>
-  </section>
+      <div class="spine-dialog-footer">
+        <button type="button" @click="emit('close')">Done</button>
+      </div>
+    </section>
+  </ModalWindow>
 </template>
 
 <style scoped>
 .spine-editor {
   width: 100%;
-  margin-top: 24px;
-  padding: 16px;
-  border: 1px solid
-    color-mix(in srgb, var(--contrast-border-color) 50%, transparent);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--sub-alt-color) 42%, var(--bg-color));
+  height: min(760px, calc(100dvh - 4rem));
+  max-height: calc(100dvh - 4rem);
+  display: flex;
+  flex-direction: column;
   color: var(--contrast-text-color);
+}
+.spine-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--contrast-border-color);
+}
+.spine-dialog-header h2 {
+  font-size: 20px;
+}
+.spine-dialog-header p {
+  margin-top: 3px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+.spine-dialog-header button {
+  padding: 4px;
+  font-size: 20px;
+}
+.spine-layout {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 20px;
+  min-height: 0;
+  overflow: hidden;
+}
+.spine-preview-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.spine-control-column {
+  padding: 4px 3px 12px;
+  overflow: auto;
+}
+.spine-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid var(--contrast-border-color);
+}
+.spine-dialog-footer button {
+  padding: 8px 16px;
+  border-radius: 7px;
+  background: var(--main-color);
+  color: var(--contrast-inverse-color);
+}
+@media (max-width: 640px) {
+  .spine-editor {
+    height: auto;
+  }
+  .spine-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    gap: 0;
+    overflow: auto;
+  }
+  .spine-preview-column {
+    height: min(500px, max(240px, calc(100dvh - 14rem)));
+  }
+  .spine-control-column {
+    overflow: visible;
+  }
 }
 .empty-icon {
   display: grid;
@@ -506,7 +895,6 @@ defineExpose({ save, reset, busy, generating });
   background: color-mix(in srgb, var(--main-color) 12%, var(--bg-color));
   font-size: 18px;
 }
-.spine-editor h2,
 .controls-heading h3 {
   color: var(--contrast-main-color);
   font-size: 14px;
@@ -535,7 +923,8 @@ defineExpose({ save, reset, busy, generating });
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 188px;
+  flex: 1;
+  min-height: 0;
   gap: 9px;
   margin-top: 16px;
   padding: 20px 14px 14px;
@@ -580,10 +969,18 @@ defineExpose({ save, reset, busy, generating });
   width: 42px;
   height: 42px;
 }
-.crop-preview {
+.preview-viewport {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  overflow: auto;
+}
+.crop-preview,
+.crop-canvas {
   position: relative;
-  max-width: 100%;
-  max-height: 280px;
+  flex: none;
+  margin: auto;
   overflow: hidden;
   border-radius: 3px;
   background: var(--sub-alt-color);
@@ -593,6 +990,96 @@ defineExpose({ save, reset, busy, generating });
   position: absolute;
   max-width: none;
   object-fit: fill;
+}
+.crop-canvas img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+.crop-selection {
+  position: absolute;
+  border: 2px solid white;
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 55%);
+}
+.crop-handle {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border: 2px solid #222;
+  border-radius: 50%;
+  background: white;
+  touch-action: none;
+}
+.handle-top-left {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+.handle-top {
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+}
+.handle-top-right {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+}
+.handle-right {
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  cursor: ew-resize;
+}
+.handle-bottom-right {
+  bottom: 0;
+  right: 0;
+  cursor: nwse-resize;
+}
+.handle-bottom {
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+}
+.handle-bottom-left {
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
+}
+.handle-left {
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  cursor: ew-resize;
+}
+.preview-tools,
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.preview-tools {
+  justify-content: space-between;
+  margin: 10px 0 12px;
+}
+.preview-tools button {
+  min-height: 32px;
+  padding: 5px 8px;
+  border: 1px solid var(--contrast-border-color);
+  border-radius: 7px;
+  background: var(--bg-color);
+  font-size: 12px;
+}
+.preview-tools button:disabled {
+  opacity: 0.5;
+}
+.zoom-controls button {
+  min-width: 32px;
 }
 .preview-label {
   font-size: 11px;
@@ -665,6 +1152,37 @@ defineExpose({ save, reset, busy, generating });
   background: var(--bg-color);
   resize: vertical;
 }
+.series-references {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+  font-size: 12px;
+}
+.series-references legend {
+  font-weight: 650;
+}
+.series-references p {
+  opacity: 0.75;
+}
+.series-reference {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.series-reference img {
+  width: 20px;
+  height: 50px;
+  object-fit: contain;
+  background: var(--bg-color);
+}
+.series-reference small {
+  display: block;
+  opacity: 0.7;
+}
+.reference-retry {
+  text-decoration: underline;
+  text-align: left;
+}
 .generation-note {
   margin-top: 10px;
   font-size: 12px;
@@ -675,41 +1193,6 @@ defineExpose({ save, reset, busy, generating });
 .spine-editor :is(button, input):focus-visible {
   outline: 2px solid var(--contrast-main-color);
   outline-offset: 2px;
-}
-.crop-controls {
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid
-    color-mix(in srgb, var(--contrast-border-color) 40%, transparent);
-}
-.controls-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: var(--contrast-main-color);
-}
-.crop-control {
-  display: block;
-  margin-top: 12px;
-  font-size: 12px;
-}
-.crop-label {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-}
-.crop-label span {
-  text-transform: capitalize;
-}
-.crop-label output {
-  opacity: 0.75;
-  font-variant-numeric: tabular-nums;
-}
-.crop-control input {
-  display: block;
-  width: 100%;
-  margin-top: 5px;
-  accent-color: var(--main-color);
 }
 .editor-footer {
   display: grid;

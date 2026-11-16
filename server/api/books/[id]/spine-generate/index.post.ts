@@ -16,6 +16,8 @@ import { renderSpine } from '~~/server/utils/books/spine-image';
 import { defaultSpineEdits } from '~~/shared/spine-artwork';
 import { buildSpineGenerationPrompt } from '~~/shared/spine-generation-prompt';
 import { readSpineGenerationPrompt } from '~~/server/utils/spine-generation/prompt';
+import { parseSelectedSeriesSpines } from '~~/shared/spine-series-references';
+import { findSeriesSpines } from '~~/server/utils/books/series-spine-references';
 
 const maxBytes = 10 * 1024 * 1024;
 async function normalize(bytes: Buffer) {
@@ -123,6 +125,25 @@ export default defineEventHandler(async (event) => {
       ?.data.toString('utf8')
       .trim() ?? '';
   const previous = parts?.find((part) => part.name === 'previous')?.data;
+  let rawSeriesReferences: unknown;
+  try {
+    rawSeriesReferences = JSON.parse(
+      parts
+        ?.find((part) => part.name === 'seriesReferences')
+        ?.data.toString('utf8') ?? '[]',
+    );
+  } catch {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Invalid series references.',
+    });
+  }
+  const selectedSeriesSpines = parseSelectedSeriesSpines(rawSeriesReferences);
+  if (!selectedSeriesSpines)
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Invalid series references.',
+    });
   if (prompt.length > 2000)
     throw createError({
       statusCode: 400,
@@ -160,6 +181,21 @@ export default defineEventHandler(async (event) => {
     .where(eq(bookAuthors.bookId, bookId))
     .orderBy(bookAuthors.position);
   const { prompt: template } = await readSpineGenerationPrompt();
+  const seriesSpines = await findSeriesSpines(
+    session.user.id,
+    bookId,
+    selectedSeriesSpines,
+  );
+  try {
+    for (const spine of seriesSpines)
+      images.push(await normalize(Buffer.from(spine.imageBase64, 'base64')));
+  } catch {
+    throw createError({
+      statusCode: 400,
+      statusMessage:
+        'A selected series spine could not be used. Reload the references and try again.',
+    });
+  }
   const connection = await getConnection();
   await assertBookEditor(cloudDb, session.user.id, bookId);
   if (!(await isCurrentConnection(connection.generation)))
@@ -167,11 +203,13 @@ export default defineEventHandler(async (event) => {
       statusCode: 409,
       statusMessage: 'ChatGPT connection changed. Try again.',
     });
+  await findSeriesSpines(session.user.id, bookId, selectedSeriesSpines);
   const instructions = buildSpineGenerationPrompt({
     template,
     title: book.title,
     authors: bookAuthorRows.map((row) => row.name),
     hasPrevious: !!previous,
+    seriesReferenceCount: seriesSpines.length,
     instructions: prompt,
   });
   let image: Buffer;
@@ -246,6 +284,7 @@ export default defineEventHandler(async (event) => {
       statusCode: 409,
       statusMessage: 'ChatGPT connection changed. The preview was discarded.',
     });
+  await findSeriesSpines(session.user.id, bookId, selectedSeriesSpines);
   const currentCover = await resolveBookCoverFile({
     event,
     bookId,

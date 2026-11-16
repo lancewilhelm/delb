@@ -72,6 +72,8 @@ for (const [account, role] of [
 const created = await request('/api/books', owner, 'POST', {
   title: 'Spine fixture',
   authors: ['Sample Author'],
+  seriesName: 'Synthetic sequence',
+  seriesIndex: 2,
   collectionIds: [collection],
 });
 assert.equal(created.status, 200, await created.clone().text());
@@ -171,6 +173,90 @@ const upload = new FormData();
 upload.append('file', new Blob([cover], { type: 'image/png' }), 'cover.png');
 response = await request(`/api/books/${id}/cover`, editor, 'POST', upload);
 assert.equal(response.status, 200, await response.clone().text());
+async function makeSeriesSpine(account, collectionId, title, index, color) {
+  const bookResponse = await request('/api/books', account, 'POST', {
+    title,
+    authors: ['Sample Author'],
+    seriesName: 'Synthetic sequence',
+    seriesIndex: index,
+    collectionIds: [collectionId],
+  });
+  assert.equal(bookResponse.status, 200, await bookResponse.clone().text());
+  const bookId = (await bookResponse.json()).data.book.id;
+  const image = await sharp({
+    create: { width: 60, height: 180, channels: 3, background: color },
+  })
+    .png()
+    .toBuffer();
+  const form = new FormData();
+  form.append('file', new Blob([image], { type: 'image/png' }), 'spine.png');
+  form.append('revision', '');
+  form.append(
+    'edits',
+    JSON.stringify({ left: 0, right: 0, top: 0, bottom: 0, stretch: false }),
+  );
+  const saved = await request(
+    `/api/books/${bookId}/spine`,
+    account,
+    'POST',
+    form,
+  );
+  assert.equal(saved.status, 200, await saved.clone().text());
+  return { bookId, revision: (await saved.json()).revision };
+}
+const visibleSpine = await makeSeriesSpine(
+  owner,
+  collection,
+  'First visible volume',
+  1,
+  '#aa2233',
+);
+const secondSpine = await makeSeriesSpine(
+  owner,
+  collection,
+  'Third visible volume',
+  3,
+  '#2244aa',
+);
+const hiddenCollection = await request('/api/collections', outsider, 'POST', {
+  name: `Private ${suffix}`,
+});
+assert.equal(
+  hiddenCollection.status,
+  200,
+  await hiddenCollection.clone().text(),
+);
+const hiddenSpine = await makeSeriesSpine(
+  outsider,
+  (await hiddenCollection.json()).data.collection.id,
+  'Private volume',
+  4,
+  '#eeaa11',
+);
+const referencePath = `/api/books/${id}/spine-generate/series-references`;
+assert.equal((await request(referencePath, viewer)).status, 403);
+response = await request(referencePath, editor);
+assert.equal(response.status, 200, await response.clone().text());
+const refs = await response.json();
+assert.deepEqual(
+  refs.map((reference) => reference.bookId),
+  [visibleSpine.bookId, secondSpine.bookId],
+);
+const invalidRefs = new FormData();
+invalidRefs.append('seriesReferences', JSON.stringify([hiddenSpine]));
+assert.equal(
+  (await request(generation, editor, 'POST', invalidRefs)).status,
+  409,
+);
+const staleRefs = new FormData();
+staleRefs.append(
+  'seriesReferences',
+  JSON.stringify([{ ...visibleSpine, revision: 'stale' }]),
+);
+assert.equal(
+  (await request(generation, editor, 'POST', staleRefs)).status,
+  409,
+);
 const first = new FormData();
 first.append('prompt', 'Use gold lettering');
 response = await request(generation, editor, 'POST', first);
@@ -205,6 +291,7 @@ assert.equal(
 );
 const second = new FormData();
 second.append('prompt', 'Make the title larger');
+second.append('seriesReferences', JSON.stringify([visibleSpine, secondSpine]));
 second.append(
   'previous',
   new Blob([bytes], { type: 'image/png' }),
@@ -236,11 +323,12 @@ const calls = (
   .map(JSON.parse);
 assert.deepEqual(
   calls.map((c) => c.images),
-  [1, 2],
+  [1, 4],
 );
 assert.match(calls[0].prompt, /personal use/);
 assert.match(calls[0].prompt, /not for distribution/);
 assert.match(calls[1].prompt, /Make the title larger/);
+assert.match(calls[1].prompt, /spines of other books in this series/);
 assert.match(calls[1].prompt, /Favor gold embossing/);
 assert.match(calls[1].prompt, /Spine fixture/);
 assert.match(calls[1].prompt, /Sample Author/);
@@ -262,10 +350,65 @@ assert.ok(
     ).readFile('review/demo/fake-codex-refreshes.txt', 'utf8')
   ).includes('refresh'),
 );
+const sharedReferenceCollection = await request(
+  '/api/collections',
+  owner,
+  'POST',
+  { name: `Reference access ${suffix}` },
+);
+assert.equal(sharedReferenceCollection.status, 200);
+const referenceCollectionId = (await sharedReferenceCollection.json()).data
+  .collection.id;
+assert.equal(
+  (
+    await request(
+      `/api/collections/${referenceCollectionId}/members`,
+      owner,
+      'PUT',
+      {
+        email: editor.email,
+        role: 'viewer',
+      },
+    )
+  ).status,
+  200,
+);
+const revocableSpine = await makeSeriesSpine(
+  owner,
+  referenceCollectionId,
+  'Revocable reference',
+  2.5,
+  '#33aa66',
+);
+const revocable = new FormData();
+revocable.append('prompt', 'WAIT_FOR_PERMISSION REVOKE_REFERENCE');
+revocable.append('seriesReferences', JSON.stringify([revocableSpine]));
+const revocablePending = request(generation, editor, 'POST', revocable);
+const files = await import('node:fs/promises');
+for (let attempt = 0; attempt < 100; attempt++) {
+  if (
+    (
+      await files.readFile('review/demo/fake-codex-calls.jsonl', 'utf8')
+    ).includes('REVOKE_REFERENCE')
+  )
+    break;
+  await new Promise((resolve) => setTimeout(resolve, 20));
+}
+assert.ok(
+  (await files.readFile('review/demo/fake-codex-calls.jsonl', 'utf8')).includes(
+    'REVOKE_REFERENCE',
+  ),
+);
+response = await request(
+  `/api/collections/${referenceCollectionId}/members/${editor.id}`,
+  owner,
+  'DELETE',
+);
+assert.equal(response.status, 200, await response.clone().text());
+assert.equal((await revocablePending).status, 409);
 const delayed = new FormData();
 delayed.append('prompt', 'WAIT_FOR_PERMISSION');
 const pending = request(generation, editor, 'POST', delayed);
-const files = await import('node:fs/promises');
 for (let attempt = 0; attempt < 100; attempt++) {
   if (
     (

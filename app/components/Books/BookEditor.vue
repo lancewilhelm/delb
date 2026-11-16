@@ -266,11 +266,16 @@ const activeBookId = computed(() => currentBookId.value);
 
 const loading = ref(false);
 const saving = ref(false);
+const spineModalOpen = ref(false);
 const spineEditor = ref<{
   save: () => Promise<void>;
   reset: () => void;
   busy: boolean;
   generating: boolean;
+  source: string | null;
+  previewStyle: Record<string, string>;
+  aspect: number;
+  imageLoaded: (event: Event) => void;
 } | null>(null);
 const errorMessage = ref<string | null>(null);
 const successMessage = ref<string | null>(null);
@@ -1784,26 +1789,55 @@ watch(
         <div
           class="flex flex-col justify-center items-center w-full sm:w-80 shrink-0 self-center md:self-start"
         >
-          <div class="relative w-50 sm:w-full">
-            <BookCover
-              :src="coverPreviewUrl ?? coverSourceUrl"
-              :fallback-src="coverPreviewUrl ? null : coverThumbUrl"
-              :show-resolution="true"
-              :alt="`Cover for ${displayTitle}`"
-              :title="displayTitle"
-              class="w-full!"
-            />
+          <div class="relative w-50 sm:w-full flex items-stretch gap-1">
             <div
-              v-if="spineEditor?.generating"
-              aria-hidden="true"
-              class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-sm bg-black/65 text-sm font-medium text-white"
+              v-if="!isCreateMode && activeBookId"
+              class="edit-spine-preview relative shrink-0 overflow-hidden rounded-sm bg-(--sub-alt-color) shadow-md"
+              :style="{
+                width: `${Math.max(10, Math.min(45, ((spineEditor?.aspect ?? 1 / 3) / ((spineEditor?.aspect ?? 1 / 3) + 2 / 3)) * 100))}%`,
+              }"
+              :aria-label="
+                spineEditor?.source
+                  ? `Spine for ${displayTitle}`
+                  : 'No spine artwork'
+              "
             >
-              <Icon
-                name="lucide:loader-circle"
-                class="text-3xl motion-safe:animate-spin"
-                aria-hidden="true"
+              <img
+                v-if="spineEditor?.source"
+                :src="spineEditor.source"
+                :style="spineEditor.previewStyle"
+                alt=""
+                class="absolute max-w-none!"
+                @load="spineEditor?.imageLoaded($event)"
               />
-              <span>Generating spine…</span>
+              <div
+                v-else
+                class="absolute inset-0 flex items-center justify-center text-xs opacity-60 [writing-mode:vertical-rl] p-2"
+              >
+                {{ displayTitle || 'Spine' }}
+              </div>
+            </div>
+            <div class="relative min-w-0 flex-1">
+              <BookCover
+                :src="coverPreviewUrl ?? coverSourceUrl"
+                :fallback-src="coverPreviewUrl ? null : coverThumbUrl"
+                :show-resolution="true"
+                :alt="`Cover for ${displayTitle}`"
+                :title="displayTitle"
+                class="w-full!"
+              />
+              <div
+                v-if="spineEditor?.generating"
+                aria-hidden="true"
+                class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-sm bg-black/65 text-sm font-medium text-white"
+              >
+                <Icon
+                  name="lucide:loader-circle"
+                  class="text-3xl motion-safe:animate-spin"
+                  aria-hidden="true"
+                />
+                <span>Generating spine…</span>
+              </div>
             </div>
           </div>
 
@@ -1816,6 +1850,16 @@ watch(
           />
 
           <div class="flex flex-wrap gap-1 pt-2 justify-center">
+            <button
+              v-if="!isCreateMode && activeBookId"
+              class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60"
+              type="button"
+              :disabled="saving"
+              @click="spineModalOpen = true"
+            >
+              <Icon name="lucide:book-open" class="scale-125" />
+              Edit spine
+            </button>
             <button
               v-tooltip="'Upload cover from computer'"
               class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm gap-2! disabled:opacity-60 disabled:cursor-not-allowed"
@@ -1914,6 +1958,8 @@ watch(
             :has-cover="!!book?.coverImagePath"
             :cover-pending="!!selectedCoverFile || coverResetPending"
             :disabled="saving"
+            :open="spineModalOpen"
+            @close="spineModalOpen = false"
           />
         </div>
 

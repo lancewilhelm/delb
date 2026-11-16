@@ -23,14 +23,22 @@ export function buildSpineGenerationPrompt(options: {
   title: string;
   authors: string[];
   hasPrevious: boolean;
+  seriesReferenceCount: number;
   instructions: string;
 }): string {
   const values: Record<string, string> = {
     '{{title}}': JSON.stringify(options.title),
     '{{authors}}': JSON.stringify(options.authors),
-    '{{reference}}': options.hasPrevious
-      ? 'The second reference is the current spine draft; revise it according to the following instructions while retaining its design where possible.'
-      : 'Use the cover to match the visual style and colors.',
+    '{{reference}}': [
+      options.hasPrevious
+        ? 'The second reference is the current spine draft; revise it according to the following instructions while retaining its design where possible.'
+        : 'Use the cover to match the visual style and colors.',
+      options.seriesReferenceCount > 0
+        ? `The final ${options.seriesReferenceCount} reference image(s) are spines of other books in this series. Match their visual style, typography, layout, and color treatment while keeping the current book's own title, author, and cover identity.`
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' '),
     '{{instructions}}': options.instructions || 'Match the cover faithfully.',
   };
   return options.template.replace(

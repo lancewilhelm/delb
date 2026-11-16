@@ -12,6 +12,7 @@ test('the default template includes book details and the correct reference instr
     title: 'A title with {{authors}}',
     authors: ['An author'],
     hasPrevious: false,
+    seriesReferenceCount: 0,
     instructions: '',
   });
   assert.match(first, /A title with \{\{authors\}\}/);
@@ -23,9 +24,11 @@ test('the default template includes book details and the correct reference instr
     title: 'A title',
     authors: [],
     hasPrevious: true,
+    seriesReferenceCount: 2,
     instructions: 'Larger letters',
   });
   assert.match(update, /second reference is the current spine draft/);
+  assert.match(update, /final 2 reference image\(s\) are spines/);
   assert.match(update, /Additional instructions: Larger letters/);
 });
 
