@@ -46,7 +46,11 @@ Bookcases sit on one continuous floor. Hold the right mouse button or hold Space
 
 Delb saves the arrangement for everyone in the collection. If a save fails, use **Retry save**. If another editor has a newer arrangement, choose **Load newer arrangement** to discard your unsaved changes and load it. Books without spine artwork use a colored title and author placeholder. Artwork loads as you pan toward it.
 
-To add spine artwork, open a book and select **Edit book details**. Under **Spine artwork**, upload an image, adjust the crop and optional stretch, and select **Save**. Delb keeps the original upload so you can adjust it later. The spine appears to the left of the cover on the book detail page and on the bookshelf. Collection owners and editors can change or remove it; the artwork is shared with people who can access the book.
+To add spine artwork, open a book and select **Edit book details**. Under **Spine artwork**, upload an image, adjust the crop, and select **Save**. Delb keeps the original upload so you can adjust it later. The spine appears to the left of the cover on the book detail page and on the bookshelf. Collection owners and editors can change or remove it; the artwork is shared with people who can access the book.
+
+To change the gloss on spine artwork in the book detail page, use **Settings → Appearance → Cover Style → Spine gloss**. This personal setting is separate from **Cover gloss**.
+
+To generate a spine, an administrator must first connect a ChatGPT account under **Settings → Admin → Spine generation**. All book editors use that shared connection. The book must have a saved cover. Under **Spine artwork**, select **Generate preview**. Delb sends the saved cover and your instructions to OpenAI. To change the result, add instructions and select **Update preview**. Adjust the crop and select **Save** to share the result with the collection. Generation is experimental and depends on the connected account's access to the Codex image service. The image dimensions may differ from the requested shape.
 
 ## Make a personal Shelf
 

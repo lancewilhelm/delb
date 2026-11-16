@@ -1193,6 +1193,8 @@ const { copy } = useClipboard();
               :class="{
                 'rounded-r-2xl':
                   userSettingsStore.activeSettings.coverStyle.roundedRight,
+                'detail-spine-gloss':
+                  userSettingsStore.activeSettings.coverStyle.detailSpineGloss,
               }"
             >
               <img
@@ -2100,6 +2102,19 @@ const { copy } = useClipboard();
   width: 100%;
   height: 100%;
   object-fit: fill;
+}
+.detail-spine-gloss::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    rgb(0 0 0 / 20%) 0%,
+    rgb(255 255 255 / 16%) 14%,
+    transparent 42%,
+    rgb(0 0 0 / 12%) 100%
+  );
 }
 @media (min-width: 640px) {
   .detail-artwork {

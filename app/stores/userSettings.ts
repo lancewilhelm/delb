@@ -50,6 +50,7 @@ export interface BaseUserSettings {
   funboxModes: FunboxMode[];
   coverStyle: {
     glossySpine: boolean;
+    detailSpineGloss: boolean;
     roundedRight: boolean;
     grayscale: boolean;
     showReadingStatus: boolean;
@@ -136,6 +137,7 @@ function getBaseDefaults(): BaseUserSettings {
     funboxModes: [],
     coverStyle: {
       glossySpine: true,
+      detailSpineGloss: true,
       roundedRight: false,
       grayscale: false,
       showReadingStatus: false,

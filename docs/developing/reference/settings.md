@@ -76,3 +76,7 @@ See [book view design record](../../archive/book-view-settings.md), [system arch
 `coverStyle.showReadingStatus` defaults to `false`. **Reading status badges** in **Appearance → Cover Style** updates this setting through the existing settings sync and active desktop or mobile profile.
 
 The badge appears in the top-right of grid, list, and dashboard shelf covers. It uses `--main-color` against `--bg-color`, stays outside cover grayscale effects, and is hidden during bulk selection mode. To be read uses a bookmark, Reading uses an open book, Finished uses a check, and DNF uses a circle-slash. An unset or unknown status has no badge.
+
+## Spine gloss
+
+`coverStyle.detailSpineGloss` defaults to `true`. **Spine gloss** in **Appearance → Cover Style** controls the gloss overlay on spine artwork in the book detail page. It uses the active desktop or mobile profile and is independent of the cover gloss setting, `coverStyle.glossySpine`.

@@ -599,6 +599,25 @@ export const userSettings = sqliteTable('user_settings', {
     .$defaultFn(() => new Date()),
 });
 
+export const codexImageConnections = sqliteTable('codex_image_connections', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  generation: text('generation').notNull(),
+  state: text('state').notNull(),
+  encryptedTokens: text('encrypted_tokens'),
+});
+
+export const sharedCodexImageConnection = sqliteTable(
+  'shared_codex_image_connection',
+  {
+    id: text('id').primaryKey(),
+    generation: text('generation').notNull(),
+    state: text('state').notNull(),
+    encryptedTokens: text('encrypted_tokens'),
+  },
+);
+
 // Shared spine artwork retains the uploaded original and the edited rendition.
 export const bookSpines = sqliteTable(
   'book_spines',

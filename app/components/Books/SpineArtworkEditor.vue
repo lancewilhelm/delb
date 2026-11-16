@@ -4,7 +4,12 @@ import {
   parseSpineEdits,
   type SpineEdits,
 } from '~~/shared/spine-artwork';
-const props = defineProps<{ bookId: string; disabled?: boolean }>();
+const props = defineProps<{
+  bookId: string;
+  hasCover: boolean;
+  coverPending: boolean;
+  disabled?: boolean;
+}>();
 const picker = ref<HTMLInputElement | null>(null);
 const file = ref<File | null>(null);
 const fileUrl = ref<string | null>(null);
@@ -13,9 +18,17 @@ const baseline = ref<SpineEdits>(defaultSpineEdits());
 const edits = ref<SpineEdits>(defaultSpineEdits());
 const removePending = ref(false);
 const busy = ref(true);
+const generating = ref(false);
 const error = ref('');
 const dimensions = ref<{ width: number; height: number } | null>(null);
+const connection = ref(false);
+const generated = ref(false);
+const instructions = ref('');
 let selection = 0;
+const connectionUrl = computed(
+  () =>
+    `/api/books/${encodeURIComponent(props.bookId)}/spine-generate/connection`,
+);
 const source = computed(() =>
   removePending.value
     ? null
@@ -61,6 +74,16 @@ function reset() {
   edits.value = { ...baseline.value };
   removePending.value = false;
   error.value = '';
+  generated.value = false;
+}
+async function loadConnection() {
+  try {
+    connection.value = (
+      await $fetch<{ connected: boolean }>(connectionUrl.value)
+    ).connected;
+  } catch {
+    connection.value = false;
+  }
 }
 async function load() {
   busy.value = true;
@@ -90,9 +113,12 @@ async function chooseFile(event: Event) {
   const chosen = event.target.files?.[0];
   event.target.value = '';
   if (!chosen) return;
+  if (await stageFile(chosen)) generated.value = false;
+}
+async function stageFile(chosen: File) {
   if (!chosen.size || chosen.size > 10 * 1024 * 1024) {
     error.value = 'Choose an image under 10 MB.';
-    return;
+    return false;
   }
   const token = ++selection;
   const url = URL.createObjectURL(chosen);
@@ -105,7 +131,7 @@ async function chooseFile(event: Event) {
       throw new Error('Image too large');
     if (token !== selection) {
       URL.revokeObjectURL(url);
-      return;
+      return false;
     }
     clearFile();
     file.value = chosen;
@@ -117,13 +143,71 @@ async function chooseFile(event: Event) {
     edits.value = defaultSpineEdits();
     removePending.value = false;
     error.value = '';
+    return true;
   } catch {
     URL.revokeObjectURL(url);
     if (token === selection)
       error.value =
         'Could not preview that image. Choose a JPEG, PNG, WebP or AVIF under 24 megapixels.';
+    return false;
   } finally {
     if (token === selection) busy.value = false;
+  }
+}
+async function generate() {
+  const token = ++selection;
+  busy.value = true;
+  generating.value = true;
+  error.value = '';
+  try {
+    const body = new FormData();
+    body.append('prompt', instructions.value);
+    if (generated.value && file.value) body.append('previous', file.value);
+    const blob = await $fetch<Blob>(
+      `/api/books/${encodeURIComponent(props.bookId)}/spine-generate`,
+      { method: 'POST', body, responseType: 'blob' },
+    );
+    if (token !== selection) return;
+    if (
+      await stageFile(new File([blob], 'generated-spine', { type: blob.type }))
+    )
+      generated.value = true;
+  } catch (cause: unknown) {
+    if (token === selection) {
+      let message =
+        typeof cause === 'object' &&
+        cause !== null &&
+        'data' in cause &&
+        typeof cause.data === 'object' &&
+        cause.data !== null &&
+        'statusMessage' in cause.data &&
+        typeof cause.data.statusMessage === 'string'
+          ? cause.data.statusMessage
+          : 'Could not generate a spine. Try again.';
+      if (
+        typeof cause === 'object' &&
+        cause !== null &&
+        'data' in cause &&
+        cause.data instanceof Blob
+      ) {
+        try {
+          const data: unknown = JSON.parse(await cause.data.text());
+          if (
+            data &&
+            typeof data === 'object' &&
+            'statusMessage' in data &&
+            typeof data.statusMessage === 'string'
+          )
+            message = data.statusMessage;
+        } catch {
+          /* Keep the generic error when the response is not JSON. */
+        }
+      }
+      error.value = message;
+    }
+  } finally {
+    if (token === selection) busy.value = false;
+    generating.value = false;
   }
 }
 function imageLoaded(event: Event) {
@@ -171,12 +255,15 @@ async function save() {
     throw new Error(error.value);
   }
 }
-onMounted(load);
+onMounted(() => {
+  load();
+  loadConnection();
+});
 onBeforeUnmount(() => {
   selection++;
   clearFile();
 });
-defineExpose({ save, reset, busy });
+defineExpose({ save, reset, busy, generating });
 </script>
 
 <template>
@@ -197,6 +284,14 @@ defineExpose({ save, reset, busy });
       @change="chooseFile"
     />
     <div class="preview-stage" :class="{ empty: !source }">
+      <div v-if="generating" class="generation-overlay" role="status">
+        <Icon
+          name="lucide:loader-circle"
+          class="text-3xl motion-safe:animate-spin"
+          aria-hidden="true"
+        />
+        <span>Generating spine…</span>
+      </div>
       <template v-if="source">
         <div
           class="crop-preview"
@@ -270,6 +365,72 @@ defineExpose({ save, reset, busy });
         Undo changes
       </button>
     </div>
+    <div class="generation">
+      <div class="controls-heading">
+        <div>
+          <h3>Generate a spine</h3>
+          <p>
+            Experimental · Uses the saved cover and the connected ChatGPT
+            account.
+          </p>
+        </div>
+        <Icon name="lucide:sparkles" aria-hidden="true" />
+      </div>
+      <p v-if="!connection" class="generation-note">
+        Spine generation is not configured. Ask an administrator to connect
+        ChatGPT in Admin settings.
+      </p>
+      <template v-else>
+        <label class="generation-label"
+          >{{
+            generated
+              ? 'How should the preview change?'
+              : 'Extra instructions (optional)'
+          }}<textarea
+            v-model="instructions"
+            maxlength="2000"
+            rows="3"
+            :disabled="disabled || busy"
+            placeholder="For example, make the title larger"
+          />
+        </label>
+        <div class="actions">
+          <button
+            class="generate-action"
+            type="button"
+            :disabled="disabled || busy || !hasCover || coverPending"
+            @click="generate"
+          >
+            <Icon
+              :name="generating ? 'lucide:loader-circle' : 'lucide:sparkles'"
+              :class="{ 'motion-safe:animate-spin': generating }"
+              aria-hidden="true"
+            />
+            {{
+              busy
+                ? 'Generating…'
+                : generated
+                  ? 'Update preview'
+                  : 'Generate preview'
+            }}
+          </button>
+        </div>
+        <p v-if="!hasCover" class="generation-note">
+          Add and save a cover before generating a spine.
+        </p>
+        <p v-else-if="coverPending" class="generation-note">
+          Save your cover change before generating a spine.
+        </p>
+        <p class="generation-note">
+          {{
+            generated
+              ? 'Your current preview and the saved cover will be sent to ChatGPT.'
+              : 'The saved cover will be sent to ChatGPT. Save a new cover first if you want to use it.'
+          }}
+          Preview the result and save the book to apply it.
+        </p>
+      </template>
+    </div>
     <div v-if="source" class="crop-controls">
       <div class="controls-heading">
         <div>
@@ -308,17 +469,6 @@ defineExpose({ save, reset, busy });
           "
           :disabled="disabled || busy"
         />
-      </label>
-      <label class="stretch">
-        <input
-          v-model="edits.stretch"
-          type="checkbox"
-          :disabled="disabled || busy"
-        />
-        <span
-          ><strong>Stretch to a 1:3 shape</strong
-          ><small>Changes the image proportions on the book page.</small></span
-        >
       </label>
     </div>
     <div class="editor-footer">
@@ -403,6 +553,20 @@ defineExpose({ save, reset, busy });
   border-style: dashed;
   text-align: center;
 }
+.generation-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: white;
+  background: rgb(0 0 0 / 65%);
+  font-size: 12px;
+  font-weight: 600;
+}
 .preview-stage.empty strong {
   font-size: 13px;
   color: var(--contrast-main-color);
@@ -481,6 +645,33 @@ defineExpose({ save, reset, busy });
   background: transparent;
   color: var(--contrast-main-color);
 }
+.generation {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid
+    color-mix(in srgb, var(--contrast-border-color) 40%, transparent);
+}
+.generation-label {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 12px;
+}
+.generation-label textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--contrast-border-color);
+  border-radius: 8px;
+  background: var(--bg-color);
+  resize: vertical;
+}
+.generation-note {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.8;
+}
+
 .spine-editor :is(button, input):focus-visible {
   outline: 2px solid var(--contrast-main-color);
   outline-offset: 2px;
@@ -519,27 +710,6 @@ defineExpose({ save, reset, busy });
   width: 100%;
   margin-top: 5px;
   accent-color: var(--main-color);
-}
-.stretch {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  margin-top: 15px;
-  font-size: 12px;
-  cursor: pointer;
-}
-.stretch input {
-  margin-top: 2px;
-  accent-color: var(--main-color);
-}
-.stretch strong,
-.stretch small {
-  display: block;
-}
-.stretch small {
-  margin-top: 3px;
-  font-size: 11px;
-  opacity: 0.75;
 }
 .editor-footer {
   display: grid;
