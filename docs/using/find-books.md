@@ -48,7 +48,7 @@ Delb saves the arrangement for everyone in the collection. If a save fails, use 
 
 To add spine artwork, open a book and select **Edit book details**, then **Edit spine** beside the cover. Upload an image and adjust the crop. Select **Done** to close the editor, then **Save** the book to apply the changes. Delb keeps the original upload so you can adjust it later. The spine appears to the left of the cover on the book detail page and on the bookshelf. Collection owners and editors can change or remove it; the artwork is shared with people who can access the book.
 
-Use the zoom controls or scroll over the preview to inspect it. Hold Shift while scrolling to move through a zoomed image. Select **Crop image** and drag an edge or corner handle to crop the original. You can use the arrow keys on a focused handle for finer adjustments. Select **Done cropping** to see the result. Zoom only changes the editor view.
+Use the zoom controls or scroll over the preview to inspect it. Drag a zoomed image to pan, or hold Shift while scrolling to move through it. Select **Crop image** and drag an edge or corner handle to crop the original. Use the arrow keys on a focused handle for fine adjustments, or hold Shift for larger steps. Select **Done cropping** to see the result. Zoom and panning only change the editor view.
 
 To change the gloss on bookshelf spines and spine artwork in the book detail page, use **Settings → Appearance → Cover Style → Spine gloss**. This personal setting is separate from **Cover gloss**. The **Grayscale** setting applies to covers and spines.
 

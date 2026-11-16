@@ -288,6 +288,23 @@ try {
   await until(
     "[...document.querySelectorAll('button')].some(b => b.textContent.trim() === 'Edit spine')",
   );
+  await until("!!document.querySelector('.edit-spine-preview img')");
+  assert.equal(
+    await evaluate(
+      "document.querySelector('.edit-spine-preview').classList.contains('spine-gloss')",
+    ),
+    false,
+    'the edit-page spine respects the disabled gloss setting',
+  );
+  await togglePaletteSetting('spine gloss', 'spine gloss');
+  await until("!!document.querySelector('.edit-spine-preview.spine-gloss')");
+  assert.equal(
+    await evaluate(
+      "getComputedStyle(document.querySelector('.edit-spine-preview'), '::after').backgroundImage",
+    ),
+    detailGloss,
+    'the edit-page spine uses the same gloss as book details',
+  );
   await evaluate(
     "(() => { const button = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Edit spine'); button.focus(); button.click(); })()",
   );
@@ -326,6 +343,12 @@ try {
     "[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Remove').click()",
   );
   await until("!document.querySelector('.edit-spine-preview img')");
+  assert.equal(
+    await evaluate(
+      "document.querySelector('.edit-spine-preview').classList.contains('spine-gloss')",
+    ),
+    false,
+  );
   assert.ok(
     await evaluate(
       "document.querySelector('.edit-spine-preview').textContent.trim().length > 0",
@@ -336,10 +359,37 @@ try {
     "[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Undo changes').click()",
   );
   await until("!!document.querySelector('.edit-spine-preview img')");
+  assert.equal(
+    await evaluate(
+      "document.querySelector('.edit-spine-preview').classList.contains('spine-gloss')",
+    ),
+    true,
+  );
   await evaluate(
     "[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Crop image').click()",
   );
   await until("!!document.querySelector('.crop-canvas')");
+  const handles = await evaluate(`(() => {
+    const selection = document.querySelector('.crop-selection').getBoundingClientRect();
+    const left = document.querySelector('[aria-label="Drag left crop handle"]');
+    const corner = document.querySelector('[aria-label="Drag top-left crop handle"]');
+    const leftRect = left.getBoundingClientRect();
+    const cornerStyle = getComputedStyle(corner, '::before');
+    return {
+      outside: leftRect.left < selection.left,
+      leftHit: document.elementFromPoint(leftRect.left + leftRect.width / 2, leftRect.top + leftRect.height / 2) === left,
+      leftBar: getComputedStyle(left, '::before').backgroundColor,
+      cornerTop: cornerStyle.borderTopWidth,
+      cornerLeft: cornerStyle.borderLeftWidth,
+    };
+  })()`);
+  assert.ok(
+    handles.outside && handles.leftHit,
+    'crop handles extend beyond the image and remain draggable',
+  );
+  assert.equal(handles.leftBar, 'rgb(255, 255, 255)');
+  assert.equal(handles.cornerTop, '3px');
+  assert.equal(handles.cornerLeft, '3px');
   const previewBounds = await evaluate(`(() => {
     const stage = document.querySelector('.preview-stage').getBoundingClientRect();
     const viewport = document.querySelector('.preview-viewport').getBoundingClientRect();
@@ -378,6 +428,40 @@ try {
     largeBounds.scrollHeight > largeBounds.viewport,
     'a zoomed image can scroll within the preview',
   );
+  const panPoint = await evaluate(`(() => {
+    const viewport = document.querySelector('.preview-viewport');
+    viewport.scrollTop = 0;
+    viewport.scrollLeft = 0;
+    const rect = viewport.getBoundingClientRect();
+    return { x: rect.left + rect.width * 0.65, y: rect.top + rect.height * 0.55 };
+  })()`);
+  await call('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    ...panPoint,
+    button: 'left',
+    clickCount: 1,
+  });
+  await call('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: panPoint.x - 60,
+    y: panPoint.y - 60,
+    buttons: 1,
+  });
+  await call('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: panPoint.x - 60,
+    y: panPoint.y - 60,
+    button: 'left',
+    clickCount: 1,
+  });
+  const panResult = await evaluate(
+    `(() => { const el = document.querySelector('.preview-viewport'); return { left: el.scrollLeft, top: el.scrollTop, crop: document.querySelector('.crop-selection').style.left }; })()`,
+  );
+  assert.ok(
+    panResult.left > 0 && panResult.top > 0,
+    'dragging pans in both directions',
+  );
+  assert.equal(panResult.crop, '0%', 'panning does not alter the crop');
   await evaluate(
     'document.querySelector(\'[aria-label="Reset zoom"]\').click()',
   );
@@ -497,7 +581,7 @@ try {
   );
   assert.equal(
     keyboardCrop,
-    croppedLeft + 1,
+    Math.round((croppedLeft + 0.1) * 10) / 10,
     'arrow key makes a fine crop adjustment',
   );
   croppedLeft = keyboardCrop;

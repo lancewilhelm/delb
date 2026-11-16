@@ -250,6 +250,7 @@ type NameChip = {
 };
 
 const router = useRouter();
+const userSettingsStore = useUserSettingsStore();
 
 const isCreateMode = computed(() => props.mode === 'create');
 const currentBookId = ref((props.bookId ?? '').toString());
@@ -1793,6 +1794,11 @@ watch(
             <div
               v-if="!isCreateMode && activeBookId"
               class="edit-spine-preview relative shrink-0 overflow-hidden rounded-sm bg-(--sub-alt-color) shadow-md"
+              :class="{
+                'spine-gloss':
+                  !!spineEditor?.source &&
+                  userSettingsStore.activeSettings.coverStyle.detailSpineGloss,
+              }"
               :style="{
                 width: `${Math.max(10, Math.min(45, ((spineEditor?.aspect ?? 1 / 3) / ((spineEditor?.aspect ?? 1 / 3) + 2 / 3)) * 100))}%`,
               }"

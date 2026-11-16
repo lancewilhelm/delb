@@ -24,7 +24,7 @@ export function parseSpineEdits(value: unknown): SpineEdits | null {
     return null;
   const { left, right, top, bottom, stretch } = value;
   const percent = (v: unknown): v is number =>
-    typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 90;
+    typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 90;
   if (
     !percent(left) ||
     !percent(right) ||
