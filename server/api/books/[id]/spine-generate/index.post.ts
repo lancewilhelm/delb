@@ -16,7 +16,10 @@ import { renderSpine } from '~~/server/utils/books/spine-image';
 import { defaultSpineEdits } from '~~/shared/spine-artwork';
 import { buildSpineGenerationPrompt } from '~~/shared/spine-generation-prompt';
 import { readSpineGenerationPrompt } from '~~/server/utils/spine-generation/prompt';
-import { parseSelectedSeriesSpines } from '~~/shared/spine-series-references';
+import {
+  MAX_SERIES_SPINE_REFERENCES,
+  parseSelectedSeriesSpines,
+} from '~~/shared/spine-series-references';
 import { findSeriesSpines } from '~~/server/utils/books/series-spine-references';
 
 const maxBytes = 10 * 1024 * 1024;
@@ -143,6 +146,11 @@ export default defineEventHandler(async (event) => {
     throw createError({
       statusCode: 400,
       statusMessage: 'Invalid series references.',
+    });
+  if (previous && selectedSeriesSpines.length >= MAX_SERIES_SPINE_REFERENCES)
+    throw createError({
+      statusCode: 400,
+      statusMessage: `Choose at most ${MAX_SERIES_SPINE_REFERENCES - 1} series spines when updating a preview.`,
     });
   if (prompt.length > 2000)
     throw createError({

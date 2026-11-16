@@ -54,13 +54,15 @@ To change the gloss on bookshelf spines and spine artwork in the book detail pag
 
 To generate a spine, an administrator must first connect a ChatGPT account under **Settings → Admin → Spine generation**. All book editors use that shared connection. The book must have a saved cover. In **Edit spine**, select **Generate preview**. Delb sends the saved cover and your instructions to OpenAI. To change the result, add instructions and select **Update preview**. Adjust the crop, select **Done**, and save the book to share the result with the collection. Generation is experimental and depends on the connected account's access to the Codex image service. The image dimensions may differ from the requested shape. An administrator can edit the shared prompt template under **Settings → Admin → Spine generation**. Changes apply to future previews and updates.
 
-When the saved book belongs to a series, Delb offers up to three nearby series spines that you can access. Selected spines are sent to OpenAI as visual references for the same design style. Clear a selection to leave it out, or refresh the list if the series artwork has changed.
+When the saved book belongs to a series, Delb shows the other series spines that you can access. Scroll across the spines and select the ones to send to OpenAI as visual references. You can select up to 15 for a new preview, or 14 when updating one because the existing preview also counts as an image. Refresh the list if the series artwork has changed.
 
 ## Make a personal Shelf
 
 Select **Shelves** in the navigation, then select **Create Shelf** and enter a name. Your Shelves are private. A Shelf starts empty and can contain books from any collection you can access. The same book can appear on more than one Shelf.
 
 Open a Shelf and select **Add books**. Search by title, author, or ISBN, or browse your library. You can filter by collection and select books across searches before adding them. Books already on the Shelf are marked. You can also select books in the Books view and choose **Actions > Add to Shelf**.
+
+On a book's detail page, **My Shelves** shows the personal Shelves containing it. Select the pencil to add or remove it from your Shelves, or select a Shelf name to open it. If you have no Shelves yet, use **Create a Shelf** to make one.
 
 Use the view controls to switch between a grid, a list, and a visual bookshelf. New books are placed after the existing books in the visual view. Select **Edit shelves** to arrange them. Positions and orientations belong to the Shelf. A book's spine size and artwork belong to the book and are shared wherever it appears. Only an owner or editor of the book's collection can change its size.
 

@@ -4,7 +4,10 @@ import {
   parseSpineEdits,
   type SpineEdits,
 } from '~~/shared/spine-artwork';
-import type { SeriesSpineReference } from '~~/shared/spine-series-references';
+import {
+  MAX_SERIES_SPINE_REFERENCES,
+  type SeriesSpineReference,
+} from '~~/shared/spine-series-references';
 const props = defineProps<{
   bookId: string;
   hasCover: boolean;
@@ -79,6 +82,9 @@ const pan = ref<{
 } | null>(null);
 const seriesSpines = ref<SeriesSpineReference[]>([]);
 const selectedSeriesIds = ref<string[]>([]);
+const seriesSelectionLimit = computed(
+  () => MAX_SERIES_SPINE_REFERENCES - (generated.value && file.value ? 1 : 0),
+);
 const referencesLoading = ref(true);
 const referencesError = ref(false);
 type CropEdge = 'left' | 'right' | 'top' | 'bottom';
@@ -290,7 +296,9 @@ async function loadSeriesSpines() {
       `/api/books/${encodeURIComponent(props.bookId)}/spine-generate/series-references`,
     );
     seriesSpines.value = refs;
-    selectedSeriesIds.value = refs.map((item) => item.bookId);
+    selectedSeriesIds.value = refs
+      .slice(0, seriesSelectionLimit.value)
+      .map((item) => item.bookId);
   } catch {
     seriesSpines.value = [];
     selectedSeriesIds.value = [];
@@ -756,28 +764,45 @@ defineExpose({
                   Selected spines from the saved series will be sent to ChatGPT
                   as visual references.
                 </p>
-                <label
-                  v-for="item in seriesSpines"
-                  :key="item.bookId"
-                  class="series-reference"
+                <p
+                  v-if="
+                    seriesSpines.length > seriesSelectionLimit ||
+                    selectedSeriesIds.length > seriesSelectionLimit
+                  "
                 >
-                  <input
-                    v-model="selectedSeriesIds"
-                    type="checkbox"
-                    :value="item.bookId"
-                    :disabled="disabled || busy"
-                  />
-                  <img
-                    :src="`/api/books/${encodeURIComponent(item.bookId)}/spine?v=${encodeURIComponent(item.revision)}`"
-                    alt=""
-                  />
-                  <span
-                    >{{ item.title
-                    }}<small v-if="item.seriesIndex !== null"
-                      >Book {{ item.seriesIndex }}</small
-                    ></span
+                  Choose up to {{ seriesSelectionLimit }} series spines{{
+                    generated ? ' when updating a preview' : ''
+                  }}.
+                  <span v-if="selectedSeriesIds.length > seriesSelectionLimit"
+                    >Deselect one to continue.</span
                   >
-                </label>
+                </p>
+                <div class="series-reference-list">
+                  <label
+                    v-for="item in seriesSpines"
+                    :key="item.bookId"
+                    class="series-reference"
+                    :title="item.title"
+                  >
+                    <img
+                      :src="`/api/books/${encodeURIComponent(item.bookId)}/spine?v=${encodeURIComponent(item.revision)}`"
+                      alt=""
+                      loading="lazy"
+                    />
+                    <input
+                      v-model="selectedSeriesIds"
+                      type="checkbox"
+                      :value="item.bookId"
+                      :aria-label="`Use ${item.title} as a series reference`"
+                      :disabled="
+                        disabled ||
+                        busy ||
+                        (!selectedSeriesIds.includes(item.bookId) &&
+                          selectedSeriesIds.length >= seriesSelectionLimit)
+                      "
+                    />
+                  </label>
+                </div>
                 <button
                   type="button"
                   class="reference-retry"
@@ -809,7 +834,8 @@ defineExpose({
                     busy ||
                     !hasCover ||
                     coverPending ||
-                    referencesLoading
+                    referencesLoading ||
+                    selectedSeriesIds.length > seriesSelectionLimit
                   "
                   @click="generate"
                 >
@@ -1293,6 +1319,7 @@ defineExpose({
 }
 .series-references {
   display: grid;
+  min-width: 0;
   gap: 7px;
   margin-top: 12px;
   font-size: 12px;
@@ -1303,20 +1330,26 @@ defineExpose({
 .series-references p {
   opacity: 0.75;
 }
+.series-reference-list {
+  display: flex;
+  max-width: 100%;
+  overflow-x: auto;
+  gap: 8px;
+  padding: 2px 2px 5px;
+}
 .series-reference {
   display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
+  cursor: pointer;
 }
 .series-reference img {
-  width: 20px;
-  height: 50px;
+  width: 36px;
+  height: 90px;
   object-fit: contain;
   background: var(--bg-color);
-}
-.series-reference small {
-  display: block;
-  opacity: 0.7;
 }
 .reference-retry {
   text-decoration: underline;

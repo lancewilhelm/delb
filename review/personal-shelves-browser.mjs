@@ -147,6 +147,19 @@ try {
       return { name: c.slice(0, at), value: c.slice(at + 1), url: base };
     }),
   });
+  await call('Page.navigate', { url: `${base}/books/${second}` });
+  await until("document.body.textContent.includes('No Shelves yet.')");
+  assert.ok(
+    await evaluate(
+      "!![...document.querySelectorAll('a')].find(a => a.textContent.trim() === 'Create a Shelf' && a.getAttribute('href') === '/shelves')",
+    ),
+  );
+  assert.equal(
+    await evaluate(
+      '!!document.querySelector(\'[aria-label="Edit my Shelves"]\')',
+    ),
+    false,
+  );
   await call('Page.navigate', { url: `${base}/shelves` });
   await until(
     'document.body.textContent.includes("You haven\'t made any Shelves yet")',
@@ -166,6 +179,42 @@ try {
     'Shelf title should be toolbar-sized',
   );
   const shelfId = await evaluate('location.pathname.split("/").pop()');
+  await call('Page.navigate', { url: `${base}/books/${second}` });
+  await until("document.body.textContent.includes('Not on any Shelves.')");
+  await evaluate(
+    'document.querySelector(\'[aria-label="Edit my Shelves"]\').click()',
+  );
+  await until("!!document.querySelector('fieldset input[type=checkbox]')");
+  await evaluate(
+    "document.querySelector('fieldset input[type=checkbox]').click()",
+  );
+  await until(
+    "document.querySelector('fieldset input[type=checkbox]')?.checked",
+  );
+  assert.ok(
+    (await api(`/api/shelves/${shelfId}`)).books.some((b) => b.id === second),
+  );
+  await call('Page.reload');
+  await until(`!!document.querySelector('a[href="/shelves/${shelfId}"]')`);
+  await evaluate(
+    'document.querySelector(\'[aria-label="Edit my Shelves"]\').click()',
+  );
+  await until(
+    "document.querySelector('fieldset input[type=checkbox]')?.checked",
+  );
+  await evaluate(
+    "document.querySelector('fieldset input[type=checkbox]').click()",
+  );
+  await until(
+    "document.querySelector('fieldset input[type=checkbox]') && !document.querySelector('fieldset input[type=checkbox]').checked",
+  );
+  assert.ok(
+    !(await api(`/api/shelves/${shelfId}`)).books.some((b) => b.id === second),
+  );
+  await call('Page.navigate', { url: `${base}/shelves/${shelfId}` });
+  await until(
+    "[...document.querySelectorAll('button')].some(b=>b.textContent.includes('Add books'))",
+  );
   await evaluate(
     "window.dispatchEvent(new KeyboardEvent('keydown', {key:'k', metaKey:true, ctrlKey:true, bubbles:true}))",
   );

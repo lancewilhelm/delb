@@ -126,6 +126,8 @@ try {
     await api('/api/books', 'POST', {
       title: 'Synthetic book',
       authors: ['Example Writer'],
+      seriesName: 'Visual reference series',
+      seriesIndex: 1,
     })
   ).data.book.id;
   const image = await sharp({
@@ -133,6 +135,29 @@ try {
   })
     .png()
     .toBuffer();
+  for (let i = 0; i < 16; i++) {
+    const reference = (
+      await api('/api/books', 'POST', {
+        title: `Reference volume ${i + 1}`,
+        authors: ['Example Writer'],
+        seriesName: 'Visual reference series',
+        seriesIndex: i + 2,
+      })
+    ).data.book.id;
+    const form = new FormData();
+    form.append('file', new Blob([image], { type: 'image/png' }), 'spine.png');
+    form.append('revision', '');
+    form.append(
+      'edits',
+      JSON.stringify({ left: 0, right: 0, top: 0, bottom: 0, stretch: false }),
+    );
+    const result = await fetch(`${base}/api/books/${reference}/spine`, {
+      method: 'POST',
+      headers: { Origin: base, Cookie: cookie },
+      body: form,
+    });
+    assert.equal(result.status, 200, await result.clone().text());
+  }
   const cover = new FormData();
   cover.append('file', new Blob([image], { type: 'image/png' }), 'cover.png');
   let response = await fetch(`${base}/api/books/${id}/cover`, {
@@ -311,6 +336,29 @@ try {
   await until(
     "!!document.querySelector('[role=dialog][aria-label], [role=dialog][aria-labelledby]')",
   );
+  await until(
+    "document.querySelectorAll('.series-reference input').length === 16",
+  );
+  const references = await evaluate(`(() => {
+    const list = document.querySelector('.series-reference-list');
+    const cards = [...list.querySelectorAll('.series-reference')];
+    const first = cards[0].getBoundingClientRect();
+    const next = cards[1].getBoundingClientRect();
+    const input = cards[0].querySelector('input').getBoundingClientRect();
+    const image = cards[0].querySelector('img').getBoundingClientRect();
+    return { checked: cards.filter(c => c.querySelector('input').checked).length,
+      disabled: cards.filter(c => c.querySelector('input').disabled).length,
+      scrolls: list.scrollWidth > list.clientWidth,
+      horizontal: next.left > first.left && next.top === first.top,
+      checkboxBelow: input.top >= image.bottom };
+  })()`);
+  assert.deepEqual(references, {
+    checked: 15,
+    disabled: 1,
+    scrolls: true,
+    horizontal: true,
+    checkboxBelow: true,
+  });
   const layout = await evaluate(`(() => {
     const preview = document.querySelector('.spine-preview-column').getBoundingClientRect();
     const controls = document.querySelector('.spine-control-column').getBoundingClientRect();
@@ -676,6 +724,15 @@ try {
   }
   await startGeneration('Generate preview', 'WAIT_FOR_PERMISSION');
   await until("!document.querySelector('.generation-overlay')");
+  await until("document.body.innerText.includes('Deselect one to continue.')");
+  assert.ok(
+    await evaluate(
+      "[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Update preview').disabled",
+    ),
+  );
+  await evaluate(
+    "document.querySelector('.series-reference input:checked').click()",
+  );
   await until(
     "[...document.querySelectorAll('button')].some(b => b.textContent.trim() === 'Update preview' && !b.disabled)",
   );
