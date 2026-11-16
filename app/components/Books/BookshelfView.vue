@@ -2,6 +2,11 @@
 import BookshelfSpine from './BookshelfSpine.vue';
 import BookshelfBookcase from './BookshelfBookcase.vue';
 import { placementStyle } from '~/utils/bookshelfPlacement';
+import {
+  bookshelfViewKey,
+  readBookshelfView,
+  saveBookshelfView,
+} from '~/utils/bookshelfViewPosition';
 import type { BookViewBook } from '~/utils/bookFields';
 import {
   SHELF_WIDTH,
@@ -130,6 +135,27 @@ const FLOOR_LINE_HEIGHT = 2;
 const width = ref(340);
 const viewportHeight = ref(0);
 const camera = reactive({ x: 0, y: 0 });
+const authUser = useState<{ id: string } | null>('auth:user');
+let viewKey: string | null = null;
+let viewSaveTimer: ReturnType<typeof setTimeout> | undefined;
+function saveView() {
+  if (!viewKey) return;
+  try {
+    saveBookshelfView(localStorage, viewKey, { ...camera, zoom: zoom.value });
+  } catch {
+    // Accessing localStorage itself can fail in restricted browser contexts.
+  }
+}
+function centerBookshelf() {
+  camera.x = 0;
+  camera.y = 0;
+  zoom.value = 1;
+}
+watch([() => camera.x, () => camera.y, zoom], () => {
+  if (!viewKey) return;
+  clearTimeout(viewSaveTimer);
+  viewSaveTimer = setTimeout(saveView, 200);
+});
 const wall = ref<HTMLElement | null>(null);
 const loading = ref(true);
 const loadError = ref('');
@@ -483,6 +509,8 @@ function canLeave() {
 defineExpose({ canLeave, refreshCatalog });
 onBeforeRouteLeave(() => canLeave());
 function unloadWarning(event: BeforeUnloadEvent) {
+  clearTimeout(viewSaveTimer);
+  saveView();
   if (dirty.value || saving.value) {
     event.preventDefault();
     event.returnValue = '';
@@ -672,6 +700,28 @@ function preventPanClick(event: MouseEvent) {
   suppressPanClick = false;
 }
 onMounted(() => {
+  watch(
+    () => authUser.value?.id,
+    (userId) => {
+      clearTimeout(viewSaveTimer);
+      saveView();
+      viewKey = userId ? bookshelfViewKey(userId, shelfPath.value) : null;
+      centerBookshelf();
+      if (viewKey) {
+        try {
+          const savedView = readBookshelfView(localStorage, viewKey);
+          if (savedView) {
+            camera.x = savedView.x;
+            camera.y = savedView.y;
+            zoom.value = savedView.zoom;
+          }
+        } catch {
+          // Accessing localStorage itself can fail in restricted browser contexts.
+        }
+      }
+    },
+    { immediate: true },
+  );
   if (wall.value) {
     observer = new ResizeObserver(([entry]) => {
       if (entry) {
@@ -693,6 +743,8 @@ onMounted(() => {
   void load();
 });
 onBeforeUnmount(() => {
+  clearTimeout(viewSaveTimer);
+  saveView();
   disposed = true;
   generation++;
   catalogGeneration++;
@@ -1262,7 +1314,7 @@ const lastOtherBookcaseId = computed(
               keys to pan with a keyboard. While focused on a book, use Alt with
               an arrow key.
             </p>
-            <p>Use Center bookshelf to return to the starting position.</p>
+            <p>Use Center bookshelf to reset the position and zoom.</p>
             <p>
               Use the wheel or pinch to zoom. Hold Shift and use the wheel to
               move vertically.
@@ -1273,15 +1325,12 @@ const lastOtherBookcaseId = computed(
           </div>
         </details>
         <button
-          v-if="camera.x || camera.y"
+          v-if="camera.x || camera.y || zoom !== 1"
           type="button"
           class="center-button"
           aria-label="Center bookshelf"
           title="Center bookshelf"
-          @click="
-            camera.x = 0;
-            camera.y = 0;
-          "
+          @click="centerBookshelf"
         >
           <Icon name="lucide:locate-fixed" aria-hidden="true" />
         </button>

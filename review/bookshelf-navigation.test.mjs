@@ -30,6 +30,7 @@ async function navigation() {
     'onTouchMove',
     'onTouchEnd',
     'onBookClick',
+    'centerBookshelf',
   ];
   const declarations = ast.statements
     .filter(
@@ -123,7 +124,7 @@ async function navigation() {
   }).outputText;
   const actions = new Function(
     ...Object.keys(state),
-    `let suppressPanClick = false; let pinch = null; let touchPan = null; let scrollFrame = null; ${js}; return {startPan, onWheel, onKeyDown, onKeyUp, preventPanClick, onMove, onUp, updateBookcaseTarget, scrollBookcaseDrag, stopBookcaseScroll, onTouchStart, onTouchMove, onTouchEnd, onBookClick};`,
+    `let suppressPanClick = false; let pinch = null; let touchPan = null; let scrollFrame = null; ${js}; return {startPan, onWheel, onKeyDown, onKeyUp, preventPanClick, onMove, onUp, updateBookcaseTarget, scrollBookcaseDrag, stopBookcaseScroll, onTouchStart, onTouchMove, onTouchEnd, onBookClick, centerBookshelf};`,
   )(...Object.values(state));
   return {
     actions,
@@ -145,6 +146,17 @@ async function navigation() {
     },
   };
 }
+
+test('centering resets pan and zoom together', async () => {
+  const nav = await navigation();
+  nav.state.camera.x = -900;
+  nav.state.camera.y = 75;
+  nav.state.zoom.value = 2;
+  nav.actions.centerBookshelf();
+  assert.equal(nav.state.camera.x, 0);
+  assert.equal(nav.state.camera.y, 0);
+  assert.equal(nav.state.zoom.value, 1);
+});
 
 test('keyboard activation opens book options in edit mode', async () => {
   const nav = await navigation();
