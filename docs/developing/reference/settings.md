@@ -13,6 +13,10 @@ Delb keeps account and global settings in the database and persists supported cl
 
 The [user settings store](../../../app/stores/userSettings.ts) includes a desktop profile and optional mobile overrides. `activeSettings` selects the effective profile. [Device detection](../../../app/composables/useIsMobileDevice.ts) determines whether the mobile profile applies.
 
+## Command palette
+
+The [command palette](../../../app/composables/useCommandPalette.ts) uses the same user settings store and active device profile as Appearance settings. Search includes nested commands and displays their parent group. Theme selection uses `useThemeAppearance`; custom theme colors and book field order use the same components as Appearance settings.
+
 ## Server rendering and sign-in
 
 1. The [auth plugin](../../../app/plugins/auth.server.ts) loads the session.
@@ -79,4 +83,10 @@ The badge appears in the top-right of grid, list, and dashboard shelf covers. It
 
 ## Spine gloss
 
-`coverStyle.detailSpineGloss` defaults to `true`. **Spine gloss** in **Appearance → Cover Style** controls the gloss overlay on spine artwork in the book detail page. It uses the active desktop or mobile profile and is independent of the cover gloss setting, `coverStyle.glossySpine`.
+`coverStyle.detailSpineGloss` defaults to `true`. **Spine gloss** in **Appearance → Cover Style** controls the shared gloss overlay on bookshelf spines and spine artwork in the book detail page. It uses the active desktop or mobile profile and is independent of the cover gloss setting, `coverStyle.glossySpine`. `coverStyle.grayscale` applies to both covers and spines.
+
+## Spine generation prompt
+
+The administrator can edit the shared generation prompt in **Settings → Admin → Spine generation**. The saved template is stored in `system_state` and applies to subsequent generation requests. It is a single prompt sent to the image endpoint, not a separate system-role message. The template must include `{{title}}`, `{{authors}}`, `{{reference}}`, and `{{instructions}}`. The server substitutes the book metadata, reference-image instructions, and the editor's additional instructions when building each request.
+
+The [prompt endpoint](../../../server/api/settings/admin/spine-prompt.ts) requires an administrator and checks the last saved value to reject conflicting edits. The default template and substitution rules live in [spine-generation-prompt.ts](../../../shared/spine-generation-prompt.ts). Restoring the default in the editor takes effect when the administrator saves it.

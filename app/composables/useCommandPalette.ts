@@ -1,6 +1,12 @@
 import fuzzysort from 'fuzzysort';
 import themesList from '~/assets/json/themes.json';
 import { normalizeCustomTheme } from '~/utils/customTheme';
+import {
+  DEFAULT_APPEARANCE_CONTRAST,
+  MIN_APPEARANCE_CONTRAST,
+  MAX_APPEARANCE_CONTRAST,
+} from '~/utils/appearanceContrast';
+import { searchPaletteOptions } from '~/utils/commandPaletteSearch';
 
 interface Theme {
   name: string;
@@ -15,6 +21,7 @@ interface Slider {
   min: number;
   max: number;
   suffix: string;
+  step?: number;
 }
 
 interface Toggle {
@@ -29,11 +36,19 @@ export interface Option {
   active?: boolean | Ref<boolean>;
   slider?: Slider | null;
   toggle?: Toggle | null;
+  numberInput?: {
+    model: number | string | null | Ref<number>;
+    description?: string;
+  };
+  panel?: 'custom-theme' | 'grid-fields' | 'list-fields';
+  themePicker?: 'fixed' | 'favorites' | 'light' | 'dark';
 }
 
 export function useCommandPalette() {
   const query = ref('');
   const selectedOption = ref<Option>();
+  const navigation = shallowRef<Option[]>([]);
+  const themePickerOpen = computed(() => !!selectedOption.value?.themePicker);
   const highlightedIndex = ref(0);
   const rowRefs = ref<HTMLElement[]>([]);
   const inputRef = ref<HTMLInputElement | null>(null);
@@ -72,8 +87,81 @@ export function useCommandPalette() {
         uiStore.setAddBookModalVisible(true);
       },
     },
-    { label: 'theme', icon: 'lucide:palette' },
-    { label: 'favorite themes', icon: 'lucide:star' },
+    { label: 'theme', icon: 'lucide:palette', themePicker: 'fixed' },
+    { label: 'favorite themes', icon: 'lucide:star', themePicker: 'favorites' },
+    { label: 'system light theme', icon: 'lucide:sun', themePicker: 'light' },
+    { label: 'system dark theme', icon: 'lucide:moon', themePicker: 'dark' },
+    {
+      label: 'follow system appearance',
+      icon: 'lucide:monitor',
+      action: () => {
+        appearance.useSystem();
+        closePalette();
+      },
+      active: computed(
+        () =>
+          userSettingsStore.activeSettings.themePreference.mode === 'system',
+      ),
+    },
+    {
+      label: 'edit custom theme colors',
+      icon: 'lucide:paintbrush',
+      panel: 'custom-theme',
+    },
+    {
+      label: 'contrast',
+      icon: 'lucide:contrast',
+      slider: {
+        model: userSettingsStore.settingRef<number>('appearanceContrast'),
+        min: MIN_APPEARANCE_CONTRAST,
+        max: MAX_APPEARANCE_CONTRAST,
+        step: 5,
+        suffix: '%',
+      },
+    },
+    {
+      label: 'reset contrast',
+      icon: 'lucide:rotate-ccw',
+      action: () => {
+        void userSettingsStore.updateSettings({
+          appearanceContrast: DEFAULT_APPEARANCE_CONTRAST,
+        });
+        closePalette();
+      },
+    },
+    {
+      label: 'theme sorting',
+      icon: 'lucide:arrow-down-a-z',
+      options: [
+        { label: 'name ascending', sortedByName: true, reverseSort: false },
+        { label: 'name descending', sortedByName: true, reverseSort: true },
+        {
+          label: 'brightness ascending',
+          sortedByName: false,
+          reverseSort: false,
+        },
+        {
+          label: 'brightness descending',
+          sortedByName: false,
+          reverseSort: true,
+        },
+      ].map(({ label, sortedByName, reverseSort }) => ({
+        label,
+        active: computed(() => {
+          const sorting = userSettingsStore.activeSettings.themeSorting;
+          return (
+            sorting.sortedByName === sortedByName &&
+            sorting.reverseSort === reverseSort
+          );
+        }),
+        action: () => {
+          void userSettingsStore.updateSettings({
+            themeSorting: { sortedByName, reverseSort },
+          });
+          closePalette();
+        },
+      })),
+    },
     {
       label: 'add current theme to favorites',
       icon: 'lucide:heart',
@@ -108,6 +196,45 @@ export function useCommandPalette() {
             ),
           },
         },
+        {
+          label: 'spine gloss',
+          icon: 'lucide:sparkles',
+          toggle: {
+            model: userSettingsStore.settingRef<boolean>(
+              'coverStyle.detailSpineGloss',
+            ),
+          },
+        },
+        {
+          label: 'reading status badges',
+          icon: 'lucide:badge-check',
+          toggle: {
+            model: userSettingsStore.settingRef<boolean>(
+              'coverStyle.showReadingStatus',
+            ),
+          },
+        },
+        {
+          label: 'copy indicators',
+          icon: 'lucide:copy',
+          toggle: {
+            model: userSettingsStore.settingRef<boolean>(
+              'coverStyle.showCopyIndicators',
+            ),
+          },
+        },
+        ...(['authors', 'series', 'publishers', 'tags'] as const).map(
+          (name) => ({
+            label: `${name} max cover count`,
+            icon: 'lucide:images',
+            numberInput: {
+              model: userSettingsStore.settingRef<number>(
+                `coverStyle.${name}MaxCovers`,
+              ),
+              description: 'Use -1 for no limit.',
+            },
+          }),
+        ),
         {
           label: 'rounded right corners',
           icon: 'lucide:log-in',
@@ -182,6 +309,11 @@ export function useCommandPalette() {
             suffix: 'px',
           },
         },
+        {
+          label: 'reorder grid fields',
+          icon: 'lucide:list-ordered',
+          panel: 'grid-fields',
+        },
         ...useBookViewFields('grid').paletteOptions,
       ],
     },
@@ -189,6 +321,11 @@ export function useCommandPalette() {
       label: 'book list',
       icon: 'lucide:list',
       options: [
+        {
+          label: 'reorder list fields',
+          icon: 'lucide:list-ordered',
+          panel: 'list-fields',
+        },
         ...useBookViewFields('list').paletteOptions,
         {
           label: 'row height',
@@ -206,7 +343,7 @@ export function useCommandPalette() {
               },
             }),
             min: 56,
-            max: 140,
+            max: 160,
             suffix: 'px',
           },
         },
@@ -217,6 +354,13 @@ export function useCommandPalette() {
       icon: 'lucide:smartphone',
       options: [
         {
+          label: 'separate mobile settings',
+          icon: 'lucide:smartphone',
+          toggle: {
+            model: userSettingsStore.mobileSettingRef<boolean>('enabled'),
+          },
+        },
+        {
           label: 'search button',
           icon: 'lucide:search',
           toggle: {
@@ -226,6 +370,16 @@ export function useCommandPalette() {
           },
         },
       ],
+    },
+    {
+      label: 'reader minimum spread width',
+      icon: 'lucide:book-open',
+      slider: {
+        model: userSettingsStore.settingRef<number>('reader.minSpreadWidth'),
+        min: 400,
+        max: 5000,
+        suffix: 'px',
+      },
     },
     {
       label: 'settings',
@@ -245,14 +399,15 @@ export function useCommandPalette() {
     },
   ]);
 
-  const filteredOptions = computed<Option[]>(() => {
-    const list = selectedOption.value?.options ?? options.value;
-    if (!query.value) return list;
-    return fuzzysort.go(query.value, list, { key: 'label' }).map((r) => r.obj);
-  });
+  const filteredOptions = computed(() =>
+    searchPaletteOptions(
+      selectedOption.value?.options ?? options.value,
+      query.value,
+    ),
+  );
 
   const filteredThemes = computed<Theme[]>(() => {
-    if (selectedOption.value?.label === 'favorite themes') {
+    if (selectedOption.value?.themePicker === 'favorites') {
       const favoriteThemes = allThemes.value.filter((t) => {
         const settings = userSettingsStore.activeSettings;
         return settings.favoriteThemes?.includes(t.name);
@@ -287,9 +442,18 @@ export function useCommandPalette() {
   function closePalette() {
     useUiStore().setCommandPaletteVisible(false);
     selectedOption.value = undefined;
+    navigation.value = [];
     query.value = '';
     highlightedIndex.value = 0;
     previewTheme();
+  }
+
+  function goBack() {
+    selectedOption.value = navigation.value.pop();
+    query.value = '';
+    highlightedIndex.value = 0;
+    previewTheme();
+    nextTick(() => inputRef.value?.focus());
   }
 
   function selectOption(option?: Option) {
@@ -300,23 +464,26 @@ export function useCommandPalette() {
       // closePalette();
     } else if (option.toggle) {
       option.toggle.model = !option.toggle.model;
-    } else if (option.options) {
+    } else if (
+      option.options ||
+      option.themePicker ||
+      option.slider ||
+      option.numberInput ||
+      option.panel
+    ) {
+      if (selectedOption.value) navigation.value.push(selectedOption.value);
       selectedOption.value = option;
       query.value = '';
       highlightedIndex.value = 0;
-    } else if (option.label === 'theme' || option.label === 'favorite themes') {
-      selectedOption.value = option;
-      query.value = '';
-      highlightedIndex.value = 0;
-    } else if (option.slider) {
-      selectedOption.value = option;
-      query.value = '';
     }
   }
 
   function selectTheme(theme?: Theme) {
     if (!theme) return;
-    appearance.selectFixed(theme.name);
+    const slot = selectedOption.value?.themePicker;
+    if (slot === 'light' || slot === 'dark')
+      appearance.assignSlot(slot, theme.name);
+    else appearance.selectFixed(theme.name);
     closePalette();
   }
 
@@ -336,7 +503,7 @@ export function useCommandPalette() {
       if (
         generation === previewGeneration &&
         uiStore.commandPaletteVisible &&
-        ['theme', 'favorite themes'].includes(selectedOption.value?.label ?? '')
+        themePickerOpen.value
       ) {
         previewTheme(theme);
       }
@@ -348,10 +515,14 @@ export function useCommandPalette() {
   }
 
   function handleInputKeydown(event: KeyboardEvent) {
-    if (
-      selectedOption.value?.label === 'theme' ||
-      selectedOption.value?.label === 'favorite themes'
-    ) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      if (selectedOption.value) goBack();
+      else closePalette();
+      return;
+    }
+    if (themePickerOpen.value) {
       // This branch is for Theme selection
       const themes = filteredThemes.value;
       if (themes.length === 0) return;
@@ -373,7 +544,7 @@ export function useCommandPalette() {
           selectTheme(themes[highlightedIndex.value]); // type: Theme
         }
       } else if (event.key === 'Delete') {
-        if (selectedOption?.value.label === 'favorite themes') {
+        if (selectedOption.value?.themePicker === 'favorites') {
           userSettingsStore.updateSettings({
             favoriteThemes:
               userSettingsStore.activeSettings.favoriteThemes.filter(
@@ -381,13 +552,6 @@ export function useCommandPalette() {
               ),
           });
         }
-      } else if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        selectedOption.value = undefined;
-        query.value = '';
-        highlightedIndex.value = 0;
-        previewTheme();
       }
     } else {
       // This branch is for Option selection
@@ -406,17 +570,7 @@ export function useCommandPalette() {
           highlightedIndex.value >= 0 &&
           highlightedIndex.value < opts.length
         ) {
-          selectOption(opts[highlightedIndex.value]); // type: Option
-        }
-      } else if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        if (selectedOption.value) {
-          selectedOption.value = undefined;
-          query.value = '';
-          highlightedIndex.value = 0;
-        } else {
-          useUiStore().setCommandPaletteVisible(false);
+          selectOption(opts[highlightedIndex.value]?.option);
         }
       }
     }
@@ -444,11 +598,7 @@ export function useCommandPalette() {
   }
 
   function scrollToCurrentThemeIfOpen() {
-    if (
-      selectedOption.value?.label !== 'theme' &&
-      selectedOption.value?.label !== 'favorite themes'
-    )
-      return;
+    if (!themePickerOpen.value) return;
     const currentTheme = appearance.resolved.value;
     const idx = filteredThemes.value.findIndex((t) => t.name === currentTheme);
     if (idx !== -1) {
@@ -475,25 +625,25 @@ export function useCommandPalette() {
   watch(
     () => uiStore.commandPaletteVisible,
     (open) => {
-      if (!open) previewTheme();
+      if (!open) {
+        selectedOption.value = undefined;
+        navigation.value = [];
+        query.value = '';
+        highlightedIndex.value = 0;
+        previewTheme();
+      }
     },
   );
 
   watch(highlightedIndex, () => nextTick(scrollToHighlighted));
 
-  watch(
-    () => selectedOption.value?.label,
-    (label) => {
-      if (label === 'theme') scrollToCurrentThemeIfOpen();
-      if (label !== 'theme' && label !== 'favorite themes') previewGeneration++;
-      if (
-        label !== 'theme' &&
-        label !== 'favorite themes' &&
-        hoveredTheme.value
-      )
-        previewTheme();
-    },
-  );
+  watch(themePickerOpen, (open) => {
+    if (open) scrollToCurrentThemeIfOpen();
+    else {
+      previewGeneration++;
+      if (hoveredTheme.value) previewTheme();
+    }
+  });
 
   watch(
     [filteredOptions, () => useUiStore().commandPaletteVisible, query],
@@ -511,6 +661,8 @@ export function useCommandPalette() {
   return {
     query,
     selectedOption,
+    themePickerOpen,
+    goBack,
     highlightedIndex,
     rowRefs,
     inputRef,

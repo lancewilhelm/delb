@@ -460,3 +460,27 @@ tr:last-child td {
     0 0 10px var(--sub-alt-color),
     0 0 15px var(--sub-alt-color);
 }*/
+
+.spine-gloss::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    rgb(0 0 0 / 20%) 0%,
+    rgb(255 255 255 / 16%) 14%,
+    transparent 42%,
+    rgb(0 0 0 / 12%) 100%
+  );
+}
+.spine-gloss-horizontal::after {
+  background: linear-gradient(
+    0deg,
+    rgb(0 0 0 / 20%) 0%,
+    rgb(255 255 255 / 16%) 14%,
+    transparent 42%,
+    rgb(0 0 0 / 12%) 100%
+  );
+}

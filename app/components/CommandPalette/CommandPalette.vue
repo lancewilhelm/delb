@@ -3,6 +3,7 @@ const userSettingsStore = useUserSettingsStore();
 const appearance = useThemeAppearance();
 const uiStore = useUiStore();
 const dialogRef = ref<HTMLElement | null>(null);
+const editorRef = ref<HTMLElement | null>(null);
 let previousFocus: HTMLElement | null = null;
 function containFocus(event: KeyboardEvent) {
   if (event.key !== 'Tab') return;
@@ -32,6 +33,8 @@ function containFocus(event: KeyboardEvent) {
 const {
   query,
   selectedOption,
+  themePickerOpen,
+  goBack,
   highlightedIndex,
   inputRef,
   optionsRef,
@@ -44,6 +47,34 @@ const {
   closePalette,
   debouncedPreviewTheme,
 } = useCommandPalette();
+
+function handleDialogKeydown(event: KeyboardEvent) {
+  containFocus(event);
+  if (event.key !== 'Escape') return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (selectedOption.value) goBack();
+  else closePalette();
+}
+
+const numberInputValue = computed<number | string | null>({
+  get: () => {
+    const model = selectedOption.value?.numberInput?.model;
+    return isRef(model) ? model.value : (model ?? null);
+  },
+  set: (value) => {
+    if (selectedOption.value?.numberInput)
+      selectedOption.value.numberInput.model = value;
+  },
+});
+
+watch(selectedOption, async (option) => {
+  if (!option?.slider && !option?.numberInput && !option?.panel) return;
+  await nextTick();
+  editorRef.value
+    ?.querySelector<HTMLElement>('input, button, [tabindex="0"]')
+    ?.focus();
+});
 
 // --- Keybinding for palette open/close
 const route = useRoute();
@@ -87,12 +118,7 @@ watch(
     v-if="uiStore.commandPaletteVisible"
     class="fixed top-0 left-0 w-full h-full flex items-center justify-center z-5000 bg-black/20"
     @click="closePalette"
-    @mouseover="
-      selectedOption?.label === 'theme' ||
-      selectedOption?.label === 'favorite themes'
-        ? debouncedPreviewTheme()
-        : null
-    "
+    @mouseover="themePickerOpen ? debouncedPreviewTheme() : null"
   >
     <div
       ref="dialogRef"
@@ -100,7 +126,7 @@ watch(
       aria-modal="true"
       aria-label="Command palette"
       class="flex flex-col backdrop-blur-lg bg-(--bg-color)/80 w-150 h-150 m-4 rounded-lg shadow-lg font-mono command-palette border border-(--contrast-border-color)"
-      @keydown="containFocus"
+      @keydown="handleDialogKeydown"
       @click.stop
     >
       <div
@@ -111,6 +137,13 @@ watch(
           ref="inputRef"
           v-model="query"
           type="text"
+          :disabled="
+            !!(
+              selectedOption?.slider ||
+              selectedOption?.numberInput ||
+              selectedOption?.panel
+            )
+          "
           role="combobox"
           aria-label="Command palette"
           aria-expanded="true"
@@ -129,24 +162,17 @@ watch(
         v-if="selectedOption"
         type="button"
         class="flex items-center gap-2 px-3 cursor-pointer hover:bg-(--sub-alt-color) command-palette-back h-9 border-b border-(--contrast-border-color)"
-        @click="
-          () => {
-            selectedOption = undefined;
-          }
-        "
+        @click="goBack"
       >
         <Icon
           name="lucide:arrow-left"
           class="text-(--contrast-main-color) scale-125 header-icon"
         />
-        back
+        back <span class="ml-2 opacity-70">{{ selectedOption.label }}</span>
       </button>
       <div class="h-full overflow-hidden command-palette-options">
         <div
-          v-if="
-            selectedOption?.label === 'theme' ||
-            selectedOption?.label === 'favorite themes'
-          "
+          v-if="themePickerOpen"
           id="command-palette-options"
           ref="optionsRef"
           role="listbox"
@@ -166,7 +192,14 @@ watch(
             :aria-selected="highlightedIndex === i"
             :theme="theme"
             :highlighted="highlightedIndex === i"
-            :selected="appearance.resolved.value === theme.name"
+            :selected="
+              (selectedOption?.themePicker === 'light' ||
+              selectedOption?.themePicker === 'dark'
+                ? userSettingsStore.activeSettings.themePreference[
+                    selectedOption.themePicker
+                  ]
+                : appearance.resolved.value) === theme.name
+            "
             @select="selectTheme"
             @preview="debouncedPreviewTheme"
             @add-favorite="
@@ -192,10 +225,36 @@ watch(
           />
         </div>
         <div
+          v-else-if="selectedOption?.panel"
+          ref="editorRef"
+          class="h-full overflow-y-auto px-4 py-3"
+        >
+          <h2 class="mb-3 font-semibold">{{ selectedOption.label }}</h2>
+          <SettingsAppearanceCustomTheme
+            v-if="selectedOption.panel === 'custom-theme'"
+          />
+          <BooksViewFieldsSettings
+            v-else
+            :mode="selectedOption.panel === 'grid-fields' ? 'grid' : 'list'"
+          />
+        </div>
+        <div
+          v-else-if="selectedOption?.numberInput"
+          ref="editorRef"
+          class="flex flex-col w-full px-4 py-2 gap-2"
+        >
+          <SettingsUIInput
+            v-model="numberInputValue"
+            :title="selectedOption.label"
+            :description="selectedOption.numberInput.description"
+          />
+        </div>
+        <div
           v-else-if="
             selectedOption?.slider !== undefined &&
             selectedOption?.slider !== null
           "
+          ref="editorRef"
           class="flex flex-col w-full px-4 py-2 gap-2"
         >
           {{ selectedOption.label }}
@@ -207,6 +266,7 @@ watch(
               :aria-label="selectedOption.label"
               :min="selectedOption.slider.min"
               :max="selectedOption.slider.max"
+              :step="selectedOption.slider.step ?? 1"
             />
             {{ selectedOption.slider.model }}{{ selectedOption.slider.suffix }}
           </div>
@@ -219,7 +279,7 @@ watch(
           class="overflow-y-auto"
         >
           <div
-            v-for="(option, i) in filteredOptions"
+            v-for="(result, i) in filteredOptions"
             :id="`command-palette-option-${i}`"
             :key="i"
             :ref="(el: Element | null) => setOptionRef(el as HTMLElement, i)"
@@ -231,20 +291,29 @@ watch(
                 ? 'bg-(--sub-color) text-(--contrast-text-color)'
                 : '',
             ]"
-            @click="selectOption(option)"
+            @click="selectOption(result.option)"
           >
             <div class="flex items-center gap-2">
-              <Icon v-if="option.icon" :name="option.icon" class="scale-125" />
-              {{ option.label }}
               <Icon
-                v-if="option.active"
+                v-if="result.option.icon"
+                :name="result.option.icon"
+                class="scale-125"
+              />
+              <span>{{ result.option.label }}</span>
+              <span v-if="result.path" class="text-xs opacity-70">{{
+                result.path
+              }}</span>
+              <Icon
+                v-if="result.option.active"
                 name="lucide:check"
                 class="scale-125"
               />
             </div>
             <Icon
-              v-if="option.toggle"
-              :name="option.toggle.model ? 'ri:toggle-fill' : 'ri:toggle-line'"
+              v-if="result.option.toggle"
+              :name="
+                result.option.toggle.model ? 'ri:toggle-fill' : 'ri:toggle-line'
+              "
               class="text-3xl"
             />
           </div>

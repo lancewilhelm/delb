@@ -79,6 +79,7 @@ const id = (await created.json()).data.book.id,
   path = `/api/books/${id}/spine`;
 const connection = `/api/books/${id}/spine-generate/connection`;
 const adminConnection = '/api/settings/admin/chatgpt-image';
+const adminPrompt = '/api/settings/admin/spine-prompt';
 const setupDb = createClient({ url: 'file:./review/demo/synthetic.db' });
 await setupDb.execute({
   sql: "UPDATE users SET role = 'admin' WHERE id = ?",
@@ -90,6 +91,25 @@ await setupDb.execute({
 });
 setupDb.close();
 const generation = `/api/books/${id}/spine-generate`;
+assert.equal((await request(adminPrompt, null)).status, 401);
+assert.equal((await request(adminPrompt, editor)).status, 403);
+assert.equal(
+  (await request(adminPrompt, editor, 'PUT', { prompt: 'x', previous: null }))
+    .status,
+  403,
+);
+const promptSettings = await (await request(adminPrompt, owner)).json();
+assert.equal(promptSettings.prompt, promptSettings.defaultPrompt);
+assert.equal(promptSettings.savedPrompt, null);
+assert.equal(
+  (
+    await request(adminPrompt, owner, 'PUT', {
+      prompt: 'missing placeholders',
+      previous: null,
+    })
+  ).status,
+  400,
+);
 assert.equal((await request(connection, null)).status, 401);
 assert.equal((await request(connection, viewer)).status, 403);
 assert.equal((await request(connection, outsider)).status, 404);
@@ -163,6 +183,26 @@ assert.equal(
   (await (await request(`${path}?variant=metadata`, editor)).json()).exists,
   false,
 );
+const customPrompt = `${promptSettings.prompt}\nFavor gold embossing.`;
+response = await request(adminPrompt, owner, 'PUT', {
+  prompt: customPrompt,
+  previous: null,
+});
+assert.equal(response.status, 200, await response.clone().text());
+assert.equal((await response.json()).savedPrompt, customPrompt);
+assert.equal(
+  (
+    await request(adminPrompt, outsider, 'PUT', {
+      prompt: promptSettings.prompt,
+      previous: null,
+    })
+  ).status,
+  409,
+);
+assert.equal(
+  (await (await request(adminPrompt, owner)).json()).prompt,
+  customPrompt,
+);
 const second = new FormData();
 second.append('prompt', 'Make the title larger');
 second.append(
@@ -201,6 +241,20 @@ assert.deepEqual(
 assert.match(calls[0].prompt, /personal use/);
 assert.match(calls[0].prompt, /not for distribution/);
 assert.match(calls[1].prompt, /Make the title larger/);
+assert.match(calls[1].prompt, /Favor gold embossing/);
+assert.match(calls[1].prompt, /Spine fixture/);
+assert.match(calls[1].prompt, /Sample Author/);
+assert.match(calls[1].prompt, /second reference/);
+assert.ok(!calls[1].prompt.includes('{{title}}'));
+response = await request(adminPrompt, owner, 'PUT', {
+  prompt: promptSettings.defaultPrompt,
+  previous: customPrompt,
+});
+assert.equal(response.status, 200);
+assert.equal(
+  (await (await request(adminPrompt, owner)).json()).prompt,
+  promptSettings.defaultPrompt,
+);
 assert.ok(
   (
     await (

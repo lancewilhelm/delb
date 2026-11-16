@@ -14,6 +14,8 @@ import {
 } from '~~/server/utils/codex-image/connection';
 import { renderSpine } from '~~/server/utils/books/spine-image';
 import { defaultSpineEdits } from '~~/shared/spine-artwork';
+import { buildSpineGenerationPrompt } from '~~/shared/spine-generation-prompt';
+import { readSpineGenerationPrompt } from '~~/server/utils/spine-generation/prompt';
 
 const maxBytes = 10 * 1024 * 1024;
 async function normalize(bytes: Buffer) {
@@ -157,6 +159,7 @@ export default defineEventHandler(async (event) => {
     .innerJoin(authors, eq(authors.id, bookAuthors.authorId))
     .where(eq(bookAuthors.bookId, bookId))
     .orderBy(bookAuthors.position);
+  const { prompt: template } = await readSpineGenerationPrompt();
   const connection = await getConnection();
   await assertBookEditor(cloudDb, session.user.id, bookId);
   if (!(await isCurrentConnection(connection.generation)))
@@ -164,7 +167,13 @@ export default defineEventHandler(async (event) => {
       statusCode: 409,
       statusMessage: 'ChatGPT connection changed. Try again.',
     });
-  const instructions = `Create a flat, straight-on book spine design inspired by the first reference image, which is the book's cover. The title is ${JSON.stringify(book.title)} and the author names are ${JSON.stringify(bookAuthorRows.map((row) => row.name))}. This is for personal use in a private library and is not for distribution. Make the artwork a single narrow vertical spine with approximately 1:3 width-to-height proportions, readable title and author, no perspective, no book mockup, and no surrounding front cover. Keep all important artwork and lettering within the spine. ${previous ? 'The second reference is the current spine draft; revise it according to the following instructions while retaining its design where possible.' : 'Use the cover to match the visual style and colors.'}\nAdditional instructions: ${prompt || 'Match the cover faithfully.'}`;
+  const instructions = buildSpineGenerationPrompt({
+    template,
+    title: book.title,
+    authors: bookAuthorRows.map((row) => row.name),
+    hasPrevious: !!previous,
+    instructions: prompt,
+  });
   let image: Buffer;
   let failure =
     'ChatGPT could not generate the spine. Your account may not support this experimental feature, or the service may be unavailable.';
