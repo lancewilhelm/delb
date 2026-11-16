@@ -223,7 +223,7 @@ function handleSortChange(target: string) {
       <SettingsUIToggle
         v-model="detailSpineGloss"
         title="Spine gloss"
-        description="Adds a glossy effect to spine artwork on the book detail page."
+        description="Adds a glossy effect to spines on bookshelves and the book detail page."
       />
       <SettingsUIToggle
         v-model="coverStyleRoundedRight"
@@ -233,7 +233,7 @@ function handleSortChange(target: string) {
       <SettingsUIToggle
         v-model="coverStyleGrayscale"
         title="Grayscale"
-        description="Applies a grayscale filter to the cover"
+        description="Applies a grayscale filter to covers and spines"
       />
       <SettingsUIToggle
         v-model="coverReadingStatus"

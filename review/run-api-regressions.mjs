@@ -132,7 +132,7 @@ for (const suite of requested.length ? requested : suites) {
         path.join(directory, 'nuxt.config.ts'),
         config.replace(
           'export default defineNuxtConfig({',
-          "export default defineNuxtConfig({\n  buildDir: '.nuxt',\n  routeRules: { '/books/**': { ssr: false } },",
+          "export default defineNuxtConfig({\n  buildDir: '.nuxt',\n  routeRules: { '/books/**': { ssr: false }, '/settings/**': { ssr: false } },",
         ),
       );
       await cp(

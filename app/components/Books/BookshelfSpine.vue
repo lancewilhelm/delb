@@ -2,6 +2,7 @@
 import type { BookViewBook } from '~/utils/bookFields';
 import type { ShelfBook } from '~~/shared/bookshelf';
 
+const userSettingsStore = useUserSettingsStore();
 const props = defineProps<{
   placement: ShelfBook;
   book: BookViewBook;
@@ -45,7 +46,14 @@ const author = computed(
 <template>
   <span
     class="shelf-spine"
-    :class="{ horizontal, dimmed }"
+    :class="{
+      horizontal,
+      dimmed,
+      grayscale: userSettingsStore.activeSettings.coverStyle.grayscale,
+      'spine-gloss':
+        userSettingsStore.activeSettings.coverStyle.detailSpineGloss,
+      'spine-gloss-horizontal': horizontal,
+    }"
     :style="{ background: color }"
   >
     <img
@@ -88,25 +96,10 @@ const author = computed(
   writing-mode: vertical-rl;
   text-align: center;
 }
-.shelf-spine::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  box-shadow:
-    inset 2px 0 3px #ffffff38,
-    inset -3px 0 4px #0003;
-  pointer-events: none;
-}
 .shelf-spine.horizontal {
   writing-mode: horizontal-tb;
   padding: 2px 7px;
   white-space: nowrap;
-}
-.shelf-spine.horizontal::after {
-  box-shadow:
-    inset 0 2px 3px #ffffff38,
-    inset 0 -3px 4px #0003;
 }
 .spine-art {
   position: absolute;

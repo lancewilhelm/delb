@@ -25,7 +25,7 @@ const isFavorite = computed(() =>
   userSettingsStore.activeSettings.favoriteThemes.includes(props.theme.name),
 );
 const isCurrentTheme = computed(
-  () => appearance.resolved.value === props.theme.name,
+  () => props.selected ?? appearance.resolved.value === props.theme.name,
 );
 
 function handleClick() {

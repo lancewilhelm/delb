@@ -40,6 +40,14 @@ Open `/login`, enter your email and password, and select **Login**. Delb restore
 
 If a form reports an error, correct the named field and submit again. A failed registration does not establish that an account or usable session exists.
 
+## Change appearance from the command palette
+
+1. Press **Command+Shift+P** on a Mac or **Ctrl+Shift+P** on another computer.
+2. Search for a setting, such as **reading status badges**, **contrast**, or **system dark theme**.
+3. Select a result to change it. Search results include settings inside groups and show the group name.
+
+The palette also opens the custom theme editor and the grid and list field-order controls. Changes use the active device profile and save like changes in **Settings → Appearance**.
+
 ## Adjust interface contrast
 
 1. Open **Settings → Appearance**.

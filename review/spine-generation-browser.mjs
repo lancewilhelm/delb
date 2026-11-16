@@ -160,6 +160,124 @@ try {
       return { name: c.slice(0, at), value: c.slice(at + 1), url: base };
     }),
   });
+  await call('Page.navigate', { url: `${base}/settings/admin/spines` });
+  await until("!!document.querySelector('#spine-generation-prompt')");
+  await evaluate(`(() => {
+    const el = document.querySelector('#spine-generation-prompt');
+    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+    set.call(el, el.value + '\\nUse embossed lettering.');
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+  await until(
+    "[...document.querySelectorAll('button')].some(b => b.textContent.trim() === 'Save prompt' && !b.disabled)",
+  );
+  await evaluate(
+    "[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Save prompt').click()",
+  );
+  await until(
+    "document.body.innerText.includes('Prompt saved for future generations.')",
+  );
+  await call('Page.reload');
+  await until(
+    "document.querySelector('#spine-generation-prompt')?.value.includes('Use embossed lettering.')",
+  );
+  await evaluate(
+    "[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Restore default').click()",
+  );
+  await until(
+    "[...document.querySelectorAll('button')].some(b => b.textContent.trim() === 'Save prompt' && !b.disabled)",
+  );
+  await evaluate(
+    "[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Save prompt').click()",
+  );
+  await until(
+    "document.body.innerText.includes('Prompt saved for future generations.')",
+  );
+  assert.equal(
+    (await api('/api/settings/admin/spine-prompt')).prompt.includes(
+      'Use embossed lettering.',
+    ),
+    false,
+  );
+  const spine = new FormData();
+  spine.append('file', new Blob([image], { type: 'image/png' }), 'spine.png');
+  spine.append('revision', '');
+  spine.append(
+    'edits',
+    JSON.stringify({ left: 0, right: 0, top: 0, bottom: 0, stretch: false }),
+  );
+  response = await fetch(`${base}/api/books/${id}/spine`, {
+    method: 'POST',
+    headers: { Origin: base, Cookie: cookie },
+    body: spine,
+  });
+  assert.equal(response.status, 200, await response.clone().text());
+  await call('Page.navigate', { url: `${base}/books/${id}` });
+  await until("!!document.querySelector('.detail-spine.spine-gloss img')");
+  const detailGloss = await evaluate(
+    "getComputedStyle(document.querySelector('.detail-spine'), '::after').backgroundImage",
+  );
+  assert.ok(detailGloss.includes('linear-gradient'));
+  async function togglePaletteSetting(query, label) {
+    await evaluate(
+      `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', metaKey: true, ctrlKey: true, shiftKey: true, bubbles: true }))`,
+    );
+    await until(
+      '!!document.querySelector(\'[aria-label="Command palette"][role=combobox]\')',
+    );
+    await evaluate(`(() => {
+      const el = document.querySelector('[aria-label="Command palette"][role=combobox]');
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      set.call(el, ${JSON.stringify(query)});
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    await until(
+      `[...document.querySelectorAll('.command-palette-option')].some(el => el.textContent.includes(${JSON.stringify(label)}))`,
+    );
+    await evaluate(
+      `[...document.querySelectorAll('.command-palette-option')].find(el => el.textContent.includes(${JSON.stringify(label)})).click()`,
+    );
+    await evaluate(
+      "window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))",
+    );
+    await until("!document.querySelector('.command-palette')");
+  }
+  await togglePaletteSetting('grayscale', 'grayscale filter');
+  await until(
+    "getComputedStyle(document.querySelector('.detail-spine')).filter.includes('grayscale')",
+  );
+  await call('Page.navigate', { url: `${base}/books` });
+  await until(
+    '!!document.querySelector(\'button[aria-label="Bookshelf View"]\')',
+  );
+  await evaluate(
+    'document.querySelector(\'button[aria-label="Bookshelf View"]\').click()',
+  );
+  await until(
+    "!!document.querySelector('.shelf-spine.spine-gloss .spine-art')",
+  );
+  assert.equal(
+    await evaluate(
+      "getComputedStyle(document.querySelector('.shelf-spine'), '::after').backgroundImage",
+    ),
+    detailGloss,
+  );
+  assert.ok(
+    (
+      await evaluate(
+        "getComputedStyle(document.querySelector('.shelf-spine')).filter",
+      )
+    ).includes('grayscale'),
+  );
+  await togglePaletteSetting('spine gloss', 'spine gloss');
+  await until("!document.querySelector('.shelf-spine.spine-gloss')");
+  assert.ok(
+    (
+      await evaluate(
+        "getComputedStyle(document.querySelector('.shelf-spine')).filter",
+      )
+    ).includes('grayscale'),
+  );
   await call('Page.navigate', { url: `${base}/books/${id}/edit` });
   await delay(500);
   if (await evaluate("document.body.innerText.includes('Server Error')"))
