@@ -1,5 +1,13 @@
 import { spawn } from 'node:child_process';
-import { cp, mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -45,6 +53,7 @@ const suites = [
   'review/bookshelf-api.mjs',
   'review/collection-bookshelf-api.mjs',
   'review/spine-artwork-api.mjs',
+  'review/spine-generation-api.mjs',
   'review/personal-shelves-api.mjs',
 ];
 const requested = process.argv.slice(2);
@@ -56,6 +65,7 @@ if (
         'review/collections-browser.mjs',
         'review/bookshelf-load-browser.mjs',
         'review/personal-shelves-browser.mjs',
+        'review/spine-generation-browser.mjs',
       ].includes(suite),
   )
 )
@@ -76,6 +86,12 @@ for (const suite of requested.length ? requested : suites) {
       'review/http-smoke.mjs',
       'review/pdf-fixture.mjs',
       suite,
+      ...([
+        'review/spine-generation-api.mjs',
+        'review/spine-generation-browser.mjs',
+      ].includes(suite)
+        ? ['review/fake-codex-provider.cjs']
+        : []),
     ]) {
       const destination = path.join(directory, file);
       await mkdir(path.dirname(destination), { recursive: true });
@@ -99,10 +115,46 @@ for (const suite of requested.length ? requested : suites) {
       path.join(directory, '.output'),
       'dir',
     );
+    if (suite === 'review/spine-generation-browser.mjs') {
+      for (const entry of ['app', 'server', 'shared', 'public'])
+        await symlink(
+          path.join(root, entry),
+          path.join(directory, entry),
+          'dir',
+        );
+      await symlink(
+        path.join(root, 'packages/epub/dist'),
+        path.join(directory, 'packages/epub/dist'),
+        'dir',
+      );
+      const config = await readFile(path.join(root, 'nuxt.config.ts'), 'utf8');
+      await writeFile(
+        path.join(directory, 'nuxt.config.ts'),
+        config.replace(
+          'export default defineNuxtConfig({',
+          "export default defineNuxtConfig({\n  buildDir: '.nuxt',\n  routeRules: { '/books/**': { ssr: false } },",
+        ),
+      );
+      await cp(
+        path.join(root, 'tsconfig.json'),
+        path.join(directory, 'tsconfig.json'),
+      );
+    }
     await run(['review/setup-demo.mjs'], directory);
     server = spawn(
       process.execPath,
-      ['review/start-demo.mjs', '--production'],
+      [
+        'review/start-demo.mjs',
+        ...(suite === 'review/spine-generation-browser.mjs'
+          ? []
+          : ['--production']),
+        ...([
+          'review/spine-generation-api.mjs',
+          'review/spine-generation-browser.mjs',
+        ].includes(suite)
+          ? ['--fake-codex']
+          : []),
+      ],
       { cwd: directory, env: environment, detached: true },
     );
     const record = (bytes) => {
@@ -111,7 +163,11 @@ for (const suite of requested.length ? requested : suites) {
     server.stdout.on('data', record);
     server.stderr.on('data', record);
     let ready = false;
-    for (let attempt = 0; attempt < 100; attempt++) {
+    for (
+      let attempt = 0;
+      attempt < (suite === 'review/spine-generation-browser.mjs' ? 400 : 100);
+      attempt++
+    ) {
       if (server.exitCode !== null) throw Error(serverOutput);
       try {
         ready =
@@ -130,7 +186,11 @@ for (const suite of requested.length ? requested : suites) {
       throw Error(
         'Disposable production server did not become ready.\n' + serverOutput,
       );
-    await run([suite], directory);
+    try {
+      await run([suite], directory);
+    } catch (error) {
+      throw new Error(`${String(error)}\nServer output:\n${serverOutput}`);
+    }
     if (suite.endsWith('/server-regression.mjs'))
       await run(['review/http-smoke.mjs'], directory);
   } finally {

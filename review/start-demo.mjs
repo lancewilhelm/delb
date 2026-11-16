@@ -19,7 +19,12 @@ const env = {
   BETTER_AUTH_URL: 'http://127.0.0.1:4317',
   BETTER_AUTH_TRUSTED_ORIGINS: 'http://127.0.0.1:4317',
   NUXT_TELEMETRY_DISABLED: '1',
-  NODE_OPTIONS: '--require ' + path.resolve('review/deny-outbound.cjs'),
+  NODE_OPTIONS:
+    '--require ' +
+    path.resolve('review/deny-outbound.cjs') +
+    (process.argv.includes('--fake-codex')
+      ? ' --require ' + path.resolve('review/fake-codex-provider.cjs')
+      : ''),
   LOG_LEVEL: 'warn',
   NITRO_HOST: '127.0.0.1',
   NITRO_PORT: '4317',

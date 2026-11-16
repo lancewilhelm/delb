@@ -17,6 +17,10 @@ Delb needs a persistent database and a writable managed library. A container res
 
 Store the authentication secret through your deployment's secret configuration. Keep it stable across restarts. Configure the public origin to match the address used in the browser.
 
+Experimental ChatGPT spine generation uses one shared connection configured under **Settings → Admin → Spine generation**. All book editors can use the connection for books they can edit. Delb encrypts the provider tokens in the database with a key derived from `BETTER_AUTH_SECRET`. Use a persistent secret of at least 32 characters. Keep the secret separate from database backups. Anyone with both the database and the secret can decrypt the tokens. Changing or losing the secret requires an administrator to reconnect ChatGPT. An interrupted token refresh also requires reconnecting; restoring an older database backup can invalidate a connection. Disconnect removes the shared credentials but does not promise remote revocation. Sign-in attempts are kept in server memory and must be restarted if the server restarts. Earlier per-user credentials remain stored separately and are not used by the shared connection.
+
+In a multi-instance deployment, route the sign-in attempt and its polling requests to the same server process. Other requests use the shared database connection state.
+
 The image runs as UID/GID 1001 by default. Ensure the mounted writable directories permit that user to write, or choose a matching runtime user. Library storage also needs working SQLite locking semantics. See [filesystem requirements](storage-recovery.md#ownership-and-filesystem-requirements).
 
 ## Initialize an installation

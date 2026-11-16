@@ -36,6 +36,9 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
 const coverStyleGlossy = userSettingsStore.settingRef<boolean>(
   'coverStyle.glossySpine',
 );
+const detailSpineGloss = userSettingsStore.settingRef<boolean>(
+  'coverStyle.detailSpineGloss',
+);
 
 const coverStyleRoundedRight = userSettingsStore.settingRef<boolean>(
   'coverStyle.roundedRight',
@@ -214,8 +217,13 @@ function handleSortChange(target: string) {
     >
       <SettingsUIToggle
         v-model="coverStyleGlossy"
-        title="Glossy Spine"
+        title="Cover gloss"
         description="Creates an Apple Books style glossy cover effect"
+      />
+      <SettingsUIToggle
+        v-model="detailSpineGloss"
+        title="Spine gloss"
+        description="Adds a glossy effect to spine artwork on the book detail page."
       />
       <SettingsUIToggle
         v-model="coverStyleRoundedRight"

@@ -43,6 +43,12 @@ const tabs: Record<string, Tab> = {
     icon: 'lucide:book-open',
     path: '/settings/admin/metadata',
   },
+  spines: {
+    name: 'Spine generation',
+    component: resolveComponent('SettingsAdminSpines'),
+    icon: 'lucide:sparkles',
+    path: '/settings/admin/spines',
+  },
   users: {
     name: 'Users',
     component: resolveComponent('SettingsAdminUsers'),

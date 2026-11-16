@@ -315,3 +315,32 @@ test('cover status badges default off and retain independent desktop and mobile 
     false,
   );
 });
+
+test('spine gloss can be changed independently of cover gloss and saved per device profile', () => {
+  const legacy = createStore();
+  legacy.store.applyRemoteSettings({
+    coverStyle: { glossySpine: false },
+  } as unknown as Partial<UserSettings>);
+  assert.equal(legacy.store.activeSettings.coverStyle.glossySpine, false);
+  assert.equal(legacy.store.activeSettings.coverStyle.detailSpineGloss, true);
+  const { store, mobile } = createStore();
+  const spineGloss = store.settingRef<boolean>('coverStyle.detailSpineGloss');
+  const coverGloss = store.settingRef<boolean>('coverStyle.glossySpine');
+  assert.equal(spineGloss.value, true);
+  spineGloss.value = false;
+  assert.equal(coverGloss.value, true);
+  store.setMobileEnabled(true);
+  mobile.value = true;
+  spineGloss.value = true;
+  const restored = createStore();
+  restored.store.applyRemoteSettings(
+    JSON.parse(JSON.stringify(store.settings)),
+  );
+  assert.equal(
+    restored.store.activeSettings.coverStyle.detailSpineGloss,
+    false,
+  );
+  assert.equal(restored.store.activeSettings.coverStyle.glossySpine, true);
+  restored.mobile.value = true;
+  assert.equal(restored.store.activeSettings.coverStyle.detailSpineGloss, true);
+});

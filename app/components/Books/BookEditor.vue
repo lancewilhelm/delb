@@ -270,6 +270,7 @@ const spineEditor = ref<{
   save: () => Promise<void>;
   reset: () => void;
   busy: boolean;
+  generating: boolean;
 } | null>(null);
 const errorMessage = ref<string | null>(null);
 const successMessage = ref<string | null>(null);
@@ -1783,14 +1784,28 @@ watch(
         <div
           class="flex flex-col justify-center items-center w-full sm:w-80 shrink-0 self-center md:self-start"
         >
-          <BookCover
-            :src="coverPreviewUrl ?? coverSourceUrl"
-            :fallback-src="coverPreviewUrl ? null : coverThumbUrl"
-            :show-resolution="true"
-            :alt="`Cover for ${displayTitle}`"
-            :title="displayTitle"
-            class="w-50! sm:w-full!"
-          />
+          <div class="relative w-50 sm:w-full">
+            <BookCover
+              :src="coverPreviewUrl ?? coverSourceUrl"
+              :fallback-src="coverPreviewUrl ? null : coverThumbUrl"
+              :show-resolution="true"
+              :alt="`Cover for ${displayTitle}`"
+              :title="displayTitle"
+              class="w-full!"
+            />
+            <div
+              v-if="spineEditor?.generating"
+              aria-hidden="true"
+              class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-sm bg-black/65 text-sm font-medium text-white"
+            >
+              <Icon
+                name="lucide:loader-circle"
+                class="text-3xl motion-safe:animate-spin"
+                aria-hidden="true"
+              />
+              <span>Generating spine…</span>
+            </div>
+          </div>
 
           <input
             ref="coverFileInput"
@@ -1896,6 +1911,8 @@ watch(
             :key="activeBookId"
             ref="spineEditor"
             :book-id="activeBookId"
+            :has-cover="!!book?.coverImagePath"
+            :cover-pending="!!selectedCoverFile || coverResetPending"
             :disabled="saving"
           />
         </div>
