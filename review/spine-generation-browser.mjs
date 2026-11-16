@@ -181,6 +181,9 @@ try {
   await until(
     "document.querySelector('#spine-generation-prompt')?.value.includes('Use embossed lettering.')",
   );
+  await until(
+    "[...document.querySelectorAll('button')].some(b => b.textContent.trim() === 'Restore default')",
+  );
   await evaluate(
     "[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Restore default').click()",
   );
@@ -282,6 +285,30 @@ try {
   await delay(500);
   if (await evaluate("document.body.innerText.includes('Server Error')"))
     throw Error('Editor returned a server error');
+  await until(
+    "[...document.querySelectorAll('button')].some(b => b.textContent.trim() === 'Edit spine')",
+  );
+  await evaluate(
+    "(() => { const button = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Edit spine'); button.focus(); button.click(); })()",
+  );
+  await until(
+    "!!document.querySelector('[role=dialog][aria-label], [role=dialog][aria-labelledby]')",
+  );
+  const layout = await evaluate(`(() => {
+    const preview = document.querySelector('.spine-preview-column').getBoundingClientRect();
+    const controls = document.querySelector('.spine-control-column').getBoundingClientRect();
+    return { previewRight: preview.right, controlsLeft: controls.left };
+  })()`);
+  assert.ok(
+    layout.previewRight <= layout.controlsLeft,
+    'preview sits to the left of controls',
+  );
+  assert.ok(
+    await evaluate(
+      "document.querySelector('.spine-editor').getBoundingClientRect().height >= Math.min(700, innerHeight - 64)",
+    ),
+    'the modal gives the spine more vertical space',
+  );
   try {
     await until(
       "[...document.querySelectorAll('button')].some(b => b.textContent.trim() === 'Generate preview' && !b.disabled)",
@@ -295,6 +322,245 @@ try {
     );
     throw error;
   }
+  await evaluate(
+    "[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Remove').click()",
+  );
+  await until("!document.querySelector('.edit-spine-preview img')");
+  assert.ok(
+    await evaluate(
+      "document.querySelector('.edit-spine-preview').textContent.trim().length > 0",
+    ),
+    'the cover shows a placeholder for a removed spine',
+  );
+  await evaluate(
+    "[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Undo changes').click()",
+  );
+  await until("!!document.querySelector('.edit-spine-preview img')");
+  await evaluate(
+    "[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Crop image').click()",
+  );
+  await until("!!document.querySelector('.crop-canvas')");
+  const previewBounds = await evaluate(`(() => {
+    const stage = document.querySelector('.preview-stage').getBoundingClientRect();
+    const viewport = document.querySelector('.preview-viewport').getBoundingClientRect();
+    const column = document.querySelector('.spine-preview-column').getBoundingClientRect();
+    return { stageHeight: stage.height, viewportHeight: viewport.height, remaining: column.bottom - stage.bottom };
+  })()`);
+  assert.ok(
+    previewBounds.remaining < 65,
+    'preview fills the available height above its tools',
+  );
+  await evaluate(
+    `(() => { const button = document.querySelector('[aria-label="Zoom out"]'); for (let i = 0; i < 30; i++) button.click(); })()`,
+  );
+  const smallBounds = await evaluate(
+    `({ stage: document.querySelector('.preview-stage').getBoundingClientRect().height, viewport: document.querySelector('.preview-viewport').getBoundingClientRect().height })`,
+  );
+  await evaluate(
+    `(() => { const button = document.querySelector('[aria-label="Zoom in"]'); for (let i = 0; i < 40; i++) button.click(); })()`,
+  );
+  const largeBounds = await evaluate(
+    `(() => { const viewport = document.querySelector('.preview-viewport'); return { stage: document.querySelector('.preview-stage').getBoundingClientRect().height, viewport: viewport.getBoundingClientRect().height, scrollHeight: viewport.scrollHeight }; })()`,
+  );
+  assert.equal(
+    smallBounds.stage,
+    previewBounds.stageHeight,
+    'zooming out keeps the preview window height',
+  );
+  assert.equal(
+    largeBounds.stage,
+    previewBounds.stageHeight,
+    'zooming in keeps the preview window height',
+  );
+  assert.equal(smallBounds.viewport, previewBounds.viewportHeight);
+  assert.equal(largeBounds.viewport, previewBounds.viewportHeight);
+  assert.ok(
+    largeBounds.scrollHeight > largeBounds.viewport,
+    'a zoomed image can scroll within the preview',
+  );
+  await evaluate(
+    'document.querySelector(\'[aria-label="Reset zoom"]\').click()',
+  );
+  const initialWidth = await evaluate(
+    "document.querySelector('.crop-canvas').getBoundingClientRect().width",
+  );
+  const wheelPoint = await evaluate(`(() => {
+    const rect = document.querySelector('.preview-viewport').getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + Math.min(rect.height / 2, 100) };
+  })()`);
+  await call('Input.dispatchMouseEvent', {
+    type: 'mouseWheel',
+    ...wheelPoint,
+    deltaX: 0,
+    deltaY: -100,
+  });
+  const wheelWidth = await evaluate(
+    "document.querySelector('.crop-canvas').getBoundingClientRect().width",
+  );
+  assert.ok(
+    wheelWidth > initialWidth,
+    'scrolling up over the preview zooms in',
+  );
+  await call('Input.dispatchMouseEvent', {
+    type: 'mouseWheel',
+    ...wheelPoint,
+    deltaX: 0,
+    deltaY: 100,
+  });
+  const wheelOutWidth = await evaluate(
+    "document.querySelector('.crop-canvas').getBoundingClientRect().width",
+  );
+  assert.ok(
+    wheelOutWidth < wheelWidth,
+    'scrolling down over the preview zooms out',
+  );
+  assert.equal(
+    await evaluate("document.querySelector('.crop-selection').style.left"),
+    '0%',
+    'wheel zoom leaves the crop unchanged',
+  );
+  await evaluate(
+    'document.querySelector(\'[aria-label="Reset zoom"]\').click()',
+  );
+  await evaluate('document.querySelector(\'[aria-label="Zoom in"]\').click()');
+  const zoomedWidth = await evaluate(
+    "document.querySelector('.crop-canvas').getBoundingClientRect().width",
+  );
+  assert.ok(
+    zoomedWidth > initialWidth,
+    'zoom enlarges the image without changing its crop',
+  );
+  assert.equal(
+    await evaluate("document.querySelector('.crop-selection').style.left"),
+    '0%',
+  );
+  assert.equal(
+    await evaluate("!!document.querySelector('.crop-control')"),
+    false,
+  );
+  await evaluate(
+    "document.querySelector('[aria-label=\"Drag left crop handle\"]').scrollIntoView({block:'center', inline:'center'})",
+  );
+  const handle = await evaluate(`(() => {
+    const canvas = document.querySelector('.crop-canvas').getBoundingClientRect();
+    const grip = document.querySelector('[aria-label="Drag left crop handle"]').getBoundingClientRect();
+    return { x: Math.max(canvas.left + 4, grip.left + grip.width / 2), y: grip.top + grip.height / 2, distance: canvas.width * 0.15 };
+  })()`);
+  await call('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x: handle.x,
+    y: handle.y,
+    button: 'left',
+    clickCount: 1,
+  });
+  await call('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: handle.x + handle.distance,
+    y: handle.y,
+    buttons: 1,
+  });
+  await call('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: handle.x + handle.distance,
+    y: handle.y,
+    button: 'left',
+    clickCount: 1,
+  });
+  let croppedLeft = Number(
+    (
+      await evaluate("document.querySelector('.crop-selection').style.left")
+    ).replace('%', ''),
+  );
+  assert.ok(
+    croppedLeft >= 10 && croppedLeft <= 20,
+    `dragging a handle updates the crop: ${croppedLeft}%`,
+  );
+  await evaluate(
+    'document.querySelector(\'[aria-label="Drag left crop handle"]\').focus()',
+  );
+  await call('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key: 'ArrowRight',
+    code: 'ArrowRight',
+    windowsVirtualKeyCode: 39,
+  });
+  await call('Input.dispatchKeyEvent', {
+    type: 'keyUp',
+    key: 'ArrowRight',
+    code: 'ArrowRight',
+    windowsVirtualKeyCode: 39,
+  });
+  const keyboardCrop = Number(
+    (
+      await evaluate("document.querySelector('.crop-selection').style.left")
+    ).replace('%', ''),
+  );
+  assert.equal(
+    keyboardCrop,
+    croppedLeft + 1,
+    'arrow key makes a fine crop adjustment',
+  );
+  croppedLeft = keyboardCrop;
+  await evaluate(
+    "[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Done cropping').click()",
+  );
+  await call('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key: 'Escape',
+    code: 'Escape',
+    windowsVirtualKeyCode: 27,
+  });
+  await call('Input.dispatchKeyEvent', {
+    type: 'keyUp',
+    key: 'Escape',
+    code: 'Escape',
+    windowsVirtualKeyCode: 27,
+  });
+  await until(
+    "!document.querySelector('[role=dialog][aria-labelledby=spine-dialog-title]')",
+  );
+  assert.equal(
+    await evaluate('document.activeElement.textContent.trim()'),
+    'Edit spine',
+  );
+  assert.ok(
+    await evaluate(
+      "parseFloat(document.querySelector('.edit-spine-preview img').style.left) < 0",
+    ),
+    'cover-side preview reflects the staged crop',
+  );
+  await evaluate(
+    "[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Edit spine').click()",
+  );
+  await evaluate(
+    "[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Crop image').click()",
+  );
+  assert.equal(
+    await evaluate("document.querySelector('.crop-selection').style.left"),
+    `${croppedLeft}%`,
+  );
+  await evaluate(
+    "[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Done').click()",
+  );
+  await evaluate(
+    "[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Save').click()",
+  );
+  await waitFor(
+    async () =>
+      (await api(`/api/books/${id}/spine?variant=metadata`)).edits.left ===
+      croppedLeft,
+    'saved dragged crop',
+  );
+  await call('Page.navigate', { url: `${base}/books/${id}/edit` });
+  await until(
+    "[...document.querySelectorAll('button')].some(b => b.textContent.trim() === 'Edit spine')",
+  );
+  await evaluate(
+    "[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Edit spine').click()",
+  );
+  await until(
+    "[...document.querySelectorAll('button')].some(b => b.textContent.trim() === 'Generate preview' && !b.disabled)",
+  );
   async function startGeneration(buttonText, prompt) {
     await evaluate(`(() => {
       const el = document.querySelector('.generation-label textarea');
@@ -335,6 +601,31 @@ try {
     deviceScaleFactor: 1,
     mobile: true,
   });
+  const mobileLayout = await evaluate(`(() => {
+    const preview = document.querySelector('.spine-preview-column').getBoundingClientRect();
+    const controls = document.querySelector('.spine-control-column').getBoundingClientRect();
+    return { previewBottom: preview.bottom, controlsTop: controls.top };
+  })()`);
+  assert.ok(
+    mobileLayout.previewBottom <= mobileLayout.controlsTop,
+    'preview stacks above controls on small screens',
+  );
+  const mobileHeight = await evaluate(
+    "document.querySelector('.preview-stage').getBoundingClientRect().height",
+  );
+  await evaluate(
+    `(() => { const button = document.querySelector('[aria-label="Zoom in"]'); for (let i = 0; i < 40; i++) button.click(); })()`,
+  );
+  assert.equal(
+    await evaluate(
+      "document.querySelector('.preview-stage').getBoundingClientRect().height",
+    ),
+    mobileHeight,
+    'zoom leaves the mobile preview window height unchanged',
+  );
+  await evaluate(
+    'document.querySelector(\'[aria-label="Reset zoom"]\').click()',
+  );
   await startGeneration('Update preview', 'WAIT_FOR_PERMISSION FAIL_IMAGE');
   await until("!document.querySelector('.generation-overlay')");
   await until(
