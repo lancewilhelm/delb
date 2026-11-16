@@ -1,10 +1,7 @@
 import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { books, bookSpines, collectionMembers } from '~/utils/db/schema';
 import { cloudDb } from '~~/server/utils/db/cloud';
-import {
-  MAX_SERIES_SPINE_REFERENCES,
-  type SelectedSeriesSpine,
-} from '~~/shared/spine-series-references';
+import type { SelectedSeriesSpine } from '~~/shared/spine-series-references';
 
 export async function findSeriesSpines(
   userId: string,
@@ -32,7 +29,7 @@ export async function findSeriesSpines(
       title: books.title,
       seriesIndex: books.seriesIndex,
       revision: bookSpines.revision,
-      imageBase64: bookSpines.imageBase64,
+      imageBase64: sql<string>`case when ${!!selected} then ${bookSpines.imageBase64} else '' end`,
     })
     .from(books)
     .innerJoin(bookSpines, eq(bookSpines.bookId, books.id))
@@ -64,8 +61,7 @@ export async function findSeriesSpines(
       ),
       asc(books.seriesIndex),
       asc(books.id),
-    )
-    .limit(MAX_SERIES_SPINE_REFERENCES);
+    );
   if (
     selected &&
     (rows.length !== selected.length ||

@@ -108,6 +108,13 @@ try {
     )
   ).data.id;
   const path = `/api/shelves/${shelf}`;
+  const bookShelves = `/api/books/${one}/shelves`;
+  assert.equal((await request(null, bookShelves)).status, 401);
+  assert.equal((await request(outsider, bookShelves)).status, 404);
+  assert.deepEqual(await ok(await request(owner, bookShelves)), []);
+  assert.deepEqual(await ok(await request(reader, bookShelves)), [
+    { id: shelf, name: 'Favorites', containsBook: false },
+  ]);
   assert.equal((await request(outsider, path)).status, 404);
   assert.equal(
     (await request(outsider, `/api/books?shelfId=${shelf}`)).status,
@@ -117,6 +124,25 @@ try {
     await request(reader, `${path}/books`, 'POST', {
       action: 'add',
       bookIds: [one, two, one],
+    }),
+  );
+  assert.deepEqual(await ok(await request(reader, bookShelves)), [
+    { id: shelf, name: 'Favorites', containsBook: true },
+  ]);
+  await ok(
+    await request(reader, `${path}/books`, 'POST', {
+      action: 'remove',
+      bookIds: [one],
+    }),
+  );
+  assert.equal(
+    (await ok(await request(reader, bookShelves)))[0].containsBook,
+    false,
+  );
+  await ok(
+    await request(reader, `${path}/books`, 'POST', {
+      action: 'add',
+      bookIds: [one],
     }),
   );
   let state = await ok(await request(reader, path));
@@ -150,6 +176,7 @@ try {
       'DELETE',
     ),
   );
+  assert.equal((await request(reader, bookShelves)).status, 404);
   state = await ok(await request(reader, path));
   assert.deepEqual(
     state.books.map((b) => b.id),

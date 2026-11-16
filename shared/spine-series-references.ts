@@ -1,4 +1,5 @@
-export const MAX_SERIES_SPINE_REFERENCES = 3;
+export const MAX_IMAGE_REFERENCES = 16;
+export const MAX_SERIES_SPINE_REFERENCES = MAX_IMAGE_REFERENCES - 1;
 
 export type SeriesSpineReference = {
   bookId: string;

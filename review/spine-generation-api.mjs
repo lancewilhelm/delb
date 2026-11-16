@@ -218,6 +218,20 @@ const secondSpine = await makeSeriesSpine(
   3,
   '#2244aa',
 );
+const thirdSpine = await makeSeriesSpine(
+  owner,
+  collection,
+  'Fourth visible volume',
+  4,
+  '#55aa33',
+);
+const fourthSpine = await makeSeriesSpine(
+  owner,
+  collection,
+  'Fifth visible volume',
+  5,
+  '#bb33aa',
+);
 const hiddenCollection = await request('/api/collections', outsider, 'POST', {
   name: `Private ${suffix}`,
 });
@@ -240,7 +254,42 @@ assert.equal(response.status, 200, await response.clone().text());
 const refs = await response.json();
 assert.deepEqual(
   refs.map((reference) => reference.bookId),
-  [visibleSpine.bookId, secondSpine.bookId],
+  [
+    visibleSpine.bookId,
+    secondSpine.bookId,
+    thirdSpine.bookId,
+    fourthSpine.bookId,
+  ],
+);
+const tooMany = new FormData();
+tooMany.append(
+  'seriesReferences',
+  JSON.stringify(
+    Array.from({ length: 16 }, (_, i) => ({
+      bookId: `book-${i}`,
+      revision: 'rev',
+    })),
+  ),
+);
+assert.equal((await request(generation, editor, 'POST', tooMany)).status, 400);
+const tooManyForUpdate = new FormData();
+tooManyForUpdate.append(
+  'seriesReferences',
+  JSON.stringify(
+    Array.from({ length: 15 }, (_, i) => ({
+      bookId: `book-${i}`,
+      revision: 'rev',
+    })),
+  ),
+);
+tooManyForUpdate.append(
+  'previous',
+  new Blob([cover], { type: 'image/png' }),
+  'draft.png',
+);
+assert.equal(
+  (await request(generation, editor, 'POST', tooManyForUpdate)).status,
+  400,
 );
 const invalidRefs = new FormData();
 invalidRefs.append('seriesReferences', JSON.stringify([hiddenSpine]));
@@ -291,7 +340,10 @@ assert.equal(
 );
 const second = new FormData();
 second.append('prompt', 'Make the title larger');
-second.append('seriesReferences', JSON.stringify([visibleSpine, secondSpine]));
+second.append(
+  'seriesReferences',
+  JSON.stringify([visibleSpine, secondSpine, thirdSpine, fourthSpine]),
+);
 second.append(
   'previous',
   new Blob([bytes], { type: 'image/png' }),
@@ -323,7 +375,7 @@ const calls = (
   .map(JSON.parse);
 assert.deepEqual(
   calls.map((c) => c.images),
-  [1, 4],
+  [1, 6],
 );
 assert.match(calls[0].prompt, /personal use/);
 assert.match(calls[0].prompt, /not for distribution/);

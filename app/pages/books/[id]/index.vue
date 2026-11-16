@@ -1639,6 +1639,7 @@ const { copy } = useClipboard();
                   </span>
                 </div>
               </div>
+              <BooksBookPersonalShelves :key="book.id" :book-id="book.id" />
               <div class="grid grid-cols-[min-content_1fr] gap-4 items-center">
                 <div class="font-semibold">Copies</div>
                 <div class="flex flex-wrap justify-end items-center gap-1">
