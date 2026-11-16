@@ -40,6 +40,10 @@ test('spine rendition crops the chosen edges and stretches only when requested',
   assert.equal(decoded.info.width, 100);
   assert.equal(decoded.info.height, 150);
   assert.ok(decoded.data[1]! > 200 && decoded.data[0]! < 50);
+  const fineEdits = parseSpineEdits({ ...defaultSpineEdits(), top: 50.5 });
+  assert.ok(fineEdits);
+  const fineCrop = await renderSpine(source, fineEdits);
+  assert.equal((await sharp(fineCrop.image).metadata()).height, 149);
   const stretched = await renderSpine(source, {
     ...defaultSpineEdits(),
     top: 50,
@@ -73,6 +77,10 @@ test('rejects invalid crop settings and unsupported or oversized images', async 
   );
   assert.equal(
     parseSpineEdits({ ...defaultSpineEdits(), stretch: 'yes' }),
+    null,
+  );
+  assert.equal(
+    parseSpineEdits({ ...defaultSpineEdits(), left: Infinity }),
     null,
   );
   await assert.rejects(

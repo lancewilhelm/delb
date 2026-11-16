@@ -69,6 +69,14 @@ const instructions = ref('');
 const zoom = ref(100);
 const cropMode = ref(false);
 const cropCanvas = ref<HTMLElement | null>(null);
+const viewport = ref<HTMLElement | null>(null);
+const pan = ref<{
+  pointerId: number;
+  x: number;
+  y: number;
+  left: number;
+  top: number;
+} | null>(null);
 const seriesSpines = ref<SeriesSpineReference[]>([]);
 const selectedSeriesIds = ref<string[]>([]);
 const referencesLoading = ref(true);
@@ -185,7 +193,14 @@ function adjustCrop(
 ) {
   const next = { ...initial };
   const clamp = (value: number, opposite: number) =>
-    Math.max(0, Math.min(90, 95 - opposite, Math.round(value)));
+    Math.max(
+      0,
+      Math.min(
+        90,
+        Math.floor((95 - opposite) * 10 + 0.000001) / 10,
+        Math.round(value * 10) / 10,
+      ),
+    );
   if (edges.includes('left'))
     next.left = clamp(initial.left + dx, initial.right);
   if (edges.includes('right'))
@@ -225,7 +240,7 @@ function stopCrop(event: PointerEvent) {
   if (drag?.pointerId === event.pointerId) drag = null;
 }
 function keyCrop(event: KeyboardEvent, edges: CropEdge[]) {
-  const amount = event.shiftKey ? 5 : 1;
+  const amount = event.shiftKey ? 1 : 0.1;
   const dx =
     event.key === 'ArrowRight'
       ? amount
@@ -237,6 +252,35 @@ function keyCrop(event: KeyboardEvent, edges: CropEdge[]) {
   if ((!dx && !dy) || props.disabled || busy.value) return;
   event.preventDefault();
   adjustCrop(edits.value, edges, dx, dy);
+}
+function startPan(event: PointerEvent) {
+  const el = viewport.value;
+  if (
+    !el ||
+    event.button !== 0 ||
+    event.pointerType === 'touch' ||
+    (el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight)
+  )
+    return;
+  pan.value = {
+    pointerId: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+    left: el.scrollLeft,
+    top: el.scrollTop,
+  };
+  el.setPointerCapture(event.pointerId);
+  event.preventDefault();
+}
+function movePan(event: PointerEvent) {
+  const el = viewport.value;
+  const active = pan.value;
+  if (!el || !active || active.pointerId !== event.pointerId) return;
+  el.scrollLeft = active.left - (event.clientX - active.x);
+  el.scrollTop = active.top - (event.clientY - active.y);
+}
+function stopPan(event: PointerEvent) {
+  if (pan.value?.pointerId === event.pointerId) pan.value = null;
 }
 async function loadSeriesSpines() {
   referencesLoading.value = true;
@@ -504,9 +548,16 @@ defineExpose({
             </div>
             <template v-if="source">
               <div
+                ref="viewport"
                 class="preview-viewport"
+                :class="{ panning: pan }"
                 tabindex="0"
-                aria-label="Spine image viewport"
+                aria-label="Spine image viewport. Drag to pan when zoomed."
+                @pointerdown="startPan"
+                @pointermove="movePan"
+                @pointerup="stopPan"
+                @pointercancel="stopPan"
+                @lostpointercapture="stopPan"
               >
                 <div
                   v-if="cropMode"
@@ -526,6 +577,9 @@ defineExpose({
                     @load="imageLoaded"
                     @error="error = 'Could not load the spine preview.'"
                   />
+                  <div class="crop-mask" aria-hidden="true">
+                    <div class="crop-mask-selection" :style="cropBoxStyle" />
+                  </div>
                   <div class="crop-selection" :style="cropBoxStyle">
                     <button
                       v-for="handle in cropHandles"
@@ -535,7 +589,7 @@ defineExpose({
                       :class="`handle-${handle.name}`"
                       :aria-label="`Drag ${handle.name} crop handle`"
                       :disabled="disabled || busy"
-                      @pointerdown="startCrop($event, handle.edges)"
+                      @pointerdown.stop="startCrop($event, handle.edges)"
                       @keydown="keyCrop($event, handle.edges)"
                     />
                   </div>
@@ -558,7 +612,9 @@ defineExpose({
                 </div>
               </div>
               <span class="preview-label">{{
-                cropMode ? 'Drag handles to crop' : 'Preview'
+                cropMode
+                  ? 'Drag handles to crop · Drag image to pan'
+                  : 'Drag image to pan'
               }}</span>
             </template>
             <template v-else>
@@ -974,17 +1030,25 @@ defineExpose({
   flex: 1;
   width: 100%;
   min-height: 0;
+  padding: 16px;
   overflow: auto;
+  cursor: grab;
+  user-select: none;
+}
+.preview-viewport.panning {
+  cursor: grabbing;
 }
 .crop-preview,
 .crop-canvas {
   position: relative;
   flex: none;
   margin: auto;
-  overflow: hidden;
   border-radius: 3px;
   background: var(--sub-alt-color);
   box-shadow: 0 7px 18px #0003;
+}
+.crop-preview {
+  overflow: hidden;
 }
 .crop-preview img {
   position: absolute;
@@ -997,65 +1061,140 @@ defineExpose({
   width: 100%;
   height: 100%;
   object-fit: fill;
+  border-radius: inherit;
   pointer-events: none;
+}
+.crop-mask {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.crop-mask-selection {
+  position: absolute;
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 55%);
 }
 .crop-selection {
   position: absolute;
-  border: 2px solid white;
-  box-shadow: 0 0 0 9999px rgb(0 0 0 / 55%);
+  border: 1px solid white;
+  pointer-events: none;
 }
 .crop-handle {
   position: absolute;
-  width: 24px;
-  height: 24px;
-  border: 2px solid #222;
-  border-radius: 50%;
-  background: white;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  pointer-events: auto;
   touch-action: none;
 }
+.crop-handle::before {
+  content: '';
+  position: absolute;
+  filter: drop-shadow(0 0 1px #000);
+}
 .handle-top-left {
-  top: 0;
-  left: 0;
+  top: -14px;
+  left: -14px;
   cursor: nwse-resize;
 }
+.handle-top-left::before {
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-top: 3px solid white;
+  border-left: 3px solid white;
+}
 .handle-top {
-  top: 0;
+  top: -18px;
   left: 50%;
   transform: translateX(-50%);
   cursor: ns-resize;
 }
+.handle-top::before,
+.handle-bottom::before {
+  left: 3px;
+  width: 22px;
+  height: 4px;
+  background: white;
+}
+.handle-top::before {
+  top: 5px;
+}
 .handle-top-right {
-  top: 0;
-  right: 0;
+  top: -14px;
+  right: -14px;
   cursor: nesw-resize;
+}
+.handle-top-right::before {
+  top: 2px;
+  right: 2px;
+  width: 13px;
+  height: 13px;
+  border-top: 3px solid white;
+  border-right: 3px solid white;
 }
 .handle-right {
   top: 50%;
-  right: 0;
+  right: -18px;
   transform: translateY(-50%);
   cursor: ew-resize;
 }
+.handle-left::before,
+.handle-right::before {
+  top: 3px;
+  width: 4px;
+  height: 22px;
+  background: white;
+}
+.handle-right::before {
+  right: 5px;
+}
 .handle-bottom-right {
-  bottom: 0;
-  right: 0;
+  bottom: -14px;
+  right: -14px;
   cursor: nwse-resize;
 }
+.handle-bottom-right::before {
+  bottom: 2px;
+  right: 2px;
+  width: 13px;
+  height: 13px;
+  border-bottom: 3px solid white;
+  border-right: 3px solid white;
+}
 .handle-bottom {
-  bottom: 0;
+  bottom: -18px;
   left: 50%;
   transform: translateX(-50%);
   cursor: ns-resize;
 }
+.handle-bottom::before {
+  bottom: 5px;
+}
 .handle-bottom-left {
-  bottom: 0;
-  left: 0;
+  bottom: -14px;
+  left: -14px;
   cursor: nesw-resize;
+}
+.handle-bottom-left::before {
+  bottom: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-bottom: 3px solid white;
+  border-left: 3px solid white;
 }
 .handle-left {
   top: 50%;
-  left: 0;
+  left: -18px;
   transform: translateY(-50%);
   cursor: ew-resize;
+}
+.handle-left::before {
+  left: 5px;
 }
 .preview-tools,
 .zoom-controls {
