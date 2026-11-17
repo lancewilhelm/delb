@@ -11,6 +11,7 @@ Follow the main library workflow:
 3. [Browse and find books](using/find-books.md).
 4. [Organize and share collections](using/collections.md).
 5. [Read books and track progress](using/reading.md).
+6. [Connect an agent](using/connect-an-agent.md) to search your library and update personal reading data.
 
 See the [glossary](../GLOSSARY.md) for library, collection, book view, and reading-data terminology.
 
