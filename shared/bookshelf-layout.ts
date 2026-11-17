@@ -16,6 +16,7 @@ export type BookPlacementAnchor = {
   shelfId: string;
   stackId: string;
   x: number;
+  bookX?: number;
   horizontal: boolean;
   order: number;
   width?: number;
@@ -35,6 +36,8 @@ export function emptyBookshelfGeometry(): Bookshelf {
 /** Geometry never stores member IDs. Membership and placement live together. */
 export function bookshelfGeometry(layout: Bookshelf): Bookshelf {
   return {
+    version: layout.version,
+    pictures: structuredClone(layout.pictures ?? []),
     bookcases: layout.bookcases.map((bookcase) => ({
       ...bookcase,
       shelves: bookcase.shelves.map((shelf) => ({ ...shelf, items: [] })),
@@ -102,7 +105,12 @@ export function composeBookshelfLayout(
     return (
       priority(a) - priority(b) ||
       rowIndex(x) - rowIndex(y) ||
-      x.x - y.x ||
+      Math.min(
+        ...a.map((member) => member.placement!.bookX ?? member.placement!.x),
+      ) -
+        Math.min(
+          ...b.map((member) => member.placement!.bookX ?? member.placement!.x),
+        ) ||
       x.stackId.localeCompare(y.stackId)
     );
   });
@@ -120,19 +128,24 @@ export function composeBookshelfLayout(
     if (
       !row ||
       !bookcase ||
-      group.some(
-        (m) =>
-          m.placement!.x !== p.x || m.placement!.horizontal !== p.horizontal,
-      ) ||
+      group.some((m) => m.placement!.horizontal !== p.horizontal) ||
       (!p.horizontal && group.length > 1)
     ) {
       pending.push(...group);
       continue;
     }
+    const left = Math.min(
+      ...group.map((m) => m.placement!.bookX ?? m.placement!.x),
+    );
     const item: ShelfItem = {
-      x: p.x,
+      x: left,
       horizontal: p.horizontal,
-      books: group.map((m) => m.book),
+      books: group.map((m) => ({
+        ...m.book,
+        offsetX: p.horizontal
+          ? (m.placement!.bookX ?? m.placement!.x) - left
+          : 0,
+      })),
     };
     const fits = (candidate: ShelfItem) =>
       Number.isInteger(candidate.x) &&
@@ -149,7 +162,9 @@ export function composeBookshelfLayout(
       const changed = group.filter(isDisplaced);
       const remaining = {
         ...item,
-        books: unchanged.map((member) => member.book),
+        books: item.books.filter((book) =>
+          unchanged.some((member) => member.book.id === book.id),
+        ),
       };
       if (unchanged.length && changed.length && fits(remaining)) {
         row.items.push(remaining);
@@ -175,7 +190,11 @@ export function composeBookshelfLayout(
     rows.findLastIndex(({ row }) => row.items.length > 0),
   );
   for (const member of pending) {
-    const item: ShelfItem = { x: 2, horizontal: false, books: [member.book] };
+    const item: ShelfItem = {
+      x: 2,
+      horizontal: false,
+      books: [{ ...member.book, offsetX: 0 }],
+    };
     let placed = false;
     while (appendIndex < rows.length) {
       const { bookcase, row } = rows[appendIndex]!;

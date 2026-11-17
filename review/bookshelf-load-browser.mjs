@@ -710,24 +710,19 @@ try {
         y: point.y + dy,
       });
     }
-    await resize('.height-handle', 0, 18);
+    await resize('.height-handle', 0, -18);
     await resize('.width-handle', 18, 0);
     const shelfCount = await evaluate(
       `document.querySelector('.bookcase').querySelectorAll('[data-shelf-canvas]').length`,
     );
-    await click('.shelf-options');
-    await until(`document.querySelector('[aria-label="Shelf options"]')`);
     await evaluate(
-      `[...document.querySelectorAll('.shelf-panel button')].find(b=>b.textContent.trim()==='Add shelf').click()`,
+      `document.querySelector('.bookcase-controls .shelf-action').click()`,
     );
     await until(
       `document.querySelector('.bookcase').querySelectorAll('[data-shelf-canvas]').length===${shelfCount + 1}`,
     );
     await evaluate(
-      `[...document.querySelector('.bookcase').querySelectorAll('.shelf-options')].at(-1).click()`,
-    );
-    await evaluate(
-      `[...document.querySelectorAll('.shelf-panel button')].find(b=>b.textContent.trim()==='Remove this shelf').click()`,
+      `document.querySelector('.bookcase-controls .shelf-control-viewport .shelf-action:nth-child(2)').click()`,
     );
     await until(
       `document.querySelector('.bookcase').querySelectorAll('[data-shelf-canvas]').length===${shelfCount}`,

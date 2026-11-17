@@ -54,7 +54,14 @@ test('system changes, previews, fixed selection and resuming system resolve thro
     new URL('../plugins/init-theme.client.ts', import.meta.url),
     'utf8',
   );
-  const pluginModule = { exports: {} as { default: () => void } };
+  let mount: () => void = () => {
+    throw new Error('Mount hook was not registered');
+  };
+  const pluginModule = {
+    exports: {} as {
+      default: (app: { hook: (name: string, callback: () => void) => void }) => void;
+    },
+  };
   runInNewContext(
     transformSync(pluginSource, { loader: 'ts', format: 'cjs' }).code,
     {
@@ -72,7 +79,14 @@ test('system changes, previews, fixed selection and resuming system resolve thro
       console,
     },
   );
-  pluginModule.exports.default();
+  pluginModule.exports.default({
+    hook(name, callback) {
+      assert.equal(name, 'app:mounted');
+      mount = callback;
+    },
+  });
+  assert.equal(applied.length, 0);
+  mount();
   assert.equal(applied.at(-1), 'guage_light');
   change({ matches: true });
   assert.equal(applied.at(-1), 'guage_dark');

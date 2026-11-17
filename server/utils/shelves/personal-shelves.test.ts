@@ -137,3 +137,39 @@ test('a resized book leaves an overfull stack without moving the other books', (
   );
   assert.deepEqual(result.adjustments, ['0']);
 });
+
+test('staggered stack anchors survive a hidden book and its return', () => {
+  const wide = { bookcases: [{ ...geometry.bookcases[0]!, width: 340 }] };
+  const members = [
+    {
+      book: book('a'),
+      placement: {
+        ...anchor('stack', 20),
+        bookX: 20,
+        horizontal: true,
+        order: 0,
+      },
+    },
+    {
+      book: book('b'),
+      placement: {
+        ...anchor('stack', 20),
+        bookX: 35,
+        horizontal: true,
+        order: 1,
+      },
+    },
+  ];
+  const visible = composeBookshelfLayout(wide, [members[1]!], 'shelf');
+  const single = visible.arrangement.bookcases[0]!.shelves[0]!.items[0]!;
+  assert.equal(single.x + (single.books[0]!.offsetX ?? 0), 35);
+  const restored = composeBookshelfLayout(wide, members, 'shelf');
+  const stack = restored.arrangement.bookcases[0]!.shelves[0]!.items[0]!;
+  assert.deepEqual(
+    stack.books.map((b) => [b.id, stack.x + (b.offsetX ?? 0)]),
+    [
+      ['a', 20],
+      ['b', 35],
+    ],
+  );
+});

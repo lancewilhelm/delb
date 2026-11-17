@@ -149,6 +149,29 @@ try {
   assert.deepEqual(new Set(state.books.map((b) => b.id)), new Set([one, two]));
   assert.equal(state.books.find((b) => b.id === one).canResize, false);
   assert.equal(state.books.find((b) => b.id === two).canResize, true);
+  const stackedBooks = state.arrangement.bookcases.flatMap((c) =>
+    c.shelves.flatMap((s) => s.items.flatMap((item) => item.books)),
+  );
+  for (const bookcase of state.arrangement.bookcases)
+    for (const row of bookcase.shelves) row.items = [];
+  state.arrangement.bookcases[0].shelves[0].items = [
+    {
+      x: 2,
+      horizontal: true,
+      books: stackedBooks.map((book) => ({
+        ...book,
+        offsetX: book.id === one ? 0 : 15,
+      })),
+    },
+  ];
+  await ok(
+    await request(reader, path, 'PUT', {
+      revision: state.revision,
+      token: state.token,
+      arrangement: state.arrangement,
+    }),
+  );
+  state = await ok(await request(reader, path));
   const originalPlacement = state.arrangement.bookcases
     .flatMap((c) => c.shelves.flatMap((s) => s.items))
     .find((i) => i.books.some((b) => b.id === one)).x;
@@ -208,11 +231,35 @@ try {
   );
   state = await ok(await request(reader, path));
   assert.equal(state.books.length, 2);
+  const restoredStack = state.arrangement.bookcases
+    .flatMap((c) => c.shelves.flatMap((s) => s.items))
+    .find((item) => item.books.some((book) => book.id === one));
+  assert.deepEqual(
+    restoredStack.books.map((book) => [
+      book.id,
+      restoredStack.x + (book.offsetX ?? 0),
+    ]),
+    stackedBooks.map((book) => [book.id, book.id === one ? 2 : 17]),
+  );
   assert.equal(
     state.arrangement.bookcases
       .flatMap((c) => c.shelves.flatMap((s) => s.items))
       .find((i) => i.books.some((b) => b.id === one)).x,
     originalPlacement,
+  );
+  state.arrangement.bookcases[0].shelves[0].items = restoredStack.books.map(
+    (book, index) => ({
+      x: index ? 80 : 2,
+      horizontal: false,
+      books: [{ ...book, offsetX: 0 }],
+    }),
+  );
+  await ok(
+    await request(reader, path, 'PUT', {
+      revision: state.revision,
+      token: state.token,
+      arrangement: state.arrangement,
+    }),
   );
   const page = await ok(await request(reader, `/api/books?shelfId=${shelf}`));
   assert.equal(page.data.books.length, 2);

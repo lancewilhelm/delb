@@ -66,6 +66,22 @@ function createStore(
   return { store: module.exports.useUserSettingsStore(createPinia()), session };
 }
 
+test('bookshelf appearance has a brown default and preserves personal choices', async () => {
+  const { store } = createStore(async () => ({}));
+  assert.equal(store.activeSettings.bookshelfStyle.color, '#895b3b');
+  assert.equal(store.activeSettings.bookshelfStyle.texture, 'wood');
+  await store.updateSettings({
+    bookshelfStyle: { color: '#305a72', texture: 'smooth' },
+  });
+  assert.equal(store.activeSettings.bookshelfStyle.color, '#305a72');
+  assert.equal(store.activeSettings.bookshelfStyle.texture, 'smooth');
+  store.applyRemoteSettings(
+    { bookshelfStyle: { color: 'not-a-color', texture: 'wood' } },
+    new Date('2040-01-01'),
+  );
+  assert.equal(store.activeSettings.bookshelfStyle.color, '#895b3b');
+});
+
 test('persisted timestamp strings survive edits and concurrent pulls', async () => {
   let resolvePull!: (value: unknown) => void;
   const { store } = createStore(

@@ -2,6 +2,10 @@
 import themesList from '~/assets/json/themes.json';
 import { normalizeCustomTheme } from '~/utils/customTheme';
 import {
+  DEFAULT_BOOKSHELF_COLOR,
+  type BookshelfTexture,
+} from '~/stores/userSettings';
+import {
   DEFAULT_APPEARANCE_CONTRAST,
   MIN_APPEARANCE_CONTRAST,
   MAX_APPEARANCE_CONTRAST,
@@ -19,6 +23,12 @@ const userSettingsStore = useUserSettingsStore();
 const appearance = useThemeAppearance();
 const isMobileDevice = useIsMobileDevice();
 const contrast = userSettingsStore.settingRef<number>('appearanceContrast');
+const bookshelfColor = userSettingsStore.settingRef<string>(
+  'bookshelfStyle.color',
+);
+const bookshelfTexture = userSettingsStore.settingRef<BookshelfTexture>(
+  'bookshelfStyle.texture',
+);
 
 // ------------------------------
 // Mobile settings
@@ -208,6 +218,65 @@ function handleSortChange(target: string) {
         class="text-sm italic text-(--contrast-sub-color)"
       >
         You are currently editing mobile-specific settings.
+      </div>
+    </SettingsUIGroup>
+    <SettingsUIGroup
+      title="Bookshelf"
+      icon="lucide:library"
+      description="Personalize your bookshelf"
+    >
+      <div class="bookshelf-appearance">
+        <label class="bookshelf-color-choice">
+          <span
+            ><strong>Wood color</strong
+            ><small>Choose a color for the frame and shelves.</small></span
+          >
+          <input
+            v-model="bookshelfColor"
+            type="color"
+            aria-label="Bookshelf color"
+          />
+        </label>
+        <div class="bookshelf-texture-choice">
+          <span
+            ><strong>Texture</strong
+            ><small>Choose the finish for your shelves.</small></span
+          >
+          <div
+            class="bookshelf-texture-options"
+            role="group"
+            aria-label="Bookshelf texture"
+          >
+            <button
+              type="button"
+              :aria-pressed="bookshelfTexture === 'wood'"
+              @click="bookshelfTexture = 'wood'"
+            >
+              Wood grain
+            </button>
+            <button
+              type="button"
+              :aria-pressed="bookshelfTexture === 'smooth'"
+              @click="bookshelfTexture = 'smooth'"
+            >
+              Smooth
+            </button>
+          </div>
+        </div>
+        <button
+          v-if="
+            bookshelfColor !== DEFAULT_BOOKSHELF_COLOR ||
+            bookshelfTexture !== 'wood'
+          "
+          type="button"
+          class="bookshelf-reset"
+          @click="
+            bookshelfColor = DEFAULT_BOOKSHELF_COLOR;
+            bookshelfTexture = 'wood';
+          "
+        >
+          Reset bookshelf appearance
+        </button>
       </div>
     </SettingsUIGroup>
     <SettingsUIGroup
@@ -479,13 +548,83 @@ function handleSortChange(target: string) {
         </div>
       </SettingsUISubGroup>
       <SettingsUISubGroup title="Custom Theme" icon="lucide:paintbrush">
-        <SettingsAppearanceCustomTheme />
+        <ClientOnly>
+          <SettingsAppearanceCustomTheme />
+        </ClientOnly>
       </SettingsUISubGroup>
     </SettingsUIGroup>
   </div>
 </template>
 
 <style scoped>
+.bookshelf-appearance {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 0 12px;
+}
+.bookshelf-color-choice,
+.bookshelf-texture-choice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.bookshelf-color-choice span,
+.bookshelf-texture-choice span {
+  display: grid;
+  gap: 3px;
+  color: var(--contrast-main-color);
+}
+.bookshelf-appearance small {
+  color: var(--contrast-text-color);
+  font-size: 12px;
+}
+.bookshelf-color-choice input {
+  width: 42px;
+  height: 38px;
+  padding: 3px;
+  border: 1px solid var(--contrast-border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  background: var(--bg-color);
+}
+.bookshelf-texture-options {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--contrast-border-color);
+  border-radius: 9px;
+}
+.bookshelf-texture-options button,
+.bookshelf-reset {
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.bookshelf-texture-options button[aria-pressed='true'] {
+  color: var(--bg-color);
+  background: var(--contrast-main-color);
+}
+.bookshelf-texture-options button:focus-visible,
+.bookshelf-color-choice input:focus-visible,
+.bookshelf-reset:focus-visible {
+  outline: 2px solid var(--contrast-main-color);
+  outline-offset: 2px;
+}
+.bookshelf-reset {
+  justify-self: start;
+  border: 1px solid var(--contrast-border-color);
+  color: var(--contrast-main-color);
+}
+@media (max-width: 480px) {
+  .bookshelf-texture-choice {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+}
 .geist {
   font-family: 'Geist', sans-serif;
 }

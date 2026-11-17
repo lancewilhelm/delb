@@ -36,10 +36,13 @@ export const funboxModes = ['confetti', 'snow'];
 export type FunboxMode = (typeof funboxModes)[number];
 
 export type ReaderTheme = 'system' | 'light' | 'gray' | 'shadow' | 'app';
+export const DEFAULT_BOOKSHELF_COLOR = '#895b3b';
+export type BookshelfTexture = 'wood' | 'smooth';
 
 export interface BaseUserSettings {
   themePreference: ThemePreference;
   appearanceContrast: number;
+  bookshelfStyle: { color: string; texture: BookshelfTexture };
   customTheme?: CustomTheme;
   fontFamily: FontFamily;
   favoriteThemes: string[];
@@ -128,6 +131,7 @@ function getBaseDefaults(): BaseUserSettings {
   return {
     themePreference: defaultThemePreference(),
     appearanceContrast: DEFAULT_APPEARANCE_CONTRAST,
+    bookshelfStyle: { color: DEFAULT_BOOKSHELF_COLOR, texture: 'wood' },
     fontFamily: 'Nunito',
     favoriteThemes: [],
     themeSorting: {
@@ -263,6 +267,15 @@ function normalizeProfileSettings(
     appearanceContrast: normalizeAppearanceContrast(
       settings.appearanceContrast,
     ),
+    bookshelfStyle: {
+      color:
+        typeof settings.bookshelfStyle?.color === 'string' &&
+        /^#[0-9a-f]{6}$/i.test(settings.bookshelfStyle.color)
+          ? settings.bookshelfStyle.color
+          : DEFAULT_BOOKSHELF_COLOR,
+      texture:
+        settings.bookshelfStyle?.texture === 'smooth' ? 'smooth' : 'wood',
+    },
     ...(settings.customTheme !== undefined ||
     Object.values(settings.themePreference).includes('custom')
       ? { customTheme: normalizeCustomTheme(settings.customTheme) }

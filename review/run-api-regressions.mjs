@@ -55,6 +55,7 @@ const suites = [
   'review/collections-api.mjs',
   'review/bookshelf-api.mjs',
   'review/collection-bookshelf-api.mjs',
+  'review/bookshelf-pictures-api.mjs',
   'review/spine-artwork-api.mjs',
   'review/spine-generation-api.mjs',
   'review/personal-shelves-api.mjs',

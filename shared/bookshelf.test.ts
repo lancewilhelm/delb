@@ -9,6 +9,7 @@ import {
   planShelfDrop,
   parseBookshelf,
   reconcileBookshelf,
+  shiftStackBook,
   type ShelfBook,
   type ShelfItem,
 } from './bookshelf';
@@ -28,6 +29,25 @@ const item = (id: string, x: number, width = 30): ShelfItem => ({
 });
 
 describe('personal bookshelf', () => {
+  it('shifts one stacked book while respecting shelf boundaries', () => {
+    const shelf = emptyBookshelf().bookcases[0]!.shelves[0]!;
+    shelf.items = [
+      { x: 20, horizontal: true, books: [placement('a'), placement('b')] },
+    ];
+    const shifted = shiftStackBook(shelf, 340, 'a', -5)!;
+    assert.deepEqual(
+      shifted[0]!.books.map((book) => shifted[0]!.x + (book.offsetX ?? 0)),
+      [15, 20],
+    );
+    shelf.items = shifted;
+    assert.ok(
+      parseBookshelf({
+        bookcases: [{ id: 'case', width: 340, shelves: [shelf] }],
+      }),
+    );
+    assert.equal(shiftStackBook(shelf, 340, 'a', -20), null);
+    assert.deepEqual(shelf.items, shifted);
+  });
   it('rejects overlapping, duplicated, and too-tall saved geometry', () => {
     const data = emptyBookshelf();
     const shelf = data.bookcases[0]!.shelves[0]!;

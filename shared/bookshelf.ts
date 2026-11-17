@@ -1,4 +1,5 @@
 export const SHELF_WIDTH = 340;
+export const SHELF_CASE_GAP = 10;
 export const SHELF_MIN_WIDTH = 120;
 export const SHELF_MAX_WIDTH = 700;
 export const SHELF_FLOOR = 14;
@@ -8,6 +9,7 @@ export const BOOKSHELF_MAX_BOOKS = 20000;
 
 export type ShelfBook = {
   id: string;
+  offsetX?: number;
   width: number;
   height: number;
   manualWidth: boolean;
@@ -17,7 +19,20 @@ export type ShelfBook = {
 export type ShelfItem = { x: number; horizontal: boolean; books: ShelfBook[] };
 export type Shelf = { id: string; height: number; items: ShelfItem[] };
 export type Bookcase = { id: string; width: number; shelves: Shelf[] };
-export type Bookshelf = { bookcases: Bookcase[] };
+export type ShelfPicture = {
+  id: string;
+  assetId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+};
+export type Bookshelf = {
+  bookcases: Bookcase[];
+  version?: 2;
+  pictures?: ShelfPicture[];
+};
 export type ShelfCatalogBook = {
   id: string;
   pages?: number | null;
@@ -29,7 +44,9 @@ export type ShelfCatalogBook = {
 
 export function itemWidth(item: ShelfItem): number {
   return Math.max(
-    ...item.books.map((book) => (item.horizontal ? book.height : book.width)),
+    ...item.books.map((book) =>
+      item.horizontal ? (book.offsetX ?? 0) + book.height : book.width,
+    ),
   );
 }
 export function itemHeight(item: ShelfItem): number {
@@ -50,6 +67,37 @@ export function minimumBookcaseWidth(bookcase: Bookcase): number {
       shelf.items.map((item) => item.x + itemWidth(item) + 2),
     ),
   );
+}
+
+/** Shift one horizontal book without moving the other books on its shelf. */
+export function shiftStackBook(
+  shelf: Shelf,
+  shelfWidth: number,
+  bookId: string,
+  delta: number,
+): ShelfItem[] | null {
+  if (!Number.isInteger(delta)) return null;
+  const items = structuredClone(shelf.items);
+  const item = items.find((entry) =>
+    entry.books.some((book) => book.id === bookId),
+  );
+  if (!item?.horizontal || item.books.length < 2) return null;
+  const book = item.books.find((entry) => entry.id === bookId)!;
+  book.offsetX = (book.offsetX ?? 0) + delta;
+  const left = Math.min(...item.books.map((entry) => entry.offsetX ?? 0));
+  item.x += left;
+  for (const entry of item.books) entry.offsetX = (entry.offsetX ?? 0) - left;
+  items.sort((a, b) => a.x - b.x);
+  if (
+    item.x < 2 ||
+    items.some(
+      (entry, i) =>
+        entry.x + itemWidth(entry) > shelfWidth - 2 ||
+        (i > 0 && items[i - 1]!.x + itemWidth(items[i - 1]!) > entry.x),
+    )
+  )
+    return null;
+  return items;
 }
 function normalizedPages(pages: number | null | undefined): number | null {
   return typeof pages === 'number' &&
@@ -78,6 +126,8 @@ export function emptyShelf(): Shelf {
 }
 export function emptyBookshelf(): Bookshelf {
   return {
+    version: 2,
+    pictures: [],
     bookcases: [
       {
         id: crypto.randomUUID(),
@@ -191,7 +241,7 @@ export function planShelfDrop(
         horizontal: source.horizontal
           ? pointerY <= grabHeight + 32
           : pointerY <= grabHeight - downThreshold,
-        books: [structuredClone(book)],
+        books: [{ ...structuredClone(book), offsetX: 0 }],
       };
   if (whole) sourceItems.splice(sourceItems.indexOf(source), 1);
   else {
@@ -386,7 +436,39 @@ export function parseBookshelf(value: unknown): Bookshelf | null {
     value.bookcases.length > 1000
   )
     return null;
-  const result: Bookshelf = { bookcases: [] },
+  if (
+    !(value.version === undefined || value.version === 2) ||
+    !(value.pictures === undefined || Array.isArray(value.pictures))
+  )
+    return null;
+  const pictures: ShelfPicture[] = [];
+  const pictureIds = new Set<string>();
+  for (const picture of value.pictures ?? []) {
+    if (
+      !record(picture) ||
+      !id(picture.id) ||
+      pictureIds.has(picture.id) ||
+      !id(picture.assetId) ||
+      !integer(picture.x, -100000, 100000) ||
+      !integer(picture.y, -100000, 100000) ||
+      !integer(picture.width, 10, 4000) ||
+      !integer(picture.height, 10, 4000) ||
+      !integer(picture.rotation, -180, 180) ||
+      pictures.length >= 100
+    )
+      return null;
+    pictureIds.add(picture.id);
+    pictures.push({
+      id: picture.id,
+      assetId: picture.assetId,
+      x: picture.x,
+      y: picture.y,
+      width: picture.width,
+      height: picture.height,
+      rotation: picture.rotation,
+    });
+  }
+  const result: Bookshelf = { bookcases: [], version: 2, pictures },
     ids = new Set<string>(),
     bookIds = new Set<string>();
   let total = 0;
@@ -467,6 +549,11 @@ export function parseBookshelf(value: unknown): Bookshelf | null {
             typeof rawBook.manualWidth !== 'boolean' ||
             typeof rawBook.manualHeight !== 'boolean' ||
             !(
+              rawBook.offsetX === undefined ||
+              integer(rawBook.offsetX, 0, SHELF_MAX_WIDTH)
+            ) ||
+            (!rawItem.horizontal && (rawBook.offsetX ?? 0) !== 0) ||
+            !(
               rawBook.sourcePages === null ||
               integer(rawBook.sourcePages, 0, 1000000)
             )
@@ -476,6 +563,9 @@ export function parseBookshelf(value: unknown): Bookshelf | null {
           if (++total > BOOKSHELF_MAX_BOOKS) return null;
           item.books.push({
             id: rawBook.id,
+            ...(rawBook.offsetX === undefined
+              ? {}
+              : { offsetX: rawBook.offsetX }),
             width: rawBook.width,
             height: rawBook.height,
             manualWidth: rawBook.manualWidth,

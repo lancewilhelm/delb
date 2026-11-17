@@ -9,6 +9,7 @@ import {
 } from '~/utils/db/schema';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { lockCollectionChanges } from '~~/server/utils/collections/model';
+import { validatePictureAssets } from '~~/server/utils/bookshelf/pictures';
 import {
   BOOKSHELF_MAX_BOOKS,
   estimatedWidth,
@@ -55,6 +56,11 @@ function parsePlacement(value: unknown): BookPlacementAnchor | null {
     shelfId: value.shelfId,
     stackId: value.stackId,
     x: value.x,
+    ...('bookX' in value &&
+    typeof value.bookX === 'number' &&
+    Number.isSafeInteger(value.bookX)
+      ? { bookX: value.bookX }
+      : {}),
     horizontal: value.horizontal,
     order: value.order,
     ...('width' in value && typeof value.width === 'number'
@@ -207,7 +213,7 @@ async function persistVisiblePlacements(
               p.stackId === first.stackId &&
               p.caseId === bookcase.id &&
               p.shelfId === row.id &&
-              p.x === item.x &&
+              (p.bookX ?? p.x) === item.x + (item.books[index]!.offsetX ?? 0) &&
               p.horizontal === item.horizontal &&
               (index === 0 || p.order > (anchors[index - 1]?.order ?? -1)),
           );
@@ -222,6 +228,7 @@ async function persistVisiblePlacements(
               shelfId: row.id,
               stackId,
               x: item.x,
+              bookX: item.x + (book.offsetX ?? 0),
               horizontal: item.horizontal,
               order: preserveStack ? anchors[order]!.order : order,
               width: book.width,
@@ -433,6 +440,21 @@ export async function saveShelf(
     const rows = await visible(tx, userId, shelfId);
     if (revision !== shelf.revision || token !== snapshotToken(shelfId, rows))
       return fail(409, 'This Shelf or its books changed. Reload to continue.');
+    if (
+      shelf.geometry &&
+      typeof shelf.geometry === 'object' &&
+      'version' in shelf.geometry &&
+      shelf.geometry.version === 2 &&
+      (!raw ||
+        typeof raw !== 'object' ||
+        !('version' in raw) ||
+        raw.version !== 2)
+    )
+      return fail(
+        409,
+        'This Shelf needs a newer version of Delb. Reload before saving.',
+      );
+    await validatePictureAssets(tx, { kind: 'personal', id: shelfId }, layout);
     const placed = layout.bookcases.flatMap((c) =>
       c.shelves.flatMap((s) => s.items.flatMap((i) => i.books)),
     );
