@@ -3,6 +3,7 @@ import {
   createConnection,
   listConnections,
   revokeConnection,
+  setMetadataPermission,
 } from '~~/server/utils/mcp/connections';
 import { cacheBoundedRequestBody } from '~~/server/utils/books/storage/bounded-upload';
 
@@ -29,7 +30,11 @@ export default defineEventHandler(async (event) => {
       statusMessage: 'Sign in to manage connections.',
     });
   if (event.method === 'GET') return listConnections(session.user.id);
-  if (event.method !== 'POST' && event.method !== 'DELETE')
+  if (
+    event.method !== 'POST' &&
+    event.method !== 'DELETE' &&
+    event.method !== 'PATCH'
+  )
     throw createError({
       statusCode: 405,
       statusMessage: 'Method not allowed.',
@@ -38,6 +43,21 @@ export default defineEventHandler(async (event) => {
   const body: unknown = await readBody(event);
   if (!body || typeof body !== 'object')
     throw createError({ statusCode: 400, statusMessage: 'Invalid request.' });
+  if (event.method === 'PATCH') {
+    if (
+      !('id' in body) ||
+      typeof body.id !== 'string' ||
+      body.id.length > 128 ||
+      !('canEditMetadata' in body) ||
+      typeof body.canEditMetadata !== 'boolean'
+    )
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Invalid connection permission.',
+      });
+    await setMetadataPermission(session.user.id, body.id, body.canEditMetadata);
+    return { success: true };
+  }
   if (event.method === 'DELETE') {
     if (!('id' in body) || typeof body.id !== 'string' || body.id.length > 128)
       throw createError({
@@ -59,5 +79,15 @@ export default defineEventHandler(async (event) => {
       statusCode: 400,
       statusMessage: 'Enter a name and select access.',
     });
-  return createConnection(session.user.id, body.name.trim(), body.canWrite);
+  if ('canEditMetadata' in body && typeof body.canEditMetadata !== 'boolean')
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Invalid metadata permission.',
+    });
+  return createConnection(
+    session.user.id,
+    body.name.trim(),
+    body.canWrite,
+    'canEditMetadata' in body && body.canEditMetadata === true,
+  );
 });

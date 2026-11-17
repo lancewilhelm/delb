@@ -57,6 +57,9 @@ export const mcpConnections = sqliteTable('mcp_connections', {
   name: text('name').notNull(),
   digest: text('digest').notNull(),
   canWrite: integer('can_write', { mode: 'boolean' }).notNull().default(false),
+  canEditMetadata: integer('can_edit_metadata', { mode: 'boolean' })
+    .notNull()
+    .default(false),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
 });
