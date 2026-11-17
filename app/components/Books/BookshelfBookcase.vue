@@ -32,6 +32,7 @@ const props = defineProps<{
   focusedShelfId: string | null;
   movingShelfId: string | null;
   movingBookId: string | null;
+  movingBooks: Set<string> | null;
   resizeShelfId: string | null;
   resizeCaseId: string | null;
   dragging: boolean;
@@ -137,6 +138,7 @@ function renderShelf(shelfIndex: number) {
             :data-book-id="book.id"
             :class="{
               selected: selected === book.id || selectedBooks.has(book.id),
+              moving: movingBooks?.has(book.id),
               needs: adjustments.includes(book.id),
               arranging: editing,
             }"
@@ -440,6 +442,9 @@ function renderShelf(shelfIndex: number) {
 .spine-button.arranging {
   cursor: grab;
   touch-action: none;
+}
+.spine-button.moving {
+  opacity: 0.35;
 }
 .spine-button.selected {
   outline: 3px solid #e5ba72;
