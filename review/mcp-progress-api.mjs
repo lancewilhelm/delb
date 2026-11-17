@@ -239,6 +239,34 @@ try {
   progress = await call(writer, 'get_reading_progress', { bookId: book });
   assert.equal(progress.progressSyncEnabled, true);
   assert.equal(progress.history[0].progressPercent, 100);
+  const visibleProgress = (
+    await ok(await request(owner, `/api/books/${book}/progress`))
+  ).data;
+  assert.equal(visibleProgress.latest.progressPercent, 100);
+  assert.equal(visibleProgress.latest.source, 'manual');
+  assert.equal(visibleProgress.history[0].progressPercent, 100);
+  assert.equal(visibleProgress.hasMore, false);
+  const dashboard = (
+    await ok(await request(owner, '/api/dashboard?shelf=reading'))
+  ).data;
+  assert.equal(
+    dashboard.shelf.books.find((item) => item.id === book).progress,
+    100,
+  );
+  const readerProgress = (
+    await ok(await request(reader, `/api/books/${book}/progress`))
+  ).data;
+  assert.equal(readerProgress.latest.progressPercent, 70);
+  assert.equal(readerProgress.history.length, 1);
+  assert.equal(
+    (await request(outsider, `/api/books/${book}/progress`)).status,
+    404,
+  );
+  assert.equal(
+    (await request(null, `/api/books/${book}/progress`)).status,
+    401,
+  );
+
   assert.deepEqual(
     (await ok(await request(owner, `/api/books/${book}/reading-position`)))
       .data,
@@ -279,6 +307,10 @@ try {
       `/api/collections/${collection}/members/${reader.id}`,
       'DELETE',
     ),
+  );
+  assert.equal(
+    (await request(reader, `/api/books/${book}/progress`)).status,
+    404,
   );
   await fails(viewer, 'get_reading_progress', { bookId: book });
   await fails(viewer, 'log_reading_progress', {

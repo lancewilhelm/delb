@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
@@ -9,6 +9,7 @@ import {
 } from '~/utils/db/schema';
 import { auth } from '~/utils/auth';
 import { logger } from '~/utils/logger';
+import { progressHistoryOrder } from '~~/server/utils/books/progress-order';
 
 function clampInt(
   input: unknown,
@@ -89,7 +90,7 @@ export default defineEventHandler(async (event) => {
           eq(userBookProgressLog.bookId, bookId),
         ),
       )
-      .orderBy(desc(userBookProgressLog.occurredAt))
+      .orderBy(...progressHistoryOrder)
       .limit(limit);
 
     return { success: true, data: { logs } };
@@ -103,7 +104,10 @@ export default defineEventHandler(async (event) => {
       throw error;
     }
 
-    logger.error(error, 'GET /api/books/:id/progress-logs: Error fetching logs');
+    logger.error(
+      error,
+      'GET /api/books/:id/progress-logs: Error fetching logs',
+    );
     throw createError({
       statusCode: 500,
       statusMessage: 'Failed to fetch progress logs',

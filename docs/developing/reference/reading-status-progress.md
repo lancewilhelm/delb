@@ -78,3 +78,7 @@ Progress logs live in `user_book_progress_log` to support charting and history.
 - Progress sync toggle: `server/api/books/[id]/progress-sync.put.ts`
 - Book detail UI: `app/pages/books/[id]/index.vue`
 - Reader sync: `app/pages/books/[id]/read.vue`
+
+## Displayed progress
+
+The book details Progress section shows the latest saved reader percentage or progress log and up to 50 recent history entries. The dashboard Continue reading shelf uses the same latest-progress rule. A log dated on an earlier day stays in history instead of replacing more recent progress; a date-only manual entry for the current day is ordered by when it was saved. Progress history and reader positions remain private to each user. Showing progress does not move the reader position.

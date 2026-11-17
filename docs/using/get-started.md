@@ -28,7 +28,7 @@ New users join the shared default as editors. It can already contain books. You 
 2. Choose **Continue reading** or **Recently read** above the books.
 3. Select **Show more** when more books are available.
 
-Continue reading shows your saved progress. Recently read shows finished books with a date read, newest first. The counts above the tabs describe your selected collection, except To be read. To be read counts your private queue across all accessible collections and opens its dedicated page.
+Continue reading shows your latest logged progress or saved reader percentage. Recently read shows finished books with a date read, newest first. The counts above the tabs describe your selected collection, except To be read. To be read counts your private queue across all accessible collections and opens its dedicated page.
 
 See the [dashboard reference](../developing/reference/dashboard.md) for shelf order and data rules.
 
