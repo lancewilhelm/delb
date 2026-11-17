@@ -621,9 +621,35 @@ try {
   const from = await evaluate(
     `(() => { const r = document.querySelector('.spine-button.selected').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`,
   );
+  const selectedRects = await evaluate(`Object.fromEntries(
+    [...document.querySelectorAll('.spine-button.selected')].map((el) => {
+      const r = el.getBoundingClientRect();
+      return [el.dataset.bookId, { left: r.left, top: r.top, width: r.width, height: r.height }];
+    }),
+  )`);
   await mouse('mousePressed', from.x, from.y);
   await mouse('mouseMoved', from.x, positions.targetY);
+  await until(
+    'document.querySelectorAll(".group-ghost .ghost-book").length === 2',
+  );
+  const ghostRects = await evaluate(`Object.fromEntries(
+    [...document.querySelectorAll('.group-ghost .ghost-book')].map((el) => {
+      const r = el.getBoundingClientRect();
+      return [el.dataset.ghostBookId, { left: r.left, top: r.top, width: r.width, height: r.height }];
+    }),
+  )`);
+  for (const [id, original] of Object.entries(selectedRects)) {
+    const preview = ghostRects[id];
+    assert.ok(preview, 'Every selected book appears in the drag preview');
+    assert.ok(Math.abs(preview.left - original.left) < 2);
+    assert.ok(
+      Math.abs(preview.top - original.top - (positions.targetY - from.y)) < 2,
+    );
+    assert.ok(Math.abs(preview.width - original.width) < 2);
+    assert.ok(Math.abs(preview.height - original.height) < 2);
+  }
   await mouse('mouseReleased', from.x, positions.targetY);
+  await until('!document.querySelector(".group-ghost")');
   await until(
     'document.querySelector(".save-status")?.textContent.trim() === "Saved"',
   );
@@ -788,6 +814,74 @@ try {
     ),
     [5, 0],
   );
+  await evaluate(
+    'document.querySelector(\'[aria-label="Close book options"]\').click()',
+  );
+  await clickAt('[aria-label="Zoom out"]');
+  const stackBounds = await evaluate(`(() => {
+    const books = [...document.querySelectorAll('.spine-button')].map(el => el.getBoundingClientRect());
+    return { left: Math.min(...books.map(r => r.left)), right: Math.max(...books.map(r => r.right)), top: Math.min(...books.map(r => r.top)), bottom: Math.max(...books.map(r => r.bottom)) };
+  })()`);
+  await mouse('mousePressed', stackBounds.left - 3, stackBounds.top - 3, 2);
+  await mouse('mouseMoved', stackBounds.right + 3, stackBounds.bottom + 3, 2);
+  await mouse(
+    'mouseReleased',
+    stackBounds.right + 3,
+    stackBounds.bottom + 3,
+    2,
+  );
+  await until(
+    'document.querySelectorAll(".spine-button.selected").length === 2',
+  );
+  const stackRects = await evaluate(`Object.fromEntries(
+    [...document.querySelectorAll('.spine-button.selected')].map(el => {
+      const r = el.getBoundingClientRect();
+      return [el.dataset.bookId, { left: r.left, top: r.top, width: r.width, height: r.height }];
+    }),
+  )`);
+  const stackStart = await evaluate(`(() => {
+    const r = document.querySelector('.spine-button.selected').getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  })()`);
+  await mouse('mousePressed', stackStart.x, stackStart.y);
+  await mouse('mouseMoved', stackStart.x + 40, stackStart.y + 20);
+  await until(
+    'document.querySelectorAll(".group-ghost .ghost-book").length === 2',
+  );
+  const stackGhosts = await evaluate(`Object.fromEntries(
+    [...document.querySelectorAll('.group-ghost .ghost-book')].map(el => {
+      const r = el.getBoundingClientRect();
+      return [el.dataset.ghostBookId, { left: r.left, top: r.top, width: r.width, height: r.height, horizontal: !!el.querySelector('.shelf-spine.horizontal') }];
+    }),
+  )`);
+  for (const [id, original] of Object.entries(stackRects)) {
+    const preview = stackGhosts[id];
+    assert.ok(
+      preview?.horizontal,
+      'Stacked books stay horizontal in the preview',
+    );
+    assert.ok(Math.abs(preview.left - original.left - 40) < 2);
+    assert.ok(Math.abs(preview.top - original.top - 20) < 2);
+    assert.ok(Math.abs(preview.width - original.width) < 2);
+    assert.ok(Math.abs(preview.height - original.height) < 2);
+  }
+  await call('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key: 'Escape',
+    code: 'Escape',
+  });
+  await mouse('mouseReleased', stackStart.x + 40, stackStart.y + 20);
+  await until('!document.querySelector(".group-ghost")');
+  assert.deepEqual(
+    (await api(`/api/shelves/${shelfId}`)).arrangement,
+    staggered.arrangement,
+  );
+  await clickAt('[aria-label="Reset zoom"]');
+  await call('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key: 'Escape',
+    code: 'Escape',
+  });
   async function dragStackTo(rowIndex) {
     const point = await evaluate(
       `(() => { const handle = document.querySelector('.stack-handle').getBoundingClientRect(); const row = document.querySelectorAll('[data-shelf-canvas]')[${rowIndex}].getBoundingClientRect(); return { x: handle.left + handle.width / 2, y: handle.top + handle.height / 2, targetY: row.bottom - 55 }; })()`,
@@ -949,9 +1043,47 @@ try {
   await until(
     'document.querySelector(".save-status")?.textContent.trim() === "Saved"',
   );
-  const decorated = await api(`/api/shelves/${shelfId}`);
+  let decorated = await api(`/api/shelves/${shelfId}`);
   assert.equal(decorated.arrangement.pictures[0].width, 300);
   assert.equal(decorated.arrangement.pictures[0].rotation, 45);
+  const retainedPictureId = decorated.arrangement.pictures[0].id;
+  const differentPicture = path.join(profile, 'other-decoration.png');
+  await writeFile(
+    differentPicture,
+    await sharp({
+      create: { width: 40, height: 30, channels: 4, background: '#527c97' },
+    })
+      .png()
+      .toBuffer(),
+  );
+  for (const file of [pictureFile, differentPicture]) {
+    await call('DOM.setFileInputFiles', {
+      nodeId: fileInput.nodeId,
+      files: [file],
+    });
+    await until('document.querySelectorAll(".shelf-picture").length === 2');
+    await until(
+      'document.querySelector(".save-status")?.textContent.trim() === "Saved"',
+    );
+    await clickText('Remove picture');
+    await until(
+      '/Saved|Could not save/.test(document.querySelector(".save-status")?.textContent ?? "")',
+    );
+    assert.equal(
+      await evaluate(
+        'document.querySelector(".save-status").textContent.trim()',
+      ),
+      'Saved',
+      'Removing one of multiple pictures saves successfully',
+    );
+    decorated = await api(`/api/shelves/${shelfId}`);
+    assert.deepEqual(
+      decorated.arrangement.pictures.map((picture) => picture.id),
+      [retainedPictureId],
+    );
+  }
+  await call('Page.reload');
+  await until('document.querySelectorAll(".shelf-picture").length === 1');
   const edgeCase = decorated.arrangement.bookcases[0];
   const edgeBooks = edgeCase.shelves.flatMap((shelf) =>
     shelf.items.flatMap((item) => item.books),
@@ -1090,6 +1222,28 @@ try {
       'document.querySelector(".bookshelf-view").style.getPropertyValue("--shelf-grain")',
     ),
     'none',
+  );
+  await evaluate(
+    'document.querySelector(\'[aria-label="Edit shelves"]\').click()',
+  );
+  const finalPicturePoint = await pictureHit();
+  assert.ok(finalPicturePoint);
+  await mouse('mousePressed', finalPicturePoint.x, finalPicturePoint.y);
+  await mouse('mouseReleased', finalPicturePoint.x, finalPicturePoint.y);
+  await until('!!document.querySelector(\'[aria-label="Picture options"]\')');
+  await clickText('Remove picture');
+  await until(
+    'document.querySelector(".save-status")?.textContent.trim() === "Saved"',
+  );
+  assert.deepEqual(
+    (await api(`/api/shelves/${shelfId}`)).arrangement.pictures,
+    [],
+  );
+  await call('Page.reload');
+  await until('!!document.querySelector(".wall-viewport")');
+  assert.equal(
+    await evaluate('document.querySelectorAll(".shelf-picture").length'),
+    0,
   );
   assert.equal(exceptions.length, 0, JSON.stringify(exceptions));
   assert.deepEqual(hydrationWarnings, []);

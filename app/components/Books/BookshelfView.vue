@@ -4,6 +4,7 @@ import BookshelfBookcase from './BookshelfBookcase.vue';
 import { placementStyle } from '~/utils/bookshelfPlacement';
 import {
   booksInRectangle,
+  bookshelfRows,
   moveSelectedBooks,
 } from '~~/shared/bookshelf-selection';
 import {
@@ -151,6 +152,15 @@ const groupDrag = ref<{
   startY: number;
   x: number;
   y: number;
+  scale: number;
+  books: {
+    book: ShelfBook;
+    horizontal: boolean;
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  }[];
   moved: boolean;
 } | null>(null);
 const selectedPicture = ref<string | null>(null);
@@ -1019,9 +1029,12 @@ function changePicture(
 }
 function removePicture() {
   if (!arrangement.value || !selectedPicture.value) return;
-  arrangement.value.pictures = (arrangement.value.pictures ?? []).filter(
-    (picture) => picture.id !== selectedPicture.value,
+  const pictures = arrangement.value.pictures;
+  const index = pictures?.findIndex(
+    (picture) => picture.id === selectedPicture.value,
   );
+  if (!pictures || index === undefined || index < 0) return;
+  pictures.splice(index, 1);
   selectedPicture.value = null;
   changed();
 }
@@ -1185,6 +1198,40 @@ function startBook(
     selectedBooks.value.size > 1 &&
     selectedBooks.value.has(book.id)
   ) {
+    if (!wall.value || !arrangement.value) return;
+    const rect = wall.value.getBoundingClientRect();
+    const frame = shelfFrame(zoom.value);
+    const currentScale = scale.value;
+    const anchorX =
+      (event.clientX - rect.left - frame.left - camera.x) / currentScale;
+    const anchorY =
+      (rect.top + frame.floor + camera.y - event.clientY) / currentScale;
+    const books = bookshelfRows(arrangement.value).flatMap((row) =>
+      row.shelf.items.flatMap((entry) => {
+        let bottom = row.floor + SHELF_FLOOR;
+        return entry.books.flatMap((placement) => {
+          const width = entry.horizontal ? placement.height : placement.width;
+          const height = entry.horizontal ? placement.width : placement.height;
+          const top = anchorY - bottom - height;
+          if (entry.horizontal) bottom += height;
+          if (!selectedBooks.value.has(placement.id)) return [];
+          return [
+            {
+              book: placement,
+              horizontal: entry.horizontal,
+              left:
+                row.left +
+                entry.x +
+                (entry.horizontal ? (placement.offsetX ?? 0) : 0) -
+                anchorX,
+              top,
+              width,
+              height,
+            },
+          ];
+        });
+      }),
+    );
     groupDrag.value = {
       pointerId: event.pointerId,
       shelfId: shelf.id,
@@ -1192,6 +1239,8 @@ function startBook(
       startY: event.clientY,
       x: event.clientX,
       y: event.clientY,
+      scale: currentScale,
+      books,
       moved: false,
     };
     event.preventDefault();
@@ -1918,6 +1967,7 @@ const lastOtherBookcaseId = computed(
           :focused-shelf-id="focusedShelfId"
           :moving-shelf-id="drag?.moved ? drag.shelfId : null"
           :moving-book-id="drag?.moved ? drag.bookId : null"
+          :moving-books="groupDrag?.moved ? selectedBooks : null"
           :resize-shelf-id="
             resizing?.axis === 'height' ? resizing.shelfId : null
           "
@@ -2067,9 +2117,29 @@ const lastOtherBookcaseId = computed(
       ><div
         v-if="groupDrag?.moved"
         class="group-ghost"
-        :style="{ left: `${groupDrag.x + 12}px`, top: `${groupDrag.y + 12}px` }"
+        :style="{
+          left: `${groupDrag.x}px`,
+          top: `${groupDrag.y}px`,
+          transform: `scale(${groupDrag.scale})`,
+        }"
+        aria-hidden="true"
       >
-        {{ selectedBooks.size }} books
+        <span
+          v-for="piece in groupDrag.books"
+          :key="piece.book.id"
+          class="ghost-book"
+          :data-ghost-book-id="piece.book.id"
+          :style="{
+            left: `${piece.left}px`,
+            top: `${piece.top}px`,
+            width: `${piece.width}px`,
+            height: `${piece.height}px`,
+          }"
+          ><BookshelfSpine
+            :placement="piece.book"
+            :book="bookFor(piece.book.id)"
+            :horizontal="piece.horizontal"
+        /></span>
       </div>
       <div
         v-if="ghost"
@@ -2294,13 +2364,10 @@ const lastOtherBookcaseId = computed(
 }
 .group-ghost {
   position: fixed;
-  z-index: 1000;
+  z-index: 9999;
   pointer-events: none;
-  padding: 6px 10px;
-  border-radius: 6px;
-  color: var(--contrast-main-color);
-  background: var(--bg-color);
-  box-shadow: 0 2px 8px #0005;
+  transform-origin: top left;
+  filter: drop-shadow(0 5px 7px #0005);
 }
 .shelf-picture {
   position: absolute;
