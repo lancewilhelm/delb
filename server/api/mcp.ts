@@ -9,6 +9,8 @@ import {
 import {
   editMetadata,
   getBook,
+  getReadingProgress,
+  logReadingProgress,
   listMyTbr,
   listCollections,
   myShelves,
@@ -154,6 +156,52 @@ function buildServer(actor: McpActor) {
       annotations: readOnly,
     },
     async ({ bookId }) => result(() => getBook(actor, bookId)),
+  );
+  server.registerTool(
+    'get_reading_progress',
+    {
+      description:
+        'Read your recent progress history, book page count, saved reader percentage and progress-sync setting. History and saved reader location are separate.',
+      inputSchema: z.object({
+        bookId: id,
+        limit: z.number().int().min(1).max(50).default(20),
+      }),
+      annotations: readOnly,
+    },
+    async ({ bookId, limit }) =>
+      result(() => getReadingProgress(actor, bookId, limit)),
+  );
+  server.registerTool(
+    'log_reading_progress',
+    {
+      description:
+        'Append a manual progress entry for your account by providing exactly one of pageNumber or progressPercent. Page numbers require a book page count. occurredAt is an optional YYYY-MM-DD date. This does not change the saved reader location or reading status; if progress sync is enabled, the reader may use the latest logged percentage when reopened. Each call adds a history entry, so check history before retrying an uncertain call.',
+      inputSchema: z.object({
+        bookId: id,
+        progressPercent: z.number().min(0).max(100).optional(),
+        pageNumber: z
+          .number()
+          .int()
+          .min(0)
+          .max(Number.MAX_SAFE_INTEGER)
+          .optional(),
+        occurredAt: z.iso.date().optional(),
+      }),
+      annotations: { ...personalWrite, idempotentHint: false },
+    },
+    async ({ bookId, progressPercent, pageNumber, occurredAt }) =>
+      result(() => {
+        if ((progressPercent === undefined) === (pageNumber === undefined))
+          throw createError({
+            statusCode: 400,
+            statusMessage: 'Provide either a percentage or a page number.',
+          });
+        return logReadingProgress(actor, bookId, {
+          progressPercent: progressPercent ?? null,
+          pageNumber: pageNumber ?? null,
+          occurredAt: parseDate(occurredAt) ?? new Date(),
+        });
+      }),
   );
   server.registerTool(
     'list_my_shelves',

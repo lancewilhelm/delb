@@ -61,6 +61,7 @@ const suites = [
   'review/personal-shelves-api.mjs',
   'review/mcp-api.mjs',
   'review/mcp-library-api.mjs',
+  'review/mcp-progress-api.mjs',
 ];
 const requested = process.argv.slice(2);
 if (

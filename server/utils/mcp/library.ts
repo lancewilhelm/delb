@@ -32,6 +32,10 @@ import { visibleBook } from '~~/server/utils/books/visibility';
 import { transitionBookStatuses } from '~~/server/utils/books/status-transition';
 import { changeShelfBooks, listShelves } from '~~/server/utils/shelves/model';
 import { authorizeWrite, type McpActor } from './connections';
+import {
+  readReadingProgress,
+  recordManualProgress,
+} from '~~/server/utils/books/progress';
 import { writeRationale } from '~~/server/utils/books/tbr';
 import { parseBookId, parseReaderId } from '~~/server/utils/books/ids';
 import { metadataVersion } from '~~/server/utils/books/metadata-snapshot';
@@ -424,4 +428,38 @@ export async function setShelf(
     (tx) => authorizeWrite(tx, actor),
   );
   return { shelfId, bookId, present };
+}
+
+export async function getReadingProgress(
+  actor: McpActor,
+  bookId: string,
+  limit: number,
+) {
+  return readReadingProgress(cloudDb, { userId: actor.userId, bookId, limit });
+}
+
+export async function logReadingProgress(
+  actor: McpActor,
+  bookId: string,
+  input: {
+    progressPercent: number | null;
+    pageNumber: number | null;
+    occurredAt: Date;
+  },
+) {
+  const log = await recordManualProgress(cloudDb, {
+    userId: actor.userId,
+    bookId,
+    ...input,
+    authorize: (tx) => authorizeWrite(tx, actor),
+  });
+  return {
+    id: log.id,
+    bookId: log.bookId,
+    progressPercent: log.progressPercent,
+    pageNumber: log.pageNumber,
+    source: log.source,
+    occurredAt: log.occurredAt,
+    createdAt: log.createdAt,
+  };
 }
