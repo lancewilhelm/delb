@@ -1,12 +1,8 @@
-import { and, eq, inArray } from 'drizzle-orm';
-
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
-  books,
-  collectionBooks,
-  collectionMembers,
-  userBookProgressLog,
-} from '~/utils/db/schema';
+  ProgressError,
+  recordManualProgress,
+} from '~~/server/utils/books/progress';
 import { auth } from '~/utils/auth';
 import { logger } from '~/utils/logger';
 
@@ -109,84 +105,24 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const memberships = await cloudDb
-      .select({ collectionId: collectionMembers.collectionId })
-      .from(collectionMembers)
-      .where(eq(collectionMembers.userId, userId));
-
-    const memberCollectionIds = Array.from(
-      new Set(memberships.map((m) => m.collectionId)),
-    ).filter(Boolean);
-
-    if (!memberCollectionIds.length) {
-      setResponseStatus(event, 404);
-      return { success: false, message: 'Book not found' };
-    }
-
-    const visible = await cloudDb
-      .select({ id: books.id, pages: books.pages })
-      .from(books)
-      .innerJoin(
-        collectionBooks,
-        and(eq(collectionBooks.bookId, books.id), eq(books.id, bookId)),
-      )
-      .where(inArray(collectionBooks.collectionId, memberCollectionIds))
-      .limit(1);
-
-    const book = visible[0] ?? null;
-    if (!book?.id) {
-      setResponseStatus(event, 404);
-      return { success: false, message: 'Book not found' };
-    }
-
-    if (pageNumber !== null) {
-      const totalPages = book.pages ?? null;
-      if (!totalPages || totalPages <= 0) {
-        setResponseStatus(event, 400);
-        return {
-          success: false,
-          message: 'This book has no page count. Add pages to log by page.',
-        };
-      }
-      if (pageNumber > totalPages) {
-        setResponseStatus(event, 400);
-        return {
-          success: false,
-          message: `pageNumber must be <= ${totalPages}.`,
-        };
-      }
-      progressPercent = (pageNumber / totalPages) * 100;
-    }
-
-    if (progressPercent === null) {
-      setResponseStatus(event, 400);
-      return {
-        success: false,
-        message: 'Provide progressPercent or pageNumber.',
-      };
-    }
-
     const occurredAt =
       occurredAtParsed && occurredAtParsed instanceof Date
         ? occurredAtParsed
         : new Date();
-
-    const log = {
-      id: crypto.randomUUID(),
+    const log = await recordManualProgress(cloudDb, {
       userId,
       bookId,
       progressPercent,
       pageNumber,
-      location: null,
-      source: 'manual',
       occurredAt,
-      createdAt: new Date(),
-    };
-
-    await cloudDb.insert(userBookProgressLog).values(log);
+    });
 
     return { success: true, data: { log } };
   } catch (error: unknown) {
+    if (error instanceof ProgressError) {
+      setResponseStatus(event, error.statusCode);
+      return { success: false, message: error.message };
+    }
     if (
       typeof error === 'object' &&
       error !== null &&
@@ -196,7 +132,10 @@ export default defineEventHandler(async (event) => {
       throw error;
     }
 
-    logger.error(error, 'POST /api/books/:id/progress-logs: Error creating log');
+    logger.error(
+      error,
+      'POST /api/books/:id/progress-logs: Error creating log',
+    );
     setResponseStatus(event, 500);
     return { success: false, message: 'Failed to create progress log' };
   }

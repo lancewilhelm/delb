@@ -16,10 +16,17 @@ async def main():
                 await session.initialize()
                 tools = await session.list_tools()
                 names = [tool.name for tool in tools.tools]
-                assert all(name in names for name in ["search_books", "list_my_tbr", "set_tbr_note", "update_book_metadata"])
+                assert all(name in names for name in ["search_books", "list_my_tbr", "set_tbr_note", "update_book_metadata", "get_reading_progress", "log_reading_progress"])
                 result = await session.call_tool("search_books", {"query": "Earthsea"})
                 assert not result.isError
-                assert any(item["title"] == "MCP Earthsea" for item in json.loads(result.content[0].text)["items"])
+                matches = json.loads(result.content[0].text)["items"]
+                assert any(item["title"] == "MCP Earthsea" for item in matches)
+                book_id = next(item["id"] for item in matches if item["title"] == "MCP Earthsea")
+                progress = await session.call_tool("get_reading_progress", {"bookId": book_id})
+                assert not progress.isError
+                assert json.loads(progress.content[0].text)["history"] == []
+                denied = await session.call_tool("log_reading_progress", {"bookId": book_id, "progressPercent": 30})
+                assert denied.isError
                 filtered = await session.call_tool("search_books", {"statuses": ["none"]})
                 assert not filtered.isError
                 assert any(item["title"] == "MCP Earthsea" for item in json.loads(filtered.content[0].text)["items"])
