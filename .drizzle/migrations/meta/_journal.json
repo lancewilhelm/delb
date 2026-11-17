@@ -127,6 +127,13 @@
       "when": 1794881279501,
       "tag": "0017_ambiguous_yellow_claw",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1794883941431,
+      "tag": "0018_bright_madame_hydra",
+      "breakpoints": true
     }
   ]
 }

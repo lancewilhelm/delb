@@ -117,9 +117,20 @@ export async function readRationale(
 
 export async function writeRationale(
   db: typeof cloudDb,
-  { userId, bookId, text }: RationaleTarget & { text: string },
+  {
+    userId,
+    bookId,
+    text,
+    authorize,
+  }: RationaleTarget & {
+    text: string;
+    authorize?: (
+      tx: Parameters<Parameters<typeof cloudDb.transaction>[0]>[0],
+    ) => Promise<void>;
+  },
 ) {
   return db.transaction(async (tx) => {
+    if (authorize) await authorize(tx);
     const [book] = await tx
       .select({ id: books.id })
       .from(books)

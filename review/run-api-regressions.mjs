@@ -60,6 +60,7 @@ const suites = [
   'review/spine-generation-api.mjs',
   'review/personal-shelves-api.mjs',
   'review/mcp-api.mjs',
+  'review/mcp-library-api.mjs',
 ];
 const requested = process.argv.slice(2);
 if (

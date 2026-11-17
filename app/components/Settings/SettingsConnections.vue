@@ -3,12 +3,14 @@ type Connection = {
   id: string;
   name: string;
   canWrite: boolean;
+  canEditMetadata: boolean;
   createdAt: string;
   expiresAt: string;
 };
 const connections = ref<Connection[]>([]);
 const name = ref('Hermes');
 const canWrite = ref(false);
+const canEditMetadata = ref(false);
 const token = ref('');
 const error = ref('');
 const busy = ref(false);
@@ -25,7 +27,14 @@ async function create() {
   try {
     const created = await $fetch<Connection & { token: string }>(
       '/api/mcp-connections',
-      { method: 'POST', body: { name: name.value, canWrite: canWrite.value } },
+      {
+        method: 'POST',
+        body: {
+          name: name.value,
+          canWrite: canWrite.value,
+          canEditMetadata: canEditMetadata.value,
+        },
+      },
     );
     token.value = created.token;
     await refresh().catch(() => {
@@ -35,6 +44,25 @@ async function create() {
   } catch {
     error.value =
       'Could not create the connection. Check its name and try again.';
+  } finally {
+    busy.value = false;
+  }
+}
+async function changeMetadataPermission(connection: Connection, event: Event) {
+  const checkbox = event.target;
+  if (!(checkbox instanceof HTMLInputElement)) return;
+  const next = checkbox.checked;
+  busy.value = true;
+  error.value = '';
+  try {
+    await $fetch('/api/mcp-connections', {
+      method: 'PATCH',
+      body: { id: connection.id, canEditMetadata: next },
+    });
+    connection.canEditMetadata = next;
+  } catch {
+    checkbox.checked = connection.canEditMetadata;
+    error.value = 'Could not change metadata permission.';
   } finally {
     busy.value = false;
   }
@@ -87,7 +115,11 @@ onMounted(() => {
         </label>
         <label class="flex gap-2 items-start"
           ><input v-model="canWrite" type="checkbox" class="mt-1" /> Allow
-          changes to my reading status and personal shelves</label
+          changes to my reading status, TBR notes, and personal shelves</label
+        >
+        <label class="flex gap-2 items-start"
+          ><input v-model="canEditMetadata" type="checkbox" class="mt-1" />
+          Allow editing shared book metadata in collections I can edit</label
         >
         <button
           :disabled="busy || !name.trim()"
@@ -126,12 +158,25 @@ onMounted(() => {
             <strong>{{ connection.name }}</strong>
             <p>
               {{
-                connection.canWrite ? 'Read and personal changes' : 'Read only'
+                connection.canWrite
+                  ? 'Read and personal changes'
+                  : connection.canEditMetadata
+                    ? 'Read and metadata changes'
+                    : 'Read only'
               }}
               · Expires
               {{ new Date(connection.expiresAt).toLocaleDateString() }}
             </p>
           </div>
+          <label class="flex gap-2 items-center"
+            ><input
+              type="checkbox"
+              :checked="connection.canEditMetadata"
+              :disabled="busy"
+              @change="changeMetadataPermission(connection, $event)"
+            />
+            Allow shared metadata edits</label
+          >
           <button
             :disabled="busy"
             class="px-3 py-2 rounded-lg bg-(--sub-alt-color)"

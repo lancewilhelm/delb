@@ -12,30 +12,31 @@ export type McpActor = {
   userId: string;
   connectionId: string;
   canWrite: boolean;
+  canEditMetadata: boolean;
 };
 
 export async function createConnection(
   userId: string,
   name: string,
   canWrite: boolean,
+  canEditMetadata = false,
 ) {
   const id = randomUUID();
   const secret = randomBytes(32).toString('base64url');
   const token = `delb_mcp_${id}.${secret}`;
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + 365 * 24 * 60 * 60 * 1000);
-  await cloudDb
-    .insert(mcpConnections)
-    .values({
-      id,
-      userId,
-      name,
-      canWrite,
-      createdAt,
-      expiresAt,
-      digest: createHash('sha256').update(secret).digest('hex'),
-    });
-  return { id, name, canWrite, createdAt, expiresAt, token };
+  await cloudDb.insert(mcpConnections).values({
+    id,
+    userId,
+    name,
+    canWrite,
+    canEditMetadata,
+    createdAt,
+    expiresAt,
+    digest: createHash('sha256').update(secret).digest('hex'),
+  });
+  return { id, name, canWrite, canEditMetadata, createdAt, expiresAt, token };
 }
 
 export async function authenticateConnection(
@@ -65,6 +66,7 @@ export async function authenticateConnection(
     userId: row.user.id,
     connectionId: row.connection.id,
     canWrite: row.connection.canWrite,
+    canEditMetadata: row.connection.canEditMetadata,
   };
 }
 
@@ -74,6 +76,7 @@ export async function listConnections(userId: string) {
       id: mcpConnections.id,
       name: mcpConnections.name,
       canWrite: mcpConnections.canWrite,
+      canEditMetadata: mcpConnections.canEditMetadata,
       createdAt: mcpConnections.createdAt,
       expiresAt: mcpConnections.expiresAt,
     })
@@ -90,6 +93,7 @@ export async function revokeConnection(userId: string, id: string) {
 export async function authorizeWrite(
   tx: Parameters<Parameters<typeof cloudDb.transaction>[0]>[0],
   actor: McpActor,
+  scope: 'personal' | 'metadata' = 'personal',
 ) {
   const [row] = await tx
     .select({ connection: mcpConnections, user: users })
@@ -104,7 +108,9 @@ export async function authorizeWrite(
     .limit(1);
   if (
     !row ||
-    !row.connection.canWrite ||
+    !(scope === 'personal'
+      ? row.connection.canWrite
+      : row.connection.canEditMetadata) ||
     row.connection.expiresAt.getTime() <= Date.now() ||
     (row.user.banned &&
       (!row.user.banExpires || row.user.banExpires.getTime() > Date.now()))
@@ -112,5 +118,22 @@ export async function authorizeWrite(
     throw createError({
       statusCode: 403,
       statusMessage: 'Connection no longer permits changes.',
+    });
+}
+
+export async function setMetadataPermission(
+  userId: string,
+  id: string,
+  canEditMetadata: boolean,
+) {
+  const updated = await cloudDb
+    .update(mcpConnections)
+    .set({ canEditMetadata })
+    .where(and(eq(mcpConnections.id, id), eq(mcpConnections.userId, userId)))
+    .returning({ id: mcpConnections.id });
+  if (!updated.length)
+    throw createError({
+      statusCode: 404,
+      statusMessage: 'Connection not found.',
     });
 }
