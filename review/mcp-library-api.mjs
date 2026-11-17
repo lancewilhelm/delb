@@ -5,6 +5,7 @@ import {
   StreamableHTTPClientTransport,
 } from '@modelcontextprotocol/client';
 import { fetchAuth } from './fetch-auth.mjs';
+import { pdfFixture } from './pdf-fixture.mjs';
 
 const base = 'http://127.0.0.1:4317';
 const suffix = randomBytes(5).toString('hex');
@@ -292,6 +293,41 @@ try {
     { type: 'isbn', value: '9781234567890' },
   ]);
   assert.notEqual(updated.book.metadataVersion, before.metadataVersion);
+  const pdfBytes = pdfFixture();
+  const form = new FormData();
+  form.append(
+    'files',
+    new Blob([pdfBytes], { type: 'application/pdf' }),
+    'MCP Storage.pdf',
+  );
+  await ok(
+    await fetch(`${base}/api/books/upload`, {
+      method: 'POST',
+      headers: { Origin: base, Cookie: owner.cookie },
+      body: form,
+    }),
+  );
+  const uploaded = (
+    await call(writer, 'search_books', { query: 'MCP Storage' })
+  ).items.find((book) => book.title === 'MCP Storage');
+  assert.ok(uploaded);
+  const file = (
+    await ok(await request(owner, `/api/books/${uploaded.id}/files`))
+  ).data.files[0];
+  const downloadUrl = `/api/books/${uploaded.id}/download?format=pdf&fileId=${file.id}`;
+  const original = await request(owner, downloadUrl);
+  assert.equal(original.status, 200);
+  assert.deepEqual(Buffer.from(await original.arrayBuffer()), pdfBytes);
+  const uploadedBook = await call(writer, 'get_book', { bookId: uploaded.id });
+  const renamed = await call(writer, 'update_book_metadata', {
+    bookId: uploaded.id,
+    expectedVersion: uploadedBook.metadataVersion,
+    changes: { title: 'MCP Storage Renamed' },
+  });
+  assert.equal(renamed.storageWarning, false);
+  const downloaded = await request(owner, downloadUrl);
+  assert.equal(downloaded.status, 200);
+  assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()), pdfBytes);
   await fails(writer, 'update_book_metadata', {
     bookId: first,
     expectedVersion: before.metadataVersion,
