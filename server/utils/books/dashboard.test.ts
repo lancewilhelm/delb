@@ -16,6 +16,7 @@ async function fixture() {
     'CREATE TABLE collection_members (collection_id TEXT, user_id TEXT)',
     'CREATE TABLE user_book_status (user_id TEXT, book_id TEXT, status TEXT, finished_at INTEGER, updated_at INTEGER, tbr_rank INTEGER, UNIQUE(user_id, book_id))',
     'CREATE TABLE user_book_reading_position (user_id TEXT, book_id TEXT, progress REAL, updated_at INTEGER, UNIQUE(user_id, book_id))',
+    'CREATE TABLE user_book_progress_log (id TEXT PRIMARY KEY, user_id TEXT, book_id TEXT, progress_percent REAL, page_number INTEGER, location TEXT, source TEXT, occurred_at INTEGER, created_at INTEGER)',
     "INSERT INTO books (id, title, cover_image_path, updated_at) VALUES ('1','One',NULL,900),('2','Two',NULL,800),('3','Three',NULL,9999),('4','Four',NULL,1),('5','Undated',NULL,500),('6','Hidden',NULL,1000)",
     "INSERT INTO collection_books VALUES ('x','1'),('x','2'),('x','3'),('x','4'),('x','5'),('y','1'),('y','4'),('z','6')",
     "INSERT INTO collection_members VALUES ('x','u'),('y','u'),('y','other'),('z','owner')",
@@ -220,4 +221,54 @@ test('finish dates retain the server calendar date when serialized', async (t) =
       cleanup();
     }
   }
+});
+
+test('a newer manual progress entry appears on the reading dashboard', async (t) => {
+  const { client, db, cleanup } = await fixture();
+  t.after(cleanup);
+  await client.execute(
+    "INSERT INTO user_book_progress_log VALUES ('log-1','u','1',70,NULL,NULL,'manual',30,40)",
+  );
+  const result = await getDashboard(db, { userId: 'u', shelf: 'reading' });
+  assert.equal(
+    result.shelf.books.find((book) => book.id === '1')?.progress,
+    70,
+  );
+});
+
+test('same-day date-only entries win by save time, while backdated entries remain historical and private', async (t) => {
+  const { client, db, cleanup } = await fixture();
+  t.after(cleanup);
+  const seconds = (day: number, hour = 0) =>
+    new Date(2026, 10, day, hour).getTime() / 1000;
+  await client.execute({
+    sql: "UPDATE user_book_reading_position SET progress=40, updated_at=? WHERE user_id='u' AND book_id='1'",
+    args: [seconds(17, 12)],
+  });
+  for (const [id, user, percent, occurred, created] of [
+    ['old', 'u', 90, seconds(15), seconds(17, 16)],
+    ['today', 'u', 0, seconds(17), seconds(17, 13)],
+    ['other', 'other', 99, seconds(17, 18), seconds(17, 18)],
+  ] as const) {
+    await client.execute({
+      sql: "INSERT INTO user_book_progress_log VALUES (?,?,'1',?,NULL,NULL,'manual',?,?)",
+      args: [id, user, percent, occurred, created],
+    });
+  }
+  const progress = async () =>
+    (
+      await getDashboard(db, { userId: 'u', shelf: 'reading' })
+    ).shelf.books.find((book) => book.id === '1')?.progress;
+  assert.equal(await progress(), 0);
+  await client.execute({
+    sql: "UPDATE user_book_reading_position SET progress=45, updated_at=? WHERE user_id='u' AND book_id='1'",
+    args: [seconds(17, 14)],
+  });
+  assert.equal(await progress(), 45);
+  await client.execute("DELETE FROM user_book_progress_log WHERE id='today'");
+  assert.equal(await progress(), 45);
+  await client.execute(
+    "UPDATE user_book_reading_position SET progress=NULL WHERE user_id='u' AND book_id='1'",
+  );
+  assert.equal(await progress(), 90);
 });

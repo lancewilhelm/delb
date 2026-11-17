@@ -10,11 +10,13 @@ import {
   type SQL,
 } from 'drizzle-orm';
 import { visibleBook } from './visibility';
+import { latestReadingProgress, progressHistoryOrder } from './progress-order';
 import {
   books,
   collectionBooks,
   collectionMembers,
   userBookReadingPosition,
+  userBookProgressLog,
   userBookStatus,
 } from '../../../app/utils/db/schema';
 import type {
@@ -110,6 +112,12 @@ export async function getDashboard(
       hasAudiobookCopy: books.hasAudiobookCopy,
       updatedAt: books.updatedAt,
       progress: userBookReadingPosition.progress,
+      positionUpdatedAt: userBookReadingPosition.updatedAt,
+      logProgress: userBookProgressLog.progressPercent,
+      logPage: userBookProgressLog.pageNumber,
+      logSource: userBookProgressLog.source,
+      logOccurredAt: userBookProgressLog.occurredAt,
+      logCreatedAt: userBookProgressLog.createdAt,
       finishedAt: userBookStatus.finishedAt,
     })
     .from(books)
@@ -125,6 +133,18 @@ export async function getDashboard(
       and(
         eq(userBookReadingPosition.bookId, books.id),
         eq(userBookReadingPosition.userId, userId),
+      ),
+    )
+    .leftJoin(
+      userBookProgressLog,
+      and(
+        eq(userBookProgressLog.userId, userId),
+        eq(
+          userBookProgressLog.id,
+          sql`(SELECT ${userBookProgressLog.id} FROM ${userBookProgressLog}
+          WHERE ${userBookProgressLog.userId} = ${userId} AND ${userBookProgressLog.bookId} = ${books.id}
+          ORDER BY ${sql.join(progressHistoryOrder, sql`, `)} LIMIT 1)`,
+        ),
       ),
     )
     .where(and(visible, filters[shelf]))
@@ -153,7 +173,24 @@ export async function getDashboard(
         hasPhysicalCopy: book.hasPhysicalCopy,
         hasAudiobookCopy: book.hasAudiobookCopy,
         updatedAt: book.updatedAt.toISOString(),
-        progress: book.progress,
+        progress:
+          latestReadingProgress(
+            book.logProgress !== null &&
+              book.logSource !== null &&
+              book.logOccurredAt !== null &&
+              book.logCreatedAt !== null
+              ? {
+                  progressPercent: book.logProgress,
+                  pageNumber: book.logPage,
+                  source: book.logSource,
+                  occurredAt: book.logOccurredAt,
+                  createdAt: book.logCreatedAt,
+                }
+              : null,
+            book.positionUpdatedAt
+              ? { progress: book.progress, updatedAt: book.positionUpdatedAt }
+              : null,
+          )?.progressPercent ?? null,
         finishedDate: book.finishedAt ? calendarDate(book.finishedAt) : null,
       })),
       nextOffset: rows.length > pageSize ? offset + pageSize : null,

@@ -41,7 +41,7 @@ The endpoint uses Streamable HTTP and a configured bearer token. It does not pro
 
 The agent can list collections and your personal shelves, browse and search visible books by title, author, identifier, or reading status, and read book details. It can filter book results by collection or personal shelf. Book details and search results include your reading dates, TBR rank, and private note when present. The TBR queue tool lists your visible To be read books in their saved global order with their notes.
 
-The agent can read your recent progress history, your saved reader percentage, and the book's progress-sync setting. With personal changes enabled, it can log a page number or percentage, optionally with a date. A page number requires a page count in the book's metadata. Each call adds a history entry, so check the history before retrying a call whose outcome is uncertain.
+The agent can read your recent progress history, your saved reader percentage, and the book's progress-sync setting. With personal changes enabled, it can log a page number or percentage, optionally with a date. A page number requires a page count in the book's metadata. Each call adds a history entry, so check the history before retrying a call whose outcome is uncertain. On the book details page, the Progress section shows the latest percentage and an expandable history. Continue reading on the dashboard also shows the latest percentage. Refresh the book page's progress if it was open when the agent logged an entry.
 
 A manual progress entry does not change your saved reader location or reading status. If progress sync is enabled, reopening the reader can restore from the latest logged percentage. The tool does not change the progress-sync setting.
 

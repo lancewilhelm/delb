@@ -146,6 +146,7 @@ const progressPercentInput = ref('');
 const progressPageInput = ref('');
 const progressDateInput = ref('');
 const progressLogSaving = ref(false);
+const progressHistoryRevision = ref(0);
 const progressLogErrorMessage = ref<string | null>(null);
 
 function formatDateInput(value?: string | number | Date | null): string {
@@ -249,6 +250,7 @@ async function saveStatus(next: UserBookStatus | null) {
     }
 
     applyStatusResponse(json?.data);
+    progressHistoryRevision.value++;
   } catch (err) {
     const e = err as FetchErrorLike;
     statusErrorMessage.value =
@@ -301,6 +303,7 @@ async function saveStatusDates(payload: {
     }
 
     applyStatusResponse(json?.data);
+    progressHistoryRevision.value++;
   } catch (err) {
     const e = err as FetchErrorLike;
     statusMetaErrorMessage.value =
@@ -498,6 +501,7 @@ async function createProgressLog() {
         json?.message || `Failed to log progress (${res.status})`,
       );
     }
+    progressHistoryRevision.value++;
   } catch (err) {
     const e = err as FetchErrorLike;
     progressLogErrorMessage.value =
@@ -1512,6 +1516,10 @@ const { copy } = useClipboard();
                 <div class="font-semibold">Progress</div>
 
                 <div class="flex flex-col items-end gap-2">
+                  <BooksBookProgressHistory
+                    :book-id="bookId"
+                    :refresh-key="progressHistoryRevision"
+                  />
                   <div class="flex flex-wrap items-center justify-end gap-2">
                     <select
                       v-model="progressMode"

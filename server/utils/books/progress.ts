@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import {
   books,
   userBookPreferences,
@@ -7,6 +7,7 @@ import {
 } from '~/utils/db/schema';
 import type { cloudDb } from '~~/server/utils/db/cloud';
 import { visibleBook } from './visibility';
+import { latestReadingProgress, progressHistoryOrder } from './progress-order';
 
 type Db = typeof cloudDb;
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -118,7 +119,7 @@ export async function readReadingProgress(
           eq(userBookProgressLog.bookId, input.bookId),
         ),
       )
-      .orderBy(desc(userBookProgressLog.occurredAt))
+      .orderBy(...progressHistoryOrder)
       .limit(input.limit);
     return {
       bookId: book.id,
@@ -126,6 +127,7 @@ export async function readReadingProgress(
       progressSyncEnabled: preference?.enabled ?? false,
       readerPosition: position ?? null,
       history,
+      latest: latestReadingProgress(history[0], position),
     };
   });
 }
