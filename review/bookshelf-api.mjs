@@ -44,6 +44,11 @@ const arrangement = {
     },
   ],
 };
+const normalizedArrangement = () => ({
+  ...arrangement,
+  version: 2,
+  pictures: [],
+});
 let response = await request(a, 'PUT', { revision: 0, arrangement });
 assert.equal(response.status, 200, await response.clone().text());
 assert.equal((await response.json()).revision, 1);
@@ -73,7 +78,7 @@ const results = await Promise.all([
 assert.deepEqual(results.map((x) => x.status).sort(), [200, 409]);
 const saved = await (await request(a)).json();
 assert.equal(saved.revision, 2);
-assert.deepEqual(saved.arrangement, arrangement);
+assert.deepEqual(saved.arrangement, normalizedArrangement());
 arrangement.bookcases[0].shelves.push({
   id: 'empty-shelf',
   height: 245,
@@ -86,7 +91,7 @@ response = await request(a, 'PUT', { revision: 3, arrangement });
 assert.equal(response.status, 200, await response.clone().text());
 const afterRemoval = await (await request(a)).json();
 assert.equal(afterRemoval.revision, 4);
-assert.deepEqual(afterRemoval.arrangement, arrangement);
+assert.deepEqual(afterRemoval.arrangement, normalizedArrangement());
 arrangement.bookcases.push({
   id: 'second-case',
   width: 340,
@@ -99,7 +104,7 @@ response = await request(a, 'PUT', { revision: 5, arrangement });
 assert.equal(response.status, 200, await response.clone().text());
 const reordered = await (await request(a)).json();
 assert.equal(reordered.revision, 6);
-assert.deepEqual(reordered.arrangement, arrangement);
+assert.deepEqual(reordered.arrangement, normalizedArrangement());
 response = await fetch(base + '/api/bookshelf', {
   method: 'PUT',
   headers: { Cookie: a, Origin: base, 'Content-Type': 'application/json' },
