@@ -115,7 +115,7 @@ onMounted(() => {
         </label>
         <label class="flex gap-2 items-start"
           ><input v-model="canWrite" type="checkbox" class="mt-1" /> Allow
-          changes to my reading status and personal shelves</label
+          changes to my reading status, TBR notes, and personal shelves</label
         >
         <label class="flex gap-2 items-start"
           ><input v-model="canEditMetadata" type="checkbox" class="mt-1" />
