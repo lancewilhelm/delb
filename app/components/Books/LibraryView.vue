@@ -705,7 +705,7 @@ onMounted(async () => {
             <!-- Books sort + filters -->
             <div class="flex items-center gap-1 self-center">
               <BooksViewToggle
-                :show-bookshelf="!!activeCollectionId || !!shelfId"
+                :show-bookshelf="!!shelfId || (hydrated && !!activeCollectionId)"
                 :bookshelf="bookshelfActive"
                 @bookshelf="setBookshelfActive"
               />

@@ -58,9 +58,18 @@ try {
   let sequence = 0;
   const pending = new Map();
   const exceptions = [];
+  const hydrationWarnings = [];
+  let pageUrl = '';
   ws.addEventListener('message', (event) => {
     const m = JSON.parse(event.data);
     if (m.method === 'Runtime.exceptionThrown') exceptions.push(m.params);
+    if (m.method === 'Page.frameNavigated' && !m.params.frame.parentId)
+      pageUrl = m.params.frame.url;
+    if (m.method === 'Runtime.consoleAPICalled') {
+      const message = m.params.args.map((arg) => arg.value ?? '').join(' ');
+      if (/hydration.*mismatch/i.test(message))
+        hydrationWarnings.push(`${pageUrl}: ${message}`);
+    }
     const request = pending.get(m.id);
     if (!request) return;
     pending.delete(m.id);
@@ -102,6 +111,9 @@ try {
     height: 900,
     deviceScaleFactor: 1,
     mobile: false,
+  });
+  await call('Emulation.setEmulatedMedia', {
+    features: [{ name: 'prefers-color-scheme', value: 'dark' }],
   });
   const signup = await fetchAuth(`${base}/api/auth/sign-up/email`, {
     method: 'POST',
@@ -1029,6 +1041,21 @@ try {
   await call('Page.navigate', { url: `${base}/settings/appearance` });
   await until('!!document.querySelector(\'[aria-label="Bookshelf color"]\')');
   await until('!!document.querySelector("#__nuxt")?.__vue_app__');
+  await until(
+    'document.querySelector(\'[aria-label^="Use guage_dark as fixed theme"]\')?.getAttribute("aria-pressed") === "true"',
+  );
+  await call('Emulation.setEmulatedMedia', {
+    features: [{ name: 'prefers-color-scheme', value: 'light' }],
+  });
+  await until(
+    'document.querySelector(\'[aria-label^="Use guage_light as fixed theme"]\')?.getAttribute("aria-pressed") === "true"',
+  );
+  await call('Emulation.setEmulatedMedia', {
+    features: [{ name: 'prefers-color-scheme', value: 'dark' }],
+  });
+  await until(
+    'document.querySelector(\'[aria-label^="Use guage_dark as fixed theme"]\')?.getAttribute("aria-pressed") === "true"',
+  );
   await evaluate(
     'document.querySelector(\'[aria-label="Bookshelf texture"] button:last-child\').click()',
   );
@@ -1065,6 +1092,7 @@ try {
     'none',
   );
   assert.equal(exceptions.length, 0, JSON.stringify(exceptions));
+  assert.deepEqual(hydrationWarnings, []);
   console.log(
     'PASS personal Shelves, selection, group move, stack offset, and picture editing',
   );
