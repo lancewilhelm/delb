@@ -346,6 +346,37 @@ try {
   assert.deepEqual((await call(writer, 'get_book', { bookId: first })).tags, [
     'Changed in Delb',
   ]);
+  const largeBook = await createBook('Large metadata');
+  const manyTags = Array.from({ length: 101 }, (_, index) => `tag-${index}`);
+  const longDescription = 'a'.repeat(12001);
+  await ok(
+    await request(owner, `/api/books/${largeBook}`, 'PUT', {
+      tags: manyTags,
+      description: longDescription,
+    }),
+  );
+  const truncated = await call(writer, 'get_book', { bookId: largeBook });
+  assert.equal(truncated.tagsTruncated, true);
+  assert.equal(truncated.descriptionTruncated, true);
+  assert.match(
+    await fails(writer, 'update_book_metadata', {
+      bookId: largeBook,
+      expectedVersion: truncated.metadataVersion,
+      changes: { tags: ['only-one'] },
+    }),
+    /more tags/,
+  );
+  assert.match(
+    await fails(writer, 'update_book_metadata', {
+      bookId: largeBook,
+      expectedVersion: truncated.metadataVersion,
+      changes: { description: 'short' },
+    }),
+    /read limit/,
+  );
+  const unchanged = await ok(await request(owner, `/api/books/${largeBook}`));
+  assert.equal(unchanged.data.book.description, longDescription);
+  assert.equal(unchanged.data.tags.length, 101);
   await ok(
     await request(owner, '/api/mcp-connections', 'PATCH', {
       id: ownerToken.id,

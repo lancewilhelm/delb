@@ -206,21 +206,24 @@ export async function getBook(actor: McpActor, bookId: string) {
         .select({ type: bookIdentifiers.type, value: bookIdentifiers.value })
         .from(bookIdentifiers)
         .where(eq(bookIdentifiers.bookId, bookId))
-        .limit(100),
+        .limit(101),
       tx
         .select({ name: tags.name })
         .from(bookTags)
         .innerJoin(tags, eq(tags.id, bookTags.tagId))
         .where(eq(bookTags.bookId, bookId))
-        .limit(100),
+        .limit(101),
     ]);
     return {
       ...book,
       metadataVersion: await metadataVersion(tx, bookId),
       description: book.description?.slice(0, 12000) ?? null,
       authors: authorRows.map((a) => a.name),
-      identifiers,
-      tags: tagRows.map((t) => t.name),
+      descriptionTruncated: (book.description?.length ?? 0) > 12000,
+      identifiers: identifiers.slice(0, 100),
+      identifiersTruncated: identifiers.length > 100,
+      tags: tagRows.slice(0, 100).map((t) => t.name),
+      tagsTruncated: tagRows.length > 100,
     };
   });
 }
@@ -360,7 +363,46 @@ export async function editMetadata(
     id: bookId,
     body: changes,
     expectedVersion,
-    authorize: (tx) => authorizeWrite(tx, actor, 'metadata'),
+    authorize: async (tx) => {
+      await authorizeWrite(tx, actor, 'metadata');
+      if (changes.description !== undefined) {
+        const [row] = await tx
+          .select({ description: books.description })
+          .from(books)
+          .where(eq(books.id, bookId))
+          .limit(1);
+        if ((row?.description?.length ?? 0) > 12000)
+          throw createError({
+            statusCode: 400,
+            statusMessage:
+              'Description exceeds the MCP read limit. Edit it in Delb instead.',
+          });
+      }
+      if (changes.tags !== undefined) {
+        const [row] = await tx
+          .select({ value: count() })
+          .from(bookTags)
+          .where(eq(bookTags.bookId, bookId));
+        if ((row?.value ?? 0) > 100)
+          throw createError({
+            statusCode: 400,
+            statusMessage:
+              'This book has more tags than MCP can show. Edit tags in Delb instead.',
+          });
+      }
+      if (changes.identifiers !== undefined) {
+        const [row] = await tx
+          .select({ value: count() })
+          .from(bookIdentifiers)
+          .where(eq(bookIdentifiers.bookId, bookId));
+        if ((row?.value ?? 0) > 100)
+          throw createError({
+            statusCode: 400,
+            statusMessage:
+              'This book has more identifiers than MCP can show. Edit identifiers in Delb instead.',
+          });
+      }
+    },
   });
   return {
     book: await getBook(actor, bookId),

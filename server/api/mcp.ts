@@ -148,7 +148,8 @@ function buildServer(actor: McpActor) {
   server.registerTool(
     'get_book',
     {
-      description: 'Read book details and your reading status.',
+      description:
+        'Read book details, metadataVersion, your reading status and note. Truncated flags identify fields too large for safe replacement through MCP.',
       inputSchema: z.object({ bookId: id }),
       annotations: readOnly,
     },
