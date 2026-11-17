@@ -38,14 +38,19 @@ export async function transitionBookStatuses(
     bookIds,
     change,
     now,
+    authorize,
   }: {
     userId: string;
     bookIds: string[];
     change: Change;
     now: Date;
+    authorize?: (
+      tx: Parameters<Parameters<typeof cloudDb.transaction>[0]>[0],
+    ) => Promise<void>;
   },
 ) {
   return db.transaction(async (tx) => {
+    if (authorize) await authorize(tx);
     const visible = await tx
       .selectDistinct({ id: books.id, pages: books.pages })
       .from(books)

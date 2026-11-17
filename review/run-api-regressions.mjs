@@ -17,6 +17,9 @@ const environment = {
   PATH: process.env.PATH,
   NUXT_TELEMETRY_DISABLED: '1',
   ...(process.env.CHROME_BIN ? { CHROME_BIN: process.env.CHROME_BIN } : {}),
+  ...(process.env.DELB_MCP_TEST_PYTHON
+    ? { DELB_MCP_TEST_PYTHON: process.env.DELB_MCP_TEST_PYTHON }
+    : {}),
 };
 async function run(args, cwd) {
   const child = spawn(process.execPath, args, { cwd, env: environment });
@@ -55,6 +58,7 @@ const suites = [
   'review/spine-artwork-api.mjs',
   'review/spine-generation-api.mjs',
   'review/personal-shelves-api.mjs',
+  'review/mcp-api.mjs',
 ];
 const requested = process.argv.slice(2);
 if (
@@ -86,6 +90,9 @@ for (const suite of requested.length ? requested : suites) {
       'review/http-smoke.mjs',
       'review/pdf-fixture.mjs',
       suite,
+      ...(suite === 'review/mcp-api.mjs'
+        ? ['review/mcp-python-client.py']
+        : []),
       ...([
         'review/spine-generation-api.mjs',
         'review/spine-generation-browser.mjs',

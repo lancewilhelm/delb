@@ -1,0 +1,11 @@
+# MCP integration design
+
+Delb already has library queries, collection authorization, reading transitions, and personal shelf operations. A general-purpose external API is not a prerequisite for MCP. This integration adds per-user machine credentials and a bounded MCP tool contract, and reuses Delb's visibility predicate and personal mutation operations.
+
+Hermes connects to `/api/mcp` with Streamable HTTP and an explicitly configured bearer token. Delb issues a random token to an interactive user, stores its digest, and checks its owner, expiry, ban state, and scope on every request. The connection never supplies a user ID. Credential management requires a browser session. The endpoint rejects browser origins and does not treat the token as a browser session or a general REST credential.
+
+Library reads return selected fields rather than database rows or file paths. Status and shelf changes call the same operations as Delb's UI, with an additional credential check inside the mutation transaction. Membership and shelf ownership remain Delb's authority. Revocation takes effect for subsequent requests; an already-running request can finish. The code does not claim that a ban or membership change cancels an operation already in progress.
+
+The first release supports reading the library and changing personal reading data. It does not expose catalog edits, files, administrative actions, or OAuth. A future public API or OAuth flow can reuse the same user and collection rules without changing this token into a general session. Test changes against the isolated MCP regression in `review/mcp-api.mjs`; a local MCP client test does not prove private-network routing or the user's deployed Hermes setup.
+
+Two alternatives were evaluated: a separate MCP process backed by a general Delb API, and a built-in MCP endpoint using Delb's service operations. The built-in endpoint avoids a second service and a privileged proxy credential. An independent design review preferred the shared domain approach and identified the need to recheck current authority on every operation. Both designs agreed that a comprehensive REST rewrite would delay a useful connection without resolving machine authentication by itself.
