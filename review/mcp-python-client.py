@@ -15,10 +15,17 @@ async def main():
             async with ClientSession(reader, writer) as session:
                 await session.initialize()
                 tools = await session.list_tools()
-                assert "search_books" in [tool.name for tool in tools.tools]
+                names = [tool.name for tool in tools.tools]
+                assert all(name in names for name in ["search_books", "list_my_tbr", "set_tbr_note", "update_book_metadata"])
                 result = await session.call_tool("search_books", {"query": "Earthsea"})
                 assert not result.isError
                 assert any(item["title"] == "MCP Earthsea" for item in json.loads(result.content[0].text)["items"])
+                filtered = await session.call_tool("search_books", {"statuses": ["none"]})
+                assert not filtered.isError
+                assert any(item["title"] == "MCP Earthsea" for item in json.loads(filtered.content[0].text)["items"])
+                queue = await session.call_tool("list_my_tbr", {})
+                assert not queue.isError
+                assert json.loads(queue.content[0].text)["items"] == []
     print("PASS Python MCP transport used by Hermes")
 
 

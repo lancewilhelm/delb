@@ -1,0 +1,1 @@
+ALTER TABLE `mcp_connections` ADD `can_edit_metadata` integer DEFAULT false NOT NULL;
