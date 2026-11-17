@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "eb7b2e87-4591-4116-b45c-0532eff7d843",
+  "id": "5d4737ec-6d9d-4c22-be9e-931e7604b9db",
   "prevId": "68fbbcca-11b2-48cf-8f85-c1ebd7ff688a",
   "tables": {
     "accounts": {
@@ -1291,6 +1291,80 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "mcp_connections": {
+      "name": "mcp_connections",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "digest": {
+          "name": "digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "can_write": {
+          "name": "can_write",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "mcp_connections_user_id_users_id_fk": {
+          "name": "mcp_connections_user_id_users_id_fk",
+          "tableFrom": "mcp_connections",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "personal_shelf_books": {
       "name": "personal_shelf_books",
       "columns": {
@@ -1671,112 +1745,6 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
-    },
-    "shelf_picture_assets": {
-      "name": "shelf_picture_assets",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "collection_id": {
-          "name": "collection_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "personal_shelf_id": {
-          "name": "personal_shelf_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "image_base64": {
-          "name": "image_base64",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "bytes": {
-          "name": "bytes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "unused_since": {
-          "name": "unused_since",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "shelf_picture_assets_collection_idx": {
-          "name": "shelf_picture_assets_collection_idx",
-          "columns": [
-            "collection_id"
-          ],
-          "isUnique": false
-        },
-        "shelf_picture_assets_personal_idx": {
-          "name": "shelf_picture_assets_personal_idx",
-          "columns": [
-            "personal_shelf_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "shelf_picture_assets_collection_id_collections_id_fk": {
-          "name": "shelf_picture_assets_collection_id_collections_id_fk",
-          "tableFrom": "shelf_picture_assets",
-          "tableTo": "collections",
-          "columnsFrom": [
-            "collection_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "shelf_picture_assets_personal_shelf_id_personal_shelves_id_fk": {
-          "name": "shelf_picture_assets_personal_shelf_id_personal_shelves_id_fk",
-          "tableFrom": "shelf_picture_assets",
-          "tableTo": "personal_shelves",
-          "columnsFrom": [
-            "personal_shelf_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "shelf_picture_assets_scope": {
-          "name": "shelf_picture_assets_scope",
-          "value": "(\"shelf_picture_assets\".\"collection_id\" IS NULL) <> (\"shelf_picture_assets\".\"personal_shelf_id\" IS NULL)"
-        }
-      }
     },
     "storage_operations": {
       "name": "storage_operations",

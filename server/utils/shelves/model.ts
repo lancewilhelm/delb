@@ -339,6 +339,7 @@ export async function changeShelfBooks(
   shelfId: string,
   ids: string[],
   action: 'add' | 'remove',
+  authorize?: (tx: Db) => Promise<void>,
 ) {
   const unique = [...new Set(ids)];
   if (
@@ -349,6 +350,7 @@ export async function changeShelfBooks(
     return fail(400, 'Choose valid books.');
   return cloudDb.transaction(async (tx) => {
     await lockCollectionChanges(tx);
+    if (authorize) await authorize(tx);
     const shelf = await owned(tx, userId, shelfId);
     const authorized = new Set<string>();
     for (let i = 0; i < unique.length; i += 400) {

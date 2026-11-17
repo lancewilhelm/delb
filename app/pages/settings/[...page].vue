@@ -48,6 +48,13 @@ const tabs: Record<string, Tab> = {
     path: '/settings/general',
     admin: false,
   },
+  connections: {
+    name: 'Connections',
+    component: resolveComponent('SettingsConnections'),
+    icon: 'lucide:plug',
+    path: '/settings/connections',
+    admin: false,
+  },
   appearance: {
     name: 'Appearance',
     component: resolveComponent('SettingsAppearance'),

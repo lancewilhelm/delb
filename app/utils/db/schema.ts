@@ -48,6 +48,19 @@ export const users = sqliteTable('users', {
   banExpires: integer('ban_expires', { mode: 'timestamp' }),
 });
 
+// Credentials for user-authorized MCP clients. Only the token digest is stored.
+export const mcpConnections = sqliteTable('mcp_connections', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  digest: text('digest').notNull(),
+  canWrite: integer('can_write', { mode: 'boolean' }).notNull().default(false),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
 // Session table for better-auth
 export const sessions = sqliteTable('sessions', {
   id: text('id').primaryKey(),
