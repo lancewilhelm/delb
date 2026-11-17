@@ -14,6 +14,7 @@ import {
 } from '~~/shared/bookshelf';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { lockCollectionChanges } from '~~/server/utils/collections/model';
+import { validatePictureAssets } from './pictures';
 import {
   composeBookshelfLayout,
   bookshelfGeometry,
@@ -128,6 +129,7 @@ export async function readCollectionShelf(
                   shelfId: shelf.id,
                   stackId: `${bookcase.id}/${shelf.id}/${index}`,
                   x: item.x,
+                  bookX: item.x + (book.offsetX ?? 0),
                   horizontal: item.horizontal,
                   order,
                   width: oldWidth,
@@ -191,7 +193,10 @@ export async function saveCollectionShelf(
       });
     const catalog = await readCatalog(tx, collectionId);
     const [stored] = await tx
-      .select({ revision: collectionBookshelves.revision })
+      .select({
+        revision: collectionBookshelves.revision,
+        arrangement: collectionBookshelves.arrangement,
+      })
       .from(collectionBookshelves)
       .where(eq(collectionBookshelves.collectionId, collectionId))
       .limit(1);
@@ -201,6 +206,26 @@ export async function saveCollectionShelf(
         statusMessage:
           'This bookshelf or its books changed. Reload to review the latest version.',
       });
+    if (
+      stored?.arrangement &&
+      typeof stored.arrangement === 'object' &&
+      'version' in stored.arrangement &&
+      stored.arrangement.version === 2 &&
+      (!rawArrangement ||
+        typeof rawArrangement !== 'object' ||
+        !('version' in rawArrangement) ||
+        rawArrangement.version !== 2)
+    )
+      throw createError({
+        statusCode: 409,
+        statusMessage:
+          'This bookshelf needs a newer version of Delb. Reload before saving.',
+      });
+    await validatePictureAssets(
+      tx,
+      { kind: 'collection', id: collectionId },
+      arrangement,
+    );
     const placed = arrangement.bookcases.flatMap((bookcase) =>
       bookcase.shelves.flatMap((shelf) =>
         shelf.items.flatMap((item) => item.books),

@@ -3,6 +3,10 @@ import BookshelfSpine from './BookshelfSpine.vue';
 import BookshelfBookcase from './BookshelfBookcase.vue';
 import { placementStyle } from '~/utils/bookshelfPlacement';
 import {
+  booksInRectangle,
+  moveSelectedBooks,
+} from '~~/shared/bookshelf-selection';
+import {
   bookshelfViewKey,
   readBookshelfView,
   saveBookshelfView,
@@ -10,6 +14,7 @@ import {
 import type { BookViewBook } from '~/utils/bookFields';
 import {
   SHELF_WIDTH,
+  SHELF_CASE_GAP,
   SHELF_FLOOR,
   SHELF_MAX_HEIGHT,
   SHELF_MAX_WIDTH,
@@ -18,6 +23,7 @@ import {
   minimumShelfHeight,
   itemWidth,
   itemHeight,
+  shiftStackBook,
   emptyShelf,
   parseBookshelf,
   type Bookshelf,
@@ -25,9 +31,11 @@ import {
   type Shelf,
   type ShelfItem,
   type ShelfBook,
+  type ShelfPicture,
 } from '~~/shared/bookshelf';
 
 defineOptions({ name: 'BookshelfView' });
+const userSettingsStore = useUserSettingsStore();
 const props = defineProps<{
   endpoint: string;
   collectionId?: string;
@@ -84,6 +92,8 @@ type Resize =
       start: number;
       original: number;
       scale: number;
+      floor: number;
+      cameraY: number;
     }
   | {
       axis: 'width';
@@ -125,7 +135,41 @@ const catalogToken = ref('');
 const canEdit = ref(false);
 const editing = ref(false);
 const selected = ref<string | null>(null);
-const selectedShelf = ref<string | null>(null);
+const selectedBooks = ref<Set<string>>(new Set());
+const marquee = ref<{
+  pointerId: number;
+  startX: number;
+  startY: number;
+  x: number;
+  y: number;
+  previousSelection: Set<string>;
+} | null>(null);
+const groupDrag = ref<{
+  pointerId: number;
+  shelfId: string;
+  startX: number;
+  startY: number;
+  x: number;
+  y: number;
+  moved: boolean;
+} | null>(null);
+const selectedPicture = ref<string | null>(null);
+const pictureInput = ref<HTMLInputElement | null>(null);
+const uploadingPicture = ref(false);
+const pictureDrag = ref<{
+  pointerId: number;
+  id: string;
+  startX: number;
+  startY: number;
+  x: number;
+  y: number;
+  previewX: number;
+  previewY: number;
+} | null>(null);
+const picturePath = computed(
+  () =>
+    `/api/bookshelf-pictures/${props.personalShelfId ? 'personal' : 'collection'}/${encodeURIComponent(props.personalShelfId ?? props.collectionId ?? '')}`,
+);
 const zoom = ref(1);
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 4;
@@ -138,6 +182,8 @@ const camera = reactive({ x: 0, y: 0 });
 const authUser = useState<{ id: string } | null>('auth:user');
 let viewKey: string | null = null;
 let viewSaveTimer: ReturnType<typeof setTimeout> | undefined;
+let sliderSaveTimer: ReturnType<typeof setTimeout> | undefined;
+let pictureResizeRatio: { id: string; ratio: number } | null = null;
 function saveView() {
   if (!viewKey) return;
   try {
@@ -157,6 +203,7 @@ watch([() => camera.x, () => camera.y, zoom], () => {
   viewSaveTimer = setTimeout(saveView, 200);
 });
 const wall = ref<HTMLElement | null>(null);
+const controlsLayer = ref<HTMLElement | null>(null);
 const loading = ref(true);
 const loadError = ref('');
 const saveError = ref('');
@@ -190,10 +237,16 @@ function onWallFocus(event: FocusEvent) {
   if (!(event.target instanceof HTMLElement)) return;
   focusedCaseId.value =
     event.target.closest<HTMLElement>('[data-bookcase-id]')?.dataset
-      .bookcaseId ?? null;
+      .bookcaseId ??
+    event.target.closest<HTMLElement>('[data-control-case-id]')?.dataset
+      .controlCaseId ??
+    null;
   focusedShelfId.value =
     event.target.closest<HTMLElement>('[data-shelf-canvas]')?.dataset
-      .shelfCanvas ?? null;
+      .shelfCanvas ??
+    event.target.closest<HTMLElement>('[data-control-shelf-id]')?.dataset
+      .controlShelfId ??
+    null;
 }
 function onWallKeydown(event: KeyboardEvent) {
   if (
@@ -226,7 +279,8 @@ function shelfFrame(atZoom: number) {
   const scaleAtZoom = Math.min(1, width.value / SHELF_WIDTH) * atZoom;
   const bookcases = arrangement.value?.bookcases ?? [];
   const totalWidth =
-    bookcases.reduce((total, bookcase) => total + bookcase.width, 0) *
+    (bookcases.reduce((total, bookcase) => total + bookcase.width, 0) +
+      Math.max(0, bookcases.length - 1) * SHELF_CASE_GAP) *
     scaleAtZoom;
   const tallest =
     Math.max(
@@ -246,6 +300,14 @@ function shelfFrame(atZoom: number) {
   };
 }
 const floorTop = computed(() => shelfFrame(zoom.value).floor + camera.y);
+const casePositions = computed(() => {
+  let left = shelfFrame(zoom.value).left + camera.x;
+  return (arrangement.value?.bookcases ?? []).map((bookcase) => {
+    const position = left;
+    left += (bookcase.width + SHELF_CASE_GAP) * scale.value;
+    return position;
+  });
+});
 const visibleCaseIds = computed(() => {
   const cases = arrangement.value?.bookcases ?? [];
   const result = new Set<string>();
@@ -268,7 +330,7 @@ const visibleCaseIds = computed(() => {
       bookcase.id === bookcaseDrag.value?.id
     )
       result.add(bookcase.id);
-    left = right;
+    left = right + SHELF_CASE_GAP * scale.value;
   }
   return result;
 });
@@ -492,6 +554,13 @@ function changed() {
   dirty.value = true;
   void save();
 }
+function sliderChanged(commit: boolean) {
+  dirtyVersion++;
+  dirty.value = true;
+  clearTimeout(sliderSaveTimer);
+  if (commit) void save();
+  else sliderSaveTimer = setTimeout(() => void save(), 250);
+}
 function retrySave() {
   saveError.value = '';
   void save();
@@ -523,7 +592,15 @@ watch(
   },
 );
 function onWheel(event: WheelEvent) {
-  if (resizing.value || drag.value || bookcaseDrag.value) return;
+  if (
+    resizing.value ||
+    drag.value ||
+    bookcaseDrag.value ||
+    pictureDrag.value ||
+    groupDrag.value ||
+    marquee.value
+  )
+    return;
   if (!event.deltaY && !event.deltaX) return;
   event.preventDefault();
   if (event.shiftKey) {
@@ -565,7 +642,15 @@ function touchDistance(touches: TouchList) {
 function onTouchStart(event: TouchEvent) {
   if (event.touches.length === 2) {
     touchPan = null;
-    if (drag.value || resizing.value || bookcaseDrag.value || pan.value)
+    if (
+      drag.value ||
+      resizing.value ||
+      bookcaseDrag.value ||
+      pan.value ||
+      pictureDrag.value ||
+      groupDrag.value ||
+      marquee.value
+    )
       onCancel();
     const distance = touchDistance(event.touches);
     if (distance) pinch = { distance, zoom: zoom.value };
@@ -575,7 +660,10 @@ function onTouchStart(event: TouchEvent) {
     event.touches.length !== 1 ||
     drag.value ||
     resizing.value ||
-    bookcaseDrag.value
+    bookcaseDrag.value ||
+    pictureDrag.value ||
+    groupDrag.value ||
+    marquee.value
   )
     return;
   const touch = event.touches.item(0);
@@ -605,7 +693,10 @@ function onTouchMove(event: TouchEvent) {
     event.touches.length !== 1 ||
     drag.value ||
     resizing.value ||
-    bookcaseDrag.value
+    bookcaseDrag.value ||
+    pictureDrag.value ||
+    groupDrag.value ||
+    marquee.value
   )
     return;
   const touch = event.touches.item(0);
@@ -640,6 +731,23 @@ function onTouchEnd(event: TouchEvent) {
   }
 }
 function onKeyDown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && editing.value) {
+    if (
+      marquee.value ||
+      groupDrag.value ||
+      pictureDrag.value ||
+      resizing.value ||
+      drag.value ||
+      bookcaseDrag.value
+    )
+      onCancel();
+    else {
+      selected.value = null;
+      selectedBooks.value = new Set();
+      selectedPicture.value = null;
+    }
+    return;
+  }
   if (event.code !== 'Space' || event.altKey || event.ctrlKey || event.metaKey)
     return;
   const target = event.target;
@@ -671,6 +779,38 @@ function onWindowBlur() {
   onCancel();
 }
 function startPan(event: PointerEvent) {
+  if (
+    editing.value &&
+    event.button === 0 &&
+    (event.ctrlKey || event.metaKey) &&
+    wall.value
+  ) {
+    marquee.value = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      x: event.clientX,
+      y: event.clientY,
+      previousSelection: new Set(selectedBooks.value),
+    };
+    selected.value = null;
+    selectedPicture.value = null;
+    event.preventDefault();
+    event.stopPropagation();
+    attachPointerListeners();
+    return;
+  }
+  if (
+    editing.value &&
+    event.button === 0 &&
+    !spaceHeld.value &&
+    event.target instanceof Element &&
+    !event.target.closest('button, .shelf-picture')
+  ) {
+    selected.value = null;
+    selectedBooks.value = new Set();
+    selectedPicture.value = null;
+  }
   if (event.pointerType === 'touch' && !touchPan) suppressPanClick = false;
   if (
     !wall.value ||
@@ -744,6 +884,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   clearTimeout(viewSaveTimer);
+  clearTimeout(sliderSaveTimer);
   saveView();
   disposed = true;
   generation++;
@@ -767,7 +908,122 @@ onBeforeUnmount(() => {
 function toggleEdit() {
   editing.value = !editing.value;
   selected.value = null;
-  selectedShelf.value = null;
+  selectedBooks.value = new Set();
+  selectedPicture.value = null;
+}
+async function addPicture(event: Event) {
+  const input = event.target;
+  if (
+    !(input instanceof HTMLInputElement) ||
+    !input.files?.[0] ||
+    !arrangement.value
+  )
+    return;
+  const file = input.files[0];
+  input.value = '';
+  const path = picturePath.value;
+  const uploadGeneration = catalogGeneration;
+  if ((arrangement.value.pictures?.length ?? 0) >= 100) {
+    notice.value = 'This shelf already has 100 pictures.';
+    return;
+  }
+  uploadingPicture.value = true;
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    const uploaded = await $fetch<{
+      id: string;
+      width: number;
+      height: number;
+    }>(path, { method: 'POST', body: form });
+    if (
+      !arrangement.value ||
+      path !== picturePath.value ||
+      uploadGeneration !== catalogGeneration ||
+      !canEdit.value
+    ) {
+      notice.value =
+        'The shelf changed during the upload. Add the picture again.';
+      return;
+    }
+    const frame = shelfFrame(zoom.value);
+    const factor = Math.min(1, 200 / Math.max(uploaded.width, uploaded.height));
+    const picture: ShelfPicture = {
+      id: uploaded.id,
+      assetId: uploaded.id,
+      x: Math.round((width.value / 2 - frame.left - camera.x) / scale.value),
+      y: Math.round(
+        (frame.floor + camera.y - viewportHeight.value / 2) / scale.value,
+      ),
+      width: Math.max(10, Math.round(uploaded.width * factor)),
+      height: Math.max(10, Math.round(uploaded.height * factor)),
+      rotation: 0,
+    };
+    (arrangement.value.pictures ??= []).push(picture);
+    selectedPicture.value = picture.id;
+    selected.value = null;
+    selectedBooks.value = new Set();
+    changed();
+  } catch (error) {
+    notice.value = `Could not upload this picture: ${errorText(error)}`;
+  } finally {
+    uploadingPicture.value = false;
+  }
+}
+function startPicture(event: PointerEvent, picture: ShelfPicture) {
+  if (!editing.value || event.button !== 0) return;
+  selectedPicture.value = picture.id;
+  selected.value = null;
+  selectedBooks.value = new Set();
+  pictureDrag.value = {
+    pointerId: event.pointerId,
+    id: picture.id,
+    startX: event.clientX,
+    startY: event.clientY,
+    x: picture.x,
+    y: picture.y,
+    previewX: picture.x,
+    previewY: picture.y,
+  };
+  event.preventDefault();
+  attachPointerListeners();
+}
+const currentPicture = computed(() =>
+  arrangement.value?.pictures?.find(
+    (picture) => picture.id === selectedPicture.value,
+  ),
+);
+function changePicture(
+  field: 'width' | 'rotation',
+  event: Event,
+  commit = false,
+) {
+  if (!currentPicture.value || !(event.target instanceof HTMLInputElement))
+    return;
+  const picture = currentPicture.value;
+  const value = Number(event.target.value);
+  if (field === 'width') {
+    if (pictureResizeRatio?.id !== picture.id)
+      pictureResizeRatio = {
+        id: picture.id,
+        ratio: picture.height / picture.width,
+      };
+    picture.height = Math.max(
+      10,
+      Math.min(4000, Math.round(pictureResizeRatio.ratio * value)),
+    );
+    picture.width = value;
+  } else picture.rotation = value;
+  sliderChanged(commit);
+  if (commit) pictureResizeRatio = null;
+}
+function removePicture() {
+  if (!arrangement.value || !selectedPicture.value) return;
+  arrangement.value.pictures = (arrangement.value.pictures ?? []).filter(
+    (picture) => picture.id !== selectedPicture.value,
+  );
+  selectedPicture.value = null;
+  changed();
 }
 function addBookcase() {
   if (!arrangement.value) return;
@@ -794,10 +1050,26 @@ function addBookcase() {
 function addShelf(shelf: Shelf) {
   const bookcase = getBookcase(shelf.id);
   if (!bookcase) return;
+  const index = bookcase.shelves.findIndex((entry) => entry.id === shelf.id);
+  if (index < 0) return;
+  const floor = shelfFrame(zoom.value).floor;
   const added = emptyShelf();
-  bookcase.shelves.push(added);
-  selectedShelf.value = added.id;
+  bookcase.shelves.splice(index, 0, added);
+  camera.y += floor - shelfFrame(zoom.value).floor;
+  selectedPicture.value = null;
+  selected.value = null;
+  selectedBooks.value = new Set();
   changed();
+  void nextTick(() => {
+    const viewport = wall.value;
+    const canvas = [
+      ...(viewport?.querySelectorAll<HTMLElement>('[data-shelf-canvas]') ?? []),
+    ].find((entry) => entry.dataset.shelfCanvas === added.id);
+    if (!viewport || !canvas) return;
+    const top = viewport.getBoundingClientRect().top + 8;
+    const shelfTop = canvas.getBoundingClientRect().top;
+    if (shelfTop < top) camera.y += top - shelfTop;
+  });
 }
 function removeShelf(shelf: Shelf) {
   const bookcase = getBookcase(shelf.id);
@@ -812,8 +1084,9 @@ function removeShelf(shelf: Shelf) {
   }
   const index = bookcase.shelves.findIndex((item) => item.id === shelf.id);
   if (index < 0) return;
+  const floor = shelfFrame(zoom.value).floor;
   bookcase.shelves.splice(index, 1);
-  selectedShelf.value = null;
+  camera.y += floor - shelfFrame(zoom.value).floor;
   changed();
 }
 function removeBookcase(shelf: Shelf) {
@@ -832,10 +1105,14 @@ function removeBookcase(shelf: Shelf) {
   );
   if (index < 0) return;
   arrangement.value.bookcases.splice(index, 1);
-  selectedShelf.value = null;
   changed();
 }
-function changeSize(bookId: string, field: 'width' | 'height', event: Event) {
+function changeSize(
+  bookId: string,
+  field: 'width' | 'height',
+  event: Event,
+  commit = false,
+) {
   if (props.personalShelfId && !bookFor(bookId).canResize) return;
   const found = getItem(bookId);
   if (!found || !(event.target instanceof HTMLInputElement)) return;
@@ -861,6 +1138,24 @@ function changeSize(bookId: string, field: 'width' | 'height', event: Event) {
   if (field === 'width') book.manualWidth = true;
   else book.manualHeight = true;
   adjustments.value = adjustments.value.filter((id) => id !== bookId);
+  sliderChanged(commit);
+}
+function shiftBook(bookId: string, delta: number) {
+  const found = getItem(bookId);
+  if (!found) return;
+  const bookcase = getBookcase(found.shelf.id);
+  if (!bookcase) return;
+  const items = shiftStackBook(
+    toRaw(found.shelf),
+    bookcase.width,
+    bookId,
+    delta,
+  );
+  if (!items) {
+    notice.value = 'Make room before shifting this book.';
+    return;
+  }
+  found.shelf.items = items;
   changed();
 }
 function bookFor(id: string): BookViewBook & { canResize?: boolean } {
@@ -873,7 +1168,7 @@ function onBookClick(event: MouseEvent, id: string) {
   }
   if (event.detail === 0) {
     selected.value = id;
-    selectedShelf.value = null;
+    selectedPicture.value = null;
   }
 }
 function startBook(
@@ -884,16 +1179,34 @@ function startBook(
   whole = false,
 ) {
   if (!editing.value || event.button !== 0) return;
+  selectedPicture.value = null;
+  if (
+    !whole &&
+    selectedBooks.value.size > 1 &&
+    selectedBooks.value.has(book.id)
+  ) {
+    groupDrag.value = {
+      pointerId: event.pointerId,
+      shelfId: shelf.id,
+      startX: event.clientX,
+      startY: event.clientY,
+      x: event.clientX,
+      y: event.clientY,
+      moved: false,
+    };
+    event.preventDefault();
+    attachPointerListeners();
+    return;
+  }
+  selectedBooks.value = new Set();
   stopNotice();
   const target = event.currentTarget;
   if (!(target instanceof HTMLElement)) return;
   const canvas = target.closest<HTMLElement>('[data-shelf-canvas]');
-  if (!canvas) return;
-  const rect = (
-      whole ? (target.closest<HTMLElement>('.shelf-item') ?? target) : target
-    ).getBoundingClientRect(),
-    shelfScale =
-      canvas.getBoundingClientRect().width / getBookcase(shelf.id)!.width;
+  const stack = target.closest<HTMLElement>('.stack-control');
+  if (whole ? !stack : !canvas) return;
+  const rect = (whole ? stack! : target).getBoundingClientRect(),
+    shelfScale = scale.value;
   drag.value = {
     bookId: book.id,
     shelfId: shelf.id,
@@ -913,33 +1226,50 @@ function startBook(
 }
 function startResize(event: PointerEvent, shelf: Shelf) {
   if (!editing.value || event.button !== 0) return;
-  const target = event.currentTarget;
-  if (!(target instanceof HTMLElement)) return;
-  const canvas = target.closest<HTMLElement>('[data-shelf-canvas]');
   const bookcase = getBookcase(shelf.id);
-  if (!canvas || !bookcase) return;
+  if (!bookcase) return;
   resizing.value = {
     axis: 'height',
     shelfId: shelf.id,
     start: event.clientY,
     original: shelf.height,
-    scale: canvas.getBoundingClientRect().width / bookcase.width,
+    scale: scale.value,
+    floor: shelfFrame(zoom.value).floor,
+    cameraY: camera.y,
   };
   event.preventDefault();
   attachPointerListeners();
 }
+function adjustShelfHeight(shelf: Shelf, amount: number) {
+  const next = Math.max(
+    minimumShelfHeight(shelf),
+    Math.min(SHELF_MAX_HEIGHT, shelf.height + amount),
+  );
+  if (next !== shelf.height) {
+    const floor = shelfFrame(zoom.value).floor;
+    shelf.height = next;
+    camera.y += floor - shelfFrame(zoom.value).floor;
+    changed();
+  }
+}
+function adjustBookcaseWidth(bookcase: Bookcase, amount: number) {
+  const next = Math.max(
+    minimumBookcaseWidth(bookcase),
+    Math.min(SHELF_MAX_WIDTH, bookcase.width + amount),
+  );
+  if (next !== bookcase.width) {
+    bookcase.width = next;
+    changed();
+  }
+}
 function startBookcaseResize(event: PointerEvent, bookcase: Bookcase) {
   if (!editing.value || event.button !== 0) return;
-  const target = event.currentTarget;
-  if (!(target instanceof HTMLElement)) return;
-  const element = target.closest<HTMLElement>('.bookcase');
-  if (!element) return;
   resizing.value = {
     axis: 'width',
     bookcaseId: bookcase.id,
     start: event.clientX,
     original: bookcase.width,
-    scale: element.getBoundingClientRect().width / bookcase.width,
+    scale: scale.value,
   };
   event.preventDefault();
   attachPointerListeners();
@@ -958,7 +1288,6 @@ function startBookcaseDrag(event: PointerEvent, bookcase: Bookcase) {
     moved: false,
   };
   selected.value = null;
-  selectedShelf.value = null;
   event.preventDefault();
   attachPointerListeners();
 }
@@ -1083,6 +1412,47 @@ function planDrop(
   };
 }
 function onMove(event: PointerEvent) {
+  if (pictureDrag.value) {
+    const state = pictureDrag.value;
+    if (event.pointerId !== state.pointerId) return;
+    state.previewX = Math.max(
+      -100000,
+      Math.min(
+        100000,
+        Math.round(state.x + (event.clientX - state.startX) / scale.value),
+      ),
+    );
+    state.previewY = Math.max(
+      -100000,
+      Math.min(
+        100000,
+        Math.round(state.y - (event.clientY - state.startY) / scale.value),
+      ),
+    );
+    return;
+  }
+  if (marquee.value) {
+    if (event.pointerId === marquee.value.pointerId) {
+      marquee.value.x = event.clientX;
+      marquee.value.y = event.clientY;
+      updateMarqueeSelection(marquee.value);
+    }
+    return;
+  }
+  if (groupDrag.value) {
+    if (event.pointerId === groupDrag.value.pointerId) {
+      groupDrag.value.x = event.clientX;
+      groupDrag.value.y = event.clientY;
+      if (
+        Math.hypot(
+          event.clientX - groupDrag.value.startX,
+          event.clientY - groupDrag.value.startY,
+        ) > 5
+      )
+        groupDrag.value.moved = true;
+    }
+    return;
+  }
   if (pan.value) {
     if (event.pointerId !== pan.value.pointerId || !wall.value) return;
     camera.x = pan.value.cameraX + event.clientX - pan.value.x;
@@ -1104,8 +1474,9 @@ function onMove(event: PointerEvent) {
   if (resizing.value) {
     const state = resizing.value;
     const coordinate = state.axis === 'width' ? event.clientX : event.clientY;
+    const delta = (coordinate - state.start) / state.scale;
     const proposed = Math.round(
-      state.original + (coordinate - state.start) / state.scale,
+      state.original + (state.axis === 'height' ? -delta : delta),
     );
     if (state.axis === 'width') {
       const bookcase = arrangement.value?.bookcases.find(
@@ -1118,11 +1489,13 @@ function onMove(event: PointerEvent) {
         );
     } else {
       const shelf = getShelf(state.shelfId);
-      if (shelf)
+      if (shelf) {
         shelf.height = Math.max(
           minimumShelfHeight(shelf),
           Math.min(SHELF_MAX_HEIGHT, proposed),
         );
+        camera.y = state.cameraY + state.floor - shelfFrame(zoom.value).floor;
+      }
     }
     return;
   }
@@ -1136,7 +1509,76 @@ function onMove(event: PointerEvent) {
     state.moved = true;
   if (state.moved) state.plan = planDrop(state, event.clientX, event.clientY);
 }
+function updateMarqueeSelection(state: NonNullable<typeof marquee.value>) {
+  if (!wall.value || !arrangement.value) return;
+  const rect = wall.value.getBoundingClientRect();
+  const frame = shelfFrame(zoom.value);
+  const worldX = (x: number) =>
+    (x - rect.left - frame.left - camera.x) / scale.value;
+  const worldY = (y: number) =>
+    (rect.top + frame.floor + camera.y - y) / scale.value;
+  selectedBooks.value = booksInRectangle(toRaw(arrangement.value), {
+    left: Math.min(worldX(state.startX), worldX(state.x)),
+    right: Math.max(worldX(state.startX), worldX(state.x)),
+    bottom: Math.min(worldY(state.startY), worldY(state.y)),
+    top: Math.max(worldY(state.startY), worldY(state.y)),
+  });
+}
 function onUp(event: PointerEvent) {
+  if (pictureDrag.value) {
+    const state = pictureDrag.value;
+    if (event.pointerId !== state.pointerId) return;
+    pictureDrag.value = null;
+    detachPointerListeners();
+    const picture = arrangement.value?.pictures?.find(
+      (entry) => entry.id === state.id,
+    );
+    if (picture && (state.previewX !== state.x || state.previewY !== state.y)) {
+      picture.x = state.previewX;
+      picture.y = state.previewY;
+      changed();
+    }
+    return;
+  }
+  if (marquee.value) {
+    if (event.pointerId !== marquee.value.pointerId) return;
+    const state = marquee.value;
+    state.x = event.clientX;
+    state.y = event.clientY;
+    updateMarqueeSelection(state);
+    marquee.value = null;
+    detachPointerListeners();
+    return;
+  }
+  if (groupDrag.value) {
+    const state = groupDrag.value;
+    if (event.pointerId !== state.pointerId) return;
+    groupDrag.value = null;
+    detachPointerListeners();
+    if (!state.moved || !arrangement.value) return;
+    const canvas = document
+      .elementsFromPoint(event.clientX, event.clientY)
+      .find(
+        (el): el is HTMLElement =>
+          el instanceof HTMLElement && !!el.dataset.shelfCanvas,
+      );
+    const moved =
+      canvas?.dataset.shelfCanvas &&
+      moveSelectedBooks(
+        toRaw(arrangement.value),
+        selectedBooks.value,
+        state.shelfId,
+        canvas.dataset.shelfCanvas,
+        (event.clientX - state.startX) / scale.value,
+      );
+    if (!moved) {
+      notice.value = 'The selected books do not fit together there.';
+      return;
+    }
+    arrangement.value = moved;
+    changed();
+    return;
+  }
   if (pan.value && event.pointerId !== pan.value.pointerId) return;
   if (bookcaseDrag.value && event.pointerId !== bookcaseDrag.value.pointerId)
     return;
@@ -1174,7 +1616,6 @@ function onUp(event: PointerEvent) {
   if (!state) return;
   if (!state.moved) {
     selected.value = state.bookId;
-    selectedShelf.value = null;
     return;
   }
   const plan = planDrop(state, event.clientX, event.clientY);
@@ -1190,7 +1631,6 @@ function onUp(event: PointerEvent) {
   destination.items = plan.items;
   if (destination.id !== origin.id) origin.items = plan.sourceItems;
   selected.value = state.bookId;
-  selectedShelf.value = null;
   changed();
 }
 function onCancel() {
@@ -1210,10 +1650,15 @@ function onCancel() {
     } else {
       const shelf = getShelf(state.shelfId);
       if (shelf) shelf.height = state.original;
+      camera.y = state.cameraY;
     }
   }
   resizing.value = null;
   drag.value = null;
+  if (marquee.value) selectedBooks.value = marquee.value.previousSelection;
+  marquee.value = null;
+  groupDrag.value = null;
+  pictureDrag.value = null;
 }
 const ghost = computed(() => {
   const state = drag.value;
@@ -1260,9 +1705,6 @@ const selectedBook = computed(() =>
       )
     : undefined,
 );
-const currentShelf = computed(() =>
-  selectedShelf.value ? getShelf(selectedShelf.value) : undefined,
-);
 const lastOtherBookcaseId = computed(
   () =>
     arrangement.value?.bookcases
@@ -1278,6 +1720,11 @@ const lastOtherBookcaseId = computed(
       '--wall-side-padding': `${WALL_SIDE_PADDING}px`,
       '--wall-top-padding': `${WALL_TOP_PADDING}px`,
       '--floor-line-height': `${FLOOR_LINE_HEIGHT}px`,
+      '--shelf-color': userSettingsStore.activeSettings.bookshelfStyle.color,
+      '--shelf-grain':
+        userSettingsStore.activeSettings.bookshelfStyle.texture === 'wood'
+          ? 'repeating-linear-gradient(4deg, transparent 0 5px, #ffffff0d 6px, transparent 8px 15px, #00000012 16px, transparent 19px)'
+          : 'none',
     }"
   >
     <div class="bookshelf-toolbar">
@@ -1302,6 +1749,23 @@ const lastOtherBookcaseId = computed(
             <Icon name="lucide:plus" aria-hidden="true" /> Add bookcase
           </button>
         </details>
+        <button
+          v-if="editing"
+          type="button"
+          :disabled="uploadingPicture"
+          :aria-label="uploadingPicture ? 'Uploading picture' : 'Add picture'"
+          :title="uploadingPicture ? 'Uploading picture' : 'Add picture'"
+          @click="pictureInput?.click()"
+        >
+          <Icon name="lucide:image-up" aria-hidden="true" />
+        </button>
+        <input
+          ref="pictureInput"
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/avif"
+          hidden
+          @change="addPicture"
+        />
         <details class="navigation-help">
           <summary aria-label="How to navigate the bookshelf">
             <Icon name="lucide:circle-help" aria-hidden="true" />
@@ -1389,7 +1853,8 @@ const lastOtherBookcaseId = computed(
     </div>
     <p v-if="editing" class="stack-hint">
       Pull a book down to lay it flat or lift it to stand it upright. Drag a
-      book onto a sideways spine to stack it.
+      book onto a sideways spine to stack it. Hold Control and drag to select
+      books, then drag the selection to move it.
     </p>
     <div
       ref="wall"
@@ -1410,6 +1875,16 @@ const lastOtherBookcaseId = computed(
       "
     >
       <div
+        v-if="marquee"
+        class="selection-rectangle"
+        :style="{
+          left: `${Math.min(marquee.startX, marquee.x) - (wall?.getBoundingClientRect().left ?? 0)}px`,
+          top: `${Math.min(marquee.startY, marquee.y) - (wall?.getBoundingClientRect().top ?? 0)}px`,
+          width: `${Math.abs(marquee.x - marquee.startX)}px`,
+          height: `${Math.abs(marquee.y - marquee.startY)}px`,
+        }"
+      />
+      <div
         v-if="arrangement && !loading"
         class="floor-line"
         :style="{ top: `${floorTop}px` }"
@@ -1417,16 +1892,23 @@ const lastOtherBookcaseId = computed(
       <div
         v-if="arrangement && !loading"
         class="wall"
-        :style="{ transform: `translate(${camera.x}px, ${camera.y}px)` }"
+        :style="{
+          transform: `translate(${camera.x}px, ${camera.y}px)`,
+          gap: `${SHELF_CASE_GAP * scale}px`,
+        }"
       >
         <BookshelfBookcase
           v-for="(bookcase, caseIndex) in arrangement.bookcases"
           :key="bookcase.id"
           :bookcase="bookcase"
           :case-index="caseIndex"
+          :bookcase-count="arrangement.bookcases.length"
+          :case-left="casePositions[caseIndex]!"
+          :controls-layer="controlsLayer"
           :scale="scale"
           :editing="editing"
           :selected="selected"
+          :selected-books="selectedBooks"
           :adjustments="adjustments"
           :matches="matches"
           :books-by-id="byId"
@@ -1463,15 +1945,75 @@ const lastOtherBookcaseId = computed(
           @reorder-case="moveBookcaseBy"
           @move-book="startBook"
           @select-book="onBookClick"
-          @select-shelf="
-            selectedShelf = $event;
-            selected = null;
-          "
           @resize-shelf="startResize"
           @resize-case="startBookcaseResize"
+          @adjust-shelf="adjustShelfHeight"
+          @adjust-case="adjustBookcaseWidth"
+          @add-shelf="addShelf"
+          @remove-shelf="removeShelf"
+          @remove-case="removeBookcase"
         />
       </div>
+      <template v-if="arrangement && !loading">
+        <div
+          v-for="picture in arrangement.pictures ?? []"
+          :key="picture.id"
+          class="shelf-picture"
+          :class="{ editable: editing, active: selectedPicture === picture.id }"
+          :style="{
+            left: `${shelfFrame(zoom).left + camera.x + (pictureDrag?.id === picture.id ? pictureDrag.previewX : picture.x) * scale}px`,
+            top: `${floorTop - (pictureDrag?.id === picture.id ? pictureDrag.previewY : picture.y) * scale}px`,
+            width: `${picture.width * scale}px`,
+            height: `${picture.height * scale}px`,
+            transform: `translate(-50%, -50%) rotate(${picture.rotation}deg)`,
+          }"
+          @pointerdown.stop="startPicture($event, picture)"
+        >
+          <img
+            :src="`${picturePath}?asset=${encodeURIComponent(picture.assetId)}`"
+            alt="Bookshelf decoration"
+            draggable="false"
+          />
+        </div>
+      </template>
+      <div ref="controlsLayer" class="controls-layer" />
     </div>
+    <aside
+      v-if="editing && currentPicture"
+      class="shelf-panel"
+      aria-label="Picture options"
+    >
+      <div class="panel-heading">
+        <strong>Picture</strong
+        ><button
+          type="button"
+          aria-label="Close picture options"
+          @click="selectedPicture = null"
+        >
+          <Icon name="lucide:x" aria-hidden="true" />
+        </button>
+      </div>
+      <label
+        >Size · {{ currentPicture.width
+        }}<input
+          type="range"
+          min="10"
+          max="1000"
+          :value="currentPicture.width"
+          @input="changePicture('width', $event)"
+          @change="changePicture('width', $event, true)"
+      /></label>
+      <label
+        >Rotation · {{ currentPicture.rotation }}°<input
+          type="range"
+          min="-180"
+          max="180"
+          :value="currentPicture.rotation"
+          @input="changePicture('rotation', $event)"
+          @change="changePicture('rotation', $event, true)"
+      /></label>
+      <button type="button" @click="removePicture">Remove picture</button>
+    </aside>
     <aside
       v-if="editing && selectedBook && selected"
       class="shelf-panel"
@@ -1490,6 +2032,16 @@ const lastOtherBookcaseId = computed(
       <p v-if="personalShelfId && !bookFor(selected).canResize">
         Only an editor of this book's collection can change its size.
       </p>
+      <div
+        v-if="
+          getItem(selected)?.item.horizontal &&
+          (getItem(selected)?.item.books.length ?? 0) > 1
+        "
+      >
+        <p>Shift this book in its stack</p>
+        <button type="button" @click="shiftBook(selected!, -5)">Left</button>
+        <button type="button" @click="shiftBook(selected!, 5)">Right</button>
+      </div>
       <label v-if="!personalShelfId || bookFor(selected).canResize"
         >Height · {{ selectedBook.height }}
         <input
@@ -1497,7 +2049,8 @@ const lastOtherBookcaseId = computed(
           min="120"
           max="230"
           :value="selectedBook.height"
-          @change="changeSize(selected!, 'height', $event)"
+          @input="changeSize(selected!, 'height', $event)"
+          @change="changeSize(selected!, 'height', $event, true)"
       /></label>
       <label v-if="!personalShelfId || bookFor(selected).canResize"
         >Thickness · {{ selectedBook.width }}
@@ -1506,39 +2059,19 @@ const lastOtherBookcaseId = computed(
           min="20"
           max="55"
           :value="selectedBook.width"
-          @change="changeSize(selected!, 'width', $event)"
+          @input="changeSize(selected!, 'width', $event)"
+          @change="changeSize(selected!, 'width', $event, true)"
       /></label>
-    </aside>
-    <aside
-      v-if="editing && currentShelf"
-      class="shelf-panel"
-      aria-label="Shelf options"
-    >
-      <div class="panel-heading">
-        <strong>Shelf options</strong
-        ><button
-          type="button"
-          aria-label="Close shelf options"
-          @click="selectedShelf = null"
-        >
-          <Icon name="lucide:x" aria-hidden="true" />
-        </button>
-      </div>
-      <p>
-        {{ getBookcase(currentShelf.id)?.shelves.length }} shelves in this
-        bookcase.
-      </p>
-      <div class="panel-actions">
-        <button type="button" @click="addShelf(currentShelf)">Add shelf</button
-        ><button type="button" @click="removeShelf(currentShelf)">
-          Remove this shelf</button
-        ><button type="button" @click="removeBookcase(currentShelf)">
-          Remove empty bookcase
-        </button>
-      </div>
     </aside>
     <Teleport to="body"
       ><div
+        v-if="groupDrag?.moved"
+        class="group-ghost"
+        :style="{ left: `${groupDrag.x + 12}px`, top: `${groupDrag.y + 12}px` }"
+      >
+        {{ selectedBooks.size }} books
+      </div>
+      <div
         v-if="ghost"
         class="shelf-ghost"
         :class="{ invalid: ghost.invalid }"
@@ -1743,6 +2276,53 @@ const lastOtherBookcaseId = computed(
   overflow: clip;
   touch-action: none;
 }
+.wall-viewport:focus {
+  outline: none;
+}
+.controls-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+.selection-rectangle {
+  position: absolute;
+  z-index: 15;
+  pointer-events: none;
+  border: 1px solid #dfad56;
+  background: #dfad5633;
+}
+.group-ghost {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: var(--contrast-main-color);
+  background: var(--bg-color);
+  box-shadow: 0 2px 8px #0005;
+}
+.shelf-picture {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+}
+.shelf-picture.editable {
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+}
+.shelf-picture.active {
+  outline: 2px solid #e5ba72;
+  outline-offset: 2px;
+}
+.shelf-picture img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: fill;
+  pointer-events: none;
+}
 .wall-viewport.pan-ready,
 .wall-viewport.pan-ready :deep(*) {
   cursor: grab;
@@ -1809,10 +2389,47 @@ const lastOtherBookcaseId = computed(
   color: var(--contrast-text-color);
   font-size: 12px;
 }
-.shelf-panel input {
+.shelf-panel input[type='range'] {
   display: block;
   width: 100%;
-  accent-color: var(--main-color);
+  height: 24px;
+  margin-top: 7px;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+.shelf-panel input[type='range']::-webkit-slider-runnable-track {
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--contrast-main-color) 28%, transparent);
+}
+.shelf-panel input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -6.5px;
+  border: 2px solid var(--bg-color);
+  border-radius: 50%;
+  background: var(--contrast-main-color);
+  box-shadow: 0 1px 5px #0005;
+}
+.shelf-panel input[type='range']::-moz-range-track {
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--contrast-main-color) 28%, transparent);
+}
+.shelf-panel input[type='range']::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--bg-color);
+  border-radius: 50%;
+  background: var(--contrast-main-color);
+  box-shadow: 0 1px 5px #0005;
+}
+.shelf-panel input[type='range']:focus-visible {
+  outline: 2px solid var(--contrast-main-color);
+  outline-offset: 3px;
+  border-radius: 8px;
 }
 .panel-actions {
   display: flex;

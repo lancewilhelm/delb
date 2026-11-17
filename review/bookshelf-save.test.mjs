@@ -75,6 +75,9 @@ async function shelfEditor() {
     canEdit: ref(true),
     props: { collectionId: 'collection' },
     shelfPath: ref('/api/collections/collection/bookshelf'),
+    shelfFrame: () => ({ floor: 0 }),
+    zoom: ref(1),
+    camera: { y: 0 },
     selectedShelf: ref(null),
     getBookcase: (id) =>
       arrangement.value.bookcases.find((item) =>

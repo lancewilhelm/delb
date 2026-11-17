@@ -7,6 +7,7 @@ import {
   uniqueIndex,
   index,
   primaryKey,
+  check,
 } from 'drizzle-orm/sqlite-core';
 
 import { sql, type InferInsertModel, type InferSelectModel } from 'drizzle-orm';
@@ -671,6 +672,32 @@ export const personalShelves = sqliteTable(
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   },
   (t) => ({ owner: index('personal_shelves_owner_idx').on(t.ownerId) }),
+);
+
+export const shelfPictureAssets = sqliteTable(
+  'shelf_picture_assets',
+  {
+    id: text('id').primaryKey(),
+    collectionId: text('collection_id').references(() => collections.id, {
+      onDelete: 'cascade',
+    }),
+    personalShelfId: text('personal_shelf_id').references(
+      () => personalShelves.id,
+      { onDelete: 'cascade' },
+    ),
+    imageBase64: text('image_base64').notNull(),
+    bytes: integer('bytes').notNull(),
+    createdAt: integer('created_at').notNull(),
+    unusedSince: integer('unused_since'),
+  },
+  (t) => ({
+    collection: index('shelf_picture_assets_collection_idx').on(t.collectionId),
+    personal: index('shelf_picture_assets_personal_idx').on(t.personalShelfId),
+    scope: check(
+      'shelf_picture_assets_scope',
+      sql`(${t.collectionId} IS NULL) <> (${t.personalShelfId} IS NULL)`,
+    ),
+  }),
 );
 
 export const personalShelfBooks = sqliteTable(

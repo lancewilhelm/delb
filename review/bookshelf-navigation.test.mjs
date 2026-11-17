@@ -72,6 +72,11 @@ async function navigation() {
     wall: ref(viewport),
     pan: ref(null),
     drag: ref(null),
+    pictureDrag: ref(null),
+    groupDrag: ref(null),
+    marquee: ref(null),
+    selectedBooks: ref(new Set()),
+    selectedPicture: ref(null),
     resizing: ref(null),
     bookcaseDrag: ref(null),
     editing: ref(false),
@@ -93,6 +98,7 @@ async function navigation() {
     }),
     camera: reactive({ x: 0, y: 0 }),
     SHELF_WIDTH: 340,
+    SHELF_CASE_GAP: 10,
     WALL_SIDE_PADDING: 28,
     WALL_TOP_PADDING: 36,
     FLOOR_LINE_HEIGHT: 2,
@@ -161,10 +167,8 @@ test('centering resets pan and zoom together', async () => {
 test('keyboard activation opens book options in edit mode', async () => {
   const nav = await navigation();
   nav.state.editing.value = true;
-  nav.state.selectedShelf.value = 'shelf';
   nav.actions.onBookClick({ detail: 0 }, 'book');
   assert.equal(nav.state.selected.value, 'book');
-  assert.equal(nav.state.selectedShelf.value, null);
   nav.actions.onBookClick({ detail: 1 }, 'other');
   assert.equal(nav.state.selected.value, 'book');
   nav.state.editing.value = false;
@@ -368,7 +372,7 @@ test('wheel zoom keeps the point under the cursor fixed across layout and zoom l
   nav.state.camera.y = -65;
   const origin = (zoom) => {
     const scale = zoom;
-    const contentWidth = 300 * scale;
+    const contentWidth = 310 * scale;
     const wallWidth = Math.max(800, contentWidth + 56);
     const wallHeight = 320 * scale + 38;
     return {
