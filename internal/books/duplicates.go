@@ -8,7 +8,8 @@ import (
 	"strings"
 )
 
-const fuzzyDuplicateThreshold = 0.82
+const FuzzyDuplicateThreshold = 0.82
+const fuzzyDuplicateThreshold = FuzzyDuplicateThreshold
 
 var (
 	nonISBNRe     = regexp.MustCompile(`[^0-9xX]`)

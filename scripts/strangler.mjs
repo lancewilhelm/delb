@@ -135,6 +135,7 @@ const nitroEnv = {
   PORT: String(upstreamPort),
   NITRO_HOST: upstreamHost,
   NITRO_PORT: String(upstreamPort),
+  DELB_DISABLE_DROPBOX_WATCHER: '1',
   ...(nodeOptionsParts.length
     ? { NODE_OPTIONS: nodeOptionsParts.join(' ') }
     : {}),

@@ -431,23 +431,33 @@ func validateShelfName(raw string) (string, error) {
 	return clean, nil
 }
 
-// GET /api/shelves
-func (s *Service) handleListShelves(w http.ResponseWriter, r *http.Request) {
-	userID := httpapi.SessionFromContext(r.Context()).User.ID
+// ShelfPreviewDTO is a compact preview entry for a personal shelf listing.
+type ShelfPreviewDTO struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
 
-	tx, err := s.db.BeginTx(r.Context(), nil)
+// ShelfSummaryDTO mirrors server/utils/shelves/model.ts listShelves items.
+type ShelfSummaryDTO struct {
+	ID       string            `json:"id"`
+	Name     string            `json:"name"`
+	Count    int               `json:"count"`
+	Previews []ShelfPreviewDTO `json:"previews"`
+}
+
+// ListShelves returns all personal shelves owned by userID with visible counts and previews.
+func (s *Service) ListShelves(ctx context.Context, userID string) ([]ShelfSummaryDTO, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		s.writeErr(w, "GET /api/shelves begin tx failed", err)
-		return
+		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	rows, err := tx.QueryContext(r.Context(), `
+	rows, err := tx.QueryContext(ctx, `
 		SELECT id, name FROM personal_shelves WHERE owner_id = ? ORDER BY created_at ASC, id ASC
 	`, userID)
 	if err != nil {
-		s.writeErr(w, "GET /api/shelves query failed", err)
-		return
+		return nil, err
 	}
 	type shelfBasic struct {
 		id   string
@@ -458,47 +468,32 @@ func (s *Service) handleListShelves(w http.ResponseWriter, r *http.Request) {
 		var b shelfBasic
 		if err := rows.Scan(&b.id, &b.name); err != nil {
 			_ = rows.Close()
-			s.writeErr(w, "GET /api/shelves scan failed", err)
-			return
+			return nil, err
 		}
 		basics = append(basics, b)
 	}
 	if err := rows.Close(); err != nil {
-		s.writeErr(w, "GET /api/shelves close failed", err)
-		return
+		return nil, err
 	}
 	if err := rows.Err(); err != nil {
-		s.writeErr(w, "GET /api/shelves rows err", err)
-		return
+		return nil, err
 	}
 
-	type previewDTO struct {
-		ID    string `json:"id"`
-		Title string `json:"title"`
-	}
-	type shelfSummaryDTO struct {
-		ID       string       `json:"id"`
-		Name     string       `json:"name"`
-		Count    int          `json:"count"`
-		Previews []previewDTO `json:"previews"`
-	}
-
-	out := make([]shelfSummaryDTO, 0, len(basics))
+	out := make([]ShelfSummaryDTO, 0, len(basics))
 	for _, b := range basics {
-		vis, err := visiblePersonalShelfBooks(r.Context(), tx, userID, b.id)
+		vis, err := visiblePersonalShelfBooks(ctx, tx, userID, b.id)
 		if err != nil {
-			s.writeErr(w, "GET /api/shelves visible failed", err)
-			return
+			return nil, err
 		}
 		limit := len(vis)
 		if limit > 4 {
 			limit = 4
 		}
-		previews := make([]previewDTO, limit)
+		previews := make([]ShelfPreviewDTO, limit)
 		for i := 0; i < limit; i++ {
-			previews[i] = previewDTO{ID: vis[i].ID, Title: vis[i].Title}
+			previews[i] = ShelfPreviewDTO{ID: vis[i].ID, Title: vis[i].Title}
 		}
-		out = append(out, shelfSummaryDTO{
+		out = append(out, ShelfSummaryDTO{
 			ID:       b.id,
 			Name:     b.name,
 			Count:    len(vis),
@@ -506,7 +501,18 @@ func (s *Service) handleListShelves(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	if err := tx.Commit(); err != nil {
-		s.writeErr(w, "GET /api/shelves commit failed", err)
+		return nil, err
+	}
+	return out, nil
+}
+
+// GET /api/shelves
+func (s *Service) handleListShelves(w http.ResponseWriter, r *http.Request) {
+	userID := httpapi.SessionFromContext(r.Context()).User.ID
+
+	out, err := s.ListShelves(r.Context(), userID)
+	if err != nil {
+		s.writeErr(w, "GET /api/shelves failed", err)
 		return
 	}
 
@@ -839,6 +845,206 @@ func (s *Service) handlePutShelf(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ChangeShelfBooks mirrors server/utils/shelves/model.ts changeShelfBooks.
+func (s *Service) ChangeShelfBooks(
+	ctx context.Context,
+	userID, shelfID string,
+	bookIDs []string,
+	action string,
+	authorize func(tx *sql.Tx) error,
+) (*personalShelfSnapshot, error) {
+	if action != "add" && action != "remove" {
+		return nil, httpapi.NewError(http.StatusBadRequest, "Choose valid books.")
+	}
+	seen := make(map[string]struct{}, len(bookIDs))
+	unique := make([]string, 0, len(bookIDs))
+	for _, id := range bookIDs {
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		unique = append(unique, id)
+	}
+	if len(unique) == 0 || len(unique) > BookshelfMaxBooks {
+		return nil, httpapi.NewError(http.StatusBadRequest, "Choose valid books.")
+	}
+	for _, id := range unique {
+		if id == "" || len(id) > 128 {
+			return nil, httpapi.NewError(http.StatusBadRequest, "Choose valid books.")
+		}
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := collections.LockCollectionChanges(ctx, tx); err != nil {
+		return nil, err
+	}
+	if authorize != nil {
+		if err := authorize(tx); err != nil {
+			return nil, err
+		}
+	}
+	shelf, err := ownedPersonalShelf(ctx, tx, userID, shelfID)
+	if err != nil {
+		return nil, err
+	}
+
+	authorized := make(map[string]struct{}, len(unique))
+	for i := 0; i < len(unique); i += 400 {
+		end := i + 400
+		if end > len(unique) {
+			end = len(unique)
+		}
+		chunk := unique[i:end]
+		args := make([]any, 0, len(chunk)+1)
+		args = append(args, userID)
+		for _, id := range chunk {
+			args = append(args, id)
+		}
+		rows, err := tx.QueryContext(ctx, `
+			SELECT b.id
+			FROM books b
+			INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+			WHERE b.id IN (`+makePlaceholders(len(chunk))+`)
+		`, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var bid string
+			if err := rows.Scan(&bid); err != nil {
+				_ = rows.Close()
+				return nil, err
+			}
+			authorized[bid] = struct{}{}
+		}
+		if err := rows.Close(); err != nil {
+			return nil, err
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+	if len(authorized) != len(unique) {
+		return nil, httpapi.NewError(http.StatusNotFound, "One or more books are unavailable.")
+	}
+
+	if action == "add" {
+		var existingCount int
+		if err := tx.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM personal_shelf_books WHERE shelf_id = ?
+		`, shelfID).Scan(&existingCount); err != nil {
+			return nil, err
+		}
+		prevRows, err := tx.QueryContext(ctx, `
+			SELECT book_id FROM personal_shelf_books WHERE shelf_id = ?
+		`, shelfID)
+		if err != nil {
+			return nil, err
+		}
+		prevSet := make(map[string]struct{})
+		for prevRows.Next() {
+			var bid string
+			if err := prevRows.Scan(&bid); err != nil {
+				_ = prevRows.Close()
+				return nil, err
+			}
+			prevSet[bid] = struct{}{}
+		}
+		if err := prevRows.Close(); err != nil {
+			return nil, err
+		}
+		if err := prevRows.Err(); err != nil {
+			return nil, err
+		}
+
+		additions := make([]string, 0, len(unique))
+		for _, id := range unique {
+			if _, exists := prevSet[id]; !exists {
+				additions = append(additions, id)
+			}
+		}
+		if existingCount+len(additions) > BookshelfMaxBooks {
+			return nil, httpapi.NewError(http.StatusBadRequest, "This Shelf has too many books.")
+		}
+		nowMs := time.Now().UTC().UnixMilli()
+		for i := 0; i < len(additions); i += 100 {
+			end := i + 100
+			if end > len(additions) {
+				end = len(additions)
+			}
+			batch := additions[i:end]
+			values := make([]string, len(batch))
+			args := make([]any, 0, len(batch)*3)
+			for j, bid := range batch {
+				values[j] = "(?, ?, NULL, ?)"
+				args = append(args, shelfID, bid, nowMs)
+			}
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO personal_shelf_books (shelf_id, book_id, placement, added_at)
+				VALUES `+strings.Join(values, ",")+`
+				ON CONFLICT DO NOTHING
+			`, args...); err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		for i := 0; i < len(unique); i += 400 {
+			end := i + 400
+			if end > len(unique) {
+				end = len(unique)
+			}
+			chunk := unique[i:end]
+			args := make([]any, 0, len(chunk)+1)
+			args = append(args, shelfID)
+			for _, id := range chunk {
+				args = append(args, id)
+			}
+			if _, err := tx.ExecContext(ctx, `
+				DELETE FROM personal_shelf_books
+				WHERE shelf_id = ? AND book_id IN (`+makePlaceholders(len(chunk))+`)
+			`, args...); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	composed, err := s.personalShelfSnapshot(ctx, tx, userID, shelfID)
+	if err != nil {
+		return nil, err
+	}
+	visRows, err := visiblePersonalShelfBooks(ctx, tx, userID, shelfID)
+	if err != nil {
+		return nil, err
+	}
+	if err := persistVisiblePlacements(ctx, tx, shelfID, composed.Arrangement, visRows); err != nil {
+		return nil, err
+	}
+
+	geomBytes, err := json.Marshal(BookshelfGeometry(composed.Arrangement))
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE personal_shelves SET geometry = ?, revision = ? WHERE id = ?
+	`, string(geomBytes), shelf.Revision+1, shelfID); err != nil {
+		return nil, err
+	}
+
+	finalSnap, err := s.personalShelfSnapshot(ctx, tx, userID, shelfID)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return finalSnap, nil
+}
+
 // POST /api/shelves/{id}/books
 func (s *Service) handlePostShelfBooks(w http.ResponseWriter, r *http.Request) {
 	userID := httpapi.SessionFromContext(r.Context()).User.ID
@@ -866,215 +1072,19 @@ func (s *Service) handlePostShelfBooks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	seen := make(map[string]struct{}, len(rawBookIDs))
-	unique := make([]string, 0, len(rawBookIDs))
+	bookIDs := make([]string, 0, len(rawBookIDs))
 	for _, elem := range rawBookIDs {
 		id, ok := elem.(string)
 		if !ok {
 			httpapi.WriteError(w, http.StatusBadRequest, "Choose valid books")
 			return
 		}
-		if _, dup := seen[id]; dup {
-			continue
-		}
-		seen[id] = struct{}{}
-		unique = append(unique, id)
-	}
-	if len(unique) == 0 || len(unique) > BookshelfMaxBooks {
-		httpapi.WriteError(w, http.StatusBadRequest, "Choose valid books.")
-		return
-	}
-	for _, id := range unique {
-		if id == "" || len(id) > 128 {
-			httpapi.WriteError(w, http.StatusBadRequest, "Choose valid books.")
-			return
-		}
+		bookIDs = append(bookIDs, id)
 	}
 
-	tx, err := s.db.BeginTx(r.Context(), nil)
+	finalSnap, err := s.ChangeShelfBooks(r.Context(), userID, shelfID, bookIDs, action, nil)
 	if err != nil {
-		s.writeErr(w, "POST /api/shelves/{id}/books begin tx failed", err)
-		return
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := collections.LockCollectionChanges(r.Context(), tx); err != nil {
-		s.writeErr(w, "POST /api/shelves/{id}/books lock failed", err)
-		return
-	}
-	shelf, err := ownedPersonalShelf(r.Context(), tx, userID, shelfID)
-	if err != nil {
-		s.writeErr(w, "POST /api/shelves/{id}/books auth failed", err)
-		return
-	}
-
-	authorized := make(map[string]struct{}, len(unique))
-	for i := 0; i < len(unique); i += 400 {
-		end := i + 400
-		if end > len(unique) {
-			end = len(unique)
-		}
-		chunk := unique[i:end]
-		args := make([]any, 0, len(chunk)+1)
-		args = append(args, userID)
-		for _, id := range chunk {
-			args = append(args, id)
-		}
-		rows, err := tx.QueryContext(r.Context(), `
-			SELECT b.id
-			FROM books b
-			INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
-			WHERE b.id IN (`+makePlaceholders(len(chunk))+`)
-		`, args...)
-		if err != nil {
-			s.writeErr(w, "POST /api/shelves/{id}/books check books failed", err)
-			return
-		}
-		for rows.Next() {
-			var bid string
-			if err := rows.Scan(&bid); err != nil {
-				_ = rows.Close()
-				s.writeErr(w, "POST /api/shelves/{id}/books scan book failed", err)
-				return
-			}
-			authorized[bid] = struct{}{}
-		}
-		if err := rows.Close(); err != nil {
-			s.writeErr(w, "POST /api/shelves/{id}/books close failed", err)
-			return
-		}
-		if err := rows.Err(); err != nil {
-			s.writeErr(w, "POST /api/shelves/{id}/books rows err", err)
-			return
-		}
-	}
-	if len(authorized) != len(unique) {
-		httpapi.WriteError(w, http.StatusNotFound, "One or more books are unavailable.")
-		return
-	}
-
-	if action == "add" {
-		var existingCount int
-		if err := tx.QueryRowContext(r.Context(), `
-			SELECT COUNT(*) FROM personal_shelf_books WHERE shelf_id = ?
-		`, shelfID).Scan(&existingCount); err != nil {
-			s.writeErr(w, "POST /api/shelves/{id}/books count failed", err)
-			return
-		}
-		prevRows, err := tx.QueryContext(r.Context(), `
-			SELECT book_id FROM personal_shelf_books WHERE shelf_id = ?
-		`, shelfID)
-		if err != nil {
-			s.writeErr(w, "POST /api/shelves/{id}/books existing query failed", err)
-			return
-		}
-		prevSet := make(map[string]struct{})
-		for prevRows.Next() {
-			var bid string
-			if err := prevRows.Scan(&bid); err != nil {
-				_ = prevRows.Close()
-				s.writeErr(w, "POST /api/shelves/{id}/books existing scan failed", err)
-				return
-			}
-			prevSet[bid] = struct{}{}
-		}
-		if err := prevRows.Close(); err != nil {
-			s.writeErr(w, "POST /api/shelves/{id}/books existing close failed", err)
-			return
-		}
-		if err := prevRows.Err(); err != nil {
-			s.writeErr(w, "POST /api/shelves/{id}/books existing err", err)
-			return
-		}
-
-		additions := make([]string, 0, len(unique))
-		for _, id := range unique {
-			if _, exists := prevSet[id]; !exists {
-				additions = append(additions, id)
-			}
-		}
-		if existingCount+len(additions) > BookshelfMaxBooks {
-			httpapi.WriteError(w, http.StatusBadRequest, "This Shelf has too many books.")
-			return
-		}
-		nowMs := time.Now().UTC().UnixMilli()
-		for i := 0; i < len(additions); i += 100 {
-			end := i + 100
-			if end > len(additions) {
-				end = len(additions)
-			}
-			batch := additions[i:end]
-			values := make([]string, len(batch))
-			args := make([]any, 0, len(batch)*3)
-			for j, bid := range batch {
-				values[j] = "(?, ?, NULL, ?)"
-				args = append(args, shelfID, bid, nowMs)
-			}
-			if _, err := tx.ExecContext(r.Context(), `
-				INSERT INTO personal_shelf_books (shelf_id, book_id, placement, added_at)
-				VALUES `+strings.Join(values, ",")+`
-				ON CONFLICT DO NOTHING
-			`, args...); err != nil {
-				s.writeErr(w, "POST /api/shelves/{id}/books insert failed", err)
-				return
-			}
-		}
-	} else {
-		for i := 0; i < len(unique); i += 400 {
-			end := i + 400
-			if end > len(unique) {
-				end = len(unique)
-			}
-			chunk := unique[i:end]
-			args := make([]any, 0, len(chunk)+1)
-			args = append(args, shelfID)
-			for _, id := range chunk {
-				args = append(args, id)
-			}
-			if _, err := tx.ExecContext(r.Context(), `
-				DELETE FROM personal_shelf_books
-				WHERE shelf_id = ? AND book_id IN (`+makePlaceholders(len(chunk))+`)
-			`, args...); err != nil {
-				s.writeErr(w, "POST /api/shelves/{id}/books delete failed", err)
-				return
-			}
-		}
-	}
-
-	composed, err := s.personalShelfSnapshot(r.Context(), tx, userID, shelfID)
-	if err != nil {
-		s.writeErr(w, "POST /api/shelves/{id}/books compose failed", err)
-		return
-	}
-	visRows, err := visiblePersonalShelfBooks(r.Context(), tx, userID, shelfID)
-	if err != nil {
-		s.writeErr(w, "POST /api/shelves/{id}/books visible reload failed", err)
-		return
-	}
-	if err := persistVisiblePlacements(r.Context(), tx, shelfID, composed.Arrangement, visRows); err != nil {
-		s.writeErr(w, "POST /api/shelves/{id}/books persist placements failed", err)
-		return
-	}
-
-	geomBytes, err := json.Marshal(BookshelfGeometry(composed.Arrangement))
-	if err != nil {
-		s.writeErr(w, "POST /api/shelves/{id}/books marshal geometry failed", err)
-		return
-	}
-	if _, err := tx.ExecContext(r.Context(), `
-		UPDATE personal_shelves SET geometry = ?, revision = ? WHERE id = ?
-	`, string(geomBytes), shelf.Revision+1, shelfID); err != nil {
-		s.writeErr(w, "POST /api/shelves/{id}/books update shelf failed", err)
-		return
-	}
-
-	finalSnap, err := s.personalShelfSnapshot(r.Context(), tx, userID, shelfID)
-	if err != nil {
-		s.writeErr(w, "POST /api/shelves/{id}/books final snapshot failed", err)
-		return
-	}
-	if err := tx.Commit(); err != nil {
-		s.writeErr(w, "POST /api/shelves/{id}/books commit failed", err)
+		s.writeErr(w, "POST /api/shelves/{id}/books failed", err)
 		return
 	}
 

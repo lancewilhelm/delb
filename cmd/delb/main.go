@@ -12,13 +12,16 @@ import (
 	"time"
 
 	"github.com/lancewilhelm/delb"
+	"github.com/lancewilhelm/delb/internal/admin"
 	"github.com/lancewilhelm/delb/internal/auth"
 	"github.com/lancewilhelm/delb/internal/books"
 	"github.com/lancewilhelm/delb/internal/bookshelf"
 	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/config"
 	"github.com/lancewilhelm/delb/internal/db"
+	"github.com/lancewilhelm/delb/internal/dropbox"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/mcp"
 	"github.com/lancewilhelm/delb/internal/proxy"
 	"github.com/lancewilhelm/delb/internal/settings"
 	"github.com/lancewilhelm/delb/internal/spines"
@@ -128,7 +131,29 @@ func main() {
 		Logger:       logger.With("component", "spines"),
 	})
 
+	adminSvc := admin.NewService(admin.ServiceOptions{
+		DB:          opened.DB,
+		AuthService: authSvc,
+		LibraryDir:  cfg.LibraryDir,
+		Logger:      logger.With("component", "admin"),
+	})
+
+	mcpSvc := mcp.NewService(mcp.ServiceOptions{
+		DB:               opened.DB,
+		AuthService:      authSvc,
+		BooksService:     booksSvc,
+		BookshelfService: bookshelfSvc,
+		Logger:           logger.With("component", "mcp"),
+	})
+
 	recoveryGate := storage.StartRecovery(ctx, opened.DB, cfg.LibraryDir, logger.With("component", "storage"))
+
+	dropboxWatcher := dropbox.NewWatcher(dropbox.WatcherOptions{
+		DB:         opened.DB,
+		LibraryDir: cfg.LibraryDir,
+		Logger:     logger.With("component", "dropbox"),
+	})
+	dropboxWatcher.Start(ctx, recoveryGate)
 
 	var upstream http.Handler
 	if cfg.UpstreamURL != "" {
@@ -151,6 +176,8 @@ func main() {
 			booksSvc,
 			bookshelfSvc,
 			spinesSvc,
+			adminSvc,
+			mcpSvc,
 		},
 		Middleware: []func(http.Handler) http.Handler{
 			recoveryGate.Middleware,
@@ -175,6 +202,8 @@ func main() {
 
 	select {
 	case serveErr := <-errCh:
+		stop()
+		dropboxWatcher.Wait()
 		if serveErr != nil {
 			logger.Error("http server error", "error", serveErr)
 			os.Exit(1)
@@ -187,5 +216,6 @@ func main() {
 			logger.Error("graceful shutdown failed", "error", err)
 			os.Exit(1)
 		}
+		dropboxWatcher.Wait()
 	}
 }

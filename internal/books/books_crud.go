@@ -1,8 +1,11 @@
 package books
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"math"
@@ -1455,25 +1458,164 @@ func listBookFilesDTO(ctx context.Context, db *sql.DB, bookID string) ([]bookFil
 	return out, rows.Err()
 }
 
-// PUT /api/books/{id}
-func (s *Service) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
-	userID := httpapi.SessionFromContext(r.Context()).User.ID
-	bookID := r.PathValue("id")
-	if bookID == "" {
-		httpapi.WriteError(w, http.StatusBadRequest, "Missing book id")
-		return
+// ComputeMetadataVersion mirrors server/utils/books/metadata-snapshot.ts metadataVersion.
+func ComputeMetadataVersion(ctx context.Context, q collections.Queryable, bookID string) (string, error) {
+	type bookMetaSnap struct {
+		Title       string   `json:"title"`
+		Description *string  `json:"description"`
+		Published   *string  `json:"published"`
+		Language    *string  `json:"language"`
+		Pages       *int64   `json:"pages"`
+		Publisher   *string  `json:"publisher"`
+		Series      *string  `json:"series"`
+		SeriesIndex *float64 `json:"seriesIndex"`
+	}
+	type nameRow struct {
+		Name string `json:"name"`
+	}
+	type identRow struct {
+		Type  string `json:"type"`
+		Value string `json:"value"`
+	}
+	type versionPayload struct {
+		Book        bookMetaSnap `json:"book"`
+		Authors     []nameRow    `json:"authors"`
+		Tags        []nameRow    `json:"tags"`
+		Identifiers []identRow   `json:"identifiers"`
 	}
 
-	body, err := decodeBodyObject(r)
+	var (
+		title     string
+		desc      sql.NullString
+		pub       sql.NullString
+		lang      sql.NullString
+		pages     sql.NullInt64
+		pubName   sql.NullString
+		serName   sql.NullString
+		serIdx    sql.NullFloat64
+	)
+	err := q.QueryRowContext(ctx, `
+		SELECT b.title, b.description, b.published, b.language, b.pages, p.name, s.name, b.series_index
+		FROM books b
+		LEFT JOIN publishers p ON p.id = b.publisher_id
+		LEFT JOIN series s ON s.id = b.series_id
+		WHERE b.id = ?
+		LIMIT 1
+	`, bookID).Scan(&title, &desc, &pub, &lang, &pages, &pubName, &serName, &serIdx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", httpapi.NewError(http.StatusNotFound, "Book not found.")
+	}
 	if err != nil {
-		httpapi.WriteHTTPError(w, err)
-		return
+		return "", err
 	}
 
+	authorRows, err := q.QueryContext(ctx, `
+		SELECT a.name
+		FROM book_authors ba
+		INNER JOIN authors a ON a.id = ba.author_id
+		WHERE ba.book_id = ?
+		ORDER BY ba.position ASC, a.id ASC
+	`, bookID)
+	if err != nil {
+		return "", err
+	}
+	authorsOut := make([]nameRow, 0)
+	for authorRows.Next() {
+		var n string
+		if err := authorRows.Scan(&n); err != nil {
+			_ = authorRows.Close()
+			return "", err
+		}
+		authorsOut = append(authorsOut, nameRow{Name: n})
+	}
+	if err := authorRows.Close(); err != nil {
+		return "", err
+	}
+
+	tagRows, err := q.QueryContext(ctx, `
+		SELECT t.name
+		FROM book_tags bt
+		INNER JOIN tags t ON t.id = bt.tag_id
+		WHERE bt.book_id = ?
+		ORDER BY t.name ASC
+	`, bookID)
+	if err != nil {
+		return "", err
+	}
+	tagsOut := make([]nameRow, 0)
+	for tagRows.Next() {
+		var n string
+		if err := tagRows.Scan(&n); err != nil {
+			_ = tagRows.Close()
+			return "", err
+		}
+		tagsOut = append(tagsOut, nameRow{Name: n})
+	}
+	if err := tagRows.Close(); err != nil {
+		return "", err
+	}
+
+	identRows, err := q.QueryContext(ctx, `
+		SELECT type, value
+		FROM book_identifiers
+		WHERE book_id = ?
+		ORDER BY type ASC, value ASC
+	`, bookID)
+	if err != nil {
+		return "", err
+	}
+	identsOut := make([]identRow, 0)
+	for identRows.Next() {
+		var r identRow
+		if err := identRows.Scan(&r.Type, &r.Value); err != nil {
+			_ = identRows.Close()
+			return "", err
+		}
+		identsOut = append(identsOut, r)
+	}
+	if err := identRows.Close(); err != nil {
+		return "", err
+	}
+
+	payload := versionPayload{
+		Book: bookMetaSnap{
+			Title:       title,
+			Description: nullStringPtr(desc),
+			Published:   nullStringPtr(pub),
+			Language:    nullStringPtr(lang),
+			Pages:       nullInt64Ptr(pages),
+			Publisher:   nullStringPtr(pubName),
+			Series:      nullStringPtr(serName),
+			SeriesIndex: nullFloat64Ptr(serIdx),
+		},
+		Authors:     authorsOut,
+		Tags:        tagsOut,
+		Identifiers: identsOut,
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(payload); err != nil {
+		return "", err
+	}
+	encoded := bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
+	sum := sha256.Sum256(encoded)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// UpdateBookMetadata updates a book's canonical metadata with optional optimistic
+// concurrency (`expectedVersion`) and in-transaction authorization (`authorize`).
+func (s *Service) UpdateBookMetadata(
+	ctx context.Context,
+	userID, bookID string,
+	body map[string]json.RawMessage,
+	expectedVersion string,
+	authorize func(tx *sql.Tx) error,
+) (bool, error) {
 	var storageWarning bool
-	err = storage.WithBookStorageLock(r.Context(), s.libraryDir, bookID, func() error {
+	err := storage.WithBookStorageLock(ctx, s.libraryDir, bookID, func() error {
 		var prevPublisherID, prevSeriesID sql.NullString
-		err := s.db.QueryRowContext(r.Context(), `
+		err := s.db.QueryRowContext(ctx, `
 			SELECT b.publisher_id, b.series_id
 			FROM books b
 			INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
@@ -1486,7 +1628,7 @@ func (s *Service) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		if _, err := collections.AssertBookEditor(r.Context(), s.db, userID, bookID); err != nil {
+		if _, err := collections.AssertBookEditor(ctx, s.db, userID, bookID); err != nil {
 			return err
 		}
 
@@ -1570,25 +1712,39 @@ func (s *Service) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
 
 		shouldMoveStorage := false
 
-		tx, err := s.db.BeginTx(r.Context(), nil)
+		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = tx.Rollback() }()
 
-		if err := collections.LockCollectionChanges(r.Context(), tx); err != nil {
+		if err := collections.LockCollectionChanges(ctx, tx); err != nil {
 			return err
 		}
-		if _, err := collections.AssertBookEditor(r.Context(), tx, userID, bookID); err != nil {
+		if _, err := collections.AssertBookEditor(ctx, tx, userID, bookID); err != nil {
 			return err
+		}
+		if authorize != nil {
+			if err := authorize(tx); err != nil {
+				return err
+			}
+		}
+		if expectedVersion != "" {
+			curVer, err := ComputeMetadataVersion(ctx, tx, bookID)
+			if err != nil {
+				return err
+			}
+			if curVer != expectedVersion {
+				return httpapi.NewError(http.StatusConflict, "Book metadata changed. Read the book again before updating it.")
+			}
 		}
 
 		// Capture previous author & tag IDs for orphan cleanup.
-		prevAuthorIDs, err := queryStringColumn(r.Context(), tx, `SELECT author_id FROM book_authors WHERE book_id = ?`, bookID)
+		prevAuthorIDs, err := queryStringColumn(ctx, tx, `SELECT author_id FROM book_authors WHERE book_id = ?`, bookID)
 		if err != nil {
 			return err
 		}
-		prevTagIDs, err := queryStringColumn(r.Context(), tx, `SELECT tag_id FROM book_tags WHERE book_id = ?`, bookID)
+		prevTagIDs, err := queryStringColumn(ctx, tx, `SELECT tag_id FROM book_tags WHERE book_id = ?`, bookID)
 		if err != nil {
 			return err
 		}
@@ -1631,7 +1787,7 @@ func (s *Service) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
 		if pubNameOpt.set {
 			publisherMutated = true
 			if pubNameOpt.value != nil {
-				pid, err := findOrCreatePublisherByName(r.Context(), tx, *pubNameOpt.value)
+				pid, err := findOrCreatePublisherByName(ctx, tx, *pubNameOpt.value)
 				if err != nil {
 					return err
 				}
@@ -1651,7 +1807,7 @@ func (s *Service) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
 		if serNameOpt.set {
 			seriesMutated = true
 			if serNameOpt.value != nil {
-				sid, err := findOrCreateSeriesByName(r.Context(), tx, *serNameOpt.value)
+				sid, err := findOrCreateSeriesByName(ctx, tx, *serNameOpt.value)
 				if err != nil {
 					return err
 				}
@@ -1682,7 +1838,7 @@ func (s *Service) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
 		if len(setClauses) > 0 {
 			setClauses = append(setClauses, "updated_at = ?")
 			setArgs = append(setArgs, now, bookID)
-			if _, err := tx.ExecContext(r.Context(), `
+			if _, err := tx.ExecContext(ctx, `
 				UPDATE books SET `+strings.Join(setClauses, ", ")+` WHERE id = ?
 			`, setArgs...); err != nil {
 				return err
@@ -1690,16 +1846,16 @@ func (s *Service) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if hasAuthorMutation {
-			if _, err := tx.ExecContext(r.Context(), `DELETE FROM book_authors WHERE book_id = ?`, bookID); err != nil {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM book_authors WHERE book_id = ?`, bookID); err != nil {
 				return err
 			}
 			currentAuthorIDs := make(map[string]struct{}, len(newAuthors))
 			for i, name := range newAuthors {
-				aid, err := findOrCreateAuthorByName(r.Context(), tx, name)
+				aid, err := findOrCreateAuthorByName(ctx, tx, name)
 				if err != nil {
 					return err
 				}
-				if _, err := tx.ExecContext(r.Context(), `
+				if _, err := tx.ExecContext(ctx, `
 					INSERT INTO book_authors (book_id, author_id, position) VALUES (?, ?, ?)
 				`, bookID, aid, i+1); err != nil {
 					return err
@@ -1709,7 +1865,7 @@ func (s *Service) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
 			shouldMoveStorage = true
 			for _, oldID := range dedupeStrings(prevAuthorIDs) {
 				if _, kept := currentAuthorIDs[oldID]; !kept {
-					if err := deleteAuthorIfUnreferenced(r.Context(), tx, oldID); err != nil {
+					if err := deleteAuthorIfUnreferenced(ctx, tx, oldID); err != nil {
 						return err
 					}
 				}
@@ -1717,16 +1873,16 @@ func (s *Service) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if tagsOpt.set {
-			if _, err := tx.ExecContext(r.Context(), `DELETE FROM book_tags WHERE book_id = ?`, bookID); err != nil {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM book_tags WHERE book_id = ?`, bookID); err != nil {
 				return err
 			}
 			currentTagIDs := make(map[string]struct{}, len(tagsOpt.values))
 			for _, name := range tagsOpt.values {
-				tid, err := findOrCreateTagByName(r.Context(), tx, name)
+				tid, err := findOrCreateTagByName(ctx, tx, name)
 				if err != nil {
 					return err
 				}
-				if _, err := tx.ExecContext(r.Context(), `
+				if _, err := tx.ExecContext(ctx, `
 					INSERT INTO book_tags (book_id, tag_id) VALUES (?, ?)
 				`, bookID, tid); err != nil {
 					return err
@@ -1735,7 +1891,7 @@ func (s *Service) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
 			}
 			for _, oldID := range dedupeStrings(prevTagIDs) {
 				if _, kept := currentTagIDs[oldID]; !kept {
-					if err := deleteTagIfUnreferenced(r.Context(), tx, oldID); err != nil {
+					if err := deleteTagIfUnreferenced(ctx, tx, oldID); err != nil {
 						return err
 					}
 				}
@@ -1743,11 +1899,11 @@ func (s *Service) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if hasIdentMutation {
-			if _, err := tx.ExecContext(r.Context(), `DELETE FROM book_identifiers WHERE book_id = ?`, bookID); err != nil {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM book_identifiers WHERE book_id = ?`, bookID); err != nil {
 				return err
 			}
 			for _, ident := range newIdents {
-				if _, err := tx.ExecContext(r.Context(), `
+				if _, err := tx.ExecContext(ctx, `
 					INSERT INTO book_identifiers (book_id, type, value)
 					VALUES (?, ?, ?)
 					ON CONFLICT(book_id, type) DO UPDATE SET value = excluded.value
@@ -1758,12 +1914,12 @@ func (s *Service) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if publisherMutated && prevPublisherID.Valid && prevPublisherID.String != "" && (newPublisherID == nil || *newPublisherID != prevPublisherID.String) {
-			if err := deletePublisherIfUnreferenced(r.Context(), tx, prevPublisherID.String); err != nil {
+			if err := deletePublisherIfUnreferenced(ctx, tx, prevPublisherID.String); err != nil {
 				return err
 			}
 		}
 		if seriesMutated && prevSeriesID.Valid && prevSeriesID.String != "" && (newSeriesID == nil || *newSeriesID != prevSeriesID.String) {
-			if err := deleteSeriesIfUnreferenced(r.Context(), tx, prevSeriesID.String); err != nil {
+			if err := deleteSeriesIfUnreferenced(ctx, tx, prevSeriesID.String); err != nil {
 				return err
 			}
 		}
@@ -1773,12 +1929,17 @@ func (s *Service) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if shouldMoveStorage {
-			if _, moveErr := storage.MoveBookStorageToCanonical(r.Context(), s.db, s.libraryDir, bookID, func(tx *sql.Tx) error {
-				if err := collections.LockCollectionChanges(r.Context(), tx); err != nil {
+			if _, moveErr := storage.MoveBookStorageToCanonical(ctx, s.db, s.libraryDir, bookID, func(tx *sql.Tx) error {
+				if err := collections.LockCollectionChanges(ctx, tx); err != nil {
 					return err
 				}
-				_, err := collections.AssertBookEditor(r.Context(), tx, userID, bookID)
-				return err
+				if _, err := collections.AssertBookEditor(ctx, tx, userID, bookID); err != nil {
+					return err
+				}
+				if authorize != nil {
+					return authorize(tx)
+				}
+				return nil
 			}); moveErr != nil {
 				storageWarning = true
 				s.logger.Warn("PUT /api/books/{id}: failed to move book storage to canonical path", "bookId", bookID, "error", moveErr)
@@ -1786,6 +1947,25 @@ func (s *Service) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
 		}
 		return nil
 	})
+	return storageWarning, err
+}
+
+// PUT /api/books/{id}
+func (s *Service) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
+	userID := httpapi.SessionFromContext(r.Context()).User.ID
+	bookID := r.PathValue("id")
+	if bookID == "" {
+		httpapi.WriteError(w, http.StatusBadRequest, "Missing book id")
+		return
+	}
+
+	body, err := decodeBodyObject(r)
+	if err != nil {
+		httpapi.WriteHTTPError(w, err)
+		return
+	}
+
+	storageWarning, err := s.UpdateBookMetadata(r.Context(), userID, bookID, body, "", nil)
 	if err != nil {
 		s.writeErrWithFallback(w, "PUT /api/books/{id} failed", "Failed to update book", err)
 		return
