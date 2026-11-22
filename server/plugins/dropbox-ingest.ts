@@ -3,6 +3,7 @@ import { storageRecoveryReady } from '~~/server/utils/books/storage/recovery-rea
 import { logger } from '~/utils/logger';
 
 export default defineNitroPlugin((nitroApp) => {
+  if (process.env.DELB_DISABLE_DROPBOX_WATCHER === '1') return;
   let watcher: ReturnType<typeof startDropboxIngestWatcher> | undefined;
   let closed = false;
   void storageRecoveryReady

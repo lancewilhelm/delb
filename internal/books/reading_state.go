@@ -184,6 +184,30 @@ func (s *Service) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// StatusChange describes a requested reading-status update.
+type StatusChange struct {
+	StatusSet     bool
+	Status        *string
+	StartedAtSet  bool
+	StartedAt     *int64
+	FinishedAtSet bool
+	FinishedAt    *int64
+	DnfAtSet      bool
+	DnfAt         *int64
+	TbrRankSet    bool
+	TbrRank       *int
+}
+
+// StatusResultRow holds the post-transition reading status for one book.
+type StatusResultRow struct {
+	BookID     string
+	Status     *string
+	StartedAt  *int64
+	FinishedAt *int64
+	DnfAt      *int64
+	TbrRank    *int
+}
+
 type statusChange struct {
 	statusSet     bool
 	status        *string
@@ -197,20 +221,42 @@ type statusChange struct {
 	tbrRank       *int
 }
 
-type statusResultRow struct {
-	BookID     string
-	Status     *string
-	StartedAt  *int64
-	FinishedAt *int64
-	DnfAt      *int64
-	TbrRank    *int
-}
+type statusResultRow = StatusResultRow
 
 type statusTransitionResult struct {
 	rows    []statusResultRow
 	visible int
 	updated int
 	cleared int
+}
+
+// TransitionBookStatuses executes a status transition with an optional in-transaction
+// authorization callback (used by MCP tools).
+func TransitionBookStatuses(
+	ctx context.Context,
+	db *sql.DB,
+	userID string,
+	bookIDs []string,
+	change StatusChange,
+	now time.Time,
+	authorize func(tx *sql.Tx) error,
+) ([]StatusResultRow, error) {
+	res, err := transitionBookStatusesWithAuth(ctx, db, userID, bookIDs, statusChange{
+		statusSet:     change.StatusSet,
+		status:        change.Status,
+		startedAtSet:  change.StartedAtSet,
+		startedAt:     change.StartedAt,
+		finishedAtSet: change.FinishedAtSet,
+		finishedAt:    change.FinishedAt,
+		dnfAtSet:      change.DnfAtSet,
+		dnfAt:         change.DnfAt,
+		tbrRankSet:    change.TbrRankSet,
+		tbrRank:       change.TbrRank,
+	}, now, authorize)
+	if err != nil {
+		return nil, err
+	}
+	return res.rows, nil
 }
 
 // transitionBookStatuses mirrors server/utils/books/status-transition.ts.
@@ -222,11 +268,29 @@ func transitionBookStatuses(
 	change statusChange,
 	now time.Time,
 ) (statusTransitionResult, error) {
+	return transitionBookStatusesWithAuth(ctx, db, userID, bookIDs, change, now, nil)
+}
+
+func transitionBookStatusesWithAuth(
+	ctx context.Context,
+	db *sql.DB,
+	userID string,
+	bookIDs []string,
+	change statusChange,
+	now time.Time,
+	authorize func(tx *sql.Tx) error,
+) (statusTransitionResult, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return statusTransitionResult{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	if authorize != nil {
+		if err := authorize(tx); err != nil {
+			return statusTransitionResult{}, err
+		}
+	}
 
 	nowSec := now.UTC().Unix()
 
@@ -760,6 +824,283 @@ func (s *Service) handleGetRationale(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"data":    map[string]string{"rationale": text},
 	})
+}
+
+// WriteRationale mirrors server/utils/books/tbr.ts writeRationale.
+func WriteRationale(
+	ctx context.Context,
+	db *sql.DB,
+	userID, bookID, text string,
+	authorize func(tx *sql.Tx) error,
+) (string, error) {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if authorize != nil {
+		if err := authorize(tx); err != nil {
+			return "", err
+		}
+	}
+	visible, err := isBookVisibleToUser(ctx, tx, userID, bookID)
+	if err != nil {
+		return "", err
+	}
+	if !visible {
+		return "", httpapi.NewError(http.StatusNotFound, "Book not found")
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO user_book_rationale (user_id, book_id, text)
+		VALUES (?, ?, ?)
+		ON CONFLICT(user_id, book_id) DO UPDATE SET text = excluded.text
+	`, userID, bookID, text); err != nil {
+		return "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	return text, nil
+}
+
+// ReadingProgressEntry is a single reading-progress history row formatted for MCP/API.
+type ReadingProgressEntry struct {
+	ID              string  `json:"id"`
+	ProgressPercent float64 `json:"progressPercent"`
+	PageNumber      *int64  `json:"pageNumber"`
+	Source          string  `json:"source"`
+	OccurredAt      string  `json:"occurredAt"`
+	CreatedAt       string  `json:"createdAt"`
+}
+
+// ReaderPositionSnapshot holds a book's saved reader percentage and update timestamp.
+type ReaderPositionSnapshot struct {
+	Progress  *float64 `json:"progress"`
+	UpdatedAt string   `json:"updatedAt"`
+}
+
+// LatestProgressDTO mirrors server/utils/books/progress-order.ts latestReadingProgress output.
+type LatestProgressDTO struct {
+	ProgressPercent float64 `json:"progressPercent"`
+	PageNumber      *int64  `json:"pageNumber"`
+	Source          string  `json:"source"`
+	OccurredAt      string  `json:"occurredAt"`
+}
+
+// ReadingProgressSnapshot mirrors server/utils/books/progress.ts readReadingProgress.
+type ReadingProgressSnapshot struct {
+	BookID              string                  `json:"bookId"`
+	PageCount           *int64                  `json:"pageCount"`
+	ProgressSyncEnabled bool                    `json:"progressSyncEnabled"`
+	ReaderPosition      *ReaderPositionSnapshot `json:"readerPosition"`
+	History             []ReadingProgressEntry  `json:"history"`
+	Latest              *LatestProgressDTO      `json:"latest"`
+}
+
+// ReadReadingProgress mirrors server/utils/books/progress.ts readReadingProgress.
+func ReadReadingProgress(ctx context.Context, db *sql.DB, userID, bookID string, limit int) (*ReadingProgressSnapshot, error) {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var bookPages sql.NullInt64
+	err = tx.QueryRowContext(ctx, `
+		SELECT b.pages
+		FROM books b
+		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		WHERE b.id = ?
+		LIMIT 1
+	`, userID, bookID).Scan(&bookPages)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, httpapi.NewError(http.StatusNotFound, "Book not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var syncEnabled int64
+	_ = tx.QueryRowContext(ctx, `
+		SELECT progress_sync_enabled FROM user_book_preferences WHERE user_id = ? AND book_id = ? LIMIT 1
+	`, userID, bookID).Scan(&syncEnabled)
+
+	var (
+		posProg    sql.NullFloat64
+		posUpd     sql.NullInt64
+		hasPosRow  bool
+	)
+	if err := tx.QueryRowContext(ctx, `
+		SELECT progress, updated_at FROM user_book_reading_position WHERE user_id = ? AND book_id = ? LIMIT 1
+	`, userID, bookID).Scan(&posProg, &posUpd); err == nil {
+		hasPosRow = true
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id, progress_percent, page_number, location, source, occurred_at, created_at
+		FROM user_book_progress_log
+		WHERE user_id = ? AND book_id = ?
+		ORDER BY `+progressHistoryOrderSQL+`
+		LIMIT ?
+	`, userID, bookID, limit)
+	if err != nil {
+		return nil, err
+	}
+	var rawHistory []progressLogRow
+	history := make([]ReadingProgressEntry, 0)
+	for rows.Next() {
+		var row progressLogRow
+		var page sql.NullInt64
+		var loc sql.NullString
+		if err := rows.Scan(&row.id, &row.progressPercent, &page, &loc, &row.source, &row.occurredAtSec, &row.createdAtSec); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		row.pageNumber = nullInt64Ptr(page)
+		row.location = nullStringPtr(loc)
+		rawHistory = append(rawHistory, row)
+		history = append(history, ReadingProgressEntry{
+			ID:              row.id,
+			ProgressPercent: row.progressPercent,
+			PageNumber:      row.pageNumber,
+			Source:          row.source,
+			OccurredAt:      formatUnixSecISO(row.occurredAtSec),
+			CreatedAt:       formatUnixSecISO(row.createdAtSec),
+		})
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	var readerPos *ReaderPositionSnapshot
+	var posProgPtr *float64
+	var posUpdPtr *int64
+	if hasPosRow {
+		posProgPtr = nullFloat64Ptr(posProg)
+		posUpdPtr = nullInt64Ptr(posUpd)
+		readerPos = &ReaderPositionSnapshot{
+			Progress:  posProgPtr,
+			UpdatedAt: formatUnixSecISO(posUpd.Int64),
+		}
+	}
+
+	var firstLog *progressLogRow
+	if len(rawHistory) > 0 {
+		firstLog = &rawHistory[0]
+	}
+	var latestDTO *LatestProgressDTO
+	if latest := computeLatestReadingProgress(firstLog, posProgPtr, posUpdPtr); latest != nil {
+		latestDTO = &LatestProgressDTO{
+			ProgressPercent: latest.ProgressPercent,
+			PageNumber:      latest.PageNumber,
+			Source:          latest.Source,
+			OccurredAt:      formatUnixSecISO(latest.OccurredAtSec),
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &ReadingProgressSnapshot{
+		BookID:              bookID,
+		PageCount:           nullInt64Ptr(bookPages),
+		ProgressSyncEnabled: syncEnabled != 0,
+		ReaderPosition:      readerPos,
+		History:             history,
+		Latest:              latestDTO,
+	}, nil
+}
+
+// ManualProgressLog mirrors the return object of MCP log_reading_progress.
+type ManualProgressLog struct {
+	ID              string  `json:"id"`
+	BookID          string  `json:"bookId"`
+	ProgressPercent float64 `json:"progressPercent"`
+	PageNumber      *int64  `json:"pageNumber"`
+	Source          string  `json:"source"`
+	OccurredAt      string  `json:"occurredAt"`
+	CreatedAt       string  `json:"createdAt"`
+}
+
+// RecordManualProgress mirrors server/utils/books/progress.ts recordManualProgress.
+func RecordManualProgress(
+	ctx context.Context,
+	db *sql.DB,
+	userID, bookID string,
+	progressPercent *float64,
+	pageNumber *int64,
+	occurredSec int64,
+	authorize func(tx *sql.Tx) error,
+) (*ManualProgressLog, error) {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if authorize != nil {
+		if err := authorize(tx); err != nil {
+			return nil, err
+		}
+	}
+
+	var bookPages sql.NullInt64
+	err = tx.QueryRowContext(ctx, `
+		SELECT b.pages
+		FROM books b
+		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		WHERE b.id = ?
+		LIMIT 1
+	`, userID, bookID).Scan(&bookPages)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, httpapi.NewError(http.StatusNotFound, "Book not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	pct := progressPercent
+	if pageNumber != nil {
+		if !bookPages.Valid || bookPages.Int64 <= 0 {
+			return nil, httpapi.NewError(http.StatusBadRequest, "This book has no page count. Add pages to log by page.")
+		}
+		if *pageNumber > bookPages.Int64 {
+			return nil, httpapi.NewError(http.StatusBadRequest, fmt.Sprintf("pageNumber must be <= %d.", bookPages.Int64))
+		}
+		v := (float64(*pageNumber) / float64(bookPages.Int64)) * 100.0
+		pct = &v
+	}
+	if pct == nil {
+		return nil, httpapi.NewError(http.StatusBadRequest, "Provide progressPercent or pageNumber.")
+	}
+
+	logID := uuid.NewString()
+	createdSec := time.Now().UTC().Unix()
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO user_book_progress_log (
+			id, user_id, book_id, progress_percent, page_number, location, source, occurred_at, created_at
+		) VALUES (?, ?, ?, ?, ?, NULL, 'manual', ?, ?)
+	`, logID, userID, bookID, *pct, pageNumber, occurredSec, createdSec); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &ManualProgressLog{
+		ID:              logID,
+		BookID:          bookID,
+		ProgressPercent: *pct,
+		PageNumber:      pageNumber,
+		Source:          "manual",
+		OccurredAt:      formatUnixSecISO(occurredSec),
+		CreatedAt:       formatUnixSecISO(createdSec),
+	}, nil
 }
 
 // PUT /api/books/{id}/rationale

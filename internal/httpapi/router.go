@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"database/sql"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -30,11 +29,12 @@ type RouterOptions struct {
 //     and any caller-supplied outer middleware (such as startup storage recovery).
 //   - Mounts /api/auth/* and all ported domain services (Settings, Users,
 //     Collections, Books/Catalog/Reading/Search/Dashboard, Bookshelves/Shelves/
-//     Pictures, Spines/SpineGeneration/ChatGPT-Image, ...).
-//   - Proxies remaining unported Phase 2D routes (e.g. /api/settings/admin/health,
-//     /api/settings/admin/calibre, /api/nuke, /api/mcp*, frontend assets) to
-//     Upstream when configured, or returns a clean JSON 404 for /api/* when
-//     running standalone.
+//     Pictures, Spines/SpineGeneration/ChatGPT-Image, Admin Health/Calibre/Nuke,
+//     MCP Connections & Streamable HTTP MCP Server).
+//   - Handles all unknown /api/* paths directly in Go with a clean JSON 404 so
+//     zero /api/* requests are proxied to Upstream.
+//   - Proxies non-API frontend paths (/, assets) to Upstream when configured,
+//     or returns 404 when running standalone.
 func NewHandler(opts RouterOptions) http.Handler {
 	mux := http.NewServeMux()
 	if opts.AuthService != nil {
@@ -46,16 +46,18 @@ func NewHandler(opts RouterOptions) http.Handler {
 		}
 	}
 
+	// Catch-all for any unknown /api/* route: return a clean JSON 404 in Go
+	// without ever hitting Upstream.
+	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
+		WriteError(w, http.StatusNotFound, "Not Found")
+	})
+
 	if opts.Upstream != nil {
 		mux.Handle("/", opts.Upstream)
 	} else {
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			if strings.HasPrefix(r.URL.Path, "/api/") {
-				w.Header().Set("Content-Type", "application/json; charset=utf-8")
-				w.WriteHeader(http.StatusNotFound)
-				_ = json.NewEncoder(w).Encode(map[string]string{
-					"message": "Not Found",
-				})
+				WriteError(w, http.StatusNotFound, "Not Found")
 				return
 			}
 			http.NotFound(w, r)

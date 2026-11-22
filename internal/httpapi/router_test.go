@@ -12,12 +12,14 @@ import (
 	"testing"
 
 	"github.com/lancewilhelm/delb"
+	"github.com/lancewilhelm/delb/internal/admin"
 	"github.com/lancewilhelm/delb/internal/auth"
 	"github.com/lancewilhelm/delb/internal/books"
 	"github.com/lancewilhelm/delb/internal/bookshelf"
 	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/db"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/mcp"
 	"github.com/lancewilhelm/delb/internal/proxy"
 	"github.com/lancewilhelm/delb/internal/settings"
 	"github.com/lancewilhelm/delb/internal/spines"
@@ -92,12 +94,26 @@ func TestRouterPhase2AOwnedAndUnportedProxied(t *testing.T) {
 		LibraryDir:  filepath.Join(tmp, "library"),
 		Logger:      discard,
 	})
+	adminSvc := admin.NewService(admin.ServiceOptions{
+		DB:          opened.DB,
+		AuthService: authSvc,
+		LibraryDir:  filepath.Join(tmp, "library"),
+		CalibreDir:  filepath.Join(tmp, "calibre"),
+		Logger:      discard,
+	})
+	mcpSvc := mcp.NewService(mcp.ServiceOptions{
+		DB:               opened.DB,
+		AuthService:      authSvc,
+		BooksService:     booksSvc,
+		BookshelfService: bookshelfSvc,
+		Logger:           discard,
+	})
 
 	handler := httpapi.NewHandler(httpapi.RouterOptions{
 		DB:          opened.DB,
 		Logger:      discard,
 		AuthService: authSvc,
-		Services:    []httpapi.RouteRegistrar{settingsSvc, usersSvc, collectionsSvc, booksSvc, bookshelfSvc, spinesSvc},
+		Services:    []httpapi.RouteRegistrar{settingsSvc, usersSvc, collectionsSvc, booksSvc, bookshelfSvc, spinesSvc, adminSvc, mcpSvc},
 		Upstream:    p,
 	})
 	front := httptest.NewServer(handler)
@@ -194,33 +210,50 @@ func TestRouterPhase2AOwnedAndUnportedProxied(t *testing.T) {
 		{http.MethodGet, "/api/settings/admin/chatgpt-image", http.StatusUnauthorized},
 		{http.MethodPost, "/api/settings/admin/chatgpt-image", http.StatusUnauthorized},
 		{http.MethodDelete, "/api/settings/admin/chatgpt-image", http.StatusUnauthorized},
+		// Phase 2D Go-owned routes
+		{http.MethodPost, "/api/settings/admin/health", http.StatusUnauthorized},
+		{http.MethodPost, "/api/settings/admin/calibre", http.StatusUnauthorized},
+		{http.MethodGet, "/api/nuke", http.StatusUnauthorized},
+		{http.MethodGet, "/api/mcp-connections", http.StatusUnauthorized},
+		{http.MethodPost, "/api/mcp-connections", http.StatusForbidden},
+		{http.MethodPatch, "/api/mcp-connections", http.StatusForbidden},
+		{http.MethodDelete, "/api/mcp-connections", http.StatusForbidden},
+		{http.MethodGet, "/api/mcp", http.StatusUnauthorized},
+		{http.MethodPost, "/api/mcp", http.StatusUnauthorized},
+		{http.MethodDelete, "/api/mcp", http.StatusUnauthorized},
+		// Unknown /api/* routes return Go JSON 404 without hitting upstream
+		{http.MethodGet, "/api/settings/admin/health", http.StatusNotFound},
+		{http.MethodGet, "/api/settings/admin/calibre", http.StatusNotFound},
+		{http.MethodPost, "/api/nuke", http.StatusNotFound},
+		{http.MethodGet, "/api/does-not-exist", http.StatusNotFound},
+		{http.MethodPost, "/api/unknown/nested/route", http.StatusNotFound},
 	} {
 		req, _ := http.NewRequest(tc.method, front.URL+tc.path, nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("%s %s: %v", tc.method, tc.path, err)
 		}
+		b, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if resp.StatusCode != tc.want || upstreamHits != 0 {
-			t.Fatalf("%s %s = %d (want %d), upstreamHits=%d", tc.method, tc.path, resp.StatusCode, tc.want, upstreamHits)
+			t.Fatalf("%s %s = %d (want %d), upstreamHits=%d body=%s", tc.method, tc.path, resp.StatusCode, tc.want, upstreamHits, string(b))
+		}
+		if tc.want == http.StatusNotFound {
+			var payload map[string]any
+			if err := json.Unmarshal(b, &payload); err != nil {
+				t.Fatalf("%s %s 404 body is not valid JSON: %v (%s)", tc.method, tc.path, err, string(b))
+			}
 		}
 	}
 
-	// 2. Unported Phase 2D routes fall through cleanly to upstream!
+	// 2. Non-API frontend paths still proxy cleanly to upstream until Phase 3.
 	for _, tc := range []struct {
 		method string
 		path   string
 	}{
-		{http.MethodGet, "/api/settings/admin/health"},
-		{http.MethodPost, "/api/settings/admin/health"},
-		{http.MethodGet, "/api/settings/admin/calibre"},
-		{http.MethodPost, "/api/settings/admin/calibre"},
-		{http.MethodPost, "/api/nuke"},
-		{http.MethodGet, "/api/mcp"},
-		{http.MethodPost, "/api/mcp"},
-		{http.MethodGet, "/api/mcp-connections"},
-		{http.MethodPost, "/api/mcp-connections"},
 		{http.MethodGet, "/"},
+		{http.MethodGet, "/library"},
+		{http.MethodGet, "/_nuxt/app.js"},
 	} {
 		before := upstreamHits
 		req, _ := http.NewRequest(tc.method, front.URL+tc.path, nil)
