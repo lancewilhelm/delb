@@ -13,10 +13,13 @@ import (
 
 	"github.com/lancewilhelm/delb"
 	"github.com/lancewilhelm/delb/internal/auth"
+	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/config"
 	"github.com/lancewilhelm/delb/internal/db"
 	"github.com/lancewilhelm/delb/internal/httpapi"
 	"github.com/lancewilhelm/delb/internal/proxy"
+	"github.com/lancewilhelm/delb/internal/settings"
+	"github.com/lancewilhelm/delb/internal/users"
 )
 
 func main() {
@@ -78,6 +81,25 @@ func main() {
 		Logger:         logger.With("component", "auth"),
 	})
 
+	settingsSvc := settings.NewService(settings.ServiceOptions{
+		DB:          opened.DB,
+		AuthService: authSvc,
+		Logger:      logger.With("component", "settings"),
+	})
+
+	usersSvc := users.NewService(users.ServiceOptions{
+		DB:          opened.DB,
+		AuthService: authSvc,
+		Logger:      logger.With("component", "users"),
+	})
+
+	collectionsSvc := collections.NewService(collections.ServiceOptions{
+		DB:          opened.DB,
+		AuthService: authSvc,
+		LibraryDir:  cfg.LibraryDir,
+		Logger:      logger.With("component", "collections"),
+	})
+
 	var upstream http.Handler
 	if cfg.UpstreamURL != "" {
 		upstream, err = proxy.New(cfg.UpstreamURL, logger.With("component", "proxy"))
@@ -89,8 +111,15 @@ func main() {
 	}
 
 	handler := httpapi.NewHandler(httpapi.RouterOptions{
+		DB:          opened.DB,
+		Logger:      logger.With("component", "httpapi"),
 		AuthService: authSvc,
-		Upstream:    upstream,
+		Services: []httpapi.RouteRegistrar{
+			settingsSvc,
+			usersSvc,
+			collectionsSvc,
+		},
+		Upstream: upstream,
 	})
 
 	srv := &http.Server{

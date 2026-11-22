@@ -1,8 +1,53 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+/**
+ * Load `.env` from cwd before reading environment variables or spawning Go and
+ * Nitro so both processes see the exact same secrets and configuration (e.g.
+ * BETTER_AUTH_SECRET / AUTH_SECRET) without overriding explicit process.env.
+ */
+function loadDotEnv(cwd) {
+  const envPath = path.join(cwd, '.env');
+  if (!existsSync(envPath)) return;
+  const content = readFileSync(envPath, 'utf8');
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const withoutExport = line.startsWith('export ')
+      ? line.slice('export '.length).trim()
+      : line;
+    const eqIdx = withoutExport.indexOf('=');
+    if (eqIdx <= 0) continue;
+    const key = withoutExport.slice(0, eqIdx).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+    if (process.env[key] !== undefined) continue;
+    let val = withoutExport.slice(eqIdx + 1).trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"') && val.length >= 2) ||
+      (val.startsWith("'") && val.endsWith("'") && val.length >= 2)
+    ) {
+      const quote = val[0];
+      val = val.slice(1, -1);
+      if (quote === '"') {
+        val = val
+          .replace(/\\n/g, '\n')
+          .replace(/\\r/g, '\r')
+          .replace(/\\t/g, '\t')
+          .replace(/\\"/g, '"')
+          .replace(/\\\\/g, '\\');
+      }
+    } else {
+      const commentIdx = val.indexOf(' #');
+      if (commentIdx >= 0) val = val.slice(0, commentIdx).trim();
+    }
+    process.env[key] = val;
+  }
+}
+
+loadDotEnv(process.cwd());
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '..');

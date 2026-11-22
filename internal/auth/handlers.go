@@ -26,6 +26,7 @@ type ServiceOptions struct {
 	BaseURL        string
 	TrustedOrigins []string
 	Logger         *slog.Logger
+	RateLimit      RateLimitConfig
 }
 
 type Service struct {
@@ -34,6 +35,7 @@ type Service struct {
 	baseURL        string
 	trustedOrigins []string
 	logger         *slog.Logger
+	limiter        *rateLimiter
 }
 
 func NewService(opts ServiceOptions) *Service {
@@ -47,6 +49,7 @@ func NewService(opts ServiceOptions) *Service {
 		baseURL:        strings.TrimRight(opts.BaseURL, "/"),
 		trustedOrigins: opts.TrustedOrigins,
 		logger:         logger,
+		limiter:        newRateLimiter(opts.RateLimit),
 	}
 }
 
@@ -90,39 +93,40 @@ func (s *Service) handleUserCount(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, n)
 }
 
-func (s *Service) handleGetSession(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Pragma", "no-cache")
+// Authenticate resolves the delb.session_token cookie from r, validates the
+// session against SQLite, performs Better-Auth sliding-window refresh when w is
+// non-nil, and returns (nil, nil) when unauthenticated or expired.
+func (s *Service) Authenticate(w http.ResponseWriter, r *http.Request) (*SessionWithUser, error) {
+	return s.authenticate(w, r, false)
+}
 
+func (s *Service) authenticate(w http.ResponseWriter, r *http.Request, disableRefresh bool) (*SessionWithUser, error) {
 	token, sawCookie := ReadSessionCookie(r, s.secret)
 	if token == "" {
-		if sawCookie {
+		if sawCookie && w != nil {
 			ClearSessionCookie(w, r, s.baseURL)
 		}
-		writeJSON(w, http.StatusOK, nil)
-		return
+		return nil, nil
 	}
 
 	swu, err := s.store.FindSessionByToken(r.Context(), token)
 	if err != nil {
-		s.logger.Error("failed to read session", "error", err)
-		writeInternalError(w)
-		return
+		return nil, err
 	}
 
 	now := time.Now().UTC()
 	if swu == nil || swu.SessionExpires.Before(now) {
-		ClearSessionCookie(w, r, s.baseURL)
+		if w != nil {
+			ClearSessionCookie(w, r, s.baseURL)
+		}
 		if swu != nil {
 			_ = s.store.DeleteSession(r.Context(), token)
 		}
-		writeJSON(w, http.StatusOK, nil)
-		return
+		return nil, nil
 	}
 
 	// Sliding window refresh matching Better Auth (7d expiresIn, 1d updateAge).
-	disableRefresh := r.URL.Query().Get("disableRefresh") == "true"
-	if !disableRefresh {
+	if !disableRefresh && w != nil {
 		refreshThreshold := swu.SessionExpires.Add(-time.Duration(SessionExpiresInSecs-SessionUpdateAgeSecs) * time.Second)
 		if !now.Before(refreshThreshold) {
 			newExpires := now.Unix() + SessionExpiresInSecs
@@ -137,6 +141,44 @@ func (s *Service) handleGetSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	return swu, nil
+}
+
+func (s *Service) checkRateLimit(w http.ResponseWriter, r *http.Request, bucket string) bool {
+	if s.limiter == nil {
+		return true
+	}
+	key := bucket + ":" + clientIP(r)
+	allowed, retryAfter := s.limiter.Allow(key)
+	if !allowed {
+		w.Header().Set("X-Retry-After", strconv.Itoa(retryAfter))
+		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+		writeAPIError(w, &APIError{
+			Status:  http.StatusTooManyRequests,
+			Code:    "TOO_MANY_REQUESTS",
+			Message: "Too many requests. Please try again later.",
+		})
+		return false
+	}
+	return true
+}
+
+func (s *Service) handleGetSession(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
+
+	disableRefresh := r.URL.Query().Get("disableRefresh") == "true"
+	swu, err := s.authenticate(w, r, disableRefresh)
+	if err != nil {
+		s.logger.Error("failed to read session", "error", err)
+		writeInternalError(w)
+		return
+	}
+	if swu == nil {
+		writeJSON(w, http.StatusOK, nil)
+		return
+	}
+
 	writeJSON(w, http.StatusOK, SessionPayload{
 		Session: swu.Session,
 		User:    swu.User,
@@ -144,6 +186,9 @@ func (s *Service) handleGetSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleSignInEmail(w http.ResponseWriter, r *http.Request) {
+	if !s.checkRateLimit(w, r, "sign-in") {
+		return
+	}
 	if csrfErr := ValidateCSRF(r, s.baseURL, s.trustedOrigins); csrfErr != nil {
 		writeAPIError(w, csrfErr)
 		return
@@ -258,6 +303,9 @@ func (s *Service) handleSignInEmail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleSignUpEmail(w http.ResponseWriter, r *http.Request) {
+	if !s.checkRateLimit(w, r, "sign-up") {
+		return
+	}
 	if csrfErr := ValidateCSRF(r, s.baseURL, s.trustedOrigins); csrfErr != nil {
 		writeAPIError(w, csrfErr)
 		return
@@ -344,6 +392,9 @@ func (s *Service) handleSignOut(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	if !s.checkRateLimit(w, r, "change-password") {
+		return
+	}
 	if csrfErr := ValidateCSRF(r, s.baseURL, s.trustedOrigins); csrfErr != nil {
 		writeAPIError(w, csrfErr)
 		return
