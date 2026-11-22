@@ -1,4 +1,4 @@
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { getTbrQueue } from '~~/server/utils/books/tbr';
 

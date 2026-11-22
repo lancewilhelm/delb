@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import {
   cp,
   mkdir,
@@ -13,14 +14,30 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const root = process.cwd();
+const externalBaseUrl = (
+  process.env.DELB_REVIEW_URL ||
+  process.env.BASE_URL ||
+  ''
+).replace(/\/$/, '');
+const reviewHost = process.env.DELB_REVIEW_HOST || '127.0.0.1';
+const reviewPort = Number(process.env.DELB_REVIEW_PORT || '4317');
+const defaultBaseUrl = `http://${reviewHost}:${reviewPort}`;
+const baseUrl = externalBaseUrl || defaultBaseUrl;
+const customServerCmd = process.env.DELB_SERVER_CMD || '';
+
 const environment = {
   PATH: process.env.PATH,
   NUXT_TELEMETRY_DISABLED: '1',
+  DELB_REVIEW_URL: baseUrl,
+  BASE_URL: baseUrl,
+  DELB_REVIEW_HOST: reviewHost,
+  DELB_REVIEW_PORT: String(reviewPort),
   ...(process.env.CHROME_BIN ? { CHROME_BIN: process.env.CHROME_BIN } : {}),
   ...(process.env.DELB_MCP_TEST_PYTHON
     ? { DELB_MCP_TEST_PYTHON: process.env.DELB_MCP_TEST_PYTHON }
     : {}),
 };
+
 async function run(args, cwd) {
   const child = spawn(process.execPath, args, { cwd, env: environment });
   let output = '';
@@ -38,12 +55,14 @@ async function run(args, cwd) {
   process.stdout.write(output);
 }
 
-const probe = createServer();
-await new Promise((resolve, reject) => {
-  probe.once('error', reject);
-  probe.listen(4317, '127.0.0.1', resolve);
-});
-await new Promise((resolve) => probe.close(resolve));
+if (!externalBaseUrl) {
+  const probe = createServer();
+  await new Promise((resolve, reject) => {
+    probe.once('error', reject);
+    probe.listen(reviewPort, reviewHost, resolve);
+  });
+  await new Promise((resolve) => probe.close(resolve));
+}
 
 const suites = [
   'review/audits/2026-10-27/bootstrap-regression.mjs',
@@ -69,6 +88,7 @@ if (
     (suite) =>
       ![
         ...suites,
+        'review/http-smoke.mjs',
         'review/collections-browser.mjs',
         'review/bookshelf-load-browser.mjs',
         'review/personal-shelves-browser.mjs',
@@ -77,6 +97,27 @@ if (
   )
 )
   throw Error('Choose a known API regression suite');
+
+if (externalBaseUrl) {
+  let ready = false;
+  try {
+    const res = await fetch(`${baseUrl}/api/books`, {
+      signal: AbortSignal.timeout(2000),
+    });
+    ready = res.status === 401 || res.status === 200;
+  } catch {
+    ready = false;
+  }
+  if (!ready) {
+    throw Error(`External server at ${baseUrl} did not respond on /api/books`);
+  }
+  for (const suite of requested.length ? requested : suites) {
+    await run([suite], root);
+  }
+  console.log(`PASS API regressions against ${baseUrl}`);
+  process.exit(0);
+}
+
 for (const suite of requested.length ? requested : suites) {
   const directory = await mkdtemp(path.join(tmpdir(), 'delb-api-regression-'));
   let server;
@@ -120,11 +161,13 @@ for (const suite of requested.length ? requested : suites) {
       path.join(directory, 'packages/epub/node_modules'),
       'dir',
     );
-    await symlink(
-      path.join(root, '.output'),
-      path.join(directory, '.output'),
-      'dir',
-    );
+    if (!customServerCmd) {
+      await symlink(
+        path.join(root, '.output'),
+        path.join(directory, '.output'),
+        'dir',
+      );
+    }
     if (suite === 'review/spine-generation-browser.mjs') {
       for (const entry of ['app', 'server', 'shared', 'public'])
         await symlink(
@@ -142,7 +185,7 @@ for (const suite of requested.length ? requested : suites) {
         path.join(directory, 'nuxt.config.ts'),
         config.replace(
           'export default defineNuxtConfig({',
-          "export default defineNuxtConfig({\n  buildDir: '.nuxt',\n  routeRules: { '/books/**': { ssr: false }, '/settings/**': { ssr: false } },",
+          "export default defineNuxtConfig({\n  buildDir: '.nuxt',",
         ),
       );
       await cp(
@@ -151,22 +194,44 @@ for (const suite of requested.length ? requested : suites) {
       );
     }
     await run(['review/setup-demo.mjs'], directory);
-    server = spawn(
-      process.execPath,
-      [
-        'review/start-demo.mjs',
-        ...(suite === 'review/spine-generation-browser.mjs'
-          ? []
-          : ['--production']),
-        ...([
-          'review/spine-generation-api.mjs',
-          'review/spine-generation-browser.mjs',
-        ].includes(suite)
-          ? ['--fake-codex']
-          : []),
-      ],
-      { cwd: directory, env: environment, detached: true },
-    );
+    if (customServerCmd) {
+      await mkdir(path.join(directory, '.review-home'), { recursive: true });
+      server = spawn(customServerCmd, {
+        cwd: directory,
+        shell: true,
+        env: {
+          ...environment,
+          HOME: path.join(directory, '.review-home'),
+          HOST: reviewHost,
+          HOSTNAME: reviewHost,
+          PORT: String(reviewPort),
+          DATABASE_URL: 'file:./review/demo/synthetic.db',
+          BETTER_AUTH_SECRET: randomBytes(32).toString('hex'),
+          BETTER_AUTH_URL: baseUrl,
+          BETTER_AUTH_TRUSTED_ORIGINS: baseUrl,
+          LOG_LEVEL: 'warn',
+          NODE_ENV: 'production',
+        },
+        detached: true,
+      });
+    } else {
+      server = spawn(
+        process.execPath,
+        [
+          'review/start-demo.mjs',
+          ...(suite === 'review/spine-generation-browser.mjs'
+            ? []
+            : ['--production']),
+          ...([
+            'review/spine-generation-api.mjs',
+            'review/spine-generation-browser.mjs',
+          ].includes(suite)
+            ? ['--fake-codex']
+            : []),
+        ],
+        { cwd: directory, env: environment, detached: true },
+      );
+    }
     const record = (bytes) => {
       serverOutput = (serverOutput + bytes).slice(-20000);
     };
@@ -182,7 +247,7 @@ for (const suite of requested.length ? requested : suites) {
       try {
         ready =
           (
-            await fetch('http://127.0.0.1:4317/api/books', {
+            await fetch(`${baseUrl}/api/books`, {
               signal: AbortSignal.timeout(500),
             })
           ).status === 401;

@@ -6,8 +6,8 @@ import {
   collectionBooks,
   collectionMembers,
   userBookPreferences,
-} from '~/utils/db/schema';
-import { auth } from '~/utils/auth';
+} from '~~/server/utils/db/schema';
+import { auth } from '~~/server/utils/auth';
 import { logger } from '~/utils/logger';
 
 type Body = {

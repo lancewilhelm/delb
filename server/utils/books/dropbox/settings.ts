@@ -1,5 +1,5 @@
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { globalSettings } from '~/utils/db/schema';
+import { globalSettings } from '~~/server/utils/db/schema';
 import { eq } from 'drizzle-orm';
 import { logger } from '~/utils/logger';
 

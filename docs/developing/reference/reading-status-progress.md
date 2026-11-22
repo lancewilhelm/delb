@@ -72,7 +72,7 @@ Progress logs live in `user_book_progress_log` to support charting and history.
 
 ## Implementation references
 
-- Schema: `app/utils/db/schema.ts`
+- Schema: `server/utils/db/schema.ts`
 - Status API: `server/api/books/[id]/status.post.ts`
 - Progress logs API: `server/api/books/[id]/progress-logs.get.ts`, `server/api/books/[id]/progress-logs.post.ts`
 - Progress sync toggle: `server/api/books/[id]/progress-sync.put.ts`

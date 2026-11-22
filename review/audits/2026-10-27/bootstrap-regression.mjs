@@ -4,6 +4,12 @@ import { readFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { createClient } from '@libsql/client';
 
+const base = (
+  process.env.DELB_REVIEW_URL ||
+  process.env.BASE_URL ||
+  'http://127.0.0.1:4317'
+).replace(/\/$/, '');
+
 assert.equal(
   (await readFile('review/demo/.synthetic-review', 'utf8')).trim(),
   'synthetic-delb-review',
@@ -16,11 +22,11 @@ try {
   );
   const results = await Promise.all(
     Array.from({ length: 3 }, (_, i) =>
-      fetchAuth('http://127.0.0.1:4317/api/auth/sign-up/email', {
+      fetchAuth(`${base}/api/auth/sign-up/email`, {
         method: 'POST',
         signal: AbortSignal.timeout(20000),
         headers: {
-          Origin: 'http://127.0.0.1:4317',
+          Origin: base,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -55,22 +61,19 @@ try {
     sql: "UPDATE users SET role='user' WHERE id=?",
     args: [owners.rows[0].id],
   });
-  const later = await fetchAuth(
-    'http://127.0.0.1:4317/api/auth/sign-up/email',
-    {
-      method: 'POST',
-      signal: AbortSignal.timeout(20000),
-      headers: {
-        Origin: 'http://127.0.0.1:4317',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        name: 'Later signup',
-        email: `later-${randomBytes(4).toString('hex')}@example.invalid`,
-        password: randomBytes(20).toString('hex'),
-      }),
+  const later = await fetchAuth(`${base}/api/auth/sign-up/email`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(20000),
+    headers: {
+      Origin: base,
+      'Content-Type': 'application/json',
     },
-  );
+    body: JSON.stringify({
+      name: 'Later signup',
+      email: `later-${randomBytes(4).toString('hex')}@example.invalid`,
+      password: randomBytes(20).toString('hex'),
+    }),
+  });
   assert.equal(later.status, 200);
   assert.equal(
     (await db.execute("SELECT id FROM users WHERE role = 'owner'")).rows.length,

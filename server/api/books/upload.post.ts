@@ -20,9 +20,9 @@ import {
   collectionMembers,
   collectionBooks,
   storageOperations,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 import { logger } from '~/utils/logger';
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 
 import { parseEpubMetadataFromBuffer } from '~~/server/utils/books/epub';
 import { extractAndStoreEpubCover } from '~~/server/utils/books/epub-cover';

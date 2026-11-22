@@ -11,9 +11,9 @@ import {
   publishers,
   series,
   tags,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 import { logger } from '~/utils/logger';
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 import { buildBookCoverUrl } from '~~/server/utils/books/cover-url';
 
 /**

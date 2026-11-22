@@ -17,9 +17,9 @@ import {
   collectionMembers,
   publishers,
   series,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 import { logger } from '~/utils/logger';
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 
 /**
  * GET /api/authors/:id/books?collectionId=<optional>&limit=<n>&cursor=<opaque>

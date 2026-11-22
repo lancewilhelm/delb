@@ -1,6 +1,6 @@
 import { and, eq, inArray, notInArray } from 'drizzle-orm';
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { books } from '~/utils/db/schema';
+import { books } from '~~/server/utils/db/schema';
 import {
   collectionActor,
   requiredCollectionId,

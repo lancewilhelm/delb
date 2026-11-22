@@ -19,9 +19,9 @@ import {
   publishers,
   series,
   tags,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 import { logger } from '~/utils/logger';
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 
 /**
  * GET /api/tags/:id/books?collectionId=<optional>&limit=<n>&cursor=<opaque>

@@ -9,7 +9,11 @@ import { fetchAuth } from './fetch-auth.mjs';
 import { createClient } from '@libsql/client';
 import { pdfFixture } from './pdf-fixture.mjs';
 
-const base = process.env.DELB_REVIEW_URL || 'http://127.0.0.1:4317';
+const base = (
+  process.env.DELB_REVIEW_URL ||
+  process.env.BASE_URL ||
+  'http://127.0.0.1:4317'
+).replace(/\/$/, '');
 assert.match(base, /^http:\/\/127\.0\.0\.1:\d+$/);
 assert.equal(
   (await readFile('review/demo/.synthetic-review', 'utf8')).trim(),

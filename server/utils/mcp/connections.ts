@@ -5,7 +5,7 @@ import {
   timingSafeEqual,
 } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
-import { mcpConnections, users } from '~/utils/db/schema';
+import { mcpConnections, users } from '~~/server/utils/db/schema';
 import { cloudDb } from '~~/server/utils/db/cloud';
 
 export type McpActor = {

@@ -66,10 +66,17 @@ async function handleSubmit() {
 
     const userSettingsStore = useUserSettingsStore();
     const globalSettingsStore = useGlobalSettingsStore();
-    await Promise.all([
-      userSettingsStore.pull(),
-      globalSettingsStore.pullLatest(),
-    ]);
+    try {
+      await Promise.all([
+        userSettingsStore.pull(),
+        globalSettingsStore.pullLatest(),
+      ]);
+    } catch (pullError) {
+      logger.warn(
+        { error: pullError },
+        'Settings pull after login failed; continuing to app',
+      );
+    }
 
     // Load the theme immediately after pulling settings so there's no "default theme"
     // flash between login and the app.

@@ -9,7 +9,7 @@ import {
   publishers,
   series,
   tags,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 import type { cloudDb } from '~~/server/utils/db/cloud';
 
 type Tx = Parameters<Parameters<typeof cloudDb.transaction>[0]>[0];

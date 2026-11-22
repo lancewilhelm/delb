@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createClient } from '@libsql/client';
 import { drizzle } from 'drizzle-orm/libsql';
-import { books } from '../../../app/utils/db/schema';
+import { books } from '../db/schema';
 import {
   bookSort,
   decodeCursor,

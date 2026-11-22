@@ -4,7 +4,7 @@ import {
   userBookPreferences,
   userBookProgressLog,
   userBookReadingPosition,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 import type { cloudDb } from '~~/server/utils/db/cloud';
 import { visibleBook } from './visibility';
 import { latestReadingProgress, progressHistoryOrder } from './progress-order';

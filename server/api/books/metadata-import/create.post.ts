@@ -10,7 +10,7 @@ import { mkdir } from 'node:fs/promises';
 
 import { and, eq, inArray } from 'drizzle-orm';
 
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 import { logger } from '~/utils/logger';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
@@ -23,7 +23,7 @@ import {
   publishers,
   series,
   tags,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 
 import { resolveDataPath } from '~~/server/utils/books/fs';
 import { buildBookStorageRelativePath } from '~~/server/utils/books/storage/paths';

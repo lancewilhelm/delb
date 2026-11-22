@@ -1,6 +1,6 @@
 # Settings, appearance, and synchronization
 
-Delb keeps account and global settings in the database and persists supported client state in localStorage. Server rendering loads the account settings before applying the theme. Client persistence improves continuity between visits; server rows remain the account-level source of truth.
+Delb keeps account and global settings in the database and persists supported client state in localStorage. An inline SPA boot script applies persisted theme and font preferences before first paint. Client persistence improves continuity between visits; server rows remain the account-level source of truth.
 
 ## Settings ownership
 
@@ -17,14 +17,13 @@ The [user settings store](../../../app/stores/userSettings.ts) includes a deskto
 
 The [command palette](../../../app/composables/useCommandPalette.ts) uses the same user settings store and active device profile as Appearance settings. Search includes nested commands and displays their parent group. Theme selection uses `useThemeAppearance`; custom theme colors and book field order use the same components as Appearance settings.
 
-## Server rendering and sign-in
+## Client boot and sign-in
 
-1. The [auth plugin](../../../app/plugins/auth.server.ts) loads the session.
-2. [Settings preload](../../../app/plugins/00-settings-ssr.server.ts) calls `GET /api/settings` with the request cookie and applies the returned settings and capabilities.
-3. The server theme/font plugins add the selected resources to the HTML.
-4. The browser hydrates the stores. The [sync plugin](../../../app/plugins/sync.client.ts) pulls settings when signed in, including after login and registration.
+1. The inline [SPA boot script](../../../app/utils/spaBootScript.ts) reads `delb.userSettings` from `localStorage` and injects the active theme stylesheet (or custom theme CSS) and font family in `<head>` synchronously before first paint.
+2. The [client auth plugin](../../../app/plugins/auth.client.ts) fetches the active session via `GET /api/auth/get-session` before route middleware executes.
+3. The [sync plugin](../../../app/plugins/sync.client.ts) pulls account and global settings via `GET /api/settings` when signed in, including after login and registration.
 
-This gives server rendering access to database-backed settings without reading browser localStorage. Failed preload can still fall back to defaults; the mechanism does not prove every deployment is free of appearance flashes.
+This keeps initial paint fast without server-side rendering while still reconciling persisted local preferences with database-backed account settings on load.
 
 ## Fixed and system appearance
 
@@ -41,7 +40,7 @@ The current account field is `themePreference`, defined in [themePreference.ts](
 
 Fixed mode uses `fixed`. System mode chooses `light` or `dark` from the operating-system preference. The defaults use system mode with the Guage light/dark pair. A legacy `theme` value migrates to a fixed preference when the store normalizes it.
 
-The [server theme plugin](../../../app/plugins/init-theme.server.ts) emits either a fixed stylesheet or separate light/dark resources with media queries. The [client plugin](../../../app/plugins/init-theme.client.ts) watches the OS preference, resolved theme, preview, and custom palette.
+The [SPA boot script](../../../app/utils/spaBootScript.ts) injects the initial fixed, system, or custom theme resource synchronously before first paint. The [client plugin](../../../app/plugins/init-theme.client.ts) watches the OS preference, resolved theme, preview, and custom palette.
 
 [useThemeAppearance](../../../app/composables/useThemeAppearance.ts) selects a fixed theme, assigns a light/dark slot, or returns to system mode. Theme previews do not become saved selections until a selection action updates the settings.
 

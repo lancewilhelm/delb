@@ -5,8 +5,8 @@ import { createHash } from 'node:crypto';
 import { and, eq, inArray } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { books, collectionBooks, collectionMembers } from '~/utils/db/schema';
-import { auth } from '~/utils/auth';
+import { books, collectionBooks, collectionMembers } from '~~/server/utils/db/schema';
+import { auth } from '~~/server/utils/auth';
 
 export type CoverVariant = 'thumb' | 'source';
 

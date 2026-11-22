@@ -1,4 +1,4 @@
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 import { changeShelfBooks } from '~~/server/utils/shelves/model';
 import { cacheBoundedRequestBody } from '~~/server/utils/books/storage/bounded-upload';
 export default defineEventHandler(async (event) => {

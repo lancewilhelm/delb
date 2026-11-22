@@ -4,7 +4,7 @@ import { mkdir, readdir, rename, stat } from 'node:fs/promises';
 import { logger } from '~/utils/logger';
 import { withBookStorageLock } from '~~/server/utils/books/storage/book-lock';
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { bookFiles, storageOperations } from '~/utils/db/schema';
+import { bookFiles, storageOperations } from '~~/server/utils/db/schema';
 import { and, eq } from 'drizzle-orm';
 
 import {

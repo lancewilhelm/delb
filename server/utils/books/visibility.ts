@@ -9,7 +9,7 @@ import {
   publishers,
   series,
   tags,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 
 export function visibleBook(userId: string, bookId: AnyColumn = books.id) {
   return sql`EXISTS (SELECT 1 FROM ${collectionBooks} INNER JOIN ${collectionMembers} ON ${collectionMembers.collectionId} = ${collectionBooks.collectionId} WHERE ${collectionBooks.bookId} = ${bookId} AND ${collectionMembers.userId} = ${userId})`;

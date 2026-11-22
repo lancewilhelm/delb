@@ -18,7 +18,7 @@ import {
   userBookReadingPosition,
   userBookProgressLog,
   userBookStatus,
-} from '../../../app/utils/db/schema';
+} from '../db/schema';
 import type {
   DashboardData,
   DashboardShelf,

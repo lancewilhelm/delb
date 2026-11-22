@@ -1,7 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { and, eq } from 'drizzle-orm';
-import { books, bookFiles, storageOperations } from '~/utils/db/schema';
+import { books, bookFiles, storageOperations } from '~~/server/utils/db/schema';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { recoverPendingCoverUpdates } from '~~/server/utils/books/cover-update-transaction';
 import { withBookStorageLock } from './book-lock';

@@ -1,6 +1,6 @@
-import { auth } from '~/utils/auth'; // path to your auth file
+import { auth } from '~~/server/utils/auth'; // path to your auth file
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { users } from '~/utils/db/schema';
+import { users } from '~~/server/utils/db/schema';
 import { count } from 'drizzle-orm';
 
 export default defineEventHandler(async (event) => {

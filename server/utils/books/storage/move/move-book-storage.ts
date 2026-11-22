@@ -10,7 +10,7 @@ import {
   bookFiles,
   books,
   storageOperations,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 import { logger } from '~/utils/logger';
 import { moveStoredFiles } from '~~/server/utils/books/storage/move-operation';
 import { moveDecision } from '~~/server/utils/books/storage/move-recovery';

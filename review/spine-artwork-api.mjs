@@ -3,7 +3,11 @@ import { randomBytes } from 'node:crypto';
 import sharp from 'sharp';
 import { fetchAuth } from './fetch-auth.mjs';
 
-const base = 'http://127.0.0.1:4317';
+const base = (
+  process.env.DELB_REVIEW_URL ||
+  process.env.BASE_URL ||
+  'http://127.0.0.1:4317'
+).replace(/\/$/, '');
 const suffix = randomBytes(6).toString('hex');
 async function signup(role) {
   const email = `spine-${role}-${suffix}@example.invalid`;

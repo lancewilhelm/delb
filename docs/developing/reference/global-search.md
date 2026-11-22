@@ -15,5 +15,5 @@ Book results include ISBN identifiers (when stored on the book), and you can sea
 Implementation details:
 
 - API: `server/api/search/index.get.ts`
-- Identifiers storage: `app/utils/db/schema.ts` (`book_identifiers` table)
+- Identifiers storage: `server/utils/db/schema.ts` (`book_identifiers` table)
 - UI: `app/components/GlobalSearch/GlobalSearchModal.vue`

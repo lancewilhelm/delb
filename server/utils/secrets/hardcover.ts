@@ -1,6 +1,6 @@
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { eq } from 'drizzle-orm';
-import { globalSecrets } from '~/utils/db/schema';
+import { globalSecrets } from '~~/server/utils/db/schema';
 
 /**
  * Server-side Hardcover token storage.

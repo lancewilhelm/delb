@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import sharp from 'sharp';
 import { eq } from 'drizzle-orm';
-import { auth } from '~/utils/auth';
-import { authors, bookAuthors, books } from '~/utils/db/schema';
+import { auth } from '~~/server/utils/auth';
+import { authors, bookAuthors, books } from '~~/server/utils/db/schema';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { assertBookEditor } from '~~/server/utils/collections/model';
 import { cacheBoundedRequestBody } from '~~/server/utils/books/storage/bounded-upload';

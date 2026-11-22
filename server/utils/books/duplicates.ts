@@ -8,7 +8,7 @@ import {
   books,
   collectionBooks,
   collectionMembers,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 
 export type IdentifierInput = { type: string; value: string };
 

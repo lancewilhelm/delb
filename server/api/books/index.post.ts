@@ -16,9 +16,9 @@ import {
   publishers,
   series,
   tags,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 import { logger } from '~/utils/logger';
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 import { makeAuthorSortKey, makeTitleSortKey } from '~~/server/utils/sort/keys';
 import { normalizePublishedAt } from '~~/server/utils/books/published';
 

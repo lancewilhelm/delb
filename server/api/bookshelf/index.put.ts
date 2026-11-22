@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
-import { auth } from '~/utils/auth';
-import { userBookshelves } from '~/utils/db/schema';
+import { auth } from '~~/server/utils/auth';
+import { userBookshelves } from '~~/server/utils/db/schema';
 import { parseBookshelf } from '~~/shared/bookshelf';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { cacheBoundedRequestBody } from '~~/server/utils/books/storage/bounded-upload';

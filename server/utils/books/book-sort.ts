@@ -9,7 +9,7 @@ import {
   sql,
   type SQLWrapper,
 } from 'drizzle-orm';
-import { books } from '../../../app/utils/db/schema';
+import { books } from '../db/schema';
 import { pageSort } from './page-sort';
 
 export type SortKey = 'dateAdded' | 'alphabetical' | 'publishedDate' | 'pages';

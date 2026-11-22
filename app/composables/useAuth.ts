@@ -1,31 +1,52 @@
 import { defu } from 'defu';
 import type { RouteLocationRaw } from 'vue-router';
-import { adminClient } from 'better-auth/client/plugins';
-import { createAuthClient } from 'better-auth/vue';
-
-export const typedClient = createAuthClient({
-  plugins: [adminClient()],
-});
-
-export type Session = typeof typedClient.$Infer.Session.session;
-export type User = typeof typedClient.$Infer.Session.user;
+import {
+  createDelbAuthClient,
+  type AuthFetcher,
+  type Session,
+  type SessionPayload,
+  type User,
+} from '~/utils/authClient';
 
 interface RuntimeAuthConfig {
   redirectUserTo: RouteLocationRaw | string;
   redirectGuestTo: RouteLocationRaw | string;
 }
 
-export function useAuth() {
-  const url = useRequestURL();
-  const headers = import.meta.server ? useRequestHeaders() : undefined;
+const PERSISTED_USER_STORES = [
+  'delb.userSettings',
+  'delb.globalSettings',
+  'delb.ui',
+  'delb.collections',
+  'delb.booksIndexFilters',
+];
 
-  const client = createAuthClient({
-    baseURL: url.origin,
-    fetchOptions: {
-      headers,
-    },
-    plugins: [adminClient()],
-  });
+let inFlightSessionFetch: Promise<SessionPayload | null> | null = null;
+
+function clearUserStoresAndStorage(clearAuthUserId: boolean) {
+  const userSettingsStore = useUserSettingsStore();
+  const globalSettingsStore = useGlobalSettingsStore();
+  const uiStore = useUiStore();
+  const collectionsStore = useCollectionsStore();
+
+  userSettingsStore.$reset();
+  globalSettingsStore.$reset();
+  uiStore.$reset();
+  collectionsStore.$reset();
+  useBooksIndexFiltersStore().clearAll();
+
+  if (typeof localStorage !== 'undefined') {
+    for (const key of PERSISTED_USER_STORES) {
+      localStorage.removeItem(key);
+    }
+    if (clearAuthUserId) {
+      localStorage.removeItem('delb.authUserId');
+    }
+  }
+}
+
+export function useAuth() {
+  const client = createDelbAuthClient($fetch as unknown as AuthFetcher);
 
   const options = defu(
     useRuntimeConfig().public.auth as Partial<RuntimeAuthConfig>,
@@ -36,68 +57,43 @@ export function useAuth() {
   );
   const session = useState<Session | null>('auth:session', () => null);
   const user = useState<User | null>('auth:user', () => null);
-  const sessionFetching = import.meta.server
-    ? ref(false)
-    : useState('auth:sessionFetching', () => false);
+  const sessionFetching = useState('auth:sessionFetching', () => false);
 
-  const fetchSession = async () => {
-    if (sessionFetching.value) {
-      console.log('already fetching session');
-      return;
+  const fetchSession = async (): Promise<SessionPayload | null> => {
+    if (inFlightSessionFetch) {
+      return inFlightSessionFetch;
     }
+
     sessionFetching.value = true;
-    const { data } = await client.getSession({
-      fetchOptions: {
-        headers,
-      },
-    });
-    session.value = data?.session || null;
-    user.value = data?.user || null;
+    inFlightSessionFetch = (async () => {
+      try {
+        const { data } = await client.getSession();
+        session.value = data?.session ?? null;
+        user.value = data?.user ?? null;
 
-    if (import.meta.client) {
-      const nextUserId = (data?.user as { id?: string } | undefined)?.id;
-      if (nextUserId) {
-        const key = 'delb.authUserId';
-        const prevUserId = localStorage.getItem(key);
-        if (prevUserId && prevUserId !== nextUserId) {
-          // User switched accounts in the same browser. Clear persisted state so we don't
-          // leak preferences/UI state between accounts.
-          const userSettingsStore = useUserSettingsStore();
-          const globalSettingsStore = useGlobalSettingsStore();
-          const uiStore = useUiStore();
-          const collectionsStore = useCollectionsStore();
-
-          userSettingsStore.$reset();
-          globalSettingsStore.$reset();
-          uiStore.$reset();
-          collectionsStore.$reset();
-          useBooksIndexFiltersStore().clearAll();
-
-          const storesToClear = [
-            'delb.userSettings',
-            'delb.globalSettings',
-            'delb.ui',
-            'delb.collections',
-            'delb.booksIndexFilters',
-          ];
-          for (const store of storesToClear) {
-            localStorage.removeItem(store);
+        if (typeof localStorage !== 'undefined') {
+          const nextUserId = data?.user?.id;
+          if (nextUserId) {
+            const key = 'delb.authUserId';
+            const prevUserId = localStorage.getItem(key);
+            if (prevUserId && prevUserId !== nextUserId) {
+              // User switched accounts in the same browser. Clear persisted state so we don't
+              // leak preferences/UI state between accounts.
+              clearUserStoresAndStorage(false);
+            }
+            localStorage.setItem(key, nextUserId);
           }
         }
-        localStorage.setItem(key, nextUserId);
+
+        return data;
+      } finally {
+        sessionFetching.value = false;
+        inFlightSessionFetch = null;
       }
-    }
+    })();
 
-    sessionFetching.value = false;
-    return data;
+    return inFlightSessionFetch;
   };
-
-  if (import.meta.client) {
-    client.$store.listen('$sessionSignal', async (signal) => {
-      if (!signal) return;
-      await fetchSession();
-    });
-  }
 
   async function signOut() {
     // Close any global UI before navigation.
@@ -109,30 +105,7 @@ export function useAuth() {
     session.value = null;
     user.value = null;
 
-    // Reset all stores
-    const userSettingsStore = useUserSettingsStore();
-    const globalSettingsStore = useGlobalSettingsStore();
-    const collectionsStore = useCollectionsStore();
-    userSettingsStore.$reset();
-    globalSettingsStore.$reset();
-    uiStore.$reset();
-    collectionsStore.$reset();
-    useBooksIndexFiltersStore().clearAll();
-
-    // Clear persisted local storage
-    const storesToClear = [
-      'delb.userSettings',
-      'delb.globalSettings',
-      'delb.ui',
-      'delb.collections',
-      'delb.booksIndexFilters',
-    ];
-    if (import.meta.client) {
-      for (const store of storesToClear) {
-        localStorage.removeItem(store);
-      }
-      localStorage.removeItem('delb.authUserId');
-    }
+    clearUserStoresAndStorage(true);
 
     await navigateTo('/login', { replace: true });
 
@@ -152,6 +125,7 @@ export function useAuth() {
     }),
     changePassword: client.changePassword,
     changeEmail: client.changeEmail,
+    updateUser: client.updateUser,
     signOut,
     options,
     fetchSession,

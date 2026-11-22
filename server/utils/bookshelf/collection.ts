@@ -5,7 +5,7 @@ import {
   books,
   collectionBookshelves,
   collectionMembers,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 import {
   BOOKSHELF_MAX_BOOKS,
   emptyBookshelf,

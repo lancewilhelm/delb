@@ -1,4 +1,4 @@
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 import { saveCollectionShelf } from '~~/server/utils/bookshelf/collection';
 import { cacheBoundedRequestBody } from '~~/server/utils/books/storage/bounded-upload';
 

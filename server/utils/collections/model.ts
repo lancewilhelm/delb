@@ -5,7 +5,7 @@ import {
   collections,
   systemState,
   users,
-} from '../../../app/utils/db/schema';
+} from '../db/schema';
 import type { cloudDb } from '../db/cloud';
 import { recordShelfBookMove } from '../bookshelf/move';
 

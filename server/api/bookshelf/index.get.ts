@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
-import { auth } from '~/utils/auth';
-import { userBookshelves } from '~/utils/db/schema';
+import { auth } from '~~/server/utils/auth';
+import { userBookshelves } from '~~/server/utils/db/schema';
 import { cloudDb } from '~~/server/utils/db/cloud';
 
 export default defineEventHandler(async (event) => {

@@ -1,6 +1,6 @@
 import { logger } from '~/utils/logger';
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { globalSettings } from '~/utils/db/schema';
+import { globalSettings } from '~~/server/utils/db/schema';
 import { getHardcoverToken } from '~~/server/utils/secrets/hardcover';
 
 type MetadataProviderKey = 'googleBooks' | 'hardcover';

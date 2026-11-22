@@ -6,7 +6,7 @@ import {
   randomUUID,
 } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
-import { sharedCodexImageConnection } from '~/utils/db/schema';
+import { sharedCodexImageConnection } from '~~/server/utils/db/schema';
 import { cloudDb } from '~~/server/utils/db/cloud';
 
 const sharedId = 'spine-generation';

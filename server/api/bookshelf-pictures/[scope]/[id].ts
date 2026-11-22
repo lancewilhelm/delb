@@ -1,4 +1,4 @@
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 import { cacheBoundedRequestBody } from '~~/server/utils/books/storage/bounded-upload';
 import {
   pictureAccess,

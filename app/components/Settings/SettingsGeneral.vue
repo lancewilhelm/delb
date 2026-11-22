@@ -4,7 +4,19 @@ const changePasswordSuccess = ref(false);
 const currentPassword = ref('');
 const newPassword = ref('');
 const confirmPassword = ref('');
-const { changePassword, changeEmail, fetchSession, user, client } = useAuth();
+const { changePassword, changeEmail, updateUser, fetchSession, user, signOut } =
+  useAuth();
+const signingOut = ref(false);
+
+async function handleSignOut() {
+  if (signingOut.value) return;
+  signingOut.value = true;
+  try {
+    await signOut();
+  } finally {
+    signingOut.value = false;
+  }
+}
 async function handleUpdatePassword() {
   if (newPassword.value !== confirmPassword.value) {
     alert('New password and confirmation do not match');
@@ -79,7 +91,7 @@ async function handleUpdateProfile() {
 
   try {
     if (trimmedName !== (user.value.name ?? '')) {
-      const { error } = await client.updateUser({ name: trimmedName });
+      const { error } = await updateUser({ name: trimmedName });
       if (error) {
         throw error;
       }
@@ -112,12 +124,20 @@ async function handleUpdateProfile() {
 <template>
   <div class="w-full">
     <SettingsUIGroup title="Credentials" icon="lucide:lock">
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <button
           class="flex items-center gap-1 px-4 py-2 text-left rounded-lg bg-(--sub-alt-color)"
           @click="changePasswordModalVisible = true"
         >
           update password
+        </button>
+        <button
+          class="flex items-center gap-1.5 px-4 py-2 text-left rounded-lg bg-(--sub-alt-color) disabled:opacity-60"
+          :disabled="signingOut"
+          @click="handleSignOut"
+        >
+          <Icon name="lucide:log-out" class="w-4 h-4" />
+          sign out
         </button>
         <div
           v-if="changePasswordSuccess"

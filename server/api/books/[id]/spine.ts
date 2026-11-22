@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
-import { auth } from '~/utils/auth';
-import { books, bookSpines, collectionMembers } from '~/utils/db/schema';
+import { auth } from '~~/server/utils/auth';
+import { books, bookSpines, collectionMembers } from '~~/server/utils/db/schema';
 import { parseSpineEdits } from '~~/shared/spine-artwork';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {

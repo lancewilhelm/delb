@@ -8,7 +8,11 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fetchAuth } from './fetch-auth.mjs';
 
 // Run against the disposable demo started by review/start-demo.mjs.
-const base = process.env.DELB_REVIEW_URL || 'http://127.0.0.1:4317';
+const base = (
+  process.env.DELB_REVIEW_URL ||
+  process.env.BASE_URL ||
+  'http://127.0.0.1:4317'
+).replace(/\/$/, '');
 assert.match(base, /^http:\/\/127\.0\.0\.1:\d+$/);
 assert.equal(
   (await readFile('review/demo/.synthetic-review', 'utf8')).trim(),

@@ -1,6 +1,7 @@
 """Optional compatibility check using the Python MCP transport used by Hermes."""
 import asyncio
 import json
+import os
 import sys
 
 import httpx
@@ -9,9 +10,10 @@ from mcp.client.streamable_http import streamable_http_client
 
 
 async def main():
+    base = (os.environ.get("DELB_REVIEW_URL") or os.environ.get("BASE_URL") or "http://127.0.0.1:4317").rstrip("/")
     token = sys.stdin.readline().strip()
     async with httpx.AsyncClient(headers={"Authorization": f"Bearer {token}"}) as http:
-        async with streamable_http_client("http://127.0.0.1:4317/api/mcp", http_client=http) as (reader, writer, _):
+        async with streamable_http_client(f"{base}/api/mcp", http_client=http) as (reader, writer, _):
             async with ClientSession(reader, writer) as session:
                 await session.initialize()
                 tools = await session.list_tools()

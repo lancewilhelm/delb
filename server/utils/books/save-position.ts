@@ -1,6 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import type { LibSQLDatabase } from 'drizzle-orm/libsql';
-import { userBookReadingPosition } from '../../../app/utils/db/schema';
+import { userBookReadingPosition } from '../db/schema';
 
 type Position = {
   userId: string;
