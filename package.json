@@ -32,7 +32,11 @@
     "test:reader-fullscreen": "node --import tsx --test app/utils/readerFullscreen.test.ts",
     "test:cover-upload": "pnpm --filter @delb/epub build && node --import tsx --test server/utils/books/cover-upload.test.ts app/utils/coverUpload.test.ts",
     "test": "pnpm --filter @delb/epub build && node scripts/test.mjs",
-    "test:integration": "node review/run-api-regressions.mjs"
+    "test:integration": "node review/run-api-regressions.mjs",
+    "go:build": "CGO_ENABLED=0 go build -o bin/delb ./cmd/delb",
+    "go:test": "go test ./...",
+    "dev:go": "pnpm go:build && node scripts/strangler.mjs --dev",
+    "test:integration:go": "pnpm go:build && DELB_SERVER_CMD=\"node $PWD/scripts/strangler.mjs\" pnpm test:integration"
   },
   "dependencies": {
     "@delb/epub": "workspace:*",

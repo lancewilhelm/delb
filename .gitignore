@@ -6,6 +6,10 @@
 .cache
 dist
 
+# Go build outputs
+/bin/
+/delb
+
 # Node dependencies
 node_modules
 .pnpm-store
