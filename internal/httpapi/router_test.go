@@ -14,11 +14,13 @@ import (
 	"github.com/lancewilhelm/delb"
 	"github.com/lancewilhelm/delb/internal/auth"
 	"github.com/lancewilhelm/delb/internal/books"
+	"github.com/lancewilhelm/delb/internal/bookshelf"
 	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/db"
 	"github.com/lancewilhelm/delb/internal/httpapi"
 	"github.com/lancewilhelm/delb/internal/proxy"
 	"github.com/lancewilhelm/delb/internal/settings"
+	"github.com/lancewilhelm/delb/internal/spines"
 	"github.com/lancewilhelm/delb/internal/users"
 )
 
@@ -77,12 +79,25 @@ func TestRouterPhase2AOwnedAndUnportedProxied(t *testing.T) {
 		LibraryDir:  filepath.Join(tmp, "library"),
 		Logger:      discard,
 	})
+	bookshelfSvc := bookshelf.NewService(bookshelf.ServiceOptions{
+		DB:          opened.DB,
+		AuthService: authSvc,
+		TokenSecret: "router-test-secret-0123456789abcdef0123456789",
+		Logger:      discard,
+	})
+	spinesSvc := spines.NewService(spines.ServiceOptions{
+		DB:          opened.DB,
+		AuthService: authSvc,
+		AuthSecret:  "router-test-secret-0123456789abcdef0123456789",
+		LibraryDir:  filepath.Join(tmp, "library"),
+		Logger:      discard,
+	})
 
 	handler := httpapi.NewHandler(httpapi.RouterOptions{
 		DB:          opened.DB,
 		Logger:      discard,
 		AuthService: authSvc,
-		Services:    []httpapi.RouteRegistrar{settingsSvc, usersSvc, collectionsSvc, booksSvc},
+		Services:    []httpapi.RouteRegistrar{settingsSvc, usersSvc, collectionsSvc, booksSvc, bookshelfSvc, spinesSvc},
 		Upstream:    p,
 	})
 	front := httptest.NewServer(handler)
@@ -154,6 +169,31 @@ func TestRouterPhase2AOwnedAndUnportedProxied(t *testing.T) {
 		{http.MethodDelete, "/api/tags/t1", http.StatusUnauthorized},
 		{http.MethodPost, "/api/tags/t1/merge", http.StatusUnauthorized},
 		{http.MethodGet, "/api/search", http.StatusUnauthorized},
+		// Phase 2C Go-owned routes
+		{http.MethodGet, "/api/bookshelf", http.StatusUnauthorized},
+		{http.MethodPut, "/api/bookshelf", http.StatusUnauthorized},
+		{http.MethodGet, "/api/collections/abc-123/bookshelf", http.StatusUnauthorized},
+		{http.MethodPut, "/api/collections/abc-123/bookshelf", http.StatusUnauthorized},
+		{http.MethodGet, "/api/shelves", http.StatusUnauthorized},
+		{http.MethodPost, "/api/shelves", http.StatusUnauthorized},
+		{http.MethodGet, "/api/shelves/s1", http.StatusUnauthorized},
+		{http.MethodPut, "/api/shelves/s1", http.StatusUnauthorized},
+		{http.MethodPatch, "/api/shelves/s1", http.StatusUnauthorized},
+		{http.MethodDelete, "/api/shelves/s1", http.StatusUnauthorized},
+		{http.MethodPost, "/api/shelves/s1/books", http.StatusUnauthorized},
+		{http.MethodGet, "/api/books/book-1/shelves", http.StatusUnauthorized},
+		{http.MethodGet, "/api/bookshelf-pictures/collection/abc-123", http.StatusUnauthorized},
+		{http.MethodPost, "/api/bookshelf-pictures/personal/s1", http.StatusUnauthorized},
+		{http.MethodGet, "/api/books/book-1/spine", http.StatusUnauthorized},
+		{http.MethodPost, "/api/books/book-1/spine", http.StatusUnauthorized},
+		{http.MethodDelete, "/api/books/book-1/spine", http.StatusUnauthorized},
+		{http.MethodPost, "/api/books/book-1/spine-generate", http.StatusUnauthorized},
+		{http.MethodGet, "/api/books/book-1/spine-generate/connection", http.StatusUnauthorized},
+		{http.MethodPost, "/api/books/book-1/spine-generate/connection", http.StatusMethodNotAllowed},
+		{http.MethodGet, "/api/books/book-1/spine-generate/series-references", http.StatusUnauthorized},
+		{http.MethodGet, "/api/settings/admin/chatgpt-image", http.StatusUnauthorized},
+		{http.MethodPost, "/api/settings/admin/chatgpt-image", http.StatusUnauthorized},
+		{http.MethodDelete, "/api/settings/admin/chatgpt-image", http.StatusUnauthorized},
 	} {
 		req, _ := http.NewRequest(tc.method, front.URL+tc.path, nil)
 		resp, err := http.DefaultClient.Do(req)
@@ -166,28 +206,20 @@ func TestRouterPhase2AOwnedAndUnportedProxied(t *testing.T) {
 		}
 	}
 
-	// 2. Unported routes — crucially including /api/collections/{id}/bookshelf,
-	// Phase 2C book sub-routes (/spine, /spine-generate*, /shelves), and
-	// unported /api/settings/admin/* endpoints — fall through cleanly to upstream!
+	// 2. Unported Phase 2D routes fall through cleanly to upstream!
 	for _, tc := range []struct {
 		method string
 		path   string
 	}{
-		{http.MethodGet, "/api/collections/abc-123/bookshelf"},
-		{http.MethodPut, "/api/collections/abc-123/bookshelf"},
-		{http.MethodGet, "/api/books/book-1/spine"},
-		{http.MethodPost, "/api/books/book-1/spine"},
-		{http.MethodDelete, "/api/books/book-1/spine"},
-		{http.MethodPost, "/api/books/book-1/spine-generate"},
-		{http.MethodGet, "/api/books/book-1/spine-generate/connection"},
-		{http.MethodGet, "/api/books/book-1/spine-generate/series-references"},
-		{http.MethodGet, "/api/books/book-1/shelves"},
-		{http.MethodPut, "/api/books/book-1/shelves"},
-		{http.MethodGet, "/api/bookshelf"},
-		{http.MethodGet, "/api/shelves"},
+		{http.MethodGet, "/api/settings/admin/health"},
 		{http.MethodPost, "/api/settings/admin/health"},
+		{http.MethodGet, "/api/settings/admin/calibre"},
 		{http.MethodPost, "/api/settings/admin/calibre"},
-		{http.MethodGet, "/api/settings/admin/chatgpt-image"},
+		{http.MethodPost, "/api/nuke"},
+		{http.MethodGet, "/api/mcp"},
+		{http.MethodPost, "/api/mcp"},
+		{http.MethodGet, "/api/mcp-connections"},
+		{http.MethodPost, "/api/mcp-connections"},
 		{http.MethodGet, "/"},
 	} {
 		before := upstreamHits

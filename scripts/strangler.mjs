@@ -1,5 +1,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
+import { createServer as createHttpServer } from 'node:http';
+import { createRequire } from 'node:module';
 import { createConnection } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -81,6 +83,8 @@ const nodeOptionsParts = [];
 if (process.env.NODE_OPTIONS) {
   nodeOptionsParts.push(process.env.NODE_OPTIONS);
 }
+let fakeCodexServer = null;
+let fakeCodexBaseUrl = '';
 if (!isDev) {
   const denyOutbound = path.resolve('review/deny-outbound.cjs');
   if (existsSync(denyOutbound)) {
@@ -89,6 +93,38 @@ if (!isDev) {
   const fakeCodex = path.resolve('review/fake-codex-provider.cjs');
   if (existsSync(fakeCodex)) {
     nodeOptionsParts.push(`--require ${fakeCodex}`);
+    const require = createRequire(fakeCodex);
+    require(fakeCodex);
+    fakeCodexServer = createHttpServer(async (req, res) => {
+      try {
+        const chunks = [];
+        for await (const chunk of req) chunks.push(chunk);
+        const body = Buffer.concat(chunks).toString('utf8');
+        const targetOrigin =
+          req.url && req.url.startsWith('/backend-api/')
+            ? 'https://chatgpt.com'
+            : 'https://auth.openai.com';
+        const response = await globalThis.fetch(`${targetOrigin}${req.url}`, {
+          method: req.method,
+          headers: req.headers,
+          ...(req.method !== 'GET' && req.method !== 'HEAD' ? { body } : {}),
+        });
+        res.statusCode = response.status;
+        const ct = response.headers.get('content-type');
+        if (ct) res.setHeader('content-type', ct);
+        const buf = Buffer.from(await response.arrayBuffer());
+        res.end(buf);
+      } catch (err) {
+        res.statusCode = 500;
+        res.end(String(err));
+      }
+    });
+    await new Promise((resolve, reject) => {
+      fakeCodexServer.once('error', reject);
+      fakeCodexServer.listen(0, '127.0.0.1', resolve);
+    });
+    const addr = fakeCodexServer.address();
+    fakeCodexBaseUrl = `http://127.0.0.1:${addr.port}`;
   }
 }
 
@@ -127,6 +163,9 @@ let shuttingDown = false;
 function shutdown(code = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
+  if (fakeCodexServer) {
+    fakeCodexServer.close();
+  }
   if (goProc && goProc.exitCode === null) {
     goProc.kill('SIGTERM');
   }
@@ -186,6 +225,12 @@ if (!shuttingDown) {
       HOST: frontHost,
       PORT: String(frontPort),
       DELB_UPSTREAM_URL: upstreamUrl,
+      ...(fakeCodexBaseUrl
+        ? {
+            DELB_CODEX_AUTH_URL: fakeCodexBaseUrl,
+            DELB_CODEX_API_URL: fakeCodexBaseUrl,
+          }
+        : {}),
     },
     stdio: 'inherit',
   });

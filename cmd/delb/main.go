@@ -14,12 +14,14 @@ import (
 	"github.com/lancewilhelm/delb"
 	"github.com/lancewilhelm/delb/internal/auth"
 	"github.com/lancewilhelm/delb/internal/books"
+	"github.com/lancewilhelm/delb/internal/bookshelf"
 	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/config"
 	"github.com/lancewilhelm/delb/internal/db"
 	"github.com/lancewilhelm/delb/internal/httpapi"
 	"github.com/lancewilhelm/delb/internal/proxy"
 	"github.com/lancewilhelm/delb/internal/settings"
+	"github.com/lancewilhelm/delb/internal/spines"
 	"github.com/lancewilhelm/delb/internal/storage"
 	"github.com/lancewilhelm/delb/internal/users"
 )
@@ -109,6 +111,23 @@ func main() {
 		Logger:      logger.With("component", "books"),
 	})
 
+	bookshelfSvc := bookshelf.NewService(bookshelf.ServiceOptions{
+		DB:          opened.DB,
+		AuthService: authSvc,
+		TokenSecret: cfg.AuthSecret,
+		Logger:      logger.With("component", "bookshelf"),
+	})
+
+	spinesSvc := spines.NewService(spines.ServiceOptions{
+		DB:           opened.DB,
+		AuthService:  authSvc,
+		AuthSecret:   cfg.AuthSecret,
+		LibraryDir:   cfg.LibraryDir,
+		CodexAuthURL: cfg.CodexAuthURL,
+		CodexAPIURL:  cfg.CodexAPIURL,
+		Logger:       logger.With("component", "spines"),
+	})
+
 	recoveryGate := storage.StartRecovery(ctx, opened.DB, cfg.LibraryDir, logger.With("component", "storage"))
 
 	var upstream http.Handler
@@ -130,6 +149,8 @@ func main() {
 			usersSvc,
 			collectionsSvc,
 			booksSvc,
+			bookshelfSvc,
+			spinesSvc,
 		},
 		Middleware: []func(http.Handler) http.Handler{
 			recoveryGate.Middleware,

@@ -14,6 +14,11 @@ import (
 // neither BETTER_AUTH_SECRET nor AUTH_SECRET is set.
 const DefaultDevSecret = "better-auth-secret-12345678901234567890"
 
+const (
+	DefaultCodexAuthURL = "https://auth.openai.com"
+	DefaultCodexAPIURL  = "https://chatgpt.com"
+)
+
 type Config struct {
 	Host           string
 	Port           string
@@ -23,6 +28,8 @@ type Config struct {
 	AuthURL        string
 	TrustedOrigins []string
 	UpstreamURL    string
+	CodexAuthURL   string
+	CodexAPIURL    string
 	LogLevel       slog.Level
 	IsProduction   bool
 	AutoMigrate    bool
@@ -74,6 +81,26 @@ func Load() (Config, error) {
 		}
 	}
 
+	codexAuthURL := strings.TrimRight(strings.TrimSpace(os.Getenv("DELB_CODEX_AUTH_URL")), "/")
+	if codexAuthURL == "" {
+		codexAuthURL = DefaultCodexAuthURL
+	} else {
+		u, err := url.Parse(codexAuthURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return Config{}, fmt.Errorf("invalid DELB_CODEX_AUTH_URL %q", codexAuthURL)
+		}
+	}
+
+	codexAPIURL := strings.TrimRight(strings.TrimSpace(os.Getenv("DELB_CODEX_API_URL")), "/")
+	if codexAPIURL == "" {
+		codexAPIURL = DefaultCodexAPIURL
+	} else {
+		u, err := url.Parse(codexAPIURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return Config{}, fmt.Errorf("invalid DELB_CODEX_API_URL %q", codexAPIURL)
+		}
+	}
+
 	autoMigrate := true
 	if raw := strings.TrimSpace(os.Getenv("DELB_AUTO_MIGRATE")); raw != "" {
 		lower := strings.ToLower(raw)
@@ -100,6 +127,8 @@ func Load() (Config, error) {
 		AuthURL:        authURL,
 		TrustedOrigins: trustedOrigins,
 		UpstreamURL:    upstreamURL,
+		CodexAuthURL:   codexAuthURL,
+		CodexAPIURL:    codexAPIURL,
 		LogLevel:       parseLogLevel(os.Getenv("LOG_LEVEL")),
 		IsProduction:   isProd,
 		AutoMigrate:    autoMigrate,

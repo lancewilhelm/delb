@@ -105,6 +105,100 @@ func ResizeMaxWidth(img image.Image, maxWidth int) image.Image {
 	return dst
 }
 
+// ResizeInsideNoEnlarge resizes img proportionally to fit within maxW x maxH
+// without enlarging if already smaller.
+func ResizeInsideNoEnlarge(img image.Image, maxW, maxH int) image.Image {
+	bounds := img.Bounds()
+	w := bounds.Dx()
+	h := bounds.Dy()
+	if w <= 0 || h <= 0 || maxW <= 0 || maxH <= 0 || (w <= maxW && h <= maxH) {
+		return img
+	}
+	scaleW := float64(maxW) / float64(w)
+	scaleH := float64(maxH) / float64(h)
+	scale := scaleW
+	if scaleH < scale {
+		scale = scaleH
+	}
+	newW := int(float64(w)*scale + 0.5)
+	newH := int(float64(h)*scale + 0.5)
+	if newW < 1 {
+		newW = 1
+	}
+	if newH < 1 {
+		newH = 1
+	}
+	dst := image.NewNRGBA(image.Rect(0, 0, newW, newH))
+	draw.CatmullRom.Scale(dst, dst.Bounds(), img, bounds, draw.Over, nil)
+	return dst
+}
+
+// ResizeExactFill resizes img to exact dimensions w x h (ignoring aspect ratio).
+func ResizeExactFill(img image.Image, w, h int) image.Image {
+	bounds := img.Bounds()
+	if w <= 0 || h <= 0 {
+		return img
+	}
+	dst := image.NewNRGBA(image.Rect(0, 0, w, h))
+	draw.CatmullRom.Scale(dst, dst.Bounds(), img, bounds, draw.Over, nil)
+	return dst
+}
+
+// CropImage extracts the rectangle (left, top, left+width, top+height) relative
+// to img.Bounds().Min into a new NRGBA image with origin (0, 0).
+func CropImage(img image.Image, left, top, width, height int) (*image.NRGBA, error) {
+	b := img.Bounds()
+	if left < 0 || top < 0 || width <= 0 || height <= 0 || left+width > b.Dx() || top+height > b.Dy() {
+		return nil, errors.New("crop region out of bounds")
+	}
+	dst := image.NewNRGBA(image.Rect(0, 0, width, height))
+	srcRect := image.Rect(b.Min.X+left, b.Min.Y+top, b.Min.X+left+width, b.Min.Y+top+height)
+	draw.Copy(dst, image.Point{}, img, srcRect, draw.Src, nil)
+	return dst, nil
+}
+
+// IsAnimatedImage reports whether data is an animated GIF, APNG, or animated WebP.
+func IsAnimatedImage(data []byte, format string) bool {
+	switch strings.ToLower(format) {
+	case "gif":
+		g, err := gif.DecodeAll(bytes.NewReader(data))
+		return err == nil && len(g.Image) > 1
+	case "png":
+		// APNG files contain an acTL chunk before the first IDAT chunk.
+		if len(data) < 8 || !bytes.Equal(data[:8], []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}) {
+			return false
+		}
+		pos := 8
+		for pos+12 <= len(data) {
+			chunkLen := int(binary.BigEndian.Uint32(data[pos : pos+4]))
+			chunkType := string(data[pos+4 : pos+8])
+			if chunkType == "acTL" {
+				return true
+			}
+			if chunkType == "IDAT" || chunkType == "IEND" {
+				return false
+			}
+			next := pos + 12 + chunkLen
+			if chunkLen < 0 || next > len(data) {
+				return false
+			}
+			pos = next
+		}
+		return false
+	case "webp":
+		// Extended WebP VP8X chunk has animation flag at bit 1 (0x02) of byte 0 of payload.
+		if len(data) < 30 || string(data[0:4]) != "RIFF" || string(data[8:12]) != "WEBP" {
+			return false
+		}
+		if string(data[12:16]) == "VP8X" && len(data) >= 21 {
+			return (data[20] & 0x02) != 0
+		}
+		return false
+	default:
+		return false
+	}
+}
+
 // EncodeWebP encodes img as pure-Go WebP using nativewebp.
 func EncodeWebP(img image.Image) ([]byte, error) {
 	var buf bytes.Buffer
