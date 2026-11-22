@@ -7,7 +7,11 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fetchAuth } from './fetch-auth.mjs';
 import sharp from 'sharp';
-const base = 'http://127.0.0.1:4317';
+const base = (
+  process.env.DELB_REVIEW_URL ||
+  process.env.BASE_URL ||
+  'http://127.0.0.1:4317'
+).replace(/\/$/, '');
 assert.equal(
   (await readFile('review/demo/.synthetic-review', 'utf8')).trim(),
   'synthetic-delb-review',

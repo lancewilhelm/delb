@@ -6,7 +6,7 @@ import {
   books,
   collections,
   storageOperations,
-} from '../../../app/utils/db/schema';
+} from '../db/schema';
 import { withBookStorageLock } from '../books/storage/book-lock';
 import { deleteStoredFiles } from '../books/storage/delete-operation';
 import {

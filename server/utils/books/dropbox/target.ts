@@ -2,7 +2,7 @@ import { resolveBookTarget } from '~~/server/utils/collections/model';
 import { eq } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { users } from '~/utils/db/schema';
+import { users } from '~~/server/utils/db/schema';
 import { parseDropboxIngestSettings } from './config';
 import { getGlobalSettingsRow } from './settings';
 

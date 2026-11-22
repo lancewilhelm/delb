@@ -3,7 +3,7 @@ import {
   ProgressError,
   recordManualProgress,
 } from '~~/server/utils/books/progress';
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 import { logger } from '~/utils/logger';
 
 type Body = {

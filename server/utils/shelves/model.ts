@@ -6,7 +6,7 @@ import {
   collectionMembers,
   personalShelfBooks,
   personalShelves,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { lockCollectionChanges } from '~~/server/utils/collections/model';
 import { validatePictureAssets } from '~~/server/utils/bookshelf/pictures';

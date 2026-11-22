@@ -1,5 +1,5 @@
 import { and, inArray, sql } from 'drizzle-orm';
-import { books, collectionMembers } from '~/utils/db/schema';
+import { books, collectionMembers } from '~~/server/utils/db/schema';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { collectionActor } from '~~/server/utils/collections/http';
 

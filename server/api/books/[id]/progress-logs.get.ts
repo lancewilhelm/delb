@@ -6,8 +6,8 @@ import {
   collectionBooks,
   collectionMembers,
   userBookProgressLog,
-} from '~/utils/db/schema';
-import { auth } from '~/utils/auth';
+} from '~~/server/utils/db/schema';
+import { auth } from '~~/server/utils/auth';
 import { logger } from '~/utils/logger';
 import { progressHistoryOrder } from '~~/server/utils/books/progress-order';
 

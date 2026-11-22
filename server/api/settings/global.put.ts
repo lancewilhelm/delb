@@ -1,7 +1,7 @@
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { logger } from '~/utils/logger';
-import { globalSettings } from '~/utils/db/schema';
-import { auth } from '~/utils/auth';
+import { globalSettings } from '~~/server/utils/db/schema';
+import { auth } from '~~/server/utils/auth';
 import { sql } from 'drizzle-orm';
 
 /**

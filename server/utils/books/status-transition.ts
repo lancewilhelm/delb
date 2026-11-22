@@ -8,7 +8,7 @@ import {
   userBookProgressLog,
   userBookStatus,
   USER_BOOK_STATUSES,
-} from '../../../app/utils/db/schema';
+} from '../db/schema';
 
 type Status = (typeof USER_BOOK_STATUSES)[number];
 type Change = {

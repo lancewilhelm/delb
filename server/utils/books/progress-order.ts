@@ -1,5 +1,5 @@
 import { desc, sql } from 'drizzle-orm';
-import { userBookProgressLog } from '../../../app/utils/db/schema';
+import { userBookProgressLog } from '../db/schema';
 
 // A manual entry for today may contain a date without a time. Its creation
 // time orders it against other events on that same day. A backdated entry

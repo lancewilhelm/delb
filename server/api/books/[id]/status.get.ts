@@ -8,8 +8,8 @@ import {
   userBookStatus,
   USER_BOOK_STATUSES,
   type UserBookStatusValue,
-} from '~/utils/db/schema';
-import { auth } from '~/utils/auth';
+} from '~~/server/utils/db/schema';
+import { auth } from '~~/server/utils/auth';
 import { logger } from '~/utils/logger';
 
 /**

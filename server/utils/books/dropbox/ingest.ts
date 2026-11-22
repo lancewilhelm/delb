@@ -14,7 +14,7 @@ import {
   bookFiles,
   books,
   storageOperations,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 import { logger } from '~/utils/logger';
 import { copyVerifiedExclusive } from '~~/server/utils/books/storage/verified-copy';
 import { readBoundedFile } from '~~/server/utils/books/storage/bounded-file';

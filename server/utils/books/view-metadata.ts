@@ -7,7 +7,7 @@ import {
   bookFiles,
   bookRatings,
   userBookStatus,
-} from '../../../app/utils/db/schema';
+} from '../db/schema';
 import type { cloudDb } from '../db/cloud';
 
 /** Enrich only the page already authorized by the caller; personal values belong to this user. */

@@ -20,7 +20,7 @@ import {
   series,
   tags,
   bookIdentifiers,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 import { logger } from '~/utils/logger';
 import { metadataVersion } from '~~/server/utils/books/metadata-snapshot';
 

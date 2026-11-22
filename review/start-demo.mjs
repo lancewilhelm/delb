@@ -11,13 +11,16 @@ if (
   throw new Error('Run review/setup-demo.mjs in a fresh checkout first');
 }
 await mkdir('.review-home', { recursive: true });
+const host = process.env.DELB_REVIEW_HOST || '127.0.0.1';
+const port = String(process.env.DELB_REVIEW_PORT || '4317');
+const baseUrl = `http://${host}:${port}`;
 const env = {
   PATH: process.env.PATH,
   HOME: path.resolve('.review-home'),
   BETTER_AUTH_SECRET: randomBytes(32).toString('hex'),
   DATABASE_URL: 'file:./review/demo/synthetic.db',
-  BETTER_AUTH_URL: 'http://127.0.0.1:4317',
-  BETTER_AUTH_TRUSTED_ORIGINS: 'http://127.0.0.1:4317',
+  BETTER_AUTH_URL: baseUrl,
+  BETTER_AUTH_TRUSTED_ORIGINS: baseUrl,
   NUXT_TELEMETRY_DISABLED: '1',
   NODE_OPTIONS:
     '--require ' +
@@ -26,8 +29,8 @@ const env = {
       ? ' --require ' + path.resolve('review/fake-codex-provider.cjs')
       : ''),
   LOG_LEVEL: 'warn',
-  NITRO_HOST: '127.0.0.1',
-  NITRO_PORT: '4317',
+  NITRO_HOST: host,
+  NITRO_PORT: port,
   NODE_ENV: process.argv.includes('--production')
     ? 'production'
     : 'development',
@@ -40,9 +43,9 @@ const child = spawn(
         'node_modules/nuxt/bin/nuxt.mjs',
         'dev',
         '--host',
-        '127.0.0.1',
+        host,
         '--port',
-        '4317',
+        port,
       ],
   { env, stdio: 'inherit' },
 );

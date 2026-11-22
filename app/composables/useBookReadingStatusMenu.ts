@@ -1,6 +1,6 @@
 import type { BookStatusChange } from '~/utils/bookReadingStatus';
 import type { CoverMenuItem } from '~/utils/coverMenu';
-import type { UserBookStatusValue } from '~/utils/db/schema';
+import type { UserBookStatusValue } from '~~/shared/reading-status';
 
 const statusOptions = [
   { value: 'to_be_read', label: 'To be read' },

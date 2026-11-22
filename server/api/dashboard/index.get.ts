@@ -1,6 +1,6 @@
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { getDashboard } from '~~/server/utils/books/dashboard';
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 import { logger } from '~/utils/logger';
 
 export default defineEventHandler(async (event) => {

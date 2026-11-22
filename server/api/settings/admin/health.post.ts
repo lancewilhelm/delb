@@ -4,7 +4,7 @@ import { stat } from 'node:fs/promises';
 
 import { eq, inArray, sql } from 'drizzle-orm';
 
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 import { logger } from '~/utils/logger';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
@@ -16,7 +16,7 @@ import {
   collectionBooks,
   collections,
   users,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 import { BOOK_STORAGE_DEFAULTS } from '~~/server/utils/books/storage/paths';
 import {
   FUZZY_DUPLICATE_THRESHOLD,

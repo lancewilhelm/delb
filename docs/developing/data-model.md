@@ -1,6 +1,6 @@
 # Delb's data model
 
-The [Drizzle schema](../../app/utils/db/schema.ts) describes Delb's own database. [SQL migrations](../../.drizzle/migrations) define upgrades. The separate [Calibre schema reference](reference/calibre-schema.md) describes an import source, not Delb's tables.
+The [Drizzle schema](../../server/utils/db/schema.ts) describes Delb's own database. [SQL migrations](../../.drizzle/migrations) define upgrades. The separate [Calibre schema reference](reference/calibre-schema.md) describes an import source, not Delb's tables.
 
 ## Shared catalog and collection access
 

@@ -181,7 +181,7 @@ test('SQLite preserves millisecond order and reports rejected writes', async () 
   const { createClient } = await import('@libsql/client');
   const { drizzle } = await import('drizzle-orm/libsql');
   const { and, eq, lt, sql } = await import('drizzle-orm');
-  const { userSettings } = await import('../utils/db/schema');
+  const { userSettings } = await import('../../server/utils/db/schema');
   const client = createClient({ url: ':memory:' });
   try {
     await client.execute(

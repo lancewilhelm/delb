@@ -17,9 +17,9 @@ import {
   series,
   userBookStatus,
   USER_BOOK_STATUSES,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 import { logger } from '~/utils/logger';
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 
 import {
   bookSort,

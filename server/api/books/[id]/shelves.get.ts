@@ -4,8 +4,8 @@ import {
   collectionMembers,
   personalShelfBooks,
   personalShelves,
-} from '~/utils/db/schema';
-import { auth } from '~/utils/auth';
+} from '~~/server/utils/db/schema';
+import { auth } from '~~/server/utils/auth';
 import { cloudDb } from '~~/server/utils/db/cloud';
 
 export default defineEventHandler(async (event) => {

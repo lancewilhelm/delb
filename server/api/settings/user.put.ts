@@ -1,7 +1,7 @@
 import { and, eq, lt, sql } from 'drizzle-orm';
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { userSettings } from '~/utils/db/schema';
-import { auth } from '~/utils/auth';
+import { userSettings } from '~~/server/utils/db/schema';
+import { auth } from '~~/server/utils/auth';
 import { logger } from '~/utils/logger';
 
 type UserSettingsPutBody = {

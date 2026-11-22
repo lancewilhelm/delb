@@ -1,5 +1,5 @@
 import type { H3Event } from 'h3';
-import { auth } from '../../../app/utils/auth';
+import { auth } from '../auth';
 import { CollectionError } from './model';
 
 export async function collectionActor(event: H3Event) {

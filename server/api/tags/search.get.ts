@@ -1,9 +1,9 @@
 import { visibleEntity } from '~~/server/utils/books/visibility';
 import { and, sql } from 'drizzle-orm';
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { tags } from '~/utils/db/schema';
+import { tags } from '~~/server/utils/db/schema';
 import { logger } from '~/utils/logger';
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 
 /**
  * GET /api/tags/search?q=...

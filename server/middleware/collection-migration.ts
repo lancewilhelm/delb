@@ -1,4 +1,4 @@
-import { users } from '../../app/utils/db/schema';
+import { users } from '../utils/db/schema';
 import { cloudDb } from '../utils/db/cloud';
 import {
   collectionModelState,
@@ -24,7 +24,9 @@ export default defineEventHandler(async (event) => {
     return;
   if (
     event.method === 'GET' &&
-    (pathname === '/api/settings/user' || pathname === '/api/settings/global')
+    (pathname === '/api/settings' ||
+      pathname === '/api/settings/user' ||
+      pathname === '/api/settings/global')
   )
     return;
   throw new CollectionError(

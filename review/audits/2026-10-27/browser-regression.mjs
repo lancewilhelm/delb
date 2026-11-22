@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
-const base = 'http://127.0.0.1:4317';
+const base = (
+  process.env.DELB_REVIEW_URL ||
+  process.env.BASE_URL ||
+  'http://127.0.0.1:4317'
+).replace(/\/$/, '');
 const targets = await (await fetch('http://127.0.0.1:9231/json/list')).json();
 const ws = new WebSocket(
   targets.find((t) => t.type === 'page').webSocketDebuggerUrl,

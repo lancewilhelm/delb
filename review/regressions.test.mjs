@@ -84,8 +84,8 @@ async function loadSource(relative) {
                       'utf8',
                     )
                   ).replace(
-                    "'../../../app/utils/db/schema'",
-                    "'~/utils/db/schema'",
+                    "'../db/schema'",
+                    "'~~/server/utils/db/schema'",
                   ),
                   loader: 'ts',
                   resolveDir: root,

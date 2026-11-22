@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { collections, users } from '~/utils/db/schema';
+import { collections, users } from '~~/server/utils/db/schema';
 import {
   collectionActor,
   requiredCollectionId,

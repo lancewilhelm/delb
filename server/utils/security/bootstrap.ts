@@ -5,7 +5,7 @@ import {
 import { eq } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { systemState, users } from '~/utils/db/schema';
+import { systemState, users } from '~~/server/utils/db/schema';
 
 export async function claimBootstrapOwner(userId: string): Promise<boolean> {
   return cloudDb.transaction(async (tx) => {

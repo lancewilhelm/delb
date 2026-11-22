@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { UserWithRole } from 'better-auth/plugins';
+import type { User as UserWithRole } from '~/utils/authClient';
 
 const users = ref<UserWithRole[]>([]);
 const sortedUsers = ref<UserWithRole[]>([]);

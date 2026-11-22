@@ -1,9 +1,9 @@
 import { eq } from 'drizzle-orm';
 
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { collections, collectionMembers } from '~/utils/db/schema';
+import { collections, collectionMembers } from '~~/server/utils/db/schema';
 import { logger } from '~/utils/logger';
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 
 /**
  * GET /api/collections

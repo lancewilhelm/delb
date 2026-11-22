@@ -1,7 +1,7 @@
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { logger } from '~/utils/logger';
-import { userSettings, globalSettings } from '~/utils/db/schema';
-import { auth } from '~/utils/auth';
+import { userSettings, globalSettings } from '~~/server/utils/db/schema';
+import { auth } from '~~/server/utils/auth';
 import { eq } from 'drizzle-orm';
 import {
   getMetadataProviderCapabilities,

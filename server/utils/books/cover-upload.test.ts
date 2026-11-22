@@ -18,7 +18,7 @@ import { createClient } from '@libsql/client';
 import { drizzle } from 'drizzle-orm/libsql';
 import { migrate } from 'drizzle-orm/libsql/migrator';
 import { and, eq, inArray } from 'drizzle-orm';
-import * as schema from '../../../app/utils/db/schema.ts';
+import * as schema from '../db/schema.ts';
 import {
   EpubError,
   inspectCover,

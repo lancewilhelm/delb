@@ -18,7 +18,7 @@ import {
   personalShelfBooks,
   userBookStatus,
   storageOperations,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 import { withBookStorageLock } from '~~/server/utils/books/storage/book-lock';
 import { deleteStoredFiles } from '~~/server/utils/books/storage/delete-operation';
 import { deleteDecision } from '~~/server/utils/books/storage/delete-recovery';

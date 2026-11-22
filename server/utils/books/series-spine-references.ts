@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
-import { books, bookSpines, collectionMembers } from '~/utils/db/schema';
+import { books, bookSpines, collectionMembers } from '~~/server/utils/db/schema';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import type { SelectedSeriesSpine } from '~~/shared/spine-series-references';
 

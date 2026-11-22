@@ -23,11 +23,11 @@ flowchart TD
 
 | Responsibility            | Implementation                                                                                                   | Boundary                                                                       |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Routes and interaction    | [Pages](../../app/pages), [components](../../app/components), [composables](../../app/composables)               | Browser interaction and server rendering                                       |
+| Routes and interaction    | [Pages](../../app/pages), [components](../../app/components), [composables](../../app/composables)               | Browser SPA interaction and client routing                                     |
 | Client state              | [Stores](../../app/stores)                                                                                       | Account settings, collection selection, filters, selection, and UI preferences |
-| Sessions and system roles | [Auth configuration](../../app/utils/auth.ts), [auth endpoint](../../server/api/auth/[...all].ts)                | Authenticated identity and account administration                              |
+| Sessions and system roles | [Auth configuration](../../server/utils/auth.ts), [auth endpoint](../../server/api/auth/[...all].ts)             | Authenticated identity and account administration                              |
 | Application requests      | [API handlers](../../server/api)                                                                                 | Input validation, authorization, queries, and mutation coordination            |
-| Persistent records        | [Schema](../../app/utils/db/schema.ts), [database connection](../../server/utils/db/cloud.ts)                    | SQLite is the default; the connection uses the libSQL client                   |
+| Persistent records        | [Schema](../../server/utils/db/schema.ts), [database connection](../../server/utils/db/cloud.ts)                 | SQLite is the default; the connection uses the libSQL client                   |
 | Book bytes and covers     | [Book utilities](../../server/utils/books), [storage operations](../../server/utils/books/storage)               | Filesystem paths, exclusive writes, locks, journals, and recovery              |
 | EPUB cover manipulation   | [EPUB package](../../packages/epub/README.md)                                                                    | Independent archive inspection and rewriting                                   |
 | Background ingestion      | [Dropbox plugin](../../server/plugins/dropbox-ingest.ts), [watcher](../../server/utils/books/dropbox/watcher.ts) | In-process watcher after recovery succeeds                                     |
@@ -36,7 +36,7 @@ The `cloudDb` identifier names the shared Drizzle connection. Its default is `fi
 
 ## Page initialization
 
-The [server auth plugin](../../app/plugins/auth.server.ts) fetches the session for a normal server-rendered request. The [settings preload plugin](../../app/plugins/00-settings-ssr.server.ts) fetches account/global settings with the request cookie. Theme and font plugins add the corresponding resources to the response.
+The inline [SPA boot script](../../app/utils/spaBootScript.ts) applies persisted theme and font preferences from `localStorage` synchronously in `<head>` before first paint. The [client auth plugin](../../app/plugins/auth.client.ts) fetches the active session via `/api/auth/get-session` before route guards run, and the [sync plugin](../../app/plugins/sync.client.ts) pulls account and global settings once authenticated.
 
 The browser hydrates that state. Client auth handles non-SSR and cached-page cases. The [sync plugin](../../app/plugins/sync.client.ts) pulls settings after sign-in and mounting. Pinia persistence stores supported state in localStorage; it does not replace server authorization or durable account settings.
 
@@ -60,7 +60,7 @@ A busy storage lock can delay recovery and retry. An unrecoverable error prevent
 
 | Area                           | User behavior                                                    | Main source and further reading                                                                                                                                                    |
 | ------------------------------ | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Accounts and dashboard         | Registration, login, totals, reading shelves                     | [Auth](../../app/utils/auth.ts), [dashboard API](../../server/api/dashboard/index.get.ts), [dashboard reference](reference/dashboard.md), [account guide](../using/get-started.md) |
+| Accounts and dashboard         | Registration, login, totals, reading shelves                     | [Auth](../../server/utils/auth.ts), [dashboard API](../../server/api/dashboard/index.get.ts), [dashboard reference](reference/dashboard.md), [account guide](../using/get-started.md) |
 | Add and edit books             | Upload, manual entry, metadata imports, duplicates, replacement  | [Add modal](../../app/components/Books/BookAddModal.vue), [editor](../../app/components/Books/BookEditor.vue), [request flows](core-workflows.md#add-a-book)                       |
 | Browse and search              | Collection scope, entities, filters, sorting, grid/list fields   | [Books page](../../app/pages/books/index.vue), [entity queries](../../server/utils/books/entity-list-query.ts), [search API](../../server/api/search/index.get.ts)                 |
 | Collections and sharing        | Membership, roles, transfer, leave, deletion                     | [Collection store](../../app/stores/collections.ts), [collection APIs](../../server/api/collections), [access reference](reference/collections.md)                                 |

@@ -26,7 +26,7 @@ import {
   userBookStatus,
   userBookRationale,
   type UserBookStatusValue,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { visibleBook } from '~~/server/utils/books/visibility';
 import { transitionBookStatuses } from '~~/server/utils/books/status-transition';

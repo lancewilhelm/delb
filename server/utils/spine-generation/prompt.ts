@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import { systemState } from '~/utils/db/schema';
+import { systemState } from '~~/server/utils/db/schema';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { defaultSpineGenerationPrompt } from '~~/shared/spine-generation-prompt';
 

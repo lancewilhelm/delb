@@ -1,4 +1,4 @@
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 import { readCollectionShelf } from '~~/server/utils/bookshelf/collection';
 
 export default defineEventHandler(async (event) => {

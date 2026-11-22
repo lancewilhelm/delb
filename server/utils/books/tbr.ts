@@ -5,7 +5,7 @@ import {
   books,
   userBookRationale,
   userBookStatus,
-} from '../../../app/utils/db/schema';
+} from '../db/schema';
 import type { TbrBook } from '../../../app/types/tbr';
 import type { cloudDb } from '../db/cloud';
 import { visibleBook } from './visibility';

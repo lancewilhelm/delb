@@ -4,7 +4,7 @@ These flows connect the [user guides](../README.md#use-delb) to the implementati
 
 ## Account initialization
 
-The [registration page](../../app/pages/register.vue) validates fields and calls Better Auth email signup. The [auth configuration](../../app/utils/auth.ts) permits the first registration, applies the later registration toggle, and restricts self-registration to the normal user role.
+The [registration page](../../app/pages/register.vue) validates fields and calls Better Auth email signup. The [auth configuration](../../server/utils/auth.ts) permits the first registration, applies the later registration toggle, and restricts self-registration to the normal user role.
 
 After user creation, [owner bootstrap](../../server/utils/security/bootstrap.ts) claims its durable marker, initializes the shared Default when needed, and enrolls the new user in one transaction. Later users join the current default as editors. Session creation does not enroll users again.
 

@@ -1,4 +1,4 @@
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 import { renameShelf } from '~~/server/utils/shelves/model';
 export default defineEventHandler(async (event) => {
   const session = await auth.api.getSession({ headers: event.headers });

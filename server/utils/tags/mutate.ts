@@ -1,5 +1,5 @@
 import { and, eq, sql } from 'drizzle-orm';
-import { bookTags, tags } from '../../../app/utils/db/schema';
+import { bookTags, tags } from '../db/schema';
 import { visibleEntity } from '../books/visibility';
 import type { cloudDb } from '../db/cloud';
 

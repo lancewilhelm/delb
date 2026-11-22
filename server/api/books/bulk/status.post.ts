@@ -1,7 +1,7 @@
-import { USER_BOOK_STATUSES } from '~/utils/db/schema';
+import { USER_BOOK_STATUSES } from '~~/server/utils/db/schema';
 import { transitionBookStatuses } from '~~/server/utils/books/status-transition';
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 import { logger } from '~/utils/logger';
 
 type Body = {

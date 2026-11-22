@@ -18,7 +18,7 @@ import {
 import { resolveDataPath } from '~~/server/utils/books/fs';
 import { ensureCoverOutputsFromBytes } from '~~/server/utils/books/covers';
 
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 import { logger } from '~/utils/logger';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import {
@@ -31,7 +31,7 @@ import {
   publishers,
   series,
   tags,
-} from '~/utils/db/schema';
+} from '~~/server/utils/db/schema';
 import {
   CalibreReader,
   type CalibreBookRow,

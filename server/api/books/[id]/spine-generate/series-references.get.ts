@@ -1,4 +1,4 @@
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { assertBookEditor } from '~~/server/utils/collections/model';
 import { findSeriesSpines } from '~~/server/utils/books/series-spine-references';

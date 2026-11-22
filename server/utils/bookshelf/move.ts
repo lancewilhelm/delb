@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { collectionBookshelves } from '~/utils/db/schema';
+import { collectionBookshelves } from '~~/server/utils/db/schema';
 import { emptyBookshelf, parseBookshelf } from '~~/shared/bookshelf';
 import type { cloudDb } from '~~/server/utils/db/cloud';
 

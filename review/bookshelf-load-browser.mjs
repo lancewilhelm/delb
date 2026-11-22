@@ -10,7 +10,11 @@ import sharp from 'sharp';
 import { fetchAuth } from './fetch-auth.mjs';
 
 // Production browser measurements against the disposable synthetic demo only.
-const base = process.env.DELB_REVIEW_URL || 'http://127.0.0.1:4317';
+const base = (
+  process.env.DELB_REVIEW_URL ||
+  process.env.BASE_URL ||
+  'http://127.0.0.1:4317'
+).replace(/\/$/, '');
 assert.match(base, /^http:\/\/127\.0\.0\.1:\d+$/);
 assert.equal(
   (await readFile('review/demo/.synthetic-review', 'utf8')).trim(),

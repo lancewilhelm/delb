@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
+import { buildSpaBootScript } from './app/utils/spaBootScript';
 
 function getAppVersion() {
   if (process.env.NUXT_PUBLIC_APP_VERSION) {
@@ -43,7 +44,7 @@ export default defineNuxtConfig({
       appVersion: getAppVersion(),
     },
   },
-  ssr: true,
+  ssr: false,
   compatibilityDate: '2025-04-12',
   devtools: { enabled: false },
   modules: [
@@ -82,6 +83,11 @@ export default defineNuxtConfig({
           href: '/apple-touch-icon.png',
         },
         { rel: 'mask-icon', href: '/safari-pinned-tab.svg', color: '#1b1b1b' },
+      ],
+      script: [
+        {
+          innerHTML: buildSpaBootScript(),
+        },
       ],
     },
   },

@@ -1,4 +1,4 @@
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 import { logger } from '~/utils/logger';
 import { fetchExternalImageBuffer } from '~~/server/utils/books/external-image';
 

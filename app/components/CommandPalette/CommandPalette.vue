@@ -170,7 +170,7 @@ watch(
         />
         back <span class="ml-2 opacity-70">{{ selectedOption.label }}</span>
       </button>
-      <div class="h-full overflow-hidden command-palette-options">
+      <div class="flex-1 min-h-0 overflow-hidden command-palette-options">
         <div
           v-if="themePickerOpen"
           id="command-palette-options"
@@ -276,7 +276,7 @@ watch(
           id="command-palette-options"
           ref="optionsRef"
           role="listbox"
-          class="overflow-y-auto"
+          class="h-full overflow-y-auto"
         >
           <div
             v-for="(result, i) in filteredOptions"

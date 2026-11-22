@@ -85,10 +85,17 @@ async function handleSubmit() {
     // Pull settings immediately after register/login so theme + prefs apply without a reload.
     const userSettingsStore = useUserSettingsStore();
     const globalSettingsStore = useGlobalSettingsStore();
-    await Promise.all([
-      userSettingsStore.pull(),
-      globalSettingsStore.pullLatest(),
-    ]);
+    try {
+      await Promise.all([
+        userSettingsStore.pull(),
+        globalSettingsStore.pullLatest(),
+      ]);
+    } catch (pullError) {
+      logger.warn(
+        { error: pullError },
+        'Settings pull after registration failed; continuing to app',
+      );
+    }
 
     return navigateTo('/');
   } catch (error) {

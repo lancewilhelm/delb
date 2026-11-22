@@ -1,5 +1,5 @@
 import { logger } from '~/utils/logger';
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 import { deleteBook, type DeleteMode } from '~~/server/utils/books/delete-book';
 
 function normalizeDeleteMode(raw: string | null | undefined): DeleteMode {

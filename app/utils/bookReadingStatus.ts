@@ -1,4 +1,4 @@
-import type { UserBookStatusValue } from './db/schema';
+import type { UserBookStatusValue } from '../../shared/reading-status';
 
 export type BookStatusChange = {
   bookId: string;

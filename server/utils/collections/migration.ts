@@ -29,7 +29,7 @@ import {
   bookNotes,
   globalSettings,
   systemState,
-} from '../../../app/utils/db/schema';
+} from '../db/schema';
 import { withBookStorageLock } from '../books/storage/book-lock';
 import {
   copyVerifiedExclusive,

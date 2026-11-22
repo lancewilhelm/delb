@@ -7,7 +7,11 @@ import {
 import { fetchAuth } from './fetch-auth.mjs';
 import { pdfFixture } from './pdf-fixture.mjs';
 
-const base = 'http://127.0.0.1:4317';
+const base = (
+  process.env.DELB_REVIEW_URL ||
+  process.env.BASE_URL ||
+  'http://127.0.0.1:4317'
+).replace(/\/$/, '');
 const suffix = randomBytes(5).toString('hex');
 async function account(name) {
   const response = await fetchAuth(`${base}/api/auth/sign-up/email`, {

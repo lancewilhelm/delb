@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createClient } from '@libsql/client';
 
-const base = 'http://127.0.0.1:4317';
+const base = (
+  process.env.DELB_REVIEW_URL ||
+  process.env.BASE_URL ||
+  'http://127.0.0.1:4317'
+).replace(/\/$/, '');
 const accounts = JSON.parse(
   await readFile('.audit/tag-browser-account.json', 'utf8'),
 );

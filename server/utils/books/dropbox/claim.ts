@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { systemState } from '../../../../app/utils/db/schema';
+import { systemState } from '../../db/schema';
 import type { CollectionConnection } from '../../collections/model';
 import type { DropboxTarget } from './target';
 import { unlink } from 'node:fs/promises';

@@ -1,4 +1,4 @@
-import { auth } from '~/utils/auth';
+import { auth } from '~~/server/utils/auth';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { assertCollectionAdmin } from '~~/server/utils/collections/model';
 import { cacheBoundedRequestBody } from '~~/server/utils/books/storage/bounded-upload';

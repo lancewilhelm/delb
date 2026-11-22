@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { and, eq } from 'drizzle-orm';
-import { storageOperations } from '~/utils/db/schema';
+import { storageOperations } from '~~/server/utils/db/schema';
 import { cloudDb } from '~~/server/utils/db/cloud';
 import { withBookStorageLock } from './book-lock';
 import { recoverStoredCreates } from './create-operation';

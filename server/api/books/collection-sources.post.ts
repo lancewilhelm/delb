@@ -1,6 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { cloudDb } from '~~/server/utils/db/cloud';
-import { books, collectionMembers, collections } from '~/utils/db/schema';
+import { books, collectionMembers, collections } from '~~/server/utils/db/schema';
 import { collectionActor } from '~~/server/utils/collections/http';
 import { CollectionError } from '~~/server/utils/collections/model';
 
