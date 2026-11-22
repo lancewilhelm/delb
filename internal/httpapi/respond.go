@@ -15,6 +15,7 @@ const DefaultMaxBodyBytes int64 = 1 << 20 // 1 MiB
 type HTTPError struct {
 	Status  int
 	Message string
+	Data    any
 }
 
 func (e *HTTPError) Error() string {
@@ -23,6 +24,10 @@ func (e *HTTPError) Error() string {
 
 func NewError(status int, message string) *HTTPError {
 	return &HTTPError{Status: status, Message: message}
+}
+
+func NewErrorWithData(status int, message string, data any) *HTTPError {
+	return &HTTPError{Status: status, Message: message, Data: data}
 }
 
 // WriteJSON encodes payload as UTF-8 JSON with the given HTTP status code.
@@ -35,15 +40,25 @@ func WriteJSON(w http.ResponseWriter, status int, payload any) {
 // WriteError writes a JSON error payload matching both Delb's
 // `{ success: false, message }` contract and H3's `{ statusCode, statusMessage, message }` shape.
 func WriteError(w http.ResponseWriter, status int, message string) {
+	WriteErrorWithData(w, status, message, nil)
+}
+
+// WriteErrorWithData writes a JSON error payload with an optional `data` field
+// (matching H3 createError({ statusCode, statusMessage, data })).
+func WriteErrorWithData(w http.ResponseWriter, status int, message string, data any) {
 	if status == 0 {
 		status = http.StatusInternalServerError
 	}
-	WriteJSON(w, status, map[string]any{
+	payload := map[string]any{
 		"success":       false,
 		"statusCode":    status,
 		"statusMessage": message,
 		"message":       message,
-	})
+	}
+	if data != nil {
+		payload["data"] = data
+	}
+	WriteJSON(w, status, payload)
 }
 
 // WriteHTTPError unwraps an *HTTPError and writes its status/message, falling
@@ -54,7 +69,7 @@ func WriteHTTPError(w http.ResponseWriter, err error) bool {
 	}
 	var httpErr *HTTPError
 	if errors.As(err, &httpErr) {
-		WriteError(w, httpErr.Status, httpErr.Message)
+		WriteErrorWithData(w, httpErr.Status, httpErr.Message, httpErr.Data)
 		return true
 	}
 	return false
