@@ -680,6 +680,51 @@ func (s *Service) handleGetBookCover(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
+// MultipartPart represents one decoded part of a bounded multipart/form-data request.
+type MultipartPart = multipartPart
+
+// ReadBoundedMultipart parses a bounded multipart/form-data request body.
+func ReadBoundedMultipart(r *http.Request, maxBytes int64) ([]MultipartPart, error) {
+	return readBoundedMultipart(r, maxBytes)
+}
+
+// ResolveBookCoverSourcePath locates the absolute file path of a book's source
+// cover image if the book is visible to userID, mirroring server/utils/books/cover-delivery.ts.
+func ResolveBookCoverSourcePath(ctx context.Context, db *sql.DB, libraryDir, userID, bookID string) (string, error) {
+	var coverImagePath sql.NullString
+	err := db.QueryRowContext(ctx, `
+		SELECT b.cover_image_path
+		FROM books b
+		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		WHERE b.id = ?
+		LIMIT 1
+	`, userID, bookID).Scan(&coverImagePath)
+	if errors.Is(err, sql.ErrNoRows) || !coverImagePath.Valid || strings.TrimSpace(coverImagePath.String) == "" {
+		return "", httpapi.NewError(http.StatusNotFound, "Not found")
+	}
+	if err != nil {
+		return "", err
+	}
+
+	relFromLibrary := strings.TrimPrefix(storage.NormalizePosix(strings.TrimSpace(coverImagePath.String)), "library/")
+	coverDirPosix := path.Dir(relFromLibrary)
+
+	for _, cand := range coverSourceCandidates {
+		relPosix := cand
+		if coverDirPosix != "." && coverDirPosix != "" {
+			relPosix = coverDirPosix + "/" + cand
+		}
+		abs, rerr := storage.ResolveUnderLibrary(libraryDir, relPosix)
+		if rerr != nil {
+			return "", rerr
+		}
+		if fileExistsNonEmpty(abs) {
+			return abs, nil
+		}
+	}
+	return "", httpapi.NewError(http.StatusNotFound, "Not found")
+}
+
 func coverContentTypeFromExt(ext string) string {
 	switch strings.ToLower(ext) {
 	case ".jpg", ".jpeg":

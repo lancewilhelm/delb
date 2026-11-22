@@ -29,9 +29,10 @@ type RouterOptions struct {
 //   - Wraps all /api/* routes with the global collections-model maintenance gate
 //     and any caller-supplied outer middleware (such as startup storage recovery).
 //   - Mounts /api/auth/* and all ported domain services (Settings, Users,
-//     Collections, Books/Catalog/Reading/Search/Dashboard, ...).
-//   - Proxies remaining unported routes (e.g. /api/collections/{id}/bookshelf,
-//     /api/books/{id}/spine*, /api/books/{id}/shelves, frontend assets) to
+//     Collections, Books/Catalog/Reading/Search/Dashboard, Bookshelves/Shelves/
+//     Pictures, Spines/SpineGeneration/ChatGPT-Image, ...).
+//   - Proxies remaining unported Phase 2D routes (e.g. /api/settings/admin/health,
+//     /api/settings/admin/calibre, /api/nuke, /api/mcp*, frontend assets) to
 //     Upstream when configured, or returns a clean JSON 404 for /api/* when
 //     running standalone.
 func NewHandler(opts RouterOptions) http.Handler {
