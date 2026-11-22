@@ -16,22 +16,15 @@ COPY packages/epub/package.json ./packages/epub/package.json
 RUN pnpm install --frozen-lockfile
 
 # -------------------------------
-# Production dependencies stage (runtime)
-FROM base AS prod-deps
-ENV NODE_ENV=production
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
-COPY packages/epub/package.json ./packages/epub/package.json
-RUN pnpm install --frozen-lockfile --prod
-
-# -------------------------------
 # Build stage
 FROM base AS build
 ARG NUXT_PUBLIC_APP_VERSION=unknown
 ENV NUXT_PUBLIC_APP_VERSION=${NUXT_PUBLIC_APP_VERSION}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN ./node_modules/.bin/esbuild .drizzle/migrate.ts --platform=node --format=esm --target=node22 --bundle --packages=external --outfile=.drizzle/migrate.mjs
 RUN pnpm build
+# Resolve the migrator's external imports from Nitro's traced dependencies.
+RUN ./node_modules/.bin/esbuild .drizzle/migrate.ts --platform=node --format=esm --target=node22 --bundle --packages=external --outfile=.output/server/migrate.mjs
 
 # -------------------------------
 # Runtime stage
@@ -50,17 +43,12 @@ RUN addgroup --system --gid 1001 nodejs && \
 # Copy production build output
 COPY --chown=nuxt:nodejs --from=build /app/.output .output
 
-# Copy runtime deps (prod only)
-COPY --chown=nuxt:nodejs --from=prod-deps /app/node_modules ./node_modules
-
-# Copy runtime source files referenced by Nitro/server routes (Nuxt aliases to ~/utils/**)
-COPY --chown=nuxt:nodejs --from=build /app/app/utils ./app/utils
-
-# Copy migrations + migrator script
-COPY --chown=nuxt:nodejs --from=build /app/.drizzle ./.drizzle
+# Copy the SQL migrations and their journal (Drizzle Kit snapshots are build tooling).
+COPY --chown=nuxt:nodejs .drizzle/migrations/*.sql ./.drizzle/migrations/
+COPY --chown=nuxt:nodejs .drizzle/migrations/meta/_journal.json ./.drizzle/migrations/meta/
 
 # Create writable data dir and set ownership
-RUN mkdir -p /app/data && chown -R 1001:1001 /app
+RUN mkdir -p /app/data && chown 1001:1001 /app /app/data
 
 # Use volume for persistent DB
 VOLUME ["/app/data"]

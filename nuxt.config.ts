@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 
@@ -131,7 +132,15 @@ export default defineNuxtConfig({
     })),
     externals: {
       inline: ['@delb/epub'],
-      traceInclude: nativeSqliteFiles,
+      traceInclude: [
+        ...nativeSqliteFiles,
+        // The Docker startup migrator runs separately from Nitro's entry point.
+        ...[
+          '@libsql/client',
+          'drizzle-orm/libsql',
+          'drizzle-orm/libsql/migrator',
+        ].map((dependency) => fileURLToPath(import.meta.resolve(dependency))),
+      ],
     },
     experimental: {
       asyncContext: true,

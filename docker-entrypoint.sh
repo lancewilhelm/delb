@@ -15,7 +15,7 @@ fi
 export DATABASE_URL="${DATABASE_URL:-file:$DB_PATH}"
 
 echo "Running database migrations..."
-NODE_ENV=production node ./.drizzle/migrate.mjs
+NODE_ENV=production node ./.output/server/migrate.mjs
 
 echo "Starting Delb..."
 exec "$@"
