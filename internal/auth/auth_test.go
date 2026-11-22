@@ -505,3 +505,88 @@ func TestAuthEndpointsFullLifecycleAndRBAC(t *testing.T) {
 		t.Fatalf("update-user during pending migration = %d, want 503", code)
 	}
 }
+
+func TestAuthRateLimiting(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "ratelimit.db")
+	opened, err := db.Open(ctx, "file:"+dbPath)
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = opened.DB.Close() })
+	if _, err := db.Migrate(ctx, opened.DB, opened.FilePath, opened.IsMemory, delb.MigrationsFS); err != nil {
+		t.Fatalf("db.Migrate: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	svc := auth.NewService(auth.ServiceOptions{
+		DB:     opened.DB,
+		Secret: "ratelimit-secret-0123456789abcdef0123456789",
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		RateLimit: auth.RateLimitConfig{
+			Window:      10 * 1e9,
+			MaxRequests: 2,
+		},
+	})
+	svc.RegisterRoutes(mux)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	post := func(path string, body map[string]any) *http.Response {
+		b, _ := json.Marshal(body)
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+path, bytes.NewReader(b))
+		req.Header.Set("Origin", srv.URL)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST %s: %v", path, err)
+		}
+		return resp
+	}
+
+	// First 2 sign-in attempts hit normal handler (401 invalid credentials), 3rd returns 429 with X-Retry-After.
+	for i := 0; i < 2; i++ {
+		resp := post("/api/auth/sign-in/email", map[string]any{
+			"email":    "nobody@example.invalid",
+			"password": "wrong-password",
+		})
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("attempt %d status = %d, want 401", i+1, resp.StatusCode)
+		}
+	}
+	resp := post("/api/auth/sign-in/email", map[string]any{
+		"email":    "nobody@example.invalid",
+		"password": "wrong-password",
+	})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("3rd sign-in status = %d, want 429", resp.StatusCode)
+	}
+	retryAfter := resp.Header.Get("X-Retry-After")
+	if retryAfter == "" {
+		t.Fatalf("expected X-Retry-After header on 429 response")
+	}
+
+	// Sign-up bucket is independent from sign-in bucket: 2 succeed, 3rd returns 429.
+	for i := 0; i < 2; i++ {
+		r := post("/api/auth/sign-up/email", map[string]any{
+			"name":     "User",
+			"email":    "rl-" + string(rune('a'+i)) + "@example.invalid",
+			"password": "password-123456",
+		})
+		r.Body.Close()
+		if r.StatusCode != http.StatusOK {
+			t.Fatalf("signup %d status = %d, want 200", i+1, r.StatusCode)
+		}
+	}
+	r3 := post("/api/auth/sign-up/email", map[string]any{
+		"name":     "User",
+		"email":    "rl-c@example.invalid",
+		"password": "password-123456",
+	})
+	r3.Body.Close()
+	if r3.StatusCode != http.StatusTooManyRequests || r3.Header.Get("X-Retry-After") == "" {
+		t.Fatalf("3rd signup = (%d, X-Retry-After=%q), want 429 with header", r3.StatusCode, r3.Header.Get("X-Retry-After"))
+	}
+}

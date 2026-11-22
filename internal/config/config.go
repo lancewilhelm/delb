@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -17,6 +18,7 @@ type Config struct {
 	Host           string
 	Port           string
 	DatabaseURL    string
+	LibraryDir     string
 	AuthSecret     string
 	AuthURL        string
 	TrustedOrigins []string
@@ -80,10 +82,20 @@ func Load() (Config, error) {
 		}
 	}
 
+	libraryDir := strings.TrimSpace(os.Getenv("DELB_LIBRARY_DIR"))
+	if libraryDir == "" {
+		libraryDir = "library"
+	}
+	absLibraryDir, err := filepath.Abs(libraryDir)
+	if err != nil {
+		return Config{}, fmt.Errorf("resolve library directory %q: %w", libraryDir, err)
+	}
+
 	return Config{
 		Host:           host,
 		Port:           port,
 		DatabaseURL:    databaseURL,
+		LibraryDir:     absLibraryDir,
 		AuthSecret:     secret,
 		AuthURL:        authURL,
 		TrustedOrigins: trustedOrigins,
