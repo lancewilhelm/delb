@@ -11,11 +11,14 @@ import (
 	"github.com/lancewilhelm/delb/internal/httpapi"
 )
 
-type queryable interface {
+// Queryable is implemented by *sql.DB and *sql.Tx.
+type Queryable interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
+
+type queryable = Queryable
 
 type collectionRecord struct {
 	ID          string
@@ -50,9 +53,19 @@ func requireCollectionModel(ctx context.Context, q queryable) error {
 	return nil
 }
 
+// RequireCollectionModel verifies that collections-model == 'exclusive'.
+func RequireCollectionModel(ctx context.Context, q Queryable) error {
+	return requireCollectionModel(ctx, q)
+}
+
 func lockCollectionChanges(ctx context.Context, q queryable) error {
 	_, err := q.ExecContext(ctx, `UPDATE system_state SET value = value WHERE key = 'collections-model'`)
 	return err
+}
+
+// LockCollectionChanges serializes collection and book ownership mutations.
+func LockCollectionChanges(ctx context.Context, q Queryable) error {
+	return lockCollectionChanges(ctx, q)
 }
 
 func assertCollectionEditor(ctx context.Context, q queryable, userID, collectionID string) error {
@@ -64,6 +77,79 @@ func assertCollectionEditor(ctx context.Context, q queryable, userID, collection
 		return httpapi.NewError(http.StatusForbidden, "Owner or editor access to the collection is required")
 	}
 	return err
+}
+
+// AssertCollectionEditor verifies that userID is an owner or editor of collectionID.
+func AssertCollectionEditor(ctx context.Context, q Queryable, userID, collectionID string) error {
+	return assertCollectionEditor(ctx, q, userID, collectionID)
+}
+
+// AssertBookEditor mirrors server/utils/collections/model.ts assertBookEditor:
+// returns 404 if the book is not visible to userID, 403 if the user lacks owner/editor role,
+// and returns the book's collection_id on success.
+func AssertBookEditor(ctx context.Context, q Queryable, userID, bookID string) (string, error) {
+	var collectionID string
+	err := q.QueryRowContext(ctx, `
+		SELECT b.collection_id
+		FROM books b
+		INNER JOIN collection_members cm
+			ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		WHERE b.id = ?
+		LIMIT 1
+	`, userID, bookID).Scan(&collectionID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", httpapi.NewError(http.StatusNotFound, "Book not found")
+	}
+	if err != nil {
+		return "", err
+	}
+	if err := assertCollectionEditor(ctx, q, userID, collectionID); err != nil {
+		return "", err
+	}
+	return collectionID, nil
+}
+
+// ResolveBookTarget mirrors server/utils/collections/model.ts resolveBookTarget.
+// If provided is false, or ids is empty, resolves the default collection.
+func ResolveBookTarget(ctx context.Context, q Queryable, userID string, provided bool, ids []string) (string, error) {
+	if err := requireCollectionModel(ctx, q); err != nil {
+		return "", err
+	}
+	var unique []string
+	if provided {
+		seen := make(map[string]struct{}, len(ids))
+		for _, raw := range ids {
+			trimmed := strings.TrimSpace(raw)
+			if trimmed == "" {
+				return "", httpapi.NewError(http.StatusBadRequest, "Choose exactly one collection")
+			}
+			if _, ok := seen[trimmed]; !ok {
+				seen[trimmed] = struct{}{}
+				unique = append(unique, trimmed)
+			}
+		}
+	}
+	if len(unique) > 1 {
+		return "", httpapi.NewError(http.StatusBadRequest, "A book belongs to exactly one collection")
+	}
+	var id string
+	if len(unique) == 1 {
+		id = unique[0]
+	} else {
+		err := q.QueryRowContext(ctx, `SELECT id FROM collections WHERE is_default = 1 LIMIT 1`).Scan(&id)
+		if errors.Is(err, sql.ErrNoRows) {
+			id = ""
+		} else if err != nil {
+			return "", err
+		}
+	}
+	if id == "" {
+		return "", httpapi.NewError(http.StatusConflict, "No default collection is configured. Choose a collection.")
+	}
+	if err := assertCollectionEditor(ctx, q, userID, id); err != nil {
+		return "", err
+	}
+	return id, nil
 }
 
 func assertCollectionAdmin(ctx context.Context, q queryable, userID string) error {
@@ -163,6 +249,19 @@ func ChangeDefaultCollection(ctx context.Context, db *sql.DB, userID, collection
 // permissions on both source and destination collections and updating
 // collection_bookshelves revisions.
 func MoveCollectionBooks(ctx context.Context, db *sql.DB, userID string, bookIDs []string, targetID string, expectedSourceID string) (int, error) {
+	var expected map[string]string
+	if expectedSourceID != "" {
+		expected = make(map[string]string, len(bookIDs))
+		for _, id := range bookIDs {
+			expected[id] = expectedSourceID
+		}
+	}
+	return MoveCollectionBooksWithExpected(ctx, db, userID, bookIDs, targetID, expected)
+}
+
+// MoveCollectionBooksWithExpected atomically moves books to targetID, checking
+// optional per-book expected source collections.
+func MoveCollectionBooksWithExpected(ctx context.Context, db *sql.DB, userID string, bookIDs []string, targetID string, expectedSources map[string]string) (int, error) {
 	if len(bookIDs) == 0 {
 		return 0, httpapi.NewError(http.StatusBadRequest, "Choose books to move")
 	}
@@ -226,9 +325,9 @@ func MoveCollectionBooks(ctx context.Context, db *sql.DB, userID string, bookIDs
 	if len(found) != len(uniqueIDs) {
 		return 0, httpapi.NewError(http.StatusNotFound, "Book not found")
 	}
-	if expectedSourceID != "" {
+	if len(expectedSources) > 0 {
 		for _, row := range found {
-			if row.CollectionID != expectedSourceID {
+			if row.CollectionID != expectedSources[row.ID] {
 				return 0, httpapi.NewError(http.StatusConflict, "The source collection changed. Review the move again.")
 			}
 		}

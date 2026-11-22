@@ -13,12 +13,14 @@ import (
 
 	"github.com/lancewilhelm/delb"
 	"github.com/lancewilhelm/delb/internal/auth"
+	"github.com/lancewilhelm/delb/internal/books"
 	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/config"
 	"github.com/lancewilhelm/delb/internal/db"
 	"github.com/lancewilhelm/delb/internal/httpapi"
 	"github.com/lancewilhelm/delb/internal/proxy"
 	"github.com/lancewilhelm/delb/internal/settings"
+	"github.com/lancewilhelm/delb/internal/storage"
 	"github.com/lancewilhelm/delb/internal/users"
 )
 
@@ -100,6 +102,15 @@ func main() {
 		Logger:      logger.With("component", "collections"),
 	})
 
+	booksSvc := books.NewService(books.ServiceOptions{
+		DB:          opened.DB,
+		AuthService: authSvc,
+		LibraryDir:  cfg.LibraryDir,
+		Logger:      logger.With("component", "books"),
+	})
+
+	recoveryGate := storage.StartRecovery(ctx, opened.DB, cfg.LibraryDir, logger.With("component", "storage"))
+
 	var upstream http.Handler
 	if cfg.UpstreamURL != "" {
 		upstream, err = proxy.New(cfg.UpstreamURL, logger.With("component", "proxy"))
@@ -118,6 +129,10 @@ func main() {
 			settingsSvc,
 			usersSvc,
 			collectionsSvc,
+			booksSvc,
+		},
+		Middleware: []func(http.Handler) http.Handler{
+			recoveryGate.Middleware,
 		},
 		Upstream: upstream,
 	})

@@ -13,6 +13,7 @@ import (
 
 	"github.com/lancewilhelm/delb"
 	"github.com/lancewilhelm/delb/internal/auth"
+	"github.com/lancewilhelm/delb/internal/books"
 	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/db"
 	"github.com/lancewilhelm/delb/internal/httpapi"
@@ -70,12 +71,18 @@ func TestRouterPhase2AOwnedAndUnportedProxied(t *testing.T) {
 		LibraryDir:  filepath.Join(tmp, "library"),
 		Logger:      discard,
 	})
+	booksSvc := books.NewService(books.ServiceOptions{
+		DB:          opened.DB,
+		AuthService: authSvc,
+		LibraryDir:  filepath.Join(tmp, "library"),
+		Logger:      discard,
+	})
 
 	handler := httpapi.NewHandler(httpapi.RouterOptions{
 		DB:          opened.DB,
 		Logger:      discard,
 		AuthService: authSvc,
-		Services:    []httpapi.RouteRegistrar{settingsSvc, usersSvc, collectionsSvc},
+		Services:    []httpapi.RouteRegistrar{settingsSvc, usersSvc, collectionsSvc, booksSvc},
 		Upstream:    p,
 	})
 	front := httptest.NewServer(handler)
@@ -99,6 +106,54 @@ func TestRouterPhase2AOwnedAndUnportedProxied(t *testing.T) {
 		{http.MethodPost, "/api/collections", http.StatusUnauthorized},
 		{http.MethodGet, "/api/settings/admin/collections", http.StatusUnauthorized},
 		{http.MethodGet, "/api/settings/admin/collections-migration", http.StatusUnauthorized},
+		// Phase 2B Go-owned routes
+		{http.MethodGet, "/api/books", http.StatusUnauthorized},
+		{http.MethodPost, "/api/books", http.StatusUnauthorized},
+		{http.MethodGet, "/api/books/book-1", http.StatusUnauthorized},
+		{http.MethodPut, "/api/books/book-1", http.StatusUnauthorized},
+		{http.MethodDelete, "/api/books/book-1", http.StatusUnauthorized},
+		{http.MethodPost, "/api/books/upload", http.StatusUnauthorized},
+		{http.MethodGet, "/api/books/book-1/cover", http.StatusUnauthorized},
+		{http.MethodPost, "/api/books/book-1/cover", http.StatusUnauthorized},
+		{http.MethodGet, "/api/books/book-1/download", http.StatusUnauthorized},
+		{http.MethodGet, "/api/books/book-1/files", http.StatusUnauthorized},
+		{http.MethodGet, "/api/books/book-1/collections", http.StatusUnauthorized},
+		{http.MethodPut, "/api/books/book-1/collections", http.StatusUnauthorized},
+		{http.MethodPost, "/api/books/move", http.StatusUnauthorized},
+		{http.MethodPost, "/api/books/collection-sources", http.StatusUnauthorized},
+		{http.MethodPost, "/api/books/bulk/copies", http.StatusUnauthorized},
+		{http.MethodPost, "/api/books/bulk/status", http.StatusUnauthorized},
+		{http.MethodGet, "/api/books/metadata/hardcover/search", http.StatusUnauthorized},
+		{http.MethodGet, "/api/books/metadata/cover", http.StatusUnauthorized},
+		{http.MethodPost, "/api/books/metadata-import/create", http.StatusUnauthorized},
+		{http.MethodPost, "/api/books/book-1/rating", http.StatusUnauthorized},
+		{http.MethodGet, "/api/books/book-1/status", http.StatusUnauthorized},
+		{http.MethodPost, "/api/books/book-1/status", http.StatusUnauthorized},
+		{http.MethodGet, "/api/books/book-1/rationale", http.StatusUnauthorized},
+		{http.MethodPut, "/api/books/book-1/rationale", http.StatusUnauthorized},
+		{http.MethodGet, "/api/books/book-1/reading-position", http.StatusUnauthorized},
+		{http.MethodPut, "/api/books/book-1/reading-position", http.StatusUnauthorized},
+		{http.MethodGet, "/api/books/book-1/progress", http.StatusUnauthorized},
+		{http.MethodGet, "/api/books/book-1/progress-logs", http.StatusUnauthorized},
+		{http.MethodPost, "/api/books/book-1/progress-logs", http.StatusUnauthorized},
+		{http.MethodPut, "/api/books/book-1/progress-sync", http.StatusUnauthorized},
+		{http.MethodGet, "/api/tbr", http.StatusUnauthorized},
+		{http.MethodGet, "/api/dashboard", http.StatusUnauthorized},
+		{http.MethodGet, "/api/authors", http.StatusUnauthorized},
+		{http.MethodGet, "/api/authors/search", http.StatusUnauthorized},
+		{http.MethodGet, "/api/authors/a1/books", http.StatusUnauthorized},
+		{http.MethodGet, "/api/publishers", http.StatusUnauthorized},
+		{http.MethodGet, "/api/publishers/search", http.StatusUnauthorized},
+		{http.MethodGet, "/api/publishers/p1/books", http.StatusUnauthorized},
+		{http.MethodGet, "/api/series", http.StatusUnauthorized},
+		{http.MethodGet, "/api/series/search", http.StatusUnauthorized},
+		{http.MethodGet, "/api/series/s1/books", http.StatusUnauthorized},
+		{http.MethodGet, "/api/tags", http.StatusUnauthorized},
+		{http.MethodGet, "/api/tags/search", http.StatusUnauthorized},
+		{http.MethodGet, "/api/tags/t1/books", http.StatusUnauthorized},
+		{http.MethodDelete, "/api/tags/t1", http.StatusUnauthorized},
+		{http.MethodPost, "/api/tags/t1/merge", http.StatusUnauthorized},
+		{http.MethodGet, "/api/search", http.StatusUnauthorized},
 	} {
 		req, _ := http.NewRequest(tc.method, front.URL+tc.path, nil)
 		resp, err := http.DefaultClient.Do(req)
@@ -111,7 +166,8 @@ func TestRouterPhase2AOwnedAndUnportedProxied(t *testing.T) {
 		}
 	}
 
-	// 2. Unported routes — crucially including /api/collections/{id}/bookshelf and
+	// 2. Unported routes — crucially including /api/collections/{id}/bookshelf,
+	// Phase 2C book sub-routes (/spine, /spine-generate*, /shelves), and
 	// unported /api/settings/admin/* endpoints — fall through cleanly to upstream!
 	for _, tc := range []struct {
 		method string
@@ -119,10 +175,19 @@ func TestRouterPhase2AOwnedAndUnportedProxied(t *testing.T) {
 	}{
 		{http.MethodGet, "/api/collections/abc-123/bookshelf"},
 		{http.MethodPut, "/api/collections/abc-123/bookshelf"},
+		{http.MethodGet, "/api/books/book-1/spine"},
+		{http.MethodPost, "/api/books/book-1/spine"},
+		{http.MethodDelete, "/api/books/book-1/spine"},
+		{http.MethodPost, "/api/books/book-1/spine-generate"},
+		{http.MethodGet, "/api/books/book-1/spine-generate/connection"},
+		{http.MethodGet, "/api/books/book-1/spine-generate/series-references"},
+		{http.MethodGet, "/api/books/book-1/shelves"},
+		{http.MethodPut, "/api/books/book-1/shelves"},
+		{http.MethodGet, "/api/bookshelf"},
+		{http.MethodGet, "/api/shelves"},
 		{http.MethodPost, "/api/settings/admin/health"},
 		{http.MethodPost, "/api/settings/admin/calibre"},
 		{http.MethodGet, "/api/settings/admin/chatgpt-image"},
-		{http.MethodGet, "/api/books"},
 		{http.MethodGet, "/"},
 	} {
 		before := upstreamHits

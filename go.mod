@@ -3,8 +3,11 @@ module github.com/lancewilhelm/delb
 go 1.27.4
 
 require (
+	github.com/HugoSmits86/nativewebp v1.3.0
+	github.com/beevik/etree v1.8.1
 	github.com/google/uuid v1.6.0
 	golang.org/x/crypto v0.59.0
+	golang.org/x/image v0.48.0
 	golang.org/x/text v0.44.0
 	modernc.org/sqlite v1.62.0
 )

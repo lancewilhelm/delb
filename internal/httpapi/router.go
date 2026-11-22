@@ -21,15 +21,19 @@ type RouterOptions struct {
 	Logger      *slog.Logger
 	AuthService *auth.Service
 	Services    []RouteRegistrar
+	Middleware  []func(http.Handler) http.Handler
 	Upstream    http.Handler
 }
 
 // NewHandler constructs the root HTTP handler:
-//   - Wraps all /api/* routes with the global collections-model maintenance gate.
-//   - Mounts /api/auth/* and all ported domain services (Settings, Users, Collections, ...).
+//   - Wraps all /api/* routes with the global collections-model maintenance gate
+//     and any caller-supplied outer middleware (such as startup storage recovery).
+//   - Mounts /api/auth/* and all ported domain services (Settings, Users,
+//     Collections, Books/Catalog/Reading/Search/Dashboard, ...).
 //   - Proxies remaining unported routes (e.g. /api/collections/{id}/bookshelf,
-//     /api/books/*, frontend assets) to Upstream when configured, or returns a
-//     clean JSON 404 for /api/* when running standalone.
+//     /api/books/{id}/spine*, /api/books/{id}/shelves, frontend assets) to
+//     Upstream when configured, or returns a clean JSON 404 for /api/* when
+//     running standalone.
 func NewHandler(opts RouterOptions) http.Handler {
 	mux := http.NewServeMux()
 	if opts.AuthService != nil {
@@ -57,5 +61,11 @@ func NewHandler(opts RouterOptions) http.Handler {
 		})
 	}
 
-	return CollectionMigrationGate(opts.DB, opts.Logger, mux)
+	var handler http.Handler = CollectionMigrationGate(opts.DB, opts.Logger, mux)
+	for i := len(opts.Middleware) - 1; i >= 0; i-- {
+		if opts.Middleware[i] != nil {
+			handler = opts.Middleware[i](handler)
+		}
+	}
+	return handler
 }
