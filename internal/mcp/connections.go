@@ -315,10 +315,15 @@ func (s *Service) handleConnections(w http.ResponseWriter, r *http.Request) {
 			if httpapi.WriteHTTPError(w, err) {
 				return
 			}
-			s.logger.Error("PATCH /api/mcp-connections failed", "error", err)
+			s.logger.ErrorContext(r.Context(), "PATCH /api/mcp-connections failed", "error", err)
 			httpapi.WriteError(w, http.StatusInternalServerError, "Internal Server Error")
 			return
 		}
+		s.logger.InfoContext(r.Context(), "mcp connection permissions updated",
+			"userId", swu.User.ID,
+			"connectionId", id,
+			"canEditMetadata", canEdit,
+		)
 		httpapi.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
 
 	case http.MethodDelete:
@@ -329,10 +334,14 @@ func (s *Service) handleConnections(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := s.revokeConnection(r.Context(), swu.User.ID, id); err != nil {
-			s.logger.Error("DELETE /api/mcp-connections failed", "error", err)
+			s.logger.ErrorContext(r.Context(), "DELETE /api/mcp-connections failed", "error", err)
 			httpapi.WriteError(w, http.StatusInternalServerError, "Internal Server Error")
 			return
 		}
+		s.logger.InfoContext(r.Context(), "mcp connection revoked",
+			"userId", swu.User.ID,
+			"connectionId", id,
+		)
 		httpapi.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
 
 	case http.MethodPost:
@@ -358,10 +367,17 @@ func (s *Service) handleConnections(w http.ResponseWriter, r *http.Request) {
 		}
 		created, err := s.createConnection(r.Context(), swu.User.ID, trimmedName, canWrite, canEditMetadata)
 		if err != nil {
-			s.logger.Error("POST /api/mcp-connections failed", "error", err)
+			s.logger.ErrorContext(r.Context(), "POST /api/mcp-connections failed", "error", err)
 			httpapi.WriteError(w, http.StatusInternalServerError, "Internal Server Error")
 			return
 		}
+		s.logger.InfoContext(r.Context(), "mcp connection created",
+			"userId", swu.User.ID,
+			"connectionId", created.ID,
+			"name", created.Name,
+			"canWrite", created.CanWrite,
+			"canEditMetadata", created.CanEditMetadata,
+		)
 		httpapi.WriteJSON(w, http.StatusOK, created)
 	}
 }

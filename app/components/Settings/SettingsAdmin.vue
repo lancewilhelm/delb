@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router';
 import SettingsAdminCollections from '~/components/Settings/SettingsAdminCollections.vue';
 import SettingsAdminDropbox from '~/components/Settings/SettingsAdminDropbox.vue';
 import SettingsAdminLibrary from '~/components/Settings/SettingsAdminLibrary.vue';
+import SettingsAdminLogs from '~/components/Settings/SettingsAdminLogs.vue';
 import SettingsAdminMetadata from '~/components/Settings/SettingsAdminMetadata.vue';
 import SettingsAdminSpines from '~/components/Settings/SettingsAdminSpines.vue';
 import SettingsAdminUsers from '~/components/Settings/SettingsAdminUsers.vue';
@@ -63,6 +64,12 @@ const tabs: Record<string, Tab> = {
     icon: 'lucide:users',
     path: '/settings/admin/users',
   },
+  logs: {
+    name: 'Logs',
+    component: SettingsAdminLogs,
+    icon: 'lucide:scroll-text',
+    path: '/settings/admin/logs',
+  },
 };
 </script>
 
@@ -74,9 +81,9 @@ const tabs: Record<string, Tab> = {
       class="flex justify-start sm:justify-center overflow-x-auto shrink-0 gap-4 px-4 py-2 border-b border-(--contrast-border-color) w-screen bg-(--sub-alt-color)"
     >
       <SettingsTabBarItem
-        v-for="tab in Object.values(tabs)"
+        v-for="[tabKey, tab] in Object.entries(tabs)"
         :key="tab.name"
-        :is-active-tab="currentPageName === tab.name"
+        :is-active-tab="currentPageName === tabKey"
         :icon="tab.icon"
         :path="tab.path"
         :label="tab.name"

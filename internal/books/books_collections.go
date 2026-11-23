@@ -186,6 +186,12 @@ func (s *Service) handleMoveBooks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logger.InfoContext(r.Context(), "books moved between collections",
+		"userId", userID,
+		"targetCollectionId", targetID,
+		"moved", moved,
+	)
+
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data":    map[string]int{"moved": moved},

@@ -119,10 +119,15 @@ func (s *Service) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := tx.Commit(); err != nil {
-		s.logger.Error("DELETE /api/users/delete: commit failed", "error", err)
+		s.logger.ErrorContext(r.Context(), "DELETE /api/users/delete: commit failed", "error", err)
 		httpapi.WriteError(w, http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
+
+	s.logger.InfoContext(r.Context(), "admin deleted user",
+		"actorUserId", actor.ID,
+		"targetUserId", targetID,
+	)
 
 	httpapi.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 }

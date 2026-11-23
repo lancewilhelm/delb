@@ -166,7 +166,9 @@ func (s *Service) handleAdminHealth(w http.ResponseWriter, r *http.Request) {
 	maxBooksForFuzzy := normalizeIntParam(body.MaxBooksForFuzzy, 3000, 0, 20_000)
 	maxFuzzyComparisons := normalizeIntParam(body.MaxFuzzyComparisons, 150_000, 0, 2_000_000)
 
-	startedAt := time.Now().UTC().Format(iso8601Millis)
+	startTime := time.Now().UTC()
+	startedAt := startTime.Format(iso8601Millis)
+	s.logger.InfoContext(r.Context(), "starting library health check", "mode", mode)
 	ctx := r.Context()
 	results := make([]healthCheckResult, 0, 11)
 
@@ -348,6 +350,13 @@ func (s *Service) handleAdminHealth(w http.ResponseWriter, r *http.Request) {
 	for _, r := range results {
 		overall = worstHealthStatus(overall, r.Status)
 	}
+
+	s.logger.InfoContext(r.Context(), "completed library health check",
+		"mode", mode,
+		"overall", string(overall),
+		"checks", len(results),
+		"durationMs", time.Since(startTime).Milliseconds(),
+	)
 
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,

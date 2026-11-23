@@ -300,6 +300,12 @@ func (s *Service) handleDeleteCollection(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	s.logger.InfoContext(r.Context(), "collection deleted",
+		"actorUserId", actor.ID,
+		"collectionId", id,
+		"deletedBooks", res.DeletedBooks,
+	)
+
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data": map[string]any{
@@ -854,6 +860,11 @@ func (s *Service) handleAdminSetDefault(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	s.logger.InfoContext(r.Context(), "admin updated default collection",
+		"actorUserId", actor.ID,
+		"collectionId", collectionID,
+	)
+
 	httpapi.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
 
@@ -942,6 +953,11 @@ func (s *Service) handleApplyMigration(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, "POST /api/settings/admin/collections-migration failed", err)
 		return
 	}
+
+	s.logger.InfoContext(r.Context(), "admin applied exclusive collections migration",
+		"actorUserId", actor.ID,
+		"choices", len(choices),
+	)
 
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,

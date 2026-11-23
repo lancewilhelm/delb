@@ -454,6 +454,12 @@ func (s *Service) handleBookSpine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logger.InfoContext(r.Context(), "book spine saved",
+		"bookId", bookID,
+		"userId", swu.User.ID,
+		"revision", newRevision,
+	)
+
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"success":  true,
 		"revision": newRevision,
@@ -498,6 +504,7 @@ func (s *Service) handleAdminChatGPTImage(w http.ResponseWriter, r *http.Request
 			s.writeErr(w, "DELETE /api/settings/admin/chatgpt-image disconnect failed", err)
 			return
 		}
+		s.logger.InfoContext(r.Context(), "admin disconnected ChatGPT image connection", "actorUserId", swu.User.ID)
 		httpapi.WriteJSON(w, http.StatusOK, map[string]bool{"connected": false})
 		return
 
@@ -535,6 +542,7 @@ func (s *Service) handleAdminChatGPTImage(w http.ResponseWriter, r *http.Request
 				s.writeErr(w, "POST /api/settings/admin/chatgpt-image start failed", err)
 				return
 			}
+			s.logger.InfoContext(r.Context(), "admin started ChatGPT image sign-in flow", "actorUserId", swu.User.ID)
 			httpapi.WriteJSON(w, http.StatusOK, res)
 			return
 		}
@@ -545,6 +553,9 @@ func (s *Service) handleAdminChatGPTImage(w http.ResponseWriter, r *http.Request
 				if err != nil {
 					s.writeErr(w, "POST /api/settings/admin/chatgpt-image poll failed", err)
 					return
+				}
+				if connected {
+					s.logger.InfoContext(r.Context(), "admin connected ChatGPT image integration", "actorUserId", swu.User.ID)
 				}
 				httpapi.WriteJSON(w, http.StatusOK, map[string]bool{"connected": connected})
 				return
@@ -860,8 +871,22 @@ func (s *Service) handleSpineGenerate(w http.ResponseWriter, r *http.Request) {
 		providerReq.Header.Set(k, v)
 	}
 
+	genStart := time.Now()
+	s.logger.InfoContext(r.Context(), "starting spine generation",
+		"bookId", bookID,
+		"userId", swu.User.ID,
+		"hasPrevious", hasPrevious,
+		"seriesReferences", len(seriesSpines),
+	)
+
 	providerResp, err := s.codex.client.Do(providerReq)
 	if err != nil {
+		s.logger.ErrorContext(r.Context(), "spine generation provider request failed",
+			"bookId", bookID,
+			"userId", swu.User.ID,
+			"durationMs", time.Since(genStart).Milliseconds(),
+			"error", err,
+		)
 		httpapi.WriteError(w, http.StatusBadGateway, failureMsg)
 		return
 	}
@@ -869,6 +894,12 @@ func (s *Service) handleSpineGenerate(w http.ResponseWriter, r *http.Request) {
 	_ = providerResp.Body.Close()
 
 	if providerResp.StatusCode < 200 || providerResp.StatusCode >= 300 {
+		s.logger.WarnContext(r.Context(), "spine generation provider returned non-2xx",
+			"bookId", bookID,
+			"userId", swu.User.ID,
+			"providerStatus", providerResp.StatusCode,
+			"durationMs", time.Since(genStart).Milliseconds(),
+		)
 		if providerResp.StatusCode == http.StatusUnauthorized || providerResp.StatusCode == http.StatusForbidden {
 			failureMsg = "ChatGPT rejected this request. Ask an administrator to reconnect or check whether the account supports Codex image generation."
 		} else if providerResp.StatusCode == http.StatusTooManyRequests {
@@ -878,6 +909,11 @@ func (s *Service) handleSpineGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if readErr != nil || int64(len(respBody)) > maxProviderResponseBytes {
+		s.logger.ErrorContext(r.Context(), "spine generation provider response unreadable or oversized",
+			"bookId", bookID,
+			"durationMs", time.Since(genStart).Milliseconds(),
+			"error", readErr,
+		)
 		httpapi.WriteError(w, http.StatusBadGateway, failureMsg)
 		return
 	}
@@ -947,6 +983,13 @@ func (s *Service) handleSpineGenerate(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusConflict, "The cover changed while generating. Generate again using the new cover.")
 		return
 	}
+
+	s.logger.InfoContext(r.Context(), "spine generation completed",
+		"bookId", bookID,
+		"userId", swu.User.ID,
+		"bytes", len(generatedBytes),
+		"durationMs", time.Since(genStart).Milliseconds(),
+	)
 
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("Vary", "Cookie")

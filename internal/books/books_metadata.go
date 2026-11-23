@@ -172,7 +172,7 @@ func (s *Service) fetchGoogleBooksVolumes(ctx context.Context, query string, max
 	}
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		s.logger.Error("Google Books API request failed", "error", sanitizeUpstreamError(err, apiKey))
+		s.logger.ErrorContext(ctx, "Google Books API request failed", "error", sanitizeUpstreamError(err, apiKey))
 		return nil, httpapi.NewError(http.StatusBadGateway, "Failed to fetch metadata from Google Books.")
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -180,6 +180,10 @@ func (s *Service) fetchGoogleBooksVolumes(ctx context.Context, query string, max
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 		if isGoogleBooksQuotaError(resp.StatusCode, errBody) {
+			s.logger.WarnContext(ctx, "Google Books API quota exceeded",
+				"status", resp.StatusCode,
+				"configuredKey", apiKey != "",
+			)
 			if apiKey == "" {
 				return nil, httpapi.NewError(
 					http.StatusTooManyRequests,
@@ -192,12 +196,13 @@ func (s *Service) fetchGoogleBooksVolumes(ctx context.Context, query string, max
 			)
 		}
 		if apiKey != "" && isGoogleBooksInvalidKeyError(resp.StatusCode, errBody) {
+			s.logger.WarnContext(ctx, "Google Books rejected configured API key", "status", resp.StatusCode)
 			return nil, httpapi.NewError(
 				http.StatusBadGateway,
 				"Google Books rejected the configured API key. Check the key in Admin Settings → Metadata.",
 			)
 		}
-		s.logger.Error("Google Books API non-2xx response", "status", resp.StatusCode)
+		s.logger.ErrorContext(ctx, "Google Books API non-2xx response", "status", resp.StatusCode)
 		return nil, httpapi.NewError(http.StatusBadGateway, "Failed to fetch metadata from Google Books.")
 	}
 

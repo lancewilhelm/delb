@@ -35,7 +35,7 @@ func RequireSession(authSvc *auth.Service, logger *slog.Logger, next http.Handle
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		swu, err := authSvc.Authenticate(w, r)
 		if err != nil {
-			logger.Error("session lookup failed", "path", r.URL.Path, "error", err)
+			logger.ErrorContext(r.Context(), "session lookup failed", "path", r.URL.Path, "error", err)
 			WriteError(w, http.StatusInternalServerError, "Internal Server Error")
 			return
 		}
@@ -43,6 +43,7 @@ func RequireSession(authSvc *auth.Service, logger *slog.Logger, next http.Handle
 			WriteError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
+		SetRequestUserID(r.Context(), swu.User.ID)
 		next.ServeHTTP(w, r.WithContext(WithSession(r.Context(), swu)))
 	})
 }
