@@ -1,11 +1,15 @@
 <script setup lang="ts">
-definePageMeta({
-  auth: {
-    only: 'user',
-    redirectGuestTo: '/login',
-  },
-});
-
+import { useEntityPagination } from '~/composables/useEntityPagination';
+import { useHead } from '~/composables/useHead';
+import { useCollectionsStore } from '~/stores/collections';
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { $fetch } from '~/utils/apiFetch';
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import AppHeader from '~/components/AppHeader.vue';
+import BookCover from '~/components/BookCover.vue';
+import EntityPaginationControl from '~/components/EntityPaginationControl.vue';
+import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 // Page metadata
 useHead({
   title: 'Home',

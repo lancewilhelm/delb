@@ -1,14 +1,9 @@
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import {
-  cp,
-  mkdir,
-  mkdtemp,
-  readFile,
-  rm,
-  symlink,
-  writeFile,
-} from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { cp, mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
+import { createServer as createHttpServer } from 'node:http';
+import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -24,10 +19,10 @@ const reviewPort = Number(process.env.DELB_REVIEW_PORT || '4317');
 const defaultBaseUrl = `http://${reviewHost}:${reviewPort}`;
 const baseUrl = externalBaseUrl || defaultBaseUrl;
 const customServerCmd = process.env.DELB_SERVER_CMD || '';
+const goBin = process.env.DELB_GO_BIN || path.join(root, 'bin', 'delb');
 
 const environment = {
   PATH: process.env.PATH,
-  NUXT_TELEMETRY_DISABLED: '1',
   DELB_REVIEW_URL: baseUrl,
   BASE_URL: baseUrl,
   DELB_REVIEW_HOST: reviewHost,
@@ -56,6 +51,11 @@ async function run(args, cwd) {
 }
 
 if (!externalBaseUrl) {
+  if (!customServerCmd && !existsSync(goBin)) {
+    throw Error(
+      `Standalone Go binary not found at ${goBin}. Run \`pnpm build\` first.`,
+    );
+  }
   const probe = createServer();
   await new Promise((resolve, reject) => {
     probe.once('error', reject);
@@ -118,31 +118,88 @@ if (externalBaseUrl) {
   process.exit(0);
 }
 
+/**
+ * Starts a loopback HTTP bridge wrapping review/fake-codex-provider.cjs so the
+ * standalone Go binary can talk to the deterministic fake Codex provider over
+ * DELB_CODEX_AUTH_URL / DELB_CODEX_API_URL without making outbound calls.
+ */
+async function startFakeCodexBridge(directory) {
+  const prevCwd = process.cwd();
+  const prevFetch = globalThis.fetch;
+  const fakeCodexPath = path.join(directory, 'review/fake-codex-provider.cjs');
+  const req = createRequire(fakeCodexPath);
+  req(fakeCodexPath);
+  const patchedFetch = globalThis.fetch;
+  globalThis.fetch = prevFetch;
+
+  const bridge = createHttpServer(async (incoming, res) => {
+    try {
+      const chunks = [];
+      for await (const chunk of incoming) chunks.push(chunk);
+      const body = Buffer.concat(chunks).toString('utf8');
+      const targetOrigin =
+        incoming.url && incoming.url.startsWith('/backend-api/')
+          ? 'https://chatgpt.com'
+          : 'https://auth.openai.com';
+      process.chdir(directory);
+      let response;
+      try {
+        response = await patchedFetch(`${targetOrigin}${incoming.url}`, {
+          method: incoming.method,
+          headers: incoming.headers,
+          ...(incoming.method !== 'GET' && incoming.method !== 'HEAD'
+            ? { body }
+            : {}),
+        });
+      } finally {
+        process.chdir(prevCwd);
+      }
+      res.statusCode = response.status;
+      const ct = response.headers.get('content-type');
+      if (ct) res.setHeader('content-type', ct);
+      const buf = Buffer.from(await response.arrayBuffer());
+      res.end(buf);
+    } catch (err) {
+      res.statusCode = 500;
+      res.end(String(err));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    bridge.once('error', reject);
+    bridge.listen(0, '127.0.0.1', resolve);
+  });
+  const addr = bridge.address();
+  return {
+    baseUrl: `http://127.0.0.1:${addr.port}`,
+    close: () => new Promise((resolve) => bridge.close(() => resolve())),
+  };
+}
+
 for (const suite of requested.length ? requested : suites) {
   const directory = await mkdtemp(path.join(tmpdir(), 'delb-api-regression-'));
   let server;
+  let fakeCodexBridge = null;
   let serverOutput = '';
   try {
+    const needsFakeCodex = [
+      'review/spine-generation-api.mjs',
+      'review/spine-generation-browser.mjs',
+    ].includes(suite);
+
     for (const file of [
       'package.json',
-      'packages/epub/package.json',
       'review/isolation.mjs',
       'review/fetch-auth.mjs',
+      'review/sqlite-client.mjs',
+      'review/test-image.mjs',
       'review/setup-demo.mjs',
-      'review/start-demo.mjs',
-      'review/deny-outbound.cjs',
       'review/http-smoke.mjs',
       'review/pdf-fixture.mjs',
       suite,
       ...(suite === 'review/mcp-api.mjs'
         ? ['review/mcp-python-client.py']
         : []),
-      ...([
-        'review/spine-generation-api.mjs',
-        'review/spine-generation-browser.mjs',
-      ].includes(suite)
-        ? ['review/fake-codex-provider.cjs']
-        : []),
+      ...(needsFakeCodex ? ['review/fake-codex-provider.cjs'] : []),
     ]) {
       const destination = path.join(directory, file);
       await mkdir(path.dirname(destination), { recursive: true });
@@ -156,93 +213,55 @@ for (const suite of requested.length ? requested : suites) {
       path.join(directory, 'node_modules'),
       'dir',
     );
-    await symlink(
-      path.join(root, 'packages/epub/node_modules'),
-      path.join(directory, 'packages/epub/node_modules'),
-      'dir',
-    );
-    if (!customServerCmd) {
-      await symlink(
-        path.join(root, '.output'),
-        path.join(directory, '.output'),
-        'dir',
-      );
-    }
-    if (suite === 'review/spine-generation-browser.mjs') {
-      for (const entry of ['app', 'server', 'shared', 'public'])
-        await symlink(
-          path.join(root, entry),
-          path.join(directory, entry),
-          'dir',
-        );
-      await symlink(
-        path.join(root, 'packages/epub/dist'),
-        path.join(directory, 'packages/epub/dist'),
-        'dir',
-      );
-      const config = await readFile(path.join(root, 'nuxt.config.ts'), 'utf8');
-      await writeFile(
-        path.join(directory, 'nuxt.config.ts'),
-        config.replace(
-          'export default defineNuxtConfig({',
-          "export default defineNuxtConfig({\n  buildDir: '.nuxt',",
-        ),
-      );
-      await cp(
-        path.join(root, 'tsconfig.json'),
-        path.join(directory, 'tsconfig.json'),
-      );
-    }
     await run(['review/setup-demo.mjs'], directory);
+
+    if (needsFakeCodex) {
+      fakeCodexBridge = await startFakeCodexBridge(directory);
+    }
+
+    await mkdir(path.join(directory, '.review-home'), { recursive: true });
+    const serverEnv = {
+      ...environment,
+      HOME: path.join(directory, '.review-home'),
+      HOST: reviewHost,
+      HOSTNAME: reviewHost,
+      PORT: String(reviewPort),
+      DATABASE_URL: 'file:./review/demo/synthetic.db',
+      BETTER_AUTH_SECRET: randomBytes(32).toString('hex'),
+      BETTER_AUTH_URL: baseUrl,
+      BETTER_AUTH_TRUSTED_ORIGINS: baseUrl,
+      LOG_LEVEL: 'warn',
+      NODE_ENV: 'production',
+      ...(fakeCodexBridge
+        ? {
+            DELB_CODEX_AUTH_URL: fakeCodexBridge.baseUrl,
+            DELB_CODEX_API_URL: fakeCodexBridge.baseUrl,
+          }
+        : {}),
+    };
+
     if (customServerCmd) {
-      await mkdir(path.join(directory, '.review-home'), { recursive: true });
       server = spawn(customServerCmd, {
         cwd: directory,
         shell: true,
-        env: {
-          ...environment,
-          HOME: path.join(directory, '.review-home'),
-          HOST: reviewHost,
-          HOSTNAME: reviewHost,
-          PORT: String(reviewPort),
-          DATABASE_URL: 'file:./review/demo/synthetic.db',
-          BETTER_AUTH_SECRET: randomBytes(32).toString('hex'),
-          BETTER_AUTH_URL: baseUrl,
-          BETTER_AUTH_TRUSTED_ORIGINS: baseUrl,
-          LOG_LEVEL: 'warn',
-          NODE_ENV: 'production',
-        },
+        env: serverEnv,
         detached: true,
       });
     } else {
-      server = spawn(
-        process.execPath,
-        [
-          'review/start-demo.mjs',
-          ...(suite === 'review/spine-generation-browser.mjs'
-            ? []
-            : ['--production']),
-          ...([
-            'review/spine-generation-api.mjs',
-            'review/spine-generation-browser.mjs',
-          ].includes(suite)
-            ? ['--fake-codex']
-            : []),
-        ],
-        { cwd: directory, env: environment, detached: true },
-      );
+      server = spawn(goBin, [], {
+        cwd: directory,
+        env: serverEnv,
+        detached: true,
+      });
     }
+
     const record = (bytes) => {
       serverOutput = (serverOutput + bytes).slice(-20000);
     };
     server.stdout.on('data', record);
     server.stderr.on('data', record);
     let ready = false;
-    for (
-      let attempt = 0;
-      attempt < (suite === 'review/spine-generation-browser.mjs' ? 400 : 100);
-      attempt++
-    ) {
+    for (let attempt = 0; attempt < 100; attempt++) {
       if (server.exitCode !== null) throw Error(serverOutput);
       try {
         ready =
@@ -259,7 +278,7 @@ for (const suite of requested.length ? requested : suites) {
     }
     if (!ready)
       throw Error(
-        'Disposable production server did not become ready.\n' + serverOutput,
+        'Disposable standalone Go server did not become ready.\n' + serverOutput,
       );
     try {
       await run([suite], directory);
@@ -274,7 +293,10 @@ for (const suite of requested.length ? requested : suites) {
       process.kill(-server.pid, 'SIGTERM');
       await closed;
     }
+    if (fakeCodexBridge) {
+      await fakeCodexBridge.close();
+    }
     await rm(directory, { recursive: true, force: true });
   }
 }
-console.log('PASS isolated production bootstrap and API regressions');
+console.log('PASS isolated standalone Go binary bootstrap and API regressions');

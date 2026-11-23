@@ -1,6 +1,10 @@
 <script setup lang="ts">
+import { $fetch } from '~/utils/apiFetch';
+import { navigateTo } from '~/utils/navigation';
+import { computed, onMounted, ref } from 'vue';
+import { RouterLink, useRoute } from 'vue-router';
+import ShelvesBookPicker from '~/components/Shelves/BookPicker.vue';
 import BooksLibraryView from '~/components/Books/LibraryView.vue';
-definePageMeta({ auth: { only: 'user', redirectGuestTo: '/login' } });
 const route = useRoute();
 const id = computed(() => String(route.params.id));
 type Shelf = { id: string; name: string; books: { id: string }[] };
@@ -65,19 +69,19 @@ onMounted(load);
   <div v-if="loading" class="p-5" role="status">Loading Shelf…</div>
   <div v-else-if="!shelf" class="p-5" role="alert">
     {{ error }}
-    <NuxtLink to="/shelves" class="underline">Back to Shelves</NuxtLink>
+    <RouterLink to="/shelves" class="underline">Back to Shelves</RouterLink>
   </div>
   <BooksLibraryView v-else ref="library" :shelf-id="id">
     <template #scope>
       <div
         class="px-3 py-2 border-b border-(--contrast-border-color) flex flex-wrap gap-3 items-center"
       >
-        <NuxtLink
+        <RouterLink
           to="/shelves"
           aria-label="Back to Shelves"
           class="p-1 flex items-center opacity-80 hover:opacity-100"
           ><Icon name="lucide:arrow-left" class="text-lg"
-        /></NuxtLink>
+        /></RouterLink>
         <form v-if="editingName" class="flex gap-2" @submit.prevent="rename">
           <input
             v-model="name"

@@ -1,3 +1,4 @@
+import { computed } from 'vue';
 import { isMobileUserAgent } from '~/utils/device';
 
 export function useIsMobileDevice() {

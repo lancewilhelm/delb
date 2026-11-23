@@ -36,9 +36,9 @@ Status changes update the loaded shelf and count strip in place. A book that no 
 
 ## Sources and verification
 
-- [Dashboard query](../../../server/utils/books/dashboard.ts)
-- [Dashboard handler](../../../server/api/dashboard/index.get.ts)
+- [Dashboard query](../../../internal/books/reading_state.go)
+- [Dashboard handler](../../../internal/books/reading_state.go)
 - [Dashboard page](../../../app/pages/index.vue)
-- [SQLite behavior tests](../../../server/utils/books/dashboard.test.ts)
+- [SQLite behavior tests](../../../internal/books/books_test.go)
 - [Component interaction checks](../../../review/dashboard.test.mjs)
 - [Production API checks](../../../review/dashboard-api.mjs), included in `pnpm test:integration`

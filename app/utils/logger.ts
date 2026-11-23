@@ -1,23 +1,25 @@
-import pino, { type Logger, type LoggerOptions } from 'pino';
+type LogFn = (...args: unknown[]) => void;
 
-const isProduction = process.env['NODE_ENV'] === 'production';
-const requestedLogLevel = process.env['LOG_LEVEL'];
-const logLevel = (requestedLogLevel || (isProduction ? 'warn' : 'debug')) as
-  | LoggerOptions['level']
-  | undefined;
+export interface AppLogger {
+  debug: LogFn;
+  info: LogFn;
+  warn: LogFn;
+  error: LogFn;
+}
 
-const pinoConfig: LoggerOptions = isProduction
-  ? {
-      level: logLevel,
-      browser: { asObject: true },
-    }
-  : {
-      transport: {
-        target: 'pino-pretty',
-        options: { colorize: true },
-      },
-      level: logLevel,
-      browser: { asObject: false },
-    };
+const isProduction = import.meta.env.PROD;
 
-export const logger: Logger = pino(pinoConfig);
+export const logger: AppLogger = {
+  debug: (...args) => {
+    if (!isProduction) console.debug(...args);
+  },
+  info: (...args) => {
+    if (!isProduction) console.info(...args);
+  },
+  warn: (...args) => {
+    console.warn(...args);
+  },
+  error: (...args) => {
+    console.error(...args);
+  },
+};

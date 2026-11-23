@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { RouterLink } from 'vue-router';
 defineProps<{
   isActiveTab: boolean;
   path: string;
@@ -8,7 +9,7 @@ defineProps<{
 </script>
 
 <template>
-  <NuxtLink
+  <RouterLink
     :to="path"
     :class="[
       'flex items-center gap-1 cursor-pointer hover:opacity-80 settings-tab-bar-item',
@@ -17,5 +18,5 @@ defineProps<{
   >
     <Icon :name="icon" class="text-(--contrast-main-color) header-icon" />
     {{ label }}
-  </NuxtLink>
+  </RouterLink>
 </template>

@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useCollectionsStore } from '~/stores/collections';
+import { $fetch } from '~/utils/apiFetch';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import ModalWindow from '~/components/ModalWindow.vue';
 import EditCollectionModal from '~/components/Collections/EditCollectionModal.vue';
 
 defineOptions({ name: 'CollectionPickerDropdown' });

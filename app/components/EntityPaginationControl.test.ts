@@ -1,15 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { createRequire } from 'node:module';
+import { compileScript, parse } from '@vue/compiler-sfc';
 import { transformSync } from 'esbuild';
 import * as vue from 'vue';
 
-const { parse, compileScript } = createRequire(
-  import.meta.resolve('nuxt/package.json'),
-)('@vue/compiler-sfc') as typeof import('@vue/compiler-sfc');
-
-// Compile the actual SFC, including its template and Nuxt's Vue auto-imports.
+// Compile the actual SFC, including its template.
 const source = readFileSync(
   new URL('./EntityPaginationControl.vue', import.meta.url),
   'utf8',
@@ -20,10 +16,10 @@ const compiled = compileScript(descriptor, {
   id: 'pagination-test',
   inlineTemplate: true,
 });
-const code = transformSync(
-  `import { ref, watch, onBeforeUnmount } from 'vue';\n${compiled.content}`,
-  { loader: 'ts', format: 'cjs' },
-).code;
+const code = transformSync(compiled.content, {
+  loader: 'ts',
+  format: 'cjs',
+}).code;
 const module = { exports: {} as { default: vue.Component } };
 new Function('require', 'module', 'exports', code)(
   (name: string) => {

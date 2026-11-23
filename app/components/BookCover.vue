@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { navigateTo } from '~/utils/navigation';
+import { computed, nextTick, ref, watch, watchEffect } from 'vue';
 import type { CoverMenuItem as ContextMenuItem } from '~/utils/coverMenu';
 
 type ContextMenuItemSubmenu = Extract<ContextMenuItem, { children: unknown }>;

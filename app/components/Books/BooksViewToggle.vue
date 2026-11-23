@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useUiStore } from '~/stores/ui';
+import { storeToRefs } from 'pinia';
+import { computed, onMounted, ref } from 'vue';
+import BooksViewSettings from '~/components/Books/BooksViewSettings.vue';
 defineOptions({ name: 'BooksViewToggle' });
 
 const props = withDefaults(

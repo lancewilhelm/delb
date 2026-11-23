@@ -1,27 +1,62 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import test from 'node:test';
+import { compileScript, parse } from '@vue/compiler-sfc';
+import { renderToString } from '@vue/server-renderer';
 import { transformSync } from 'esbuild';
 import { createPinia, defineStore } from 'pinia';
 import { createPersistedState } from 'pinia-plugin-persistedstate';
 import * as vue from 'vue';
 
-const { parse, compileScript } = createRequire(
-  import.meta.resolve('nuxt/package.json'),
-)('@vue/compiler-sfc');
-const { renderToString } = createRequire(import.meta.resolve('vue'))(
-  '@vue/server-renderer',
-);
+const StubNull = { render: () => null };
+const StubBookThumbnail = {
+  props: ['book'],
+  render() {
+    return vue.h(
+      'span',
+      { 'data-status': this.book.status },
+      this.book.title,
+    );
+  },
+};
 
-function evaluate(source, globals = {}) {
+function evaluate(source, globals = {}, linkCapture = null) {
   const { code } = transformSync(source, { loader: 'ts', format: 'cjs' });
   const module = { exports: {} };
+  const RouterLink = {
+    props: ['to'],
+    setup(props, { attrs, slots }) {
+      if (linkCapture) linkCapture.push({ to: props.to, onClick: attrs.onClick });
+      return () => vue.h('a', { ...attrs, href: props.to }, slots.default?.());
+    },
+  };
   new Function('require', 'module', 'exports', ...Object.keys(globals), code)(
     (name) => {
       if (name === 'vue') return vue;
-      assert.equal(name, 'pinia');
-      return { defineStore };
+      if (name === 'pinia') return { defineStore };
+      if (name === 'vue-router') {
+        return {
+          RouterLink,
+          useRoute: globals.useRoute ?? (() => ({ query: {} })),
+          useRouter: globals.useRouter ?? (() => ({ replace: () => undefined })),
+        };
+      }
+      if (name === '~/utils/apiFetch')
+        return { $fetch: globals.$fetch ?? (async () => ({})) };
+      if (name === '~/composables/useAuth')
+        return { useAuth: globals.useAuth };
+      if (name === '~/composables/useHead')
+        return { useHead: globals.useHead ?? (() => undefined) };
+      if (name === '~/stores/collections')
+        return { useCollectionsStore: globals.useCollectionsStore };
+      if (name === '~/stores/booksIndexFilters')
+        return { useBooksIndexFiltersStore: globals.useBooksIndexFiltersStore };
+      if (name === '~/stores/ui') return { useUiStore: globals.useUiStore };
+      if (name === '~/components/BookThumbnail.vue')
+        return { __esModule: true, default: StubBookThumbnail };
+      if (name.startsWith('~/components/'))
+        return { __esModule: true, default: StubNull };
+      throw new Error(`Unexpected require in dashboard.test.mjs: ${name}`);
     },
     module,
     module.exports,
@@ -32,10 +67,7 @@ function evaluate(source, globals = {}) {
 
 function loadStore(name) {
   return evaluate(
-    `import { ref, computed } from 'vue';\n${readFileSync(
-      new URL(`../app/stores/${name}.ts`, import.meta.url),
-      'utf8',
-    )}`,
+    readFileSync(new URL(`../app/stores/${name}.ts`, import.meta.url), 'utf8'),
   );
 }
 
@@ -79,10 +111,10 @@ async function dashboard() {
     id: 'dashboard-test',
     inlineTemplate: true,
   });
+  const links = [];
   const { default: page } = evaluate(
-    `import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';\n${compiled.content}`,
+    compiled.content,
     {
-      definePageMeta: () => undefined,
       useHead: () => undefined,
       useAuth: () => ({ user: vue.ref({ name: 'Reader' }) }),
       useRoute: () => ({ query: {} }),
@@ -90,8 +122,8 @@ async function dashboard() {
       useCollectionsStore: () => collections,
       useBooksIndexFiltersStore: () => filters,
     },
+    links,
   );
-  const links = [];
   app.component('NuxtLink', {
     props: ['to'],
     setup(props, { attrs, slots }) {
@@ -210,10 +242,7 @@ function mountedComponent(filename, globals, rootProps = {}) {
     id: 'interaction-test',
     inlineTemplate: true,
   });
-  const { default: component } = evaluate(
-    `import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';\n${compiled.content}`,
-    globals,
-  );
+  const { default: component } = evaluate(compiled.content, globals);
   const app = renderer.createApp({ render: () => vue.h(component, rootProps) });
   app.directive('tooltip', {});
   for (const name of ['AppHeader', 'ViewSelectorDropdown', 'Icon'])

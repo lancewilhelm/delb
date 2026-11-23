@@ -1,12 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import test from 'node:test';
+import { compileScript, parse } from '@vue/compiler-sfc';
 import { transformSync } from 'esbuild';
 import * as vue from 'vue';
-const { parse, compileScript } = createRequire(
-  import.meta.resolve('nuxt/package.json'),
-)('@vue/compiler-sfc');
 const { descriptor } = parse(
   readFileSync(
     new URL('../app/components/Books/BookProgressHistory.vue', import.meta.url),
@@ -21,6 +18,22 @@ const code = transformSync(compiled.content, {
   loader: 'ts',
   format: 'cjs',
 }).code;
+const StubLink = {
+  props: ['to'],
+  setup:
+    (props, { slots }) =>
+    () =>
+      vue.h('a', { href: props.to }, slots.default?.()),
+};
+const StubNull = { render: () => null };
+const StubTbrEditor = {
+  props: ['bookId', 'rationale'],
+  setup: (props) => () =>
+    vue.h('div', {
+      'data-editor-book': props.bookId,
+      'data-editor-value': props.rationale,
+    }),
+};
 function mount(fetch, props, { compiledCode = code, globals = {} } = {}) {
   const module = { exports: {} };
   new Function(
@@ -33,8 +46,18 @@ function mount(fetch, props, { compiledCode = code, globals = {} } = {}) {
   )(
     (name) => {
       if (name === 'vue') return vue;
-      assert.equal(name, '~/utils/descriptionHtml');
-      return { sanitizeDescriptionHtml: (value) => value };
+      if (name === 'vue-router') return { RouterLink: StubLink };
+      if (name === '~/utils/apiFetch') return { $fetch: fetch };
+      if (name === '~/utils/descriptionHtml')
+        return { sanitizeDescriptionHtml: (value) => value };
+      if (name === '~/composables/useHead')
+        return { useHead: globals.useHead ?? (() => undefined) };
+      if (name === '~/stores/ui') return { useUiStore: globals.useUiStore };
+      if (name === '~/components/Books/TbrRationaleEditor.vue')
+        return { __esModule: true, default: StubTbrEditor };
+      if (name.startsWith('~/components/'))
+        return { __esModule: true, default: StubNull };
+      throw new Error(`Unexpected require: ${name}`);
     },
     module,
     module.exports,

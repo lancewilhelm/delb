@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { onClickOutside } from '@vueuse/core';
+import { nextTick, ref } from 'vue';
+import BooksViewFieldsSettings from '~/components/Books/BooksViewFieldsSettings.vue';
 import type { BookViewMode } from '~/utils/bookFields';
 defineProps<{ mode: BookViewMode }>();
 const open = ref(false);

@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useCollectionsStore } from '~/stores/collections';
+import { $fetch } from '~/utils/apiFetch';
+import { computed, nextTick, ref, watch } from 'vue';
+import ModalWindow from '~/components/ModalWindow.vue';
 import type { BookMoveSelection } from '~/utils/collectionActions';
 
 const props = defineProps<{ open: boolean; selection: BookMoveSelection }>();

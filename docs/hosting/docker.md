@@ -61,6 +61,4 @@ share or power-loss durability. See [storage recovery](storage-recovery.md).
 
 ## Migrations
 
-Delb uses Drizzle SQL migrations from `.drizzle/migrations`. The container runs migrations on startup via `.drizzle/migrate.ts` (compiled to `.drizzle/migrate.mjs` during the Docker build).
-
-When the schema changes, generate and commit migrations with `pnpm db:generate`.
+Delb embeds its canonical SQLite migrations from `.drizzle/migrations` directly into the Go binary (`embed_migrations.go`). The standalone `/app/delb` binary automatically applies any pending migrations on startup before accepting requests (or run `/app/delb --migrate-only` to apply migrations and exit).

@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useAuth } from '~/composables/useAuth';
+import { $fetch } from '~/utils/apiFetch';
+import { nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
 type TagRef = { id: string; name: string };
 type MenuOrigin =
   | { kind: 'pointer'; x: number; y: number; returnFocus: HTMLElement | null }

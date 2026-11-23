@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
-import sharp from 'sharp';
+import sharp from './test-image.mjs';
 import { fetchAuth } from './fetch-auth.mjs';
 
 const base = (

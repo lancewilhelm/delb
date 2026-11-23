@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onBeforeUnmount, onMounted } from 'vue';
 type Props = {
   open: boolean;
   widthFull?: boolean;

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { computed } from 'vue';
 import { readingStatusDetails } from '~/utils/bookReadingStatus';
 
 const props = defineProps<{ status?: string | null }>();

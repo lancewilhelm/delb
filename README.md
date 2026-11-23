@@ -124,18 +124,19 @@ The application will be available at `http://localhost:3000`.
 
 ```
 delb/
-├── app/              # Nuxt application code
+├── app/              # Vue 3 + Vite SPA frontend
 │   ├── components/   # Vue components
 │   ├── composables/  # Vue composables
 │   ├── pages/        # Route pages (book detail at /books/[id])
-│   └── utils/        # Utilities and database schema
+│   ├── stores/       # Pinia stores
+│   └── utils/        # Frontend utilities
+├── cmd/delb/         # Standalone Go server entrypoint
+├── internal/         # Pure-Go backend packages (auth, books, storage, epub, mcp, etc.)
+├── shared/           # Shared domain logic and types
+├── .drizzle/         # SQLite migrations embedded into the Go binary
 ├── library/          # Book storage directory (gitignored)
 ├── data/             # SQLite database location (gitignored)
-├── docs/             # Project documentation
-├── server/           # Nuxt server code
-│   ├── api/          # API endpoints
-│   └── utils/        # Server utilities
-└── scratch/          # Development scratch space
+└── docs/             # Project documentation
 ```
 
 ## Documentation
@@ -149,23 +150,18 @@ Start at the [documentation home](docs/README.md), then follow the path for your
 ## Development
 
 ```bash
-# Run dev server
+# Run dev server (Go API backend + Vite HMR frontend)
 pnpm run dev
 
-# Build for production
+# Build production SPA and standalone static Go binary (bin/delb)
 pnpm run build
 
-# Preview production build
-pnpm run preview
+# Run frontend unit tests and Go tests
+pnpm run test
+pnpm run go:test
 
-# Push database schema changes
-pnpm run db:push
-
-# Generate Drizzle migrations
-pnpm run db:generate
-
-# Open Drizzle Studio
-pnpm run db:studio
+# Run full API integration test suite against bin/delb
+pnpm run test:integration
 ```
 
 ## Storage

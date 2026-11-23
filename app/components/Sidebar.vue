@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useUiStore } from '~/stores/ui';
+import { computed, onBeforeUnmount, ref } from 'vue';
 defineOptions({ name: 'AppSidebar' });
 
 const uiStore = useUiStore();

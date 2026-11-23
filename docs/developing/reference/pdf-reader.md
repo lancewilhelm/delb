@@ -4,7 +4,7 @@ The [reader route](../../../app/pages/books/[id]/read.vue) prefers EPUB, then PD
 
 ## Rendering and access
 
-The [PDF component](../../../app/components/Readers/PdfReader.client.vue) loads [Mozilla PDF.js](https://mozilla.github.io/pdf.js/) only in the browser when opening a PDF. Its matching worker, CMaps, standard fonts, and image codecs are served locally through Vite/Nitro. No document is sent to an external viewer or CDN.
+The [PDF component](../../../app/components/Readers/PdfReader.vue) loads [Mozilla PDF.js](https://mozilla.github.io/pdf.js/) only in the browser when opening a PDF. Its matching worker, CMaps, standard fonts, and image codecs are served locally through Vite/Nitro. No document is sent to an external viewer or CDN.
 
 The component requests `GET /api/books/:id/download?format=pdf&fileId=...`. The existing handler requires a session, checks collection visibility and book/file association, confines the stored path to the managed library, and responds with `application/pdf`, attachment disposition, and `Cache-Control: private, no-store`. The PDF reader does not introduce another file-serving endpoint.
 

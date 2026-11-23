@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { navigateTo } from '~/utils/navigation';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
+import HoverScrollText from '~/components/HoverScrollText.vue';
 const pages = {
   home: {
     name: 'home',

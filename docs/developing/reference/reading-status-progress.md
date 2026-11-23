@@ -72,10 +72,10 @@ Progress logs live in `user_book_progress_log` to support charting and history.
 
 ## Implementation references
 
-- Schema: `server/utils/db/schema.ts`
-- Status API: `server/api/books/[id]/status.post.ts`
-- Progress logs API: `server/api/books/[id]/progress-logs.get.ts`, `server/api/books/[id]/progress-logs.post.ts`
-- Progress sync toggle: `server/api/books/[id]/progress-sync.put.ts`
+- Schema: `.drizzle/migrations`
+- Status API: `internal/books/[id]/status.post.ts`
+- Progress logs API: `internal/books/[id]/progress-logs.get.ts`, `internal/books/[id]/progress-logs.post.ts`
+- Progress sync toggle: `internal/books/reading_state.go`
 - Book detail UI: `app/pages/books/[id]/index.vue`
 - Reader sync: `app/pages/books/[id]/read.vue`
 

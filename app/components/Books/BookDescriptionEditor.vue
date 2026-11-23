@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue';
 import Link from '@tiptap/extension-link';
 import StarterKit from '@tiptap/starter-kit';
 import { EditorContent, useEditor } from '@tiptap/vue-3';
@@ -208,8 +209,7 @@ function clearFormatting() {
     </div>
 
     <div v-if="mode === 'rich'" class="grid gap-2">
-      <ClientOnly>
-        <div class="grid gap-2">
+      <div class="grid gap-2">
           <div class="flex flex-wrap gap-2">
             <button
               type="button"
@@ -333,21 +333,6 @@ function clearFormatting() {
             <EditorContent :editor="editor" />
           </div>
         </div>
-
-        <template #fallback>
-          <textarea
-            :value="modelValue"
-            class="w-full h-52 max-h-52 overflow-y-auto px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) resize-y"
-            :placeholder="placeholder"
-            @input="
-              emit(
-                'update:modelValue',
-                (($event.target as HTMLTextAreaElement | null)?.value ?? ''),
-              )
-            "
-          />
-        </template>
-      </ClientOnly>
     </div>
 
     <div v-else class="grid gap-2">

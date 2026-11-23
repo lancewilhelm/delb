@@ -1,3 +1,4 @@
+import { nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 export function useScrollList({ nearBottomThreshold = 75 } = {}) {
   const containerRef = shallowRef<HTMLElement | null>(null);
   const isNearBottom = ref(true);
@@ -30,7 +31,7 @@ export function useScrollList({ nearBottomThreshold = 75 } = {}) {
   // Optional: ResizeObserver to detect late content expansion (e.g., MDC)
   let observer: ResizeObserver | null = null;
 
-  if (import.meta.client) {
+  if (typeof window !== 'undefined') {
     observer = new ResizeObserver(() => {
       if (isNearBottom.value) scrollToBottom();
     });

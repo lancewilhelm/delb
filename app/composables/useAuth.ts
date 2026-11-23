@@ -1,5 +1,10 @@
-import { defu } from 'defu';
-import type { RouteLocationRaw } from 'vue-router';
+import { computed, ref } from 'vue';
+import { useBooksIndexFiltersStore } from '~/stores/booksIndexFilters';
+import { useCollectionsStore } from '~/stores/collections';
+import { useGlobalSettingsStore } from '~/stores/globalSettings';
+import { useUiStore } from '~/stores/ui';
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { $fetch } from '~/utils/apiFetch';
 import {
   createDelbAuthClient,
   type AuthFetcher,
@@ -7,11 +12,17 @@ import {
   type SessionPayload,
   type User,
 } from '~/utils/authClient';
+import { navigateTo } from '~/utils/navigation';
 
-interface RuntimeAuthConfig {
-  redirectUserTo: RouteLocationRaw | string;
-  redirectGuestTo: RouteLocationRaw | string;
+export interface RuntimeAuthConfig {
+  redirectUserTo: string;
+  redirectGuestTo: string;
 }
+
+const DEFAULT_AUTH_OPTIONS: RuntimeAuthConfig = {
+  redirectUserTo: '/',
+  redirectGuestTo: '/login',
+};
 
 const PERSISTED_USER_STORES = [
   'delb.userSettings',
@@ -21,6 +32,9 @@ const PERSISTED_USER_STORES = [
   'delb.booksIndexFilters',
 ];
 
+const sessionState = ref<Session | null>(null);
+const userState = ref<User | null>(null);
+const sessionFetchingState = ref(false);
 let inFlightSessionFetch: Promise<SessionPayload | null> | null = null;
 
 function clearUserStoresAndStorage(clearAuthUserId: boolean) {
@@ -47,17 +61,11 @@ function clearUserStoresAndStorage(clearAuthUserId: boolean) {
 
 export function useAuth() {
   const client = createDelbAuthClient($fetch as unknown as AuthFetcher);
+  const options = DEFAULT_AUTH_OPTIONS;
 
-  const options = defu(
-    useRuntimeConfig().public.auth as Partial<RuntimeAuthConfig>,
-    {
-      redirectUserTo: '/',
-      redirectGuestTo: '/login',
-    },
-  );
-  const session = useState<Session | null>('auth:session', () => null);
-  const user = useState<User | null>('auth:user', () => null);
-  const sessionFetching = useState('auth:sessionFetching', () => false);
+  const session = sessionState;
+  const user = userState;
+  const sessionFetching = sessionFetchingState;
 
   const fetchSession = async (): Promise<SessionPayload | null> => {
     if (inFlightSessionFetch) {

@@ -20,8 +20,8 @@ The [command palette](../../../app/composables/useCommandPalette.ts) uses the sa
 ## Client boot and sign-in
 
 1. The inline [SPA boot script](../../../app/utils/spaBootScript.ts) reads `delb.userSettings` from `localStorage` and injects the active theme stylesheet (or custom theme CSS) and font family in `<head>` synchronously before first paint.
-2. The [client auth plugin](../../../app/plugins/auth.client.ts) fetches the active session via `GET /api/auth/get-session` before route middleware executes.
-3. The [sync plugin](../../../app/plugins/sync.client.ts) pulls account and global settings via `GET /api/settings` when signed in, including after login and registration.
+2. The [client auth plugin](../../../app/main.ts) fetches the active session via `GET /api/auth/get-session` before route middleware executes.
+3. The [sync plugin](../../../app/plugins/init-sync.ts) pulls account and global settings via `GET /api/settings` when signed in, including after login and registration.
 
 This keeps initial paint fast without server-side rendering while still reconciling persisted local preferences with database-backed account settings on load.
 
@@ -40,7 +40,7 @@ The current account field is `themePreference`, defined in [themePreference.ts](
 
 Fixed mode uses `fixed`. System mode chooses `light` or `dark` from the operating-system preference. The defaults use system mode with the Guage light/dark pair. A legacy `theme` value migrates to a fixed preference when the store normalizes it.
 
-The [SPA boot script](../../../app/utils/spaBootScript.ts) injects the initial fixed, system, or custom theme resource synchronously before first paint. The [client plugin](../../../app/plugins/init-theme.client.ts) watches the OS preference, resolved theme, preview, and custom palette.
+The [SPA boot script](../../../app/utils/spaBootScript.ts) injects the initial fixed, system, or custom theme resource synchronously before first paint. The [client plugin](../../../app/plugins/init-theme.ts) watches the OS preference, resolved theme, preview, and custom palette.
 
 [useThemeAppearance](../../../app/composables/useThemeAppearance.ts) selects a fixed theme, assigns a light/dark slot, or returns to system mode. Theme previews do not become saved selections until a selection action updates the settings.
 
@@ -60,7 +60,7 @@ The [contrast utility](../../../app/utils/appearanceContrast.ts) owns the coeffi
 
 ## Write acknowledgements and concurrent changes
 
-`PUT /api/settings/user` receives the settings document and its `updatedAt` revision. [The handler](../../../server/api/settings/user.put.ts) accepts a newer revision, or acknowledges an identical repeat of the stored revision/content. It returns the stored row and whether the write was accepted.
+`PUT /api/settings/user` receives the settings document and its `updatedAt` revision. [The handler](../../../internal/settings/handlers.go) accepts a newer revision, or acknowledges an identical repeat of the stored revision/content. It returns the stored row and whether the write was accepted.
 
 The client tracks acknowledged revisions. A rejected write rebases the pending local changes onto the returned server row and retries with a later revision. Stale pulls and delayed responses must not overwrite acknowledged or pending changes. User settings timestamps use millisecond storage; global settings use their separate server contract.
 
@@ -88,4 +88,4 @@ The badge appears in the top-right of grid, list, and dashboard shelf covers. It
 
 The administrator can edit the shared generation prompt in **Settings → Admin → Spine generation**. The saved template is stored in `system_state` and applies to subsequent generation requests. It is a single prompt sent to the image endpoint, not a separate system-role message. The template must include `{{title}}`, `{{authors}}`, `{{reference}}`, and `{{instructions}}`. The server substitutes the book metadata, reference-image instructions, and the editor's additional instructions when building each request.
 
-The [prompt endpoint](../../../server/api/settings/admin/spine-prompt.ts) requires an administrator and checks the last saved value to reject conflicting edits. The default template and substitution rules live in [spine-generation-prompt.ts](../../../shared/spine-generation-prompt.ts). Restoring the default in the editor takes effect when the administrator saves it.
+The [prompt endpoint](../../../internal/spines/prompt.go) requires an administrator and checks the last saved value to reject conflicting edits. The default template and substitution rules live in [spine-generation-prompt.ts](../../../shared/spine-generation-prompt.ts). Restoring the default in the editor takes effect when the administrator saves it.

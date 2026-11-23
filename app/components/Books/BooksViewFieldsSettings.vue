@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useBookViewFields } from '~/composables/useBookViewFields';
+import { ref } from 'vue';
 import {
   bookFieldDefinition,
   type BookFieldId,

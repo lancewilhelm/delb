@@ -26,7 +26,7 @@ Bookshelf view is available for one selected collection. A compact authorized re
 
 ### Personal Shelves
 
-A Shelf is a private selection of book entries across collections. Its owner can add, remove, and arrange accessible books. [Personal Shelf operations](../../../server/utils/shelves/model.ts) store membership and placement separately from shelf geometry. Reads project only currently accessible members and retain hidden placements for later restoration. Global spine dimensions remain subject to the book's collection role. The grid, list, and visual bookshelf reuse the existing book view components.
+A Shelf is a private selection of book entries across collections. Its owner can add, remove, and arrange accessible books. [Personal Shelf operations](../../../internal/bookshelf/shelves.go) store membership and placement separately from shelf geometry. Reads project only currently accessible members and retain hidden placements for later restoration. Global spine dimensions remain subject to the book's collection role. The grid, list, and visual bookshelf reuse the existing book view components.
 
 ## Filters and search
 

@@ -1,4 +1,11 @@
 <script setup lang="ts">
+import { useAuth } from '~/composables/useAuth';
+import { computed, ref, watch } from 'vue';
+import DelbLogo from '~/components/DelbLogo.vue';
+import ModalWindow from '~/components/ModalWindow.vue';
+import SettingsUIGroup from '~/components/Settings/UI/SettingsUIGroup.vue';
+import { appVersion } from '~/utils/appVersion';
+
 const changePasswordModalVisible = ref(false);
 const changePasswordSuccess = ref(false);
 const currentPassword = ref('');
@@ -45,8 +52,6 @@ async function handleUpdatePassword() {
     changePasswordSuccess.value = false;
   }, 3000);
 }
-
-const config = useRuntimeConfig();
 
 const profileName = ref('');
 const profileEmail = ref('');
@@ -202,10 +207,12 @@ async function handleUpdateProfile() {
         Donde está la biblioteca
       </div>
       <div class="text-(--contrast-sub-color) italic">
-        version: {{ config.public.appVersion }}
+        version: {{ appVersion }}
       </div>
-      <NuxtLink
-        to="https://github.com/lancewilhelm/delb"
+      <a
+        href="https://github.com/lancewilhelm/delb"
+        target="_blank"
+        rel="noopener noreferrer"
         class="flex items-center gap-1"
       >
         <Icon
@@ -215,7 +222,7 @@ async function handleUpdateProfile() {
         <span class="text-(--contrast-main-color)"
           ><span class="logo">Delb</span> on GitHub</span
         >
-      </NuxtLink>
+      </a>
     </SettingsUIGroup>
 
     <!-- Change Password Modal -->

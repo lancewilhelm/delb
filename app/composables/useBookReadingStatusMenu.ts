@@ -1,3 +1,4 @@
+import { $fetch } from '~/utils/apiFetch';
 import type { BookStatusChange } from '~/utils/bookReadingStatus';
 import type { CoverMenuItem } from '~/utils/coverMenu';
 import type { UserBookStatusValue } from '~~/shared/reading-status';

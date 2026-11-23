@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, watchEffect } from 'vue';
 /** The value */
 const model = defineModel<number | string | null>();
 

@@ -1,3 +1,4 @@
+import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 
 export type UserBookStatus = 'to_be_read' | 'reading' | 'finished' | 'dnf';

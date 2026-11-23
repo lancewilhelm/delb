@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onBeforeUnmount, ref, watch } from 'vue';
 const props = defineProps<{
   root: HTMLElement | null;
   rowCount: number;

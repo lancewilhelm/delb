@@ -1,40 +1,27 @@
 <script setup lang="ts">
-import type { ConcreteComponent } from 'vue';
-import type { RouteLocationNormalized } from 'vue-router';
-// Redirect to the profile page if the page parameter is empty
-definePageMeta({
-  auth: {
-    only: 'user',
-    redirectGuestTo: '/login',
-  },
-  middleware: [
-    function (to: RouteLocationNormalized) {
-      if (!to.params.page) {
-        return navigateTo('/settings/general');
-      } else if (
-        Array.isArray(to.params.page) &&
-        to.params.page.length === 1 &&
-        to.params.page[0] === 'admin'
-      ) {
-        return navigateTo('/settings/admin/library');
-      }
-    },
-  ],
-});
+import { computed, type Component } from 'vue';
+import { useRoute } from 'vue-router';
+import AppHeader from '~/components/AppHeader.vue';
+import SettingsAdmin from '~/components/Settings/SettingsAdmin.vue';
+import SettingsAppearance from '~/components/Settings/SettingsAppearance.vue';
+import SettingsConnections from '~/components/Settings/SettingsConnections.vue';
+import SettingsGeneral from '~/components/Settings/SettingsGeneral.vue';
+import SettingsTabBarItem from '~/components/Settings/SettingsTabBarItem.vue';
+import { useAuth } from '~/composables/useAuth';
 
 // Compute the current page based on the route parameter
 const route = useRoute();
-const currentPageName = computed(() =>
-  route.params.page !== ''
-    ? Array.isArray(route.params.page)
-      ? route.params.page[0]
-      : route.params.page
-    : 'profile',
-);
+const currentPageName = computed(() => {
+  const page = route.params.page;
+  if (Array.isArray(page)) {
+    return page[0] || 'general';
+  }
+  return page ? page.split('/')[0] || 'general' : 'general';
+});
 
 interface Tab {
   name: string;
-  component: string | ConcreteComponent;
+  component: Component;
   icon: string;
   path: string;
   admin: boolean;
@@ -43,35 +30,28 @@ interface Tab {
 const tabs: Record<string, Tab> = {
   general: {
     name: 'General',
-    component: resolveComponent('SettingsGeneral'),
+    component: SettingsGeneral,
     icon: 'lucide:settings',
     path: '/settings/general',
     admin: false,
   },
   connections: {
     name: 'Connections',
-    component: resolveComponent('SettingsConnections'),
+    component: SettingsConnections,
     icon: 'lucide:plug',
     path: '/settings/connections',
     admin: false,
   },
   appearance: {
     name: 'Appearance',
-    component: resolveComponent('SettingsAppearance'),
+    component: SettingsAppearance,
     icon: 'lucide:palette',
     path: '/settings/appearance',
     admin: false,
   },
-  // cloud: {
-  //     name: "cloud",
-  //     component: resolveComponent("SettingsCloud"),
-  //     icon: "lucide:cloud",
-  //     path: "/settings/cloud",
-  //     admin: false,
-  // },
   admin: {
     name: 'Admin',
-    component: resolveComponent('SettingsAdmin'),
+    component: SettingsAdmin,
     icon: 'lucide:shield-check',
     path: '/settings/admin',
     admin: true,

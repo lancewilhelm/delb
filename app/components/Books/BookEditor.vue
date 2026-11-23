@@ -1,4 +1,15 @@
 <script setup lang="ts">
+import { useGlobalSettingsStore } from '~/stores/globalSettings';
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { $fetch } from '~/utils/apiFetch';
+import { buildBookCoverUrl } from '~/utils/covers';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
+import AppHeader from '~/components/AppHeader.vue';
+import BookCover from '~/components/BookCover.vue';
+import BookMetadataSearchModal from '~/components/BookMetadataSearchModal.vue';
+import UiChip from '~/components/ui/UiChip.vue';
+import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 import BookDescriptionEditor from '~/components/Books/BookDescriptionEditor.vue';
 import SpineArtworkEditor from '~/components/Books/SpineArtworkEditor.vue';
 import { readResponseError } from '~/utils/responseError';
@@ -1355,7 +1366,7 @@ function backToBook() {
     // If the previous history entry is already the book page, going "back"
     // avoids duplicating the book route (book -> edit -> replace-to-book =>
     // book twice in history).
-    if (import.meta.client) {
+    if (typeof window !== 'undefined') {
       const back = (window.history.state as { back?: unknown } | null)?.back;
       if (typeof back === 'string') {
         try {
@@ -1732,7 +1743,7 @@ watch(
         class="flex items-center justify-between gap-2 mb-4 text-(--contrast-main-color)"
       >
         <!-- Back button -->
-        <icon
+        <Icon
           v-tooltip="backTooltip"
           name="lucide:arrow-left"
           class="text-3xl opacity-80 hover:opacity-100 cursor-pointer self-start"
@@ -1873,7 +1884,7 @@ watch(
               :disabled="saving || coverUrlLoading"
               @click="pickCoverFile"
             >
-              <icon name="lucide:image-up" class="scale-135" />
+              <Icon name="lucide:image-up" class="scale-135" />
               Upload
             </button>
 
@@ -1885,7 +1896,7 @@ watch(
               :disabled="saving"
               @click="resetCoverPreview"
             >
-              <icon name="ri:reset-left-line" class="scale-135" />
+              <Icon name="ri:reset-left-line" class="scale-135" />
               Reset
             </button>
 
@@ -1898,7 +1909,7 @@ watch(
               "
               @click="resetSavedCover"
             >
-              <icon name="lucide:x" class="scale-135" />
+              <Icon name="lucide:x" class="scale-135" />
               Clear
             </button>
           </div>
@@ -1927,7 +1938,7 @@ watch(
                 "
                 @click="previewCoverFromUrl"
               >
-                <icon
+                <Icon
                   :name="
                     coverUrlLoading ? 'lucide:loader-circle' : 'lucide:download'
                   "
@@ -2006,7 +2017,7 @@ watch(
                 >
                   Required
                 </span>
-                <icon
+                <Icon
                   v-if="form.title.trim() !== (book.title ?? '').trim()"
                   v-tooltip="'Reset title'"
                   name="ri:reset-left-line"
@@ -2048,7 +2059,7 @@ watch(
                 >
                   Required
                 </span>
-                <icon
+                <Icon
                   v-if="
                     authorChips
                       .map((c) => c.name)
@@ -2156,7 +2167,7 @@ watch(
                   "
                   >Description</label
                 >
-                <icon
+                <Icon
                   v-if="
                     form.description.trim() !== (book.description ?? '').trim()
                   "
@@ -2186,7 +2197,7 @@ watch(
                     "
                     >Series</label
                   >
-                  <icon
+                  <Icon
                     v-if="
                       form.series.trim() !== (book.series?.name ?? '').trim()
                     "
@@ -2271,7 +2282,7 @@ watch(
                     Series Index
                     <span class="opacity-60">(number)</span>
                   </label>
-                  <icon
+                  <Icon
                     v-if="
                       form.seriesIndex.trim() !==
                       ((book.series?.index ?? '') + '').trim()
@@ -2315,7 +2326,7 @@ watch(
                   "
                   >Tags</label
                 >
-                <icon
+                <Icon
                   v-if="
                     tagChips
                       .map((c) => c.name)
@@ -2418,7 +2429,7 @@ watch(
                     "
                     >Publisher</label
                   >
-                  <icon
+                  <Icon
                     v-if="
                       form.publisher.trim() !==
                       (book.publisher?.name ?? '').trim()
@@ -2502,7 +2513,7 @@ watch(
                     "
                     >Published</label
                   >
-                  <icon
+                  <Icon
                     v-if="
                       form.published.trim() !==
                       (formatDateOnly(book.published ?? '') || '').trim()
@@ -2541,7 +2552,7 @@ watch(
                   "
                   >Identifiers</label
                 >
-                <icon
+                <Icon
                   v-if="
                     form.identifiers.trim() !==
                     (
@@ -2592,7 +2603,7 @@ watch(
                       })()
                     "
                   >
-                    <icon name="lucide:x" class="scale-110" />
+                    <Icon name="lucide:x" class="scale-110" />
                   </button>
                 </div>
               </div>
@@ -2653,7 +2664,7 @@ watch(
                   "
                   >Pages</label
                 >
-                <icon
+                <Icon
                   v-if="form.pages.trim() !== ((book.pages ?? '') + '').trim()"
                   v-tooltip="'Reset pages'"
                   name="ri:reset-left-line"
@@ -2695,7 +2706,7 @@ watch(
                   "
                   >Language</label
                 >
-                <icon
+                <Icon
                   v-if="form.language.trim() !== (book.language ?? '').trim()"
                   v-tooltip="'Reset language'"
                   name="ri:reset-left-line"

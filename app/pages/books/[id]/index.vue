@@ -1,13 +1,25 @@
 <script setup lang="ts">
+import { useClipboard } from '@vueuse/core';
+import { useHead } from '~/composables/useHead';
+import { useCollectionsStore } from '~/stores/collections';
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { $fetch } from '~/utils/apiFetch';
+import { navigateTo } from '~/utils/navigation';
+import { buildBookCoverUrl } from '~/utils/covers';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { RouterLink, useRoute, useRouter } from 'vue-router';
+import AppHeader from '~/components/AppHeader.vue';
+import BookCover from '~/components/BookCover.vue';
+import BooksBookMoveModal from '~/components/Books/BookMoveModal.vue';
+import BooksBookPersonalShelves from '~/components/Books/BookPersonalShelves.vue';
+import BooksBookProgressHistory from '~/components/Books/BookProgressHistory.vue';
+import BooksTbrRationaleEditor from '~/components/Books/TbrRationaleEditor.vue';
+import HoverScrollText from '~/components/HoverScrollText.vue';
+import ModalWindow from '~/components/ModalWindow.vue';
+import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 import type { BookMoveSelection } from '~/utils/collectionActions';
 import { readDownloadFilename } from '~/utils/downloadFilename';
 import { sanitizeDescriptionHtml } from '~/utils/descriptionHtml';
-definePageMeta({
-  auth: {
-    only: 'user',
-    redirectGuestTo: '/login',
-  },
-});
 
 // Page metadata
 useHead({
@@ -1164,7 +1176,7 @@ const { copy } = useClipboard();
 
     <div class="flex flex-col w-full h-full p-4 pt-2 sm:pt-4 overflow-auto">
       <div class="flex items-center gap-4 mb-4 text-(--contrast-main-color)">
-        <icon
+        <Icon
           v-tooltip="'Go back'"
           class="opacity-80 hover:opacity-100 text-3xl cursor-pointer"
           name="lucide:arrow-left"
@@ -1231,23 +1243,23 @@ const { copy } = useClipboard();
           <div class="flex flex-col items-center w-full">
             <!-- Actions -->
             <div class="flex flex-wrap gap-1 pt-2 items-center justify-center">
-              <NuxtLink
+              <RouterLink
                 v-if="hasEpub || hasPdf"
                 v-tooltip="'Read book'"
                 aria-label="Read book"
                 class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
                 :to="`/books/${book.id}/read`"
               >
-                <icon name="lucide:book-open" class="text-xl" />
-              </NuxtLink>
+                <Icon name="lucide:book-open" class="text-xl" />
+              </RouterLink>
 
-              <NuxtLink
+              <RouterLink
                 v-if="hasEpub && hasPdf"
                 class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm"
                 :to="`/books/${book.id}/read?format=pdf`"
               >
                 Read PDF
-              </NuxtLink>
+              </RouterLink>
 
               <div v-if="book.files && book.files.length > 0" class="relative">
                 <button
@@ -1260,14 +1272,14 @@ const { copy } = useClipboard();
                   aria-haspopup="menu"
                   @click="onDownloadClick"
                 >
-                  <icon
+                  <Icon
                     :name="
                       downloading ? 'lucide:loader-circle' : 'lucide:book-down'
                     "
                     class="text-xl"
                     :class="[downloading ? 'animate-spin' : '']"
                   />
-                  <icon
+                  <Icon
                     v-if="book.files.length > 1"
                     name="lucide:chevron-down"
                     class="text-base opacity-70"
@@ -1303,14 +1315,14 @@ const { copy } = useClipboard();
                 </div>
               </div>
 
-              <NuxtLink
+              <RouterLink
                 v-if="canEditBook"
                 v-tooltip="'Edit book details'"
                 class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm gap-2! inline-flex items-center"
                 :to="`/books/${book.id}/edit`"
               >
-                <icon name="lucide:pencil" class="text-xl" />
-              </NuxtLink>
+                <Icon name="lucide:pencil" class="text-xl" />
+              </RouterLink>
 
               <button
                 v-if="canEditBook"
@@ -1320,7 +1332,7 @@ const { copy } = useClipboard();
                 :disabled="deleting"
                 @click="showDeleteConfirm = true"
               >
-                <icon name="lucide:trash-2" class="text-xl" />
+                <Icon name="lucide:trash-2" class="text-xl" />
               </button>
             </div>
 
@@ -1738,19 +1750,12 @@ const { copy } = useClipboard();
                     descriptionExpanded ? '' : 'max-h-75 overflow-hidden',
                   ]"
                 >
-                  <ClientOnly>
-                    <!-- eslint-disable vue/no-v-html -->
+                  <!-- eslint-disable vue/no-v-html -->
                     <div
                       class="book-description-content"
                       v-html="safeDescriptionHtml"
                     />
                     <!-- eslint-enable vue/no-v-html -->
-                    <template #fallback>
-                      <span class="book-description-content">{{
-                        book.description
-                      }}</span>
-                    </template>
-                  </ClientOnly>
                 </div>
 
                 <div
@@ -2073,7 +2078,7 @@ const { copy } = useClipboard();
           class="fixed top-3 right-3 bg-(--bg-color) border border-(--contrast-border-color) rounded-full w-9 h-9 flex items-center justify-center hover:bg-(--sub-color)/10"
           @click="closeCoverViewer"
         >
-          <icon name="lucide:x" class="scale-135" />
+          <Icon name="lucide:x" class="scale-135" />
         </button>
 
         <img

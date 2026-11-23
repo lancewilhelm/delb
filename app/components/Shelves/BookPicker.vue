@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import { useCollectionsStore } from '~/stores/collections';
+import { $fetch } from '~/utils/apiFetch';
+import { computed, nextTick, ref, watch } from 'vue';
+import SearchBookResult from '~/components/Search/BookResult.vue';
+import SearchDialogFrame from '~/components/Search/DialogFrame.vue';
 import type { BookViewBook } from '~/utils/bookFields';
 const props = withDefaults(
   defineProps<{

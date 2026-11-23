@@ -1,11 +1,17 @@
 <script setup lang="ts">
+import { useAuth } from '~/composables/useAuth';
+import { useEntityPagination } from '~/composables/useEntityPagination';
+import { useHead } from '~/composables/useHead';
+import { useCollectionsStore } from '~/stores/collections';
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { $fetch } from '~/utils/apiFetch';
+import { ref } from 'vue';
+import { RouterLink } from 'vue-router';
+import AppHeader from '~/components/AppHeader.vue';
+import BookCover from '~/components/BookCover.vue';
+import EntityPaginationControl from '~/components/EntityPaginationControl.vue';
+import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 import type TagsActions from '~/components/Tags/Actions.vue';
-definePageMeta({
-  auth: {
-    only: 'user',
-    redirectGuestTo: '/login',
-  },
-});
 
 // Page metadata
 useHead({
@@ -154,7 +160,7 @@ const filteredTags = tags;
                 @contextmenu="onTagContextMenu($event, t)"
                 @keydown="onTagKey($event, t)"
               >
-                <NuxtLink
+                <RouterLink
                   :to="`/tags/${encodeURIComponent(t.id)}`"
                   class="absolute inset-0 z-100"
                   :aria-label="`View ${t.name}`"

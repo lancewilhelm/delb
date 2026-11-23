@@ -5,8 +5,8 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { createClient } from '@libsql/client';
-import sharp from 'sharp';
+import { createClient } from './sqlite-client.mjs';
+import sharp from './test-image.mjs';
 import { fetchAuth } from './fetch-auth.mjs';
 
 // Production browser measurements against the disposable synthetic demo only.

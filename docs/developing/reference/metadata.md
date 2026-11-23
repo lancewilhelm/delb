@@ -49,15 +49,15 @@ Hardcover results are mapped into the shape consumed by the shared import flow. 
 
 ## Cover delivery
 
-External images pass through [server image handling](../../../server/utils/books/external-image.ts). The current contract accepts decoded JPEG, PNG, and WebP input, normalizes output to PNG for metadata delivery, and bounds input/output size, pixels, redirects, and elapsed time. Active SVG input is rejected.
+External images pass through [server image handling](../../../internal/books/external_image.go). The current contract accepts decoded JPEG, PNG, and WebP input, normalizes output to PNG for metadata delivery, and bounds input/output size, pixels, redirects, and elapsed time. Active SVG input is rejected.
 
-Cover storage and ebook embedding are separate operations. A stored cover can be delivered through the authorized book-cover endpoint; supported EPUB cover updates use the independent [EPUB package](../../../packages/epub/README.md) and Delb's storage coordination.
+Cover storage and ebook embedding are separate operations. A stored cover can be delivered through the authorized book-cover endpoint; supported EPUB cover updates use the independent [EPUB package](../../../internal/epub/epub.go) and Delb's storage coordination.
 
 ## Sources and evidence
 
 - [Search modal](../../../app/components/BookMetadataSearchModal.vue), [Add book dialog](../../../app/components/Books/BookAddModal.vue), and [editor](../../../app/components/Books/BookEditor.vue).
-- [Metadata creation](../../../server/api/books/metadata-import/create.post.ts) and [metadata proxy endpoints](../../../server/api/books/metadata).
-- [Hardcover secret handling](../../../server/utils/secrets/hardcover.ts).
+- [Metadata creation](../../../internal/books/books_metadata.go) and [metadata proxy endpoints](../../../internal/books/books_metadata.go).
+- [Hardcover secret handling](../../../internal/settings/handlers.go).
 - [Core request flows](../core-workflows.md#add-a-book) and [verification record](../documentation-status.md).
 
 The synthetic demo blocks outbound requests. Source inspection and supplied-record imports do not establish successful live Google Books/Hardcover searches or cover downloads.

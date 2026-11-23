@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import BookshelfSpine from './BookshelfSpine.vue';
 import type { BookViewBook } from '~/utils/bookFields';
 import { placementStyle } from '~/utils/bookshelfPlacement';

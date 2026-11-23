@@ -1,4 +1,4 @@
 <script setup lang="ts">
-definePageMeta({ auth: { only: 'user', redirectGuestTo: '/login' } });
+import BooksLibraryView from '~/components/Books/LibraryView.vue';
 </script>
 <template><BooksLibraryView /></template>

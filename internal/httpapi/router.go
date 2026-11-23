@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"database/sql"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -22,19 +23,20 @@ type RouterOptions struct {
 	Services    []RouteRegistrar
 	Middleware  []func(http.Handler) http.Handler
 	Upstream    http.Handler
+	WebFS       fs.FS
 }
 
 // NewHandler constructs the root HTTP handler:
 //   - Wraps all /api/* routes with the global collections-model maintenance gate
 //     and any caller-supplied outer middleware (such as startup storage recovery).
-//   - Mounts /api/auth/* and all ported domain services (Settings, Users,
-//     Collections, Books/Catalog/Reading/Search/Dashboard, Bookshelves/Shelves/
-//     Pictures, Spines/SpineGeneration/ChatGPT-Image, Admin Health/Calibre/Nuke,
-//     MCP Connections & Streamable HTTP MCP Server).
-//   - Handles all unknown /api/* paths directly in Go with a clean JSON 404 so
-//     zero /api/* requests are proxied to Upstream.
-//   - Proxies non-API frontend paths (/, assets) to Upstream when configured,
-//     or returns 404 when running standalone.
+//   - Mounts /api/auth/* and all domain services (Settings, Users, Collections,
+//     Books/Catalog/Reading/Search/Dashboard, Bookshelves/Shelves/Pictures,
+//     Spines/SpineGeneration/ChatGPT-Image, Admin Health/Calibre/Nuke, MCP
+//     Connections & Streamable HTTP MCP Server).
+//   - Handles all unknown /api/* paths directly in Go with a clean JSON 404.
+//   - Proxies non-API frontend paths (/, assets) to Upstream when configured
+//     (e.g. Vite HMR dev server), or serves the embedded SPA from WebFS in
+//     standalone production mode.
 func NewHandler(opts RouterOptions) http.Handler {
 	mux := http.NewServeMux()
 	if opts.AuthService != nil {
@@ -47,14 +49,17 @@ func NewHandler(opts RouterOptions) http.Handler {
 	}
 
 	// Catch-all for any unknown /api/* route: return a clean JSON 404 in Go
-	// without ever hitting Upstream.
+	// without ever hitting Upstream or the SPA fallback.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusNotFound, "Not Found")
 	})
 
-	if opts.Upstream != nil {
+	switch {
+	case opts.Upstream != nil:
 		mux.Handle("/", opts.Upstream)
-	} else {
+	case opts.WebFS != nil:
+		mux.Handle("/", NewSPAHandler(opts.WebFS))
+	default:
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			if strings.HasPrefix(r.URL.Path, "/api/") {
 				WriteError(w, http.StatusNotFound, "Not Found")

@@ -38,7 +38,7 @@ On open, the reader restores the saved CFI. With progress sync enabled, it also 
 
 ## Sources and evidence
 
-- [Position handler](../../../server/api/books/[id]/reading-position.put.ts) and [persistence helper](../../../server/utils/books/save-position.ts).
-- [Progress-sync handler](../../../server/api/books/[id]/progress-sync.put.ts) and [status transitions](../../../server/utils/books/status-transition.ts).
+- [Position handler](../../../internal/books/reading_state.go) and [persistence helper](../../../internal/books/reading_state.go).
+- [Progress-sync handler](../../../internal/books/reading_state.go) and [status transitions](../../../internal/books/reading_state.go).
 - [Historical fullscreen investigation](../../archive/reader-fullscreen-fix.md).
 - [Documentation verification](../documentation-status.md) for exercised controls and evidence limits.

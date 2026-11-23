@@ -4,9 +4,9 @@ These flows connect the [user guides](../README.md#use-delb) to the implementati
 
 ## Account initialization
 
-The [registration page](../../app/pages/register.vue) validates fields and calls Better Auth email signup. The [auth configuration](../../server/utils/auth.ts) permits the first registration, applies the later registration toggle, and restricts self-registration to the normal user role.
+The [registration page](../../app/pages/register.vue) validates fields and calls Better Auth email signup. The [auth configuration](../../internal/auth/handlers.go) permits the first registration, applies the later registration toggle, and restricts self-registration to the normal user role.
 
-After user creation, [owner bootstrap](../../server/utils/security/bootstrap.ts) claims its durable marker, initializes the shared Default when needed, and enrolls the new user in one transaction. Later users join the current default as editors. Session creation does not enroll users again.
+After user creation, [owner bootstrap](../../internal/auth/handlers.go) claims its durable marker, initializes the shared Default when needed, and enrolls the new user in one transaction. Later users join the current default as editors. Session creation does not enroll users again.
 
 The page fetches the new session and pulls user/global settings before navigation. Route middleware controls navigation; API authorization remains server-side.
 
@@ -39,11 +39,11 @@ sequenceDiagram
     API-->>UI: Per-file results
 ```
 
-The [upload handler](../../server/api/books/upload.post.ts) uses [stored-create operations](../../server/utils/books/storage/create-operation.ts) and database decisions to coordinate files and rows. A replacement also uses the per-book lock and preserves the existing book identity. User reading records attached to that identity remain distinct from replaced content.
+The [upload handler](../../internal/books/books_files.go) uses [stored-create operations](../../internal/storage/create.go) and database decisions to coordinate files and rows. A replacement also uses the per-book lock and preserves the existing book identity. User reading records attached to that identity remain distinct from replaced content.
 
 Batch results require per-file inspection. Duplicate review can stop an individual import and request an explicit decision. Replacement requires collection owner/editor access and stays in the existing collection. A match in another collection creates an independent entry or cancels; a move is a separate confirmed action.
 
-The [manual handler](../../server/api/books/index.post.ts), [metadata handler](../../server/api/books/metadata-import/create.post.ts), and upload handler have different sequencing. Do not infer that all creation paths use the same database transaction or storage journal. Metadata cover fetches and canonical-directory work include best-effort steps after record creation.
+The [manual handler](../../internal/books/books_crud.go), [metadata handler](../../internal/books/books_metadata.go), and upload handler have different sequencing. Do not infer that all creation paths use the same database transaction or storage journal. Metadata cover fetches and canonical-directory work include best-effort steps after record creation.
 
 ## Browse and search
 
@@ -51,11 +51,11 @@ The header's [collection store](../../app/stores/collections.ts) holds either Al
 
 The dashboard's **All books** link calls the [Books filter store](../../app/stores/booksIndexFilters.ts) to clear its persisted status, date-added, and file-presence filters before navigation. The collection selection, sort settings, and view preferences remain unchanged. **To be read** opens the dedicated personal queue. Other dashboard status links retain their status query parameters.
 
-The [dashboard query](../../server/utils/books/dashboard.ts) counts books in the active collection and pages the selected reading shelf. The To be read count covers the reader's full private queue across accessible collections. Continue reading uses the reader's saved progress. Recently finished uses the reader's finish dates. Membership checks apply to both counts and shelf results. [The dashboard reference](reference/dashboard.md) describes the request and order rules.
+The [dashboard query](../../internal/books/reading_state.go) counts books in the active collection and pages the selected reading shelf. The To be read count covers the reader's full private queue across accessible collections. Continue reading uses the reader's saved progress. Recently finished uses the reader's finish dates. Membership checks apply to both counts and shelf results. [The dashboard reference](reference/dashboard.md) describes the request and order rules.
 
-[Book listing](../../server/api/books/index.get.ts) first resolves the authenticated reader's collection memberships. A selected collection must belong to that set. Status filters join the reader's personal status records. Stable sort keys and cursors keep pagination consistent for a chosen ordering. The response enriches the page with the metadata selected by book views.
+[Book listing](../../internal/books/books_crud.go) first resolves the authenticated reader's collection memberships. A selected collection must belong to that set. Status filters join the reader's personal status records. Stable sort keys and cursors keep pagination consistent for a chosen ordering. The response enriches the page with the metadata selected by book views.
 
-[Entity list queries](../../server/utils/books/entity-list-query.ts) serve book lists under authors, publishers, and tags. [Global search](../../server/api/search/index.get.ts) searches across accessible records, including stored identifiers. Its visibility scope is not an automatic copy of every Books-page filter.
+[Entity list queries](../../internal/books/catalog.go) serve book lists under authors, publishers, and tags. [Global search](../../internal/books/catalog.go) searches across accessible records, including stored identifiers. Its visibility scope is not an automatic copy of every Books-page filter.
 
 Tag deletion and merging require system admin/owner authorization. They mutate shared catalog links across collections in a transaction and preserve book records. The selected collection does not limit the global effect.
 
@@ -63,11 +63,11 @@ Changing a view field updates account settings, not the book's metadata. The vir
 
 ## Collections and sharing
 
-Creating a [collection](../../server/api/collections/index.post.ts) establishes the owner relation. [Member upsert](../../server/api/collections/[id]/members/index.put.ts) resolves an existing account by email and accepts editor/viewer roles. It does not deliver an email invitation.
+Creating a [collection](../../internal/collections/handlers.go) establishes the owner relation. [Member upsert](../../internal/collections/handlers.go) resolves an existing account by email and accepts editor/viewer roles. It does not deliver an email invitation.
 
-The [single-book handler](../../server/api/books/[id]/collections/index.put.ts), [explicit selection move](../../server/api/books/move.post.ts), and [source-scoped bulk handler](../../server/api/collections/[id]/books/bulk.post.ts) require edit rights in both source and destination. They validate expected source mappings and commit the move atomically. Readers remaining only in the source lose access.
+The [single-book handler](../../internal/books/books_collections.go), [explicit selection move](../../internal/books/books_collections.go), and [source-scoped bulk handler](../../internal/books/books_collections.go) require edit rights in both source and destination. They validate expected source mappings and commit the move atomically. Readers remaining only in the source lose access.
 
-Ownership transfer establishes one owner and demotes the old owner to editor. Leave removes a non-owner membership. Collection deletion requires two warnings and the current collection name, and removes all contained books, reading data, and managed files. The default requires a replacement first. Book and collection rows are deleted atomically; the storage journal coordinates file cleanup and recovery. Account deletion is blocked while the account owns collections. Book deletion uses [collection owner/editor authorization and storage coordination](../../server/utils/books/delete-book.ts).
+Ownership transfer establishes one owner and demotes the old owner to editor. Leave removes a non-owner membership. Collection deletion requires two warnings and the current collection name, and removes all contained books, reading data, and managed files. The default requires a replacement first. Book and collection rows are deleted atomically; the storage journal coordinates file cleanup and recovery. Account deletion is blocked while the account owns collections. Book deletion uses [collection owner/editor authorization and storage coordination](../../internal/storage/delete.go).
 
 The [collection settings dialog](../../app/components/Collections/EditCollectionModal.vue) handles member loading, immediate access saves, errors, focus, and separate confirmation states for consequential actions. Read the [permissions reference](reference/collections.md) for the role matrix.
 
@@ -75,13 +75,13 @@ The [collection settings dialog](../../app/components/Collections/EditCollection
 
 The [book detail page](../../app/pages/books/[id]/index.vue) loads metadata/files and the current user's status and preferences. Read supports EPUB and PDF, preferring EPUB when both exist. Read PDF explicitly selects a PDF alongside an EPUB. The [reader page](../../app/pages/books/[id]/read.vue) fetches the selected file through the authorized download endpoint and restores the saved position. The [PDF reference](reference/pdf-reader.md) describes its canvas rendering and page-based locations.
 
-Relocation sends `PUT /api/books/:id/reading-position`. The request can include `clientSessionId` and an increasing `clientSequence`. [Position persistence](../../server/utils/books/save-position.ts) ignores older sequence writes from the same reader session. This is not a global conflict-resolution protocol between devices; a different reader session is accepted independently.
+Relocation sends `PUT /api/books/:id/reading-position`. The request can include `clientSessionId` and an increasing `clientSequence`. [Position persistence](../../internal/books/reading_state.go) ignores older sequence writes from the same reader session. This is not a global conflict-resolution protocol between devices; a different reader session is accepted independently.
 
 Progress-history sync is opt-in per user/book. Position updates can append reader-sourced progress entries when enabled. On open, the enabled reader can also restore from the latest logged percentage after EPUB locations finish generating, provided the user has not already navigated. Manual progress logs and Finished status create their own entries. A historical percentage remains a separate record from an EPUB location even when this restoration converts between them.
 
 Grid cards, list covers, and dashboard Continue reading covers expose **Reading status** in their context menu. The [shared status menu](../../app/composables/useBookReadingStatusMenu.ts) reads `GET /api/books/:id/status` whenever the menu opens and saves a choice with `POST` to the same endpoint. Successful saves emit the saved book ID and status. The containing view updates that loaded record in place, or removes it if it no longer matches the status filter. Loaded pages, pagination cursors, and scroll position are retained. The dashboard updates its personal counts and Continue reading shelf locally. Failed saves keep the menu open for retry. Existing View and Download actions remain available, and bulk selection mode disables the cover menu.
 
-[Status transitions](../../server/utils/books/status-transition.ts) apply date and To be read ordering rules. The [bulk status endpoint](../../server/api/books/bulk/status.post.ts) accepts explicit book IDs and applies the current user's status only to visible records. It does not accept all-in-scope selection semantics. Personal ratings use a user/book record with a half-star integer value. Sharing the book leaves each user's records separate.
+[Status transitions](../../internal/books/reading_state.go) apply date and To be read ordering rules. The [bulk status endpoint](../../internal/books/reading_state.go) accepts explicit book IDs and applies the current user's status only to visible records. It does not accept all-in-scope selection semantics. Personal ratings use a user/book record with a half-star integer value. Sharing the book leaves each user's records separate.
 
 ## Settings and background work
 

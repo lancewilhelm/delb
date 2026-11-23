@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BookCover from '~/components/BookCover.vue';
 defineProps<{
   title: string;
   subtitle?: string | null;

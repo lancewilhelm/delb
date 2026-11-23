@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import { useAuth } from '~/composables/useAuth';
+import { useGlobalSettingsStore } from '~/stores/globalSettings';
+import { $fetch } from '~/utils/apiFetch';
+import { computed, reactive, ref, watch } from 'vue';
+import SettingsUIGroup from '~/components/Settings/UI/SettingsUIGroup.vue';
 defineOptions({ name: 'SettingsAdminMetadata' });
 
 const { isAdmin } = useAuth();

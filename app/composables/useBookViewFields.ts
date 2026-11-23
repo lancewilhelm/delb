@@ -1,3 +1,5 @@
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { computed } from 'vue';
 import {
   bookFieldCatalog,
   type BookFieldId,

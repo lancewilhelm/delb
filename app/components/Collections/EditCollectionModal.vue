@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useAuth } from '~/composables/useAuth';
+import { useCollectionsStore } from '~/stores/collections';
+import { computed, nextTick, ref, watch } from 'vue';
+import ModalWindow from '~/components/ModalWindow.vue';
 import type {
   Collection,
   CollectionMember,

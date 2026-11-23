@@ -1,10 +1,7 @@
-# Nuxt dev/build outputs
-.output
-.data
-.nuxt
-.nitro
+# Frontend build outputs (keep dist/.gitkeep for //go:embed)
+dist/*
+!dist/.gitkeep
 .cache
-dist
 
 # Go build outputs
 /bin/

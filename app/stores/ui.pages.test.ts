@@ -12,14 +12,19 @@ const { createApp, ref } = createRequire(import.meta.resolve('pinia'))('vue');
 
 function createStore(storage: Pick<Storage, 'getItem' | 'setItem'>) {
   const code = transformSync(
-    readFileSync(new URL('./ui.ts', import.meta.url), 'utf8').replace(
-      "import { defineStore } from 'pinia';",
-      '',
-    ),
+    readFileSync(new URL('./ui.ts', import.meta.url), 'utf8'),
     { loader: 'ts', format: 'cjs' },
   ).code;
   const module = { exports: {} as typeof import('./ui') };
-  runInNewContext(code, { module, exports: module.exports, defineStore, ref });
+  runInNewContext(code, {
+    module,
+    exports: module.exports,
+    require: (name: string) => {
+      if (name === 'pinia') return { defineStore };
+      if (name === 'vue') return { ref };
+      throw new Error(`Unexpected import in ui.ts: ${name}`);
+    },
+  });
   const pinia = createPinia();
   pinia.use(createPersistedState({ storage }));
   createApp({}).use(pinia);
