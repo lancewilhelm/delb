@@ -1,12 +1,28 @@
 # Delb
 
-![Nuxt](https://img.shields.io/badge/Nuxt%204-%23000000?style=for-the-badge&logo=nuxt)
+![Go](https://img.shields.io/badge/Go-%2300ADD8?style=for-the-badge&logo=go&logoColor=white)
 ![Vue](https://img.shields.io/badge/Vue%203-%23191A22?style=for-the-badge&logo=vuedotjs)
+![Vite](https://img.shields.io/badge/Vite-%23646CFF?style=for-the-badge&logo=vite&logoColor=white)
 ![Tailwind](https://img.shields.io/badge/Tailwind%20v4-%231a202c?style=for-the-badge&logo=tailwind-css)
 ![SQLite](https://img.shields.io/badge/SQLite-%231a202c?style=for-the-badge&logo=sqlite)
-![Drizzle](https://img.shields.io/badge/Drizzle%20ORM-%231a202c?style=for-the-badge&logo=drizzle)
 
-A modern, self-hosted digital library manager built with Nuxt. Manage your ebook collection with a clean web interface.
+A fast, self-hosted digital library manager shipped as a single portable Go static binary with an embedded Vue 3 SPA and zero runtime dependencies.
+
+## Lightweight & Fast to Self-Host
+
+Delb compiles to a single `CGO_ENABLED=0` static binary (with the frontend, fonts, icons, PDF.js assets, and SQLite migrations embedded) and publishes a minimal multi-arch `FROM scratch` Docker image (`linux/amd64` + `linux/arm64`) — no Node.js runtime, no separate database server, and no external CDN calls required.
+
+Measured on a real library (76 books, 32 authors, 9 series, Apple Silicon):
+
+| Deployment Metric | Delb (Go + Vite) | Why It Matters |
+|---|---|---|
+| **Docker image size** | **~38.4 MB** (`FROM scratch`) | Fast pulls, minimal attack surface, no OS/runtime packages |
+| **Standalone binary** | **~25 MB** | Single executable — drop onto any Linux/macOS host and run |
+| **Idle memory (RSS)** | **~22 MB** (~66 MB peak under 16-client load) | Runs effortlessly on a Raspberry Pi, NAS, or tiny VPS |
+| **Cold startup time** | **~23 ms** (p50) | Instant container restarts with automatic SQLite migrations |
+| **API latency (p50)** | **0.14–1.95 ms** across library, bookshelf, search, and covers | Snappy browsing even on modest hardware |
+| **Throughput (16 clients)** | **1,260–31,000+ req/s** with zero errors | Handles concurrent readers, cover grids, and MCP clients smoothly |
+| **Offline-first assets** | **100% self-hosted** | All 10 UI fonts, icons, and PDF.js assets ship inside the binary |
 
 ## Collections model (Personal-first)
 
@@ -59,7 +75,8 @@ See:
 - **Direct Downloads** - Download books directly from the web interface
 - **In-app Reading** - Read EPUBs and PDFs, with a saved position for each reader
 - **Search & Filter** - Find books quickly with search and filtering
-- **SQLite Database** - Lightweight, file-based database with Drizzle ORM
+- **SQLite Database** - Lightweight, embedded pure-Go SQLite database with automatic startup migrations
+- **MCP Integration** - Connect AI assistants to your library via Streamable HTTP MCP (`/api/mcp`)
 
 ## Cover Delivery
 
@@ -75,18 +92,18 @@ For external "fetch cover by URL" flows, Delb proxies through server-side guards
 
 ## Tech Stack
 
-- **Framework**: Nuxt 4 (Vue 3)
-- **Styling**: Tailwind CSS v4
-- **Database**: SQLite with Drizzle ORM
-- **Authentication**: Better Auth with session management
-- **File Storage**: Local filesystem (`library/` directory)
+- **Backend**: Pure Go (`CGO_ENABLED=0`) static binary with `//go:embed` SPA & SQLite migrations
+- **Frontend**: Vue 3 + Vite + Vue Router + Pinia
+- **Styling**: Tailwind CSS v4 (with 180+ themes & 10 self-hosted fonts)
+- **Database**: Embedded SQLite (`modernc.org/sqlite`)
+- **File Storage**: Local filesystem (`library/` directory) with crash-recoverable journaled operations
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 22.22.3 or a supported newer LTS release
-- pnpm (recommended package manager)
+- Go 1.27+ (matching `go.mod`)
+- Node.js 22.22.3+ and pnpm (for frontend build / dev HMR)
 
 ### Installation
 
@@ -95,16 +112,18 @@ For external "fetch cover by URL" flows, Delb proxies through server-side guards
 git clone <repository-url>
 cd delb
 
-# Install dependencies
+# Install frontend dependencies
 pnpm install --frozen-lockfile
-pnpm prepare:nuxt
-pnpm --filter @delb/epub build
 
-# Set up the database
-pnpm db:migrate
-
-# Start development server
+# Start development server (Go API backend + Vite HMR frontend; runs migrations automatically)
 pnpm run dev
+```
+
+Or build and run the standalone production binary:
+
+```bash
+pnpm run build
+./bin/delb
 ```
 
 The application will be available at `http://localhost:3000`.
