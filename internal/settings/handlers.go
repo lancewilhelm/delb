@@ -268,10 +268,19 @@ func (s *Service) handlePutGlobalSettings(w http.ResponseWriter, r *http.Request
 			updated_at = excluded.updated_at
 	`, GlobalSettingsID, string(serialized), now.Unix())
 	if err != nil {
-		s.logger.Error("PUT /api/settings/global: upsert failed", "error", err)
+		s.logger.ErrorContext(r.Context(), "PUT /api/settings/global: upsert failed", "error", err)
 		httpapi.WriteError(w, http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
+
+	keys := make([]string, 0, len(incoming))
+	for k := range incoming {
+		keys = append(keys, k)
+	}
+	s.logger.InfoContext(r.Context(), "admin updated global settings",
+		"actorUserId", swu.User.ID,
+		"keys", keys,
+	)
 
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
@@ -321,15 +330,21 @@ func (s *Service) handlePutHardcoverToken(w http.ResponseWriter, r *http.Request
 			updated_at = excluded.updated_at
 	`, HardcoverSecretID, normalized, now)
 	if err != nil {
-		s.logger.Error("PUT /api/settings/admin/hardcover-token: upsert failed", "error", err)
+		s.logger.ErrorContext(r.Context(), "PUT /api/settings/admin/hardcover-token: upsert failed", "error", err)
 		httpapi.WriteError(w, http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
 
+	cleared := strings.TrimSpace(tokenRaw) == ""
+	s.logger.InfoContext(r.Context(), "admin updated hardcover api token",
+		"actorUserId", swu.User.ID,
+		"cleared", cleared,
+	)
+
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data": map[string]bool{
-			"cleared": strings.TrimSpace(tokenRaw) == "",
+			"cleared": cleared,
 		},
 	})
 }
@@ -337,7 +352,7 @@ func (s *Service) handlePutHardcoverToken(w http.ResponseWriter, r *http.Request
 func (s *Service) handlePutGoogleBooksAPIKey(w http.ResponseWriter, r *http.Request) {
 	swu, err := s.auth.Authenticate(w, r)
 	if err != nil {
-		s.logger.Error("PUT /api/settings/admin/google-books-api-key: session lookup failed", "error", err)
+		s.logger.ErrorContext(r.Context(), "PUT /api/settings/admin/google-books-api-key: session lookup failed", "error", err)
 		httpapi.WriteError(w, http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
@@ -380,15 +395,21 @@ func (s *Service) handlePutGoogleBooksAPIKey(w http.ResponseWriter, r *http.Requ
 		`, GoogleBooksSecretID, normalized, now)
 	}
 	if err != nil {
-		s.logger.Error("PUT /api/settings/admin/google-books-api-key: update failed", "error", err)
+		s.logger.ErrorContext(r.Context(), "PUT /api/settings/admin/google-books-api-key: update failed", "error", err)
 		httpapi.WriteError(w, http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
 
+	cleared := normalized == ""
+	s.logger.InfoContext(r.Context(), "admin updated google books api key",
+		"actorUserId", swu.User.ID,
+		"cleared", cleared,
+	)
+
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data": map[string]bool{
-			"cleared": normalized == "",
+			"cleared": cleared,
 		},
 	})
 }
@@ -496,6 +517,11 @@ func (s *Service) handleSpinePrompt(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusConflict, "The prompt changed since you opened it. Reload before saving.")
 		return
 	}
+
+	s.logger.InfoContext(r.Context(), "admin updated spine generation prompt",
+		"actorUserId", swu.User.ID,
+		"promptLength", len(promptStr),
+	)
 
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"prompt":        promptStr,

@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lancewilhelm/delb/internal/logging"
 )
 
 const (
@@ -141,6 +143,7 @@ func (s *Service) authenticate(w http.ResponseWriter, r *http.Request, disableRe
 		}
 	}
 
+	logging.SetRequestUserID(r.Context(), swu.User.ID)
 	return swu, nil
 }
 
@@ -148,9 +151,15 @@ func (s *Service) checkRateLimit(w http.ResponseWriter, r *http.Request, bucket 
 	if s.limiter == nil {
 		return true
 	}
-	key := bucket + ":" + clientIP(r)
+	ip := clientIP(r)
+	key := bucket + ":" + ip
 	allowed, retryAfter := s.limiter.Allow(key)
 	if !allowed {
+		s.logger.WarnContext(r.Context(), "auth rate limit exceeded",
+			"bucket", bucket,
+			"remoteIp", ip,
+			"retryAfterSec", retryAfter,
+		)
 		w.Header().Set("X-Retry-After", strconv.Itoa(retryAfter))
 		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 		writeAPIError(w, &APIError{
@@ -231,6 +240,7 @@ func (s *Service) handleSignInEmail(w http.ResponseWriter, r *http.Request) {
 	if user == nil {
 		// Timing mitigation matching Better Auth.
 		_, _ = HashPassword(body.Password)
+		s.logger.WarnContext(r.Context(), "sign-in failed", "reason", "unknown_account", "remoteIp", clientIP(r))
 		writeAPIError(w, &APIError{
 			Status:  http.StatusUnauthorized,
 			Code:    "INVALID_EMAIL_OR_PASSWORD",
@@ -241,12 +251,13 @@ func (s *Service) handleSignInEmail(w http.ResponseWriter, r *http.Request) {
 
 	storedHash, hasAccount, err := s.store.FindCredentialPassword(r.Context(), user.ID)
 	if err != nil {
-		s.logger.Error("sign-in credential lookup failed", "error", err)
+		s.logger.ErrorContext(r.Context(), "sign-in credential lookup failed", "error", err)
 		writeInternalError(w)
 		return
 	}
 	if !hasAccount {
 		_, _ = HashPassword(body.Password)
+		s.logger.WarnContext(r.Context(), "sign-in failed", "reason", "missing_credential", "userId", user.ID, "remoteIp", clientIP(r))
 		writeAPIError(w, &APIError{
 			Status:  http.StatusUnauthorized,
 			Code:    "INVALID_EMAIL_OR_PASSWORD",
@@ -257,6 +268,7 @@ func (s *Service) handleSignInEmail(w http.ResponseWriter, r *http.Request) {
 
 	matched, err := VerifyPassword(storedHash, body.Password)
 	if err != nil || !matched {
+		s.logger.WarnContext(r.Context(), "sign-in failed", "reason", "invalid_password", "userId", user.ID, "remoteIp", clientIP(r))
 		writeAPIError(w, &APIError{
 			Status:  http.StatusUnauthorized,
 			Code:    "INVALID_EMAIL_OR_PASSWORD",
@@ -275,6 +287,7 @@ func (s *Service) handleSignInEmail(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if user.Banned {
+			s.logger.WarnContext(r.Context(), "sign-in rejected for banned user", "userId", user.ID, "remoteIp", clientIP(r))
 			writeAPIError(w, &APIError{
 				Status:  http.StatusForbidden,
 				Code:    "BANNED_USER",
@@ -286,10 +299,13 @@ func (s *Service) handleSignInEmail(w http.ResponseWriter, r *http.Request) {
 
 	sess, err := s.store.CreateSession(r.Context(), user.ID, clientIP(r), r.UserAgent())
 	if err != nil {
-		s.logger.Error("sign-in session creation failed", "error", err)
+		s.logger.ErrorContext(r.Context(), "sign-in session creation failed", "error", err)
 		writeInternalError(w)
 		return
 	}
+
+	logging.SetRequestUserID(r.Context(), user.ID)
+	s.logger.InfoContext(r.Context(), "user signed in", "userId", user.ID, "role", user.Role, "remoteIp", clientIP(r))
 
 	SetSessionCookie(w, r, s.baseURL, s.secret, sess.Token, SessionExpiresInSecs)
 
@@ -364,8 +380,11 @@ func (s *Service) handleSignUpEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	logging.SetRequestUserID(r.Context(), usr.ID)
 	if promoted {
-		s.logger.Info("Initial system owner bootstrap completed", "userId", usr.ID)
+		s.logger.InfoContext(r.Context(), "initial system owner bootstrap completed", "userId", usr.ID)
+	} else {
+		s.logger.InfoContext(r.Context(), "user registered", "userId", usr.ID, "role", usr.Role)
 	}
 
 	SetSessionCookie(w, r, s.baseURL, s.secret, sess.Token, SessionExpiresInSecs)
@@ -384,7 +403,9 @@ func (s *Service) handleSignOut(w http.ResponseWriter, r *http.Request) {
 	token, _ := ReadSessionCookie(r, s.secret)
 	if token != "" {
 		if err := s.store.DeleteSession(r.Context(), token); err != nil {
-			s.logger.Error("failed to delete session during sign-out", "error", err)
+			s.logger.ErrorContext(r.Context(), "failed to delete session during sign-out", "error", err)
+		} else {
+			s.logger.InfoContext(r.Context(), "user signed out")
 		}
 	}
 	ClearSessionCookie(w, r, s.baseURL)
@@ -478,6 +499,11 @@ func (s *Service) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	if newToken != nil {
 		SetSessionCookie(w, r, s.baseURL, s.secret, *newToken, SessionExpiresInSecs)
 	}
+
+	s.logger.InfoContext(r.Context(), "user password changed",
+		"userId", swu.User.ID,
+		"revokedOtherSessions", body.RevokeOtherSessions,
+	)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"token": newToken,
@@ -624,7 +650,8 @@ func (s *Service) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) 
 	if !s.requireCollectionModel(w, r) {
 		return
 	}
-	if _, ok := s.requireAdminSession(w, r); !ok {
+	actor, ok := s.requireAdminSession(w, r)
+	if !ok {
 		return
 	}
 
@@ -698,6 +725,12 @@ func (s *Service) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	s.logger.InfoContext(r.Context(), "admin created user",
+		"actorUserId", actor.User.ID,
+		"targetUserId", usr.ID,
+		"role", usr.Role,
+	)
+
 	writeJSON(w, http.StatusOK, map[string]any{"user": usr})
 }
 
@@ -730,6 +763,11 @@ func (s *Service) handleAdminRemoveUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	s.logger.InfoContext(r.Context(), "admin removed user",
+		"actorUserId", swu.User.ID,
+		"targetUserId", body.UserID,
+	)
+
 	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
 
@@ -741,7 +779,8 @@ func (s *Service) handleAdminSetRole(w http.ResponseWriter, r *http.Request) {
 	if !s.requireCollectionModel(w, r) {
 		return
 	}
-	if _, ok := s.requireAdminSession(w, r); !ok {
+	actor, ok := s.requireAdminSession(w, r)
+	if !ok {
 		return
 	}
 
@@ -768,6 +807,12 @@ func (s *Service) handleAdminSetRole(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, "admin set-role failed", err)
 		return
 	}
+
+	s.logger.InfoContext(r.Context(), "admin updated user role",
+		"actorUserId", actor.User.ID,
+		"targetUserId", body.UserID,
+		"role", roleStr,
+	)
 
 	writeJSON(w, http.StatusOK, map[string]any{"user": updated})
 }
@@ -804,6 +849,11 @@ func (s *Service) handleAdminBanUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logger.InfoContext(r.Context(), "admin banned user",
+		"actorUserId", swu.User.ID,
+		"targetUserId", body.UserID,
+	)
+
 	writeJSON(w, http.StatusOK, map[string]any{"user": updated})
 }
 
@@ -815,7 +865,8 @@ func (s *Service) handleAdminUnbanUser(w http.ResponseWriter, r *http.Request) {
 	if !s.requireCollectionModel(w, r) {
 		return
 	}
-	if _, ok := s.requireAdminSession(w, r); !ok {
+	actor, ok := s.requireAdminSession(w, r)
+	if !ok {
 		return
 	}
 
@@ -835,6 +886,11 @@ func (s *Service) handleAdminUnbanUser(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, "admin unban-user failed", err)
 		return
 	}
+
+	s.logger.InfoContext(r.Context(), "admin unbanned user",
+		"actorUserId", actor.User.ID,
+		"targetUserId", body.UserID,
+	)
 
 	writeJSON(w, http.StatusOK, map[string]any{"user": updated})
 }
@@ -985,7 +1041,8 @@ func (s *Service) handleAdminSetUserPassword(w http.ResponseWriter, r *http.Requ
 	if !s.requireCollectionModel(w, r) {
 		return
 	}
-	if _, ok := s.requireAdminSession(w, r); !ok {
+	actor, ok := s.requireAdminSession(w, r)
+	if !ok {
 		return
 	}
 
@@ -1016,6 +1073,11 @@ func (s *Service) handleAdminSetUserPassword(w http.ResponseWriter, r *http.Requ
 		s.writeStoreError(w, "admin set-user-password failed", err)
 		return
 	}
+
+	s.logger.InfoContext(r.Context(), "admin reset user password",
+		"actorUserId", actor.User.ID,
+		"targetUserId", body.UserID,
+	)
 
 	writeJSON(w, http.StatusOK, map[string]bool{"status": true})
 }

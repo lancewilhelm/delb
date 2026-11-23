@@ -179,7 +179,13 @@ func (s *Service) handleAdminCalibre(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	startTime := time.Now()
 	ctx := r.Context()
+	s.logger.InfoContext(ctx, "starting calibre operation",
+		"action", body.Action,
+		"dryRun", body.DryRun,
+		"actorUserId", userID,
+	)
 	targetCollectionID, err := collections.ResolveBookTarget(ctx, s.db, userID, body.CollectionIDs != nil, body.CollectionIDs)
 	if err != nil {
 		s.writeErr(w, "POST /api/settings/admin/calibre resolve target failed", err)
@@ -785,6 +791,18 @@ func (s *Service) handleAdminCalibre(w http.ResponseWriter, r *http.Request) {
 	if hasBooks, _ := reader.hasTable(ctx, "books"); !hasBooks {
 		summary.Results.Warnings = append(summary.Results.Warnings, "Calibre DB missing `books` table (unexpected).")
 	}
+
+	s.logger.InfoContext(ctx, "completed calibre operation",
+		"action", body.Action,
+		"dryRun", body.DryRun,
+		"actorUserId", userID,
+		"scannedBooks", summary.Scanned.CalibreBooks,
+		"booksCreated", summary.Results.BooksCreated,
+		"booksUpdated", summary.Results.BooksUpdated,
+		"filesUpserted", summary.Results.FilesUpserted,
+		"warnings", len(summary.Results.Warnings),
+		"durationMs", time.Since(startTime).Milliseconds(),
+	)
 
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,

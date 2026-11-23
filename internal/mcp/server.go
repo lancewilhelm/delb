@@ -832,15 +832,22 @@ func (s *Service) handleMCP(w http.ResponseWriter, r *http.Request) {
 
 	actor, err := s.authenticateConnection(r.Context(), r.Header.Get("Authorization"))
 	if err != nil {
-		s.logger.Error("/api/mcp auth lookup failed", "error", err)
+		s.logger.ErrorContext(r.Context(), "/api/mcp auth lookup failed", "error", err)
 		httpapi.WriteError(w, http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
 	if actor == nil {
+		s.logger.WarnContext(r.Context(), "mcp authentication rejected")
 		w.Header().Set("WWW-Authenticate", "Bearer")
 		httpapi.WriteError(w, http.StatusUnauthorized, "Invalid or expired connection.")
 		return
 	}
+	httpapi.SetRequestUserID(r.Context(), actor.UserID)
+	s.logger.DebugContext(r.Context(), "mcp request authenticated",
+		"userId", actor.UserID,
+		"connectionId", actor.ConnectionID,
+		"method", r.Method,
+	)
 
 	if r.Method != http.MethodPost && r.Method != http.MethodGet && r.Method != http.MethodDelete {
 		httpapi.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed.")

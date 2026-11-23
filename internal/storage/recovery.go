@@ -37,13 +37,17 @@ func StartRecovery(ctx context.Context, db *sql.DB, libraryRoot string, logger *
 		return g
 	}
 	go func() {
+		start := time.Now()
+		logger.Debug("starting storage recovery", "libraryRoot", libraryRoot)
 		for {
 			err := RecoverAll(ctx, db, libraryRoot, logger)
 			if err == nil {
+				logger.Info("storage startup recovery completed", "durationMs", time.Since(start).Milliseconds())
 				g.finish(nil)
 				return
 			}
 			if errors.Is(err, ErrBookStorageLockBusy) {
+				logger.Debug("storage recovery waiting for busy book lock")
 				select {
 				case <-ctx.Done():
 					g.finish(ctx.Err())

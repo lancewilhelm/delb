@@ -6,7 +6,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+
+	"github.com/lancewilhelm/delb/internal/logging"
 )
 
 // DefaultDevSecret matches Better Auth's built-in development fallback so the
@@ -20,19 +23,24 @@ const (
 )
 
 type Config struct {
-	Host           string
-	Port           string
-	DatabaseURL    string
-	LibraryDir     string
-	AuthSecret     string
-	AuthURL        string
-	TrustedOrigins []string
-	UpstreamURL    string
-	CodexAuthURL   string
-	CodexAPIURL    string
-	LogLevel       slog.Level
-	IsProduction   bool
-	AutoMigrate    bool
+	Host             string
+	Port             string
+	DatabaseURL      string
+	LibraryDir       string
+	AuthSecret       string
+	AuthURL          string
+	TrustedOrigins   []string
+	UpstreamURL      string
+	CodexAuthURL     string
+	CodexAPIURL      string
+	LogLevel         slog.Level
+	LogFormat        logging.Format
+	LogDir           string
+	LogMaxFileBytes  int64
+	LogMaxFiles      int
+	LogMaxTotalBytes int64
+	IsProduction     bool
+	AutoMigrate      bool
 }
 
 func Load() (Config, error) {
@@ -118,20 +126,34 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("resolve library directory %q: %w", libraryDir, err)
 	}
 
+	logDir := strings.TrimSpace(os.Getenv("DELB_LOG_DIR"))
+	if logDir != "" {
+		absLogDir, err := filepath.Abs(logDir)
+		if err != nil {
+			return Config{}, fmt.Errorf("resolve log directory %q: %w", logDir, err)
+		}
+		logDir = absLogDir
+	}
+
 	return Config{
-		Host:           host,
-		Port:           port,
-		DatabaseURL:    databaseURL,
-		LibraryDir:     absLibraryDir,
-		AuthSecret:     secret,
-		AuthURL:        authURL,
-		TrustedOrigins: trustedOrigins,
-		UpstreamURL:    upstreamURL,
-		CodexAuthURL:   codexAuthURL,
-		CodexAPIURL:    codexAPIURL,
-		LogLevel:       parseLogLevel(os.Getenv("LOG_LEVEL")),
-		IsProduction:   isProd,
-		AutoMigrate:    autoMigrate,
+		Host:             host,
+		Port:             port,
+		DatabaseURL:      databaseURL,
+		LibraryDir:       absLibraryDir,
+		AuthSecret:       secret,
+		AuthURL:          authURL,
+		TrustedOrigins:   trustedOrigins,
+		UpstreamURL:      upstreamURL,
+		CodexAuthURL:     codexAuthURL,
+		CodexAPIURL:      codexAPIURL,
+		LogLevel:         parseLogLevel(os.Getenv("LOG_LEVEL")),
+		LogFormat:        logging.ParseFormat(os.Getenv("LOG_FORMAT")),
+		LogDir:           logDir,
+		LogMaxFileBytes:  parsePositiveInt64(os.Getenv("DELB_LOG_MAX_FILE_BYTES"), logging.DefaultMaxFileBytes),
+		LogMaxFiles:      parsePositiveInt(os.Getenv("DELB_LOG_MAX_FILES"), logging.DefaultMaxFiles),
+		LogMaxTotalBytes: parsePositiveInt64(os.Getenv("DELB_LOG_MAX_TOTAL_BYTES"), logging.DefaultMaxTotalBytes),
+		IsProduction:     isProd,
+		AutoMigrate:      autoMigrate,
 	}, nil
 }
 
@@ -155,14 +177,33 @@ func resolveHost() string {
 }
 
 func parseLogLevel(raw string) slog.Level {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "debug", "trace":
-		return slog.LevelDebug
-	case "warn", "warning":
-		return slog.LevelWarn
-	case "error", "fatal":
-		return slog.LevelError
-	default:
+	lvl, err := logging.ParseLevel(raw)
+	if err != nil {
 		return slog.LevelInfo
 	}
+	return lvl
+}
+
+func parsePositiveInt(raw string, fallback int) int {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(trimmed)
+	if err != nil || n <= 0 {
+		return fallback
+	}
+	return n
+}
+
+func parsePositiveInt64(raw string, fallback int64) int64 {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return fallback
+	}
+	n, err := strconv.ParseInt(trimmed, 10, 64)
+	if err != nil || n <= 0 {
+		return fallback
+	}
+	return n
 }

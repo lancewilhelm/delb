@@ -89,13 +89,14 @@ func (w *Watcher) Start(ctx context.Context, recoveryGate *storage.RecoveryGate)
 				return
 			}
 		}
-		w.logger.Info("dropbox: watcher started")
+		w.logger.Info("dropbox watcher started", "libraryDir", w.libraryDir, "baseDir", w.baseDir)
+		defer w.logger.Info("dropbox watcher stopped")
 		for {
 			if ctx.Err() != nil {
 				return
 			}
 			if err := w.ScanOnce(ctx); err != nil && ctx.Err() == nil {
-				w.logger.Error("dropbox: watcher tick failed", "error", err)
+				w.logger.Error("dropbox watcher scan failed", "error", err)
 			}
 			cfg := w.loadConfig(ctx)
 			pollInterval := cfg.PollInterval
@@ -215,6 +216,7 @@ func (w *Watcher) ScanOnce(ctx context.Context) error {
 		if len(ready) == 0 {
 			return nil
 		}
+		w.logger.Debug("dropbox scan found ready files", "count", len(ready), "dir", cfg.DropboxDirAbs)
 
 		var batchTarget *Target
 
@@ -282,6 +284,7 @@ func (w *Watcher) ScanOnce(ctx context.Context) error {
 				return markerErr
 			}
 
+			ingestStart := time.Now()
 			err := func() error {
 				target, err := readDropboxClaimTarget(ctx, w.db, operationID)
 				if err != nil {
@@ -302,7 +305,12 @@ func (w *Watcher) ScanOnce(ctx context.Context) error {
 					return err
 				}
 				_ = removeDropboxClaimTarget(ctx, w.db, operationID)
-				w.logger.Info("dropbox: ingested book", "bookId", res.BookID, "relativePath", res.RelativePath)
+				w.logger.Info("dropbox ingested book",
+					"bookId", res.BookID,
+					"filename", originalFilename,
+					"relativePath", res.RelativePath,
+					"durationMs", time.Since(ingestStart).Milliseconds(),
+				)
 				return nil
 			}()
 
@@ -310,13 +318,18 @@ func (w *Watcher) ScanOnce(ctx context.Context) error {
 			delete(w.seen, processingAbs)
 
 			if err != nil {
-				w.logger.Error("dropbox: ingest failed", "filename", r.filename, "error", err)
+				w.logger.Error("dropbox ingest failed",
+					"filename", originalFilename,
+					"durationMs", time.Since(ingestStart).Milliseconds(),
+					"error", err,
+				)
 				var existingOpID string
 				if qerr := w.db.QueryRowContext(ctx, `SELECT id FROM storage_operations WHERE id = ? LIMIT 1`, operationID).Scan(&existingOpID); qerr == nil && existingOpID != "" {
 					continue
 				}
 				if moveToFailed(cfg.FailedDirAbs, processingAbs, originalFilename, err.Error(), time.Now()) {
 					_ = removeDropboxClaimTarget(ctx, w.db, operationID)
+					w.logger.Warn("dropbox moved failed file", "filename", originalFilename, "failedDir", cfg.FailedDirAbs)
 				}
 			}
 		}

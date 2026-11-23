@@ -34,7 +34,7 @@ func New(upstreamURL string, logger *slog.Logger) (http.Handler, error) {
 		// large file downloads) are never buffered.
 		FlushInterval: -1,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, proxyErr error) {
-			logger.Error("upstream proxy error", "method", r.Method, "path", r.URL.Path, "upstream", upstreamURL, "error", proxyErr)
+			logger.ErrorContext(r.Context(), "upstream proxy error", "method", r.Method, "path", r.URL.Path, "upstream", upstreamURL, "error", proxyErr)
 			if strings.HasPrefix(r.URL.Path, "/api/") {
 				w.Header().Set("Content-Type", "application/json; charset=utf-8")
 				w.WriteHeader(http.StatusBadGateway)

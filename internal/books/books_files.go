@@ -214,6 +214,12 @@ func (s *Service) handleUploadBooks(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	s.logger.InfoContext(r.Context(), "book upload batch completed",
+		"userId", user.ID,
+		"uploaded", len(uploaded),
+		"totalFiles", len(results),
+	)
+
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data": map[string]any{

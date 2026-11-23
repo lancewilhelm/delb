@@ -1214,6 +1214,12 @@ func (s *Service) handleCreateBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logger.InfoContext(r.Context(), "book created",
+		"bookId", bookID,
+		"userId", userID,
+		"collectionId", collectionID,
+	)
+
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data": map[string]any{
@@ -2113,6 +2119,12 @@ func (s *Service) handleDeleteBook(w http.ResponseWriter, r *http.Request) {
 		s.writeErrWithFallback(w, "DELETE /api/books/{id} failed", "Internal server error", err)
 		return
 	}
+
+	s.logger.InfoContext(r.Context(), "book deleted",
+		"bookId", bookID,
+		"userId", userID,
+		"mode", mode,
+	)
 
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,

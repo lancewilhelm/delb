@@ -8,16 +8,18 @@ import (
 
 	"github.com/lancewilhelm/delb/internal/auth"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/logging"
 )
 
 const iso8601Millis = "2006-01-02T15:04:05.000Z"
 
-// ServiceOptions configures the Admin Operations service (health, Calibre import/rescan, nuke).
+// ServiceOptions configures the Admin Operations service (health, Calibre import/rescan, nuke, logs).
 type ServiceOptions struct {
 	DB          *sql.DB
 	AuthService *auth.Service
 	LibraryDir  string
 	CalibreDir  string
+	LogManager  *logging.Manager
 	Logger      *slog.Logger
 }
 
@@ -27,6 +29,7 @@ type Service struct {
 	auth       *auth.Service
 	libraryDir string
 	calibreDir string
+	logs       *logging.Manager
 	logger     *slog.Logger
 }
 
@@ -55,6 +58,7 @@ func NewService(opts ServiceOptions) *Service {
 		auth:       opts.AuthService,
 		libraryDir: libraryDir,
 		calibreDir: calibreDir,
+		logs:       opts.LogManager,
 		logger:     logger,
 	}
 }
@@ -63,13 +67,16 @@ func NewService(opts ServiceOptions) *Service {
 func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/settings/admin/health", s.handleAdminHealth)
 	mux.HandleFunc("POST /api/settings/admin/calibre", s.handleAdminCalibre)
+	mux.HandleFunc("GET /api/settings/admin/logs", s.handleAdminLogs)
+	mux.HandleFunc("PUT /api/settings/admin/logs/level", s.handleAdminLogsLevel)
+	mux.HandleFunc("GET /api/settings/admin/logs/download", s.handleAdminLogsDownload)
 	mux.HandleFunc("GET /api/nuke", s.handleNuke)
 }
 
 func (s *Service) requireAdminOrOwner(w http.ResponseWriter, r *http.Request) (*auth.SessionWithUser, bool) {
 	swu, err := s.auth.Authenticate(w, r)
 	if err != nil {
-		s.logger.Error("session lookup failed", "path", r.URL.Path, "error", err)
+		s.logger.ErrorContext(r.Context(), "session lookup failed", "path", r.URL.Path, "error", err)
 		httpapi.WriteError(w, http.StatusInternalServerError, "Internal Server Error")
 		return nil, false
 	}
@@ -77,6 +84,7 @@ func (s *Service) requireAdminOrOwner(w http.ResponseWriter, r *http.Request) (*
 		httpapi.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return nil, false
 	}
+	httpapi.SetRequestUserID(r.Context(), swu.User.ID)
 	if swu.User.Role != "admin" && swu.User.Role != "owner" {
 		httpapi.WriteError(w, http.StatusForbidden, "Forbidden")
 		return nil, false
