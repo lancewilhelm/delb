@@ -1,5 +1,13 @@
 <script setup lang="ts">
-definePageMeta({ auth: { only: 'user', redirectGuestTo: '/login' } });
+import { useHead } from '~/composables/useHead';
+import { $fetch } from '~/utils/apiFetch';
+import { navigateTo } from '~/utils/navigation';
+import { onMounted, ref } from 'vue';
+import { RouterLink } from 'vue-router';
+import AppHeader from '~/components/AppHeader.vue';
+import BookCover from '~/components/BookCover.vue';
+import ModalWindow from '~/components/ModalWindow.vue';
+import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 useHead({ title: 'Shelves' });
 type Shelf = {
   id: string;
@@ -90,7 +98,7 @@ onMounted(load);
         v-else
         class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4"
       >
-        <NuxtLink
+        <RouterLink
           v-for="shelf in shelves"
           :key="shelf.id"
           :to="`/shelves/${encodeURIComponent(shelf.id)}`"
@@ -114,7 +122,7 @@ onMounted(load);
           <p class="text-sm opacity-70">
             {{ shelf.count }} {{ shelf.count === 1 ? 'book' : 'books' }}
           </p>
-        </NuxtLink>
+        </RouterLink>
       </div>
     </main>
     <ModalWindow :open="creating" @close="creating = false"

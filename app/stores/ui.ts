@@ -1,3 +1,4 @@
+import { ref } from 'vue';
 import { defineStore } from 'pinia';
 
 export type LibraryView =

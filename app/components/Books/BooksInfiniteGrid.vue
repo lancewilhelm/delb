@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import { useBookSelectionStore } from '~/stores/bookSelection';
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { $fetch } from '~/utils/apiFetch';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import BookThumbnail from '~/components/BookThumbnail.vue';
 import {
   applyBookStatusChange,
   type BookStatusChange,

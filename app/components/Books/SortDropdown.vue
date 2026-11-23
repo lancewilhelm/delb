@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useUiStore } from '~/stores/ui';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 const uiStore = useUiStore();
 type BooksSortOption = {
   id: 'dateAdded' | 'alphabetical' | 'publishedDate' | 'pages';

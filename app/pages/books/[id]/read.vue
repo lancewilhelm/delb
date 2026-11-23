@@ -1,18 +1,16 @@
 <script setup lang="ts">
+import { useHead } from '~/composables/useHead';
+import { useIsMobileDevice } from '~/composables/useIsMobileDevice';
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
+
+const PdfReader = defineAsyncComponent(() => import('~/components/Readers/PdfReader.vue'));
 import type Book from 'epubjs/types/book';
 import type Rendition from 'epubjs/types/rendition';
 import { v4 as uuidv4 } from 'uuid';
 import type { ReaderTheme } from '~/stores/userSettings';
 import { selectReaderFile } from '~/utils/readerFile';
-
-definePageMeta({
-  auth: {
-    only: 'user',
-    redirectGuestTo: '/login',
-  },
-  layout: false,
-  key: (route) => route.fullPath,
-});
 
 useHead({
   title: 'Reader',
@@ -97,7 +95,7 @@ function backToBook() {
 
   // If the previous history entry is already the book page, going "back" avoids
   // duplicating the book route (book → read → replace-to-book => book twice).
-  if (import.meta.client) {
+  if (typeof window !== 'undefined') {
     const back = (window.history.state as { back?: unknown } | null)?.back;
     if (typeof back === 'string') {
       try {
@@ -999,7 +997,7 @@ watch(
 </script>
 
 <template>
-  <LazyReadersPdfReader
+  <PdfReader
     v-if="pdfFileId"
     :book-id="bookId"
     :file-id="pdfFileId"
@@ -1020,7 +1018,7 @@ watch(
           aria-label="Back to book"
           @click.stop="backToBook"
         >
-          <icon
+          <Icon
             v-tooltip="'Back to book'"
             name="lucide:arrow-left"
             class="text-3xl opacity-80 hover:opacity-100 cursor-pointer shrink-0"
@@ -1038,7 +1036,7 @@ watch(
           aria-label="Table of contents"
           @click.stop="toggleToc"
         >
-          <icon
+          <Icon
             v-tooltip="'Table of contents'"
             name="lucide:list"
             class="text-2xl opacity-80 hover:opacity-100 cursor-pointer"
@@ -1052,7 +1050,7 @@ watch(
               aria-label="Reader settings"
               @click.stop="toggleSettings"
             >
-              <icon
+              <Icon
                 v-tooltip="'Reader settings'"
                 name="lucide:settings-2"
                 class="text-2xl opacity-80 hover:opacity-100 cursor-pointer"
@@ -1236,7 +1234,7 @@ watch(
               aria-label="Close table of contents"
               @click.stop="closeToc"
             >
-              <icon
+              <Icon
                 v-tooltip="'Close'"
                 name="lucide:x"
                 class="text-2xl opacity-80 hover:opacity-100 cursor-pointer md:hidden"
@@ -1293,7 +1291,7 @@ watch(
         :class="getThemeClass(true)"
         @click.stop="goPrev"
       >
-        <icon name="lucide:arrow-left" class="text-2xl opacity-80" />
+        <Icon name="lucide:arrow-left" class="text-2xl opacity-80" />
       </button>
 
       <!-- Page content -->
@@ -1326,7 +1324,7 @@ watch(
         :class="getThemeClass(true)"
         @click.stop="goNext"
       >
-        <icon name="lucide:arrow-right" class="text-2xl opacity-80" />
+        <Icon name="lucide:arrow-right" class="text-2xl opacity-80" />
       </button>
 
       <!-- Full screen toggle -->
@@ -1344,7 +1342,7 @@ watch(
           "
           @click.stop="toggleFullscreen"
         >
-          <icon
+          <Icon
             :name="
               isFullscreen
                 ? 'mingcute:fullscreen-exit-2-fill'

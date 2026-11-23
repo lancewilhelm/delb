@@ -1,13 +1,14 @@
 <script setup lang="ts">
+import { useAuth } from '~/composables/useAuth';
+import { useHead } from '~/composables/useHead';
+import { useGlobalSettingsStore } from '~/stores/globalSettings';
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { navigateTo } from '~/utils/navigation';
+import { onBeforeUnmount, ref } from 'vue';
+import { RouterLink } from 'vue-router';
+import AuthFormError from '~/components/AuthFormError.vue';
 import { getRegisterErrorMessage } from '~/utils/authErrors';
 import { logger } from '~/utils/logger';
-
-definePageMeta({
-  auth: {
-    only: 'guest',
-    redirectUserTo: '/',
-  },
-});
 useHead({
   title: 'Register',
 });
@@ -111,10 +112,10 @@ async function handleSubmit() {
   <div
     class="login-container w-full h-full flex flex-col items-center justify-center"
   >
-    <NuxtLink
+    <RouterLink
       to="/login"
       class="logo text-7xl font-bold mb-6 text-(--contrast-main-color)"
-      >Delb</NuxtLink
+      >Delb</RouterLink
     >
     <form
       class="flex flex-col gap-2 items-center register-form"

@@ -14,27 +14,22 @@ jobs:
         with:
           node-version: '22.22.3'
           cache: pnpm
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-go@v5
         with:
-          distribution: temurin
-          java-version: '21'
+          go-version-file: go.mod
+          cache: true
       - run: pnpm install --frozen-lockfile
-      - run: pnpm prepare:nuxt
       - run: pnpm docs:check
       - run: pnpm test
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm build
+      - run: go vet ./...
+      - run: go test -count=1 ./...
+      - name: Verify multi-arch static Go builds
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /tmp/delb-linux-amd64 ./cmd/delb
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o /tmp/delb-linux-arm64 ./cmd/delb
       - run: pnpm test:integration
-      - name: Generate EPUBCheck fixtures
-        run: pnpm --filter @delb/epub fixtures:epubcheck -- "$RUNNER_TEMP/epub-fixtures"
-      - name: Install EPUBCheck 5.4.0
-        run: |
-          curl -fsSL --retry 3 https://github.com/w3c/epubcheck/releases/download/v5.4.0/epubcheck-5.4.0.zip -o "$RUNNER_TEMP/epubcheck.zip"
-          unzip -q "$RUNNER_TEMP/epubcheck.zip" -d "$RUNNER_TEMP"
-      - name: Validate generated EPUB 2 and EPUB 3 files
-        run: |
-          java -jar "$RUNNER_TEMP/epubcheck-5.4.0/epubcheck.jar" "$RUNNER_TEMP/epub-fixtures/cover-epub2.epub"
-          java -jar "$RUNNER_TEMP/epubcheck-5.4.0/epubcheck.jar" "$RUNNER_TEMP/epub-fixtures/cover-epub3.epub"
       - name: Build production container
         run: docker build -t delb:ci .

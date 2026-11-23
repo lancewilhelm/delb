@@ -1,13 +1,13 @@
 <script setup lang="ts">
+import { useAuth } from '~/composables/useAuth';
+import { useHead } from '~/composables/useHead';
+import { useGlobalSettingsStore } from '~/stores/globalSettings';
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { navigateTo } from '~/utils/navigation';
+import { onBeforeUnmount, ref } from 'vue';
+import AuthFormError from '~/components/AuthFormError.vue';
 import { getLoginErrorMessage } from '~/utils/authErrors';
 import { logger } from '~/utils/logger';
-
-definePageMeta({
-  auth: {
-    only: 'guest',
-    redirectUserTo: '/',
-  },
-});
 useHead({
   title: 'Login',
 });

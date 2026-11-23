@@ -1,4 +1,7 @@
 import themes from '~/assets/json/themes.json';
+import { useHead } from '~/composables/useHead';
+import { useThemeAppearance } from '~/composables/useThemeAppearance';
+import { useUserSettingsStore } from '~/stores/userSettings';
 import {
   appearanceContrastTarget,
   appearanceContrastVariables,
@@ -6,7 +9,7 @@ import {
 import { defaultCustomTheme, normalizeCustomTheme } from '~/utils/customTheme';
 import { resolveTheme } from '~/utils/themePreference';
 
-export default defineNuxtPlugin(() => {
+export function initContrast() {
   const store = useUserSettingsStore();
   const appearance = useThemeAppearance();
 
@@ -35,4 +38,4 @@ export default defineNuxtPlugin(() => {
       style: [{ id: 'appearanceContrastTarget', textContent: targetCss }],
     };
   });
-});
+}

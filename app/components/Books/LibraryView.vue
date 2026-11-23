@@ -1,4 +1,20 @@
 <script setup lang="ts">
+import { useHead } from '~/composables/useHead';
+import { useBookSelectionStore } from '~/stores/bookSelection';
+import { useBooksIndexFiltersStore } from '~/stores/booksIndexFilters';
+import { useCollectionsStore } from '~/stores/collections';
+import { useUiStore } from '~/stores/ui';
+import { $fetch } from '~/utils/apiFetch';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { RouterLink, useRoute } from 'vue-router';
+import AppHeader from '~/components/AppHeader.vue';
+import BooksBookMoveModal from '~/components/Books/BookMoveModal.vue';
+import BooksInfiniteGrid from '~/components/Books/BooksInfiniteGrid.vue';
+import BooksInfiniteList from '~/components/Books/BooksInfiniteList.vue';
+import BooksSortDropdown from '~/components/Books/SortDropdown.vue';
+import BooksViewToggle from '~/components/Books/BooksViewToggle.vue';
+import ModalWindow from '~/components/ModalWindow.vue';
+import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 import BookshelfView from '~/components/Books/BookshelfView.vue';
 import type { BookMoveSelection } from '~/utils/collectionActions';
 const props = defineProps<{ shelfId?: string }>();
@@ -1240,8 +1256,8 @@ onMounted(async () => {
             <p v-if="addToShelfLoading" role="status">Loading your Shelves…</p>
             <p v-else-if="!availableShelves.length && !addToShelfError">
               You don't have a Shelf yet.
-              <NuxtLink to="/shelves" class="underline"
-                >Create a Shelf</NuxtLink
+              <RouterLink to="/shelves" class="underline"
+                >Create a Shelf</RouterLink
               >
               first.
             </p>

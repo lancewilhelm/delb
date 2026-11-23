@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import { useIsMobileDevice } from '~/composables/useIsMobileDevice';
+import { useUiStore } from '~/stores/ui';
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { navigateTo } from '~/utils/navigation';
+import { useRoute } from 'vue-router';
+import CollectionPickerDropdown from '~/components/CollectionPickerDropdown.vue';
 import BookAddModal from '~/components/Books/BookAddModal.vue';
 
 const uiStore = useUiStore();
@@ -54,35 +60,13 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
       >
         Delb
       </div>
-      <ClientOnly
+      <CollectionPickerDropdown
         v-if="
           route.path !== '/to-be-read' &&
           route.path !== '/shelves' &&
           !route.path.startsWith('/shelves/')
         "
-      >
-        <CollectionPickerDropdown />
-        <template #fallback>
-          <button
-            class="sm:pl-1 flex items-center gap-2 px-1 opacity-70 cursor-wait"
-            type="button"
-            disabled
-            aria-label="Loading collections"
-          >
-            <Icon
-              name="lucide:folder"
-              class="text-(--contrast-main-color) opacity-80 shrink-0"
-            />
-            <span class="max-w-48 truncate text-sm opacity-80">
-              Collection
-            </span>
-            <Icon
-              name="lucide:chevron-down"
-              class="text-(--contrast-main-color) opacity-80 shrink-0"
-            />
-          </button>
-        </template>
-      </ClientOnly>
+      />
       <button type="button" aria-label="Add book" @click="openAddBook">
         <Icon
           name="lucide:book-plus"

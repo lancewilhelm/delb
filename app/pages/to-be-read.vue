@@ -1,8 +1,15 @@
 <script setup lang="ts">
+import { useHead } from '~/composables/useHead';
+import { useUiStore } from '~/stores/ui';
+import { $fetch } from '~/utils/apiFetch';
+import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
+import { RouterLink } from 'vue-router';
+import AppHeader from '~/components/AppHeader.vue';
+import BookCover from '~/components/BookCover.vue';
+import BooksTbrRationaleEditor from '~/components/Books/TbrRationaleEditor.vue';
+import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 import type { TbrBook } from '~/types/tbr';
 import { sanitizeDescriptionHtml } from '~/utils/descriptionHtml';
-
-definePageMeta({ auth: { only: 'user', redirectGuestTo: '/login' } });
 useHead({ title: 'To be read' });
 const ui = useUiStore();
 const books = ref<TbrBook[]>([]);
@@ -219,8 +226,8 @@ onBeforeUnmount(() => {
         <p class="mt-2">
           Mark a book <strong>To be read</strong> to add it here.
         </p>
-        <NuxtLink to="/books" class="inline-flex mt-4 underline"
-          >Browse books</NuxtLink
+        <RouterLink to="/books" class="inline-flex mt-4 underline"
+          >Browse books</RouterLink
         >
       </div>
       <ol class="flex flex-col gap-5 list-none p-0" aria-label="Your TBR queue">
@@ -277,28 +284,28 @@ onBeforeUnmount(() => {
               <Icon name="lucide:chevron-down" />
             </button>
           </div>
-          <NuxtLink :to="`/books/${book.id}`" class="self-start"
+          <RouterLink :to="`/books/${book.id}`" class="self-start"
             ><BookCover
               :src="book.coverThumbnailUrl ?? undefined"
               :alt="book.title"
               :title="book.title"
               class="w-full!"
-          /></NuxtLink>
+          /></RouterLink>
           <div class="min-w-0 flex flex-col gap-1">
-            <NuxtLink
+            <RouterLink
               :to="`/books/${book.id}`"
               class="text-xl sm:text-3xl leading-tight font-serif hover:underline wrap-anywhere"
-              >{{ book.title }}</NuxtLink
+              >{{ book.title }}</RouterLink
             >
             <div class="font-serif opacity-80">
               <template
                 v-for="(author, authorIndex) in book.authors"
                 :key="author.id"
                 ><span v-if="authorIndex">, </span
-                ><NuxtLink
+                ><RouterLink
                   :to="`/authors/${author.id}`"
                   class="hover:underline"
-                  >{{ author.name }}</NuxtLink
+                  >{{ author.name }}</RouterLink
                 ></template
               >
             </div>
@@ -306,13 +313,8 @@ onBeforeUnmount(() => {
               v-if="book.description"
               class="line-clamp-3 text-sm font-light opacity-90 prose prose-sm max-w-none text-(--contrast-text-color)"
             >
-              <ClientOnly>
-                <!-- eslint-disable-next-line vue/no-v-html -->
-                <div v-html="sanitizeDescriptionHtml(book.description)" />
-                <template #fallback
-                  ><span>{{ book.description }}</span></template
-                >
-              </ClientOnly>
+              <!-- eslint-disable-next-line vue/no-v-html -->
+              <div v-html="sanitizeDescriptionHtml(book.description)" />
             </div>
           </div>
           <BooksTbrRationaleEditor

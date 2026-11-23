@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import { useDynamicFavicon } from '@/composables/useDynamicFavicon';
+import { watch } from 'vue';
+import { RouterView } from 'vue-router';
+import CommandPalette from '~/components/CommandPalette/CommandPalette.vue';
+import GlobalSearchModal from '~/components/GlobalSearch/GlobalSearchModal.vue';
+import { useDynamicFavicon } from '~/composables/useDynamicFavicon';
+import { useHead } from '~/composables/useHead';
 
 const favicon = useDynamicFavicon();
 
@@ -30,7 +35,12 @@ watch(
 
 <template>
   <div class="w-dvw h-dvh overflow-hidden">
-    <NuxtPage />
+    <RouterView v-slot="{ Component, route }">
+      <component
+        :is="Component"
+        :key="route.meta.keyByFullPath ? route.fullPath : undefined"
+      />
+    </RouterView>
     <CommandPalette />
     <GlobalSearchModal />
   </div>

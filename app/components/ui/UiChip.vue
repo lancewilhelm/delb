@@ -21,7 +21,7 @@ const emit = defineEmits(['remove']);
       aria-label="Remove tag"
       @click.stop="emit('remove')"
     >
-      <icon name="lucide:x" class="scale-110" />
+      <Icon name="lucide:x" class="scale-110" />
     </button>
   </div>
 </template>

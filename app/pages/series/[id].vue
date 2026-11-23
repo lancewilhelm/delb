@@ -1,13 +1,15 @@
 <script setup lang="ts">
+import { useHead } from '~/composables/useHead';
+import { useCollectionsStore } from '~/stores/collections';
+import { $fetch } from '~/utils/apiFetch';
+import { navigateTo } from '~/utils/navigation';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
+import AppHeader from '~/components/AppHeader.vue';
+import BookCover from '~/components/BookCover.vue';
+import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 import { sanitizeDescriptionHtml } from '~/utils/descriptionHtml';
 import { buildBookCoverUrl } from '~/utils/covers';
-
-definePageMeta({
-  auth: {
-    only: 'user',
-    redirectGuestTo: '/login',
-  },
-});
 
 type FetchErrorLike = {
   data?: { message?: string };
@@ -243,13 +245,8 @@ watch(
               >
                 <div class="relative">
                   <div class="line-clamp-3">
-                    <ClientOnly>
-                      <!-- eslint-disable-next-line vue/no-v-html -->
+                    <!-- eslint-disable-next-line vue/no-v-html -->
                       <div v-html="sanitizeDescriptionHtml(b.description)" />
-                      <template #fallback>
-                        <span>{{ b.description }}</span>
-                      </template>
-                    </ClientOnly>
                   </div>
                 </div>
               </div>

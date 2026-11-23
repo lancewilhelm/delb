@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { RouterLink, useRoute } from 'vue-router';
 defineOptions({ name: 'ViewSelectorDropdown' });
 
 type NavItem = {
@@ -122,7 +124,7 @@ onBeforeUnmount(() => {
         class="absolute left-0 mt-1 w-44 bg-(--bg-color) border border-(--contrast-border-color) rounded-md shadow-lg z-150 overflow-hidden"
         role="menu"
       >
-          <NuxtLink
+          <RouterLink
             v-for="item in items"
             :key="item.id"
             :to="item.to"
@@ -148,13 +150,13 @@ onBeforeUnmount(() => {
               name="lucide:check"
               class="ml-auto text-(--contrast-main-color) opacity-80 shrink-0"
             />
-          </NuxtLink>
+          </RouterLink>
       </div>
     </div>
 
     <!-- Desktop: inline nav -->
     <nav aria-label="Views" class="hidden md:flex items-center gap-0!">
-      <NuxtLink
+      <RouterLink
         v-for="item in items"
         :key="item.id"
         :to="item.to"
@@ -167,7 +169,7 @@ onBeforeUnmount(() => {
       >
         <Icon :name="item.icon" class="shrink-0 opacity-80" />
         <span class="text-md">{{ item.label }}</span>
-      </NuxtLink>
+      </RouterLink>
     </nav>
   </div>
 </template>

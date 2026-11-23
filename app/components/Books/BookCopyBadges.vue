@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useUserSettingsStore } from '~/stores/userSettings';
 defineProps<{ physical?: boolean; audiobook?: boolean }>();
 const settings = useUserSettingsStore();
 </script>

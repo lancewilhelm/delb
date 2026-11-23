@@ -38,4 +38,4 @@ Preserve a matching database/library backup before manual repair. Follow [storag
 
 Ingestion handlers perform their own input and duplicate checks. This reference does not claim that every import automatically runs the complete admin health suite. Automatic repair, duplicate merging, and deployment-specific restore drills require separate work and verification.
 
-The [health handler](../../server/api/settings/admin/health.post.ts) is the source for current limits, result IDs, and response fields. The [documentation record](../developing/documentation-status.md) distinguishes source inspection from demo execution.
+The [health handler](../../internal/admin/health.go) is the source for current limits, result IDs, and response fields. The [documentation record](../developing/documentation-status.md) distinguishes source inspection from demo execution.

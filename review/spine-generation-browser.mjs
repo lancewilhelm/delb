@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fetchAuth } from './fetch-auth.mjs';
-import sharp from 'sharp';
+import sharp from './test-image.mjs';
 const base = (
   process.env.DELB_REVIEW_URL ||
   process.env.BASE_URL ||

@@ -67,6 +67,6 @@ Replace the health check that expects a Personal collection for each user. The n
 
 ## Implementation references
 
-The [collection model](../../server/utils/collections/model.ts) owns target authorization, default selection, and atomic moves. The [migration engine](../../server/utils/collections/migration.ts) retains plans and verifies independent file copies. The [collection reference](../developing/reference/collections.md) documents endpoints and roles.
+The [collection model](../../internal/collections/model.go) owns target authorization, default selection, and atomic moves. The [migration engine](../../internal/collections/migration.go) retains plans and verifies independent file copies. The [collection reference](../developing/reference/collections.md) documents endpoints and roles.
 
 The [migration guide](../hosting/collection-migration.md) covers backup, preview, apply, recovery, and verification. Administrative health checks report duplicate identifiers, cross-collection title matches, and bounded fuzzy matches without automatic repair.

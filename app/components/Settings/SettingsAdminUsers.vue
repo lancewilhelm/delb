@@ -1,4 +1,11 @@
 <script setup lang="ts">
+import { useAuth } from '~/composables/useAuth';
+import { useGlobalSettingsStore } from '~/stores/globalSettings';
+import { logger } from '~/utils/logger';
+import { computed, nextTick, onMounted, ref } from 'vue';
+import ModalWindow from '~/components/ModalWindow.vue';
+import SettingsUIGroup from '~/components/Settings/UI/SettingsUIGroup.vue';
+import SettingsUIToggle from '~/components/Settings/UI/SettingsUIToggle.vue';
 import type { User as UserWithRole } from '~/utils/authClient';
 
 const users = ref<UserWithRole[]>([]);

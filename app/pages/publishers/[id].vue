@@ -1,11 +1,16 @@
 <script setup lang="ts">
-definePageMeta({
-  auth: {
-    only: 'user',
-    redirectGuestTo: '/login',
-  },
-});
-
+import { useHead } from '~/composables/useHead';
+import { useCollectionsStore } from '~/stores/collections';
+import { useUiStore } from '~/stores/ui';
+import { $fetch } from '~/utils/apiFetch';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
+import AppHeader from '~/components/AppHeader.vue';
+import BooksInfiniteGrid from '~/components/Books/BooksInfiniteGrid.vue';
+import BooksInfiniteList from '~/components/Books/BooksInfiniteList.vue';
+import BooksSortDropdown from '~/components/Books/SortDropdown.vue';
+import BooksViewToggle from '~/components/Books/BooksViewToggle.vue';
+import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 type FetchErrorLike = {
   data?: { message?: string };
   statusMessage?: string;

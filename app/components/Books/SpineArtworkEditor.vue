@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { $fetch } from '~/utils/apiFetch';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import ModalWindow from '~/components/ModalWindow.vue';
 import {
   defaultSpineEdits,
   parseSpineEdits,
@@ -402,7 +405,7 @@ async function generate() {
       ),
     );
     if (generated.value && file.value) body.append('previous', file.value);
-    const blob = await $fetch<Blob>(
+    const blob = await $fetch<Blob, 'blob'>(
       `/api/books/${encodeURIComponent(props.bookId)}/spine-generate`,
       { method: 'POST', body, responseType: 'blob' },
     );

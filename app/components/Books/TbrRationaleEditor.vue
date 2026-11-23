@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { $fetch } from '~/utils/apiFetch';
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 const props = defineProps<{ bookId: string; rationale?: string }>();
 const emit = defineEmits<{ saved: [value: string] }>();
 const saved = ref(props.rationale ?? '');

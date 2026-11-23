@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import { useAuth } from '~/composables/useAuth';
+import { useGlobalSettingsStore } from '~/stores/globalSettings';
+import { $fetch } from '~/utils/apiFetch';
+import { logger } from '~/utils/logger';
+import { computed, onMounted, ref, watch } from 'vue';
+import SettingsUIGroup from '~/components/Settings/UI/SettingsUIGroup.vue';
 defineOptions({ name: 'SettingsAdminDropbox' });
 
 type CollectionOption = { id: string; name: string; isDefault?: boolean };

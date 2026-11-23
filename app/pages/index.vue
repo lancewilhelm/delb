@@ -1,4 +1,14 @@
 <script setup lang="ts">
+import { useAuth } from '~/composables/useAuth';
+import { useHead } from '~/composables/useHead';
+import { useBooksIndexFiltersStore } from '~/stores/booksIndexFilters';
+import { useCollectionsStore } from '~/stores/collections';
+import { $fetch } from '~/utils/apiFetch';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { RouterLink, useRoute, useRouter } from 'vue-router';
+import AppHeader from '~/components/AppHeader.vue';
+import BookThumbnail from '~/components/BookThumbnail.vue';
+import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 import type { BookStatusChange } from '~/utils/bookReadingStatus';
 import type {
   DashboardBook,
@@ -6,8 +16,6 @@ import type {
   DashboardData,
   DashboardShelf,
 } from '#shared/types/dashboard';
-
-definePageMeta({ auth: { only: 'user', redirectGuestTo: '/login' } });
 useHead({ title: 'Dashboard' });
 
 const collectionsStore = useCollectionsStore();
@@ -230,7 +238,7 @@ onBeforeUnmount(() => {
         </header>
 
         <nav class="dashboard-counts" aria-label="Book counts">
-          <NuxtLink
+          <RouterLink
             v-for="stat in stats"
             :key="stat.key"
             :to="stat.to"
@@ -241,7 +249,7 @@ onBeforeUnmount(() => {
               counts?.[stat.key]?.toLocaleString() ?? '—'
             }}</span>
             <span class="dashboard-count-label">{{ stat.label }}</span>
-          </NuxtLink>
+          </RouterLink>
         </nav>
 
         <div class="dashboard-shelf-toolbar">
@@ -261,17 +269,17 @@ onBeforeUnmount(() => {
               {{ shelf.label }}
             </button>
           </div>
-          <NuxtLink
+          <RouterLink
             v-if="selectedShelf === 'reading'"
             to="/books?status=reading"
             class="dashboard-view-all"
-            >View all</NuxtLink
+            >View all</RouterLink
           >
-          <NuxtLink
+          <RouterLink
             v-else-if="selectedShelf === 'tbr'"
             to="/to-be-read"
             class="dashboard-view-all"
-            >View all</NuxtLink
+            >View all</RouterLink
           >
         </div>
 

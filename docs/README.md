@@ -46,7 +46,7 @@ Browse the [feature contracts](developing/reference/README.md) or [UI component 
 | Library integrity checks                       | [Health checks](hosting/health-checks.md)                                                               |
 | Managed files and interrupted operations       | [Storage recovery](hosting/storage-recovery.md)                                                         |
 | Container deployment                           | [Docker](hosting/docker.md)                                                                             |
-| EPUB package                                   | [Independent EPUB cover package](../packages/epub/README.md)                                            |
+| EPUB package                                   | [Independent EPUB cover package](../internal/epub/epub.go)                                            |
 | Component details                              | [UI component reference](developing/ui/README.md)                                                       |
 
 The architecture and core guides describe the implementation at the revision recorded in [documentation status](developing/documentation-status.md). Historical review records and future-work sections are identified separately from current behavior.

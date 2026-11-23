@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { Component } from 'vue';
 defineProps<{
   title: string;
   icon?: string | Component;

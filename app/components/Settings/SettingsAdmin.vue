@@ -1,19 +1,27 @@
 <script setup lang="ts">
-import type { ConcreteComponent } from 'vue';
+import { computed, type Component } from 'vue';
+import { useRoute } from 'vue-router';
+import SettingsAdminCollections from '~/components/Settings/SettingsAdminCollections.vue';
+import SettingsAdminDropbox from '~/components/Settings/SettingsAdminDropbox.vue';
+import SettingsAdminLibrary from '~/components/Settings/SettingsAdminLibrary.vue';
+import SettingsAdminMetadata from '~/components/Settings/SettingsAdminMetadata.vue';
+import SettingsAdminSpines from '~/components/Settings/SettingsAdminSpines.vue';
+import SettingsAdminUsers from '~/components/Settings/SettingsAdminUsers.vue';
+import SettingsTabBarItem from '~/components/Settings/SettingsTabBarItem.vue';
 
 // Compute the current page based on the route parameter
 const route = useRoute();
-const currentPageName = computed(() =>
-  route.params.page !== ''
-    ? Array.isArray(route.params.page)
-      ? route.params.page[1]
-      : route.params.page
-    : 'profile',
-);
+const currentPageName = computed(() => {
+  const page = route.params.page;
+  if (Array.isArray(page)) {
+    return page[1] || 'library';
+  }
+  return page ? page.split('/')[1] || 'library' : 'library';
+});
 
 interface Tab {
   name: string;
-  component: string | ConcreteComponent;
+  component: Component;
   icon: string;
   path: string;
 }
@@ -21,37 +29,37 @@ interface Tab {
 const tabs: Record<string, Tab> = {
   collections: {
     name: 'Collections',
-    component: resolveComponent('SettingsAdminCollections'),
+    component: SettingsAdminCollections,
     icon: 'lucide:library',
     path: '/settings/admin/collections',
   },
   library: {
     name: 'Library',
-    component: resolveComponent('SettingsAdminLibrary'),
+    component: SettingsAdminLibrary,
     icon: 'lucide:library',
     path: '/settings/admin/library',
   },
   dropbox: {
     name: 'Dropbox',
-    component: resolveComponent('SettingsAdminDropbox'),
+    component: SettingsAdminDropbox,
     icon: 'lucide:inbox',
     path: '/settings/admin/dropbox',
   },
   metadata: {
     name: 'Metadata',
-    component: resolveComponent('SettingsAdminMetadata'),
+    component: SettingsAdminMetadata,
     icon: 'lucide:book-open',
     path: '/settings/admin/metadata',
   },
   spines: {
     name: 'Spine generation',
-    component: resolveComponent('SettingsAdminSpines'),
+    component: SettingsAdminSpines,
     icon: 'lucide:sparkles',
     path: '/settings/admin/spines',
   },
   users: {
     name: 'Users',
-    component: resolveComponent('SettingsAdminUsers'),
+    component: SettingsAdminUsers,
     icon: 'lucide:users',
     path: '/settings/admin/users',
   },

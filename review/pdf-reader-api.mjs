@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { createClient } from '@libsql/client';
+import { createClient } from './sqlite-client.mjs';
 import { fetchAuth } from './fetch-auth.mjs';
 import { pdfFixture } from './pdf-fixture.mjs';
 

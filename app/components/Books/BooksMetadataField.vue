@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { navigateTo } from '~/utils/navigation';
+import { computed } from 'vue';
 import HoverScrollText from '~/components/HoverScrollText.vue';
 import {
   bookFieldParts,

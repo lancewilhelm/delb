@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { $fetch } from '~/utils/apiFetch';
+import { computed, onMounted, ref } from 'vue';
+import { RouterLink } from 'vue-router';
 const props = defineProps<{ bookId: string }>();
 type Shelf = { id: string; name: string; containsBook: boolean };
 const shelves = ref<Shelf[]>([]);
@@ -66,22 +69,22 @@ onMounted(load);
       <span v-if="loading" role="status" class="opacity-70">Loading…</span>
       <template v-else>
         <div class="flex flex-wrap justify-end items-center gap-2">
-          <NuxtLink
+          <RouterLink
             v-for="shelf in selected"
             :key="shelf.id"
             :to="`/shelves/${encodeURIComponent(shelf.id)}`"
             class="border border-(--contrast-border-color) px-2 py-1 rounded-md text-xs hover:bg-(--sub-color)/10"
           >
             {{ shelf.name }}
-          </NuxtLink>
+          </RouterLink>
           <span v-if="!selected.length && !error" class="opacity-70">{{
             shelves.length ? 'Not on any Shelves.' : 'No Shelves yet.'
           }}</span>
-          <NuxtLink
+          <RouterLink
             v-if="!shelves.length && !error"
             to="/shelves"
             class="underline text-xs"
-            >Create a Shelf</NuxtLink
+            >Create a Shelf</RouterLink
           >
         </div>
         <fieldset v-if="editing" class="w-full flex flex-col items-end gap-2">

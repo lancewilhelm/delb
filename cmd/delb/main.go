@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/lancewilhelm/delb"
 	"github.com/lancewilhelm/delb/internal/admin"
@@ -156,13 +158,21 @@ func main() {
 	dropboxWatcher.Start(ctx, recoveryGate)
 
 	var upstream http.Handler
+	var webFS fs.FS
 	if cfg.UpstreamURL != "" {
 		upstream, err = proxy.New(cfg.UpstreamURL, logger.With("component", "proxy"))
 		if err != nil {
 			logger.Error("failed to initialize upstream reverse proxy", "upstream", cfg.UpstreamURL, "error", err)
 			os.Exit(1)
 		}
-		logger.Info("strangler reverse proxy enabled", "upstream", cfg.UpstreamURL)
+		logger.Info("frontend reverse proxy enabled", "upstream", cfg.UpstreamURL)
+	} else {
+		webFS, err = fs.Sub(delb.WebFS, "dist")
+		if err != nil {
+			logger.Error("failed to open embedded web assets", "error", err)
+			os.Exit(1)
+		}
+		logger.Info("serving embedded web SPA")
 	}
 
 	handler := httpapi.NewHandler(httpapi.RouterOptions{
@@ -183,6 +193,7 @@ func main() {
 			recoveryGate.Middleware,
 		},
 		Upstream: upstream,
+		WebFS:    webFS,
 	})
 
 	srv := &http.Server{

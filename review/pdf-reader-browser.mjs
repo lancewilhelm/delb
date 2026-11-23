@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fetchAuth } from './fetch-auth.mjs';
-import { createClient } from '@libsql/client';
+import { createClient } from './sqlite-client.mjs';
 import { pdfFixture } from './pdf-fixture.mjs';
 
 const base = (

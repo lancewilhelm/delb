@@ -1,8 +1,9 @@
 <script setup lang="ts">
-definePageMeta({
-  auth: { only: 'user', redirectGuestTo: '/login' },
-});
-
+import { useHead } from '~/composables/useHead';
+import { useCollectionsStore } from '~/stores/collections';
+import { $fetch } from '~/utils/apiFetch';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import BookThumbnail from '~/components/BookThumbnail.vue';
 useHead({ title: 'Dev: Infinite Scroll' });
 
 type FetchErrorLike = {

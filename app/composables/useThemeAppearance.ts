@@ -1,9 +1,14 @@
+import { computed, ref } from 'vue';
+import { useUserSettingsStore } from '~/stores/userSettings';
 import { resolveTheme } from '~/utils/themePreference';
+
+const systemDarkState = ref(false);
+const themePreviewState = ref<string | null>(null);
 
 export function useThemeAppearance() {
   const store = useUserSettingsStore();
-  const dark = useState('theme-system-dark', () => false);
-  const preview = useState<string | null>('theme-preview', () => null);
+  const dark = systemDarkState;
+  const preview = themePreviewState;
   const resolved = computed(() =>
     resolveTheme(store.activeSettings.themePreference, dark.value),
   );

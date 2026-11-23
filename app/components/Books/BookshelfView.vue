@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import { useAuth } from '~/composables/useAuth';
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { $fetch } from '~/utils/apiFetch';
+import { navigateTo } from '~/utils/navigation';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, toRaw, watch } from 'vue';
+import { onBeforeRouteLeave } from 'vue-router';
 import BookshelfSpine from './BookshelfSpine.vue';
 import BookshelfBookcase from './BookshelfBookcase.vue';
 import { placementStyle } from '~/utils/bookshelfPlacement';
@@ -189,7 +195,7 @@ const FLOOR_LINE_HEIGHT = 2;
 const width = ref(340);
 const viewportHeight = ref(0);
 const camera = reactive({ x: 0, y: 0 });
-const authUser = useState<{ id: string } | null>('auth:user');
+const { user: authUser } = useAuth();
 let viewKey: string | null = null;
 let viewSaveTimer: ReturnType<typeof setTimeout> | undefined;
 let sliderSaveTimer: ReturnType<typeof setTimeout> | undefined;

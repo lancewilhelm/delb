@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { computed, ref, watch } from 'vue';
 import type { BookViewBook } from '~/utils/bookFields';
 import type { ShelfBook } from '~~/shared/bookshelf';
 

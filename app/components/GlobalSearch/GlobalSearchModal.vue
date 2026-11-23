@@ -1,4 +1,11 @@
 <script setup lang="ts">
+import { useDebounceFn } from '@vueuse/core';
+import { useUiStore } from '~/stores/ui';
+import { $fetch } from '~/utils/apiFetch';
+import { navigateTo } from '~/utils/navigation';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import SearchBookResult from '~/components/Search/BookResult.vue';
+import SearchDialogFrame from '~/components/Search/DialogFrame.vue';
 import { buildBookCoverUrl } from '~/utils/covers';
 
 type SearchKind = 'book' | 'author' | 'series' | 'publisher' | 'tag';
@@ -451,9 +458,9 @@ onBeforeUnmount(() => {
               :id="`global-search-option-${flatResults.findIndex((x) => x.item.id === item.id && x.item.kind === item.kind)}`"
               :key="`${item.kind}:${item.id}`"
               :ref="
-                (el: Element | null) =>
+                (el) =>
                   setRowRef(
-                    el as HTMLElement,
+                    el as HTMLElement | null,
                     flatResults.findIndex(
                       (x) => x.item.id === item.id && x.item.kind === item.kind,
                     ),

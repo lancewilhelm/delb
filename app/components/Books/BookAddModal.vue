@@ -1,4 +1,12 @@
 <script setup lang="ts">
+import { useDropZone } from '@vueuse/core';
+import { useCollectionsStore } from '~/stores/collections';
+import { useUiStore } from '~/stores/ui';
+import { $fetch } from '~/utils/apiFetch';
+import { navigateTo } from '~/utils/navigation';
+import { computed, ref, watch } from 'vue';
+import BookMetadataSearchModal from '~/components/BookMetadataSearchModal.vue';
+import ModalWindow from '~/components/ModalWindow.vue';
 import { chooseBookTarget } from '~/utils/collectionActions';
 import { buildBookCoverUrl } from '~/utils/covers';
 

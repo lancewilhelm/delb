@@ -1,4 +1,12 @@
 <script setup lang="ts">
+import { useBookReadingStatusMenu } from '~/composables/useBookReadingStatusMenu';
+import { $fetch } from '~/utils/apiFetch';
+import { navigateTo } from '~/utils/navigation';
+import { computed, ref } from 'vue';
+import BookCover from '~/components/BookCover.vue';
+import BooksBookCopyBadges from '~/components/Books/BookCopyBadges.vue';
+import BooksBookStatusBadge from '~/components/Books/BookStatusBadge.vue';
+import BooksMetadataField from '~/components/Books/BooksMetadataField.vue';
 import type { BookStatusChange } from '~/utils/bookReadingStatus';
 import type { CoverMenuItem } from '~/utils/coverMenu';
 import { readDownloadFilename } from '~/utils/downloadFilename';

@@ -28,27 +28,30 @@ function fixture() {
   const source = readFileSync(
     new URL('./collections.ts', import.meta.url),
     'utf8',
-  ).replace("import { defineStore } from 'pinia';", '');
+  );
   const code = transformSync(source, { loader: 'ts', format: 'cjs' }).code;
   const module = { exports: {} as typeof import('./collections') };
+  const mockFetch = async (
+    url: string,
+    options: { method: string; body?: { collectionId?: string } },
+  ) => {
+    if (url === '/api/collections')
+      return { success: true, data: { collections: rows } };
+    if (failDefault) throw new Error('Forbidden');
+    rows = rows.map((row) => ({
+      ...row,
+      isDefault: row.id === options.body?.collectionId,
+    }));
+    return { success: true };
+  };
   runInNewContext(code, {
     module,
     exports: module.exports,
-    ref,
-    computed,
-    defineStore,
-    $fetch: async (
-      url: string,
-      options: { method: string; body?: { collectionId?: string } },
-    ) => {
-      if (url === '/api/collections')
-        return { success: true, data: { collections: rows } };
-      if (failDefault) throw new Error('Forbidden');
-      rows = rows.map((row) => ({
-        ...row,
-        isDefault: row.id === options.body?.collectionId,
-      }));
-      return { success: true };
+    require: (name: string) => {
+      if (name === 'pinia') return { defineStore };
+      if (name === 'vue') return { ref, computed };
+      if (name === '~/utils/apiFetch') return { $fetch: mockFetch };
+      throw new Error(`Unexpected import in collections.ts: ${name}`);
     },
   });
   return {

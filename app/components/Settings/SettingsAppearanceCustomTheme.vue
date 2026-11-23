@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useThemeAppearance } from '~/composables/useThemeAppearance';
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import SettingsUITheme from '~/components/Settings/UI/SettingsUITheme.vue';
 import { whenThemeReady } from '~/utils/theme';
 import {
   defaultCustomTheme,

@@ -1,4 +1,14 @@
 <script setup lang="ts">
+import { useCommandPalette } from '~/composables/useCommandPalette';
+import { useThemeAppearance } from '~/composables/useThemeAppearance';
+import { useUiStore } from '~/stores/ui';
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { computed, isRef, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
+import BooksViewFieldsSettings from '~/components/Books/BooksViewFieldsSettings.vue';
+import CommandPaletteThemeItem from '~/components/CommandPalette/CommandPaletteThemeItem.vue';
+import SettingsAppearanceCustomTheme from '~/components/Settings/SettingsAppearanceCustomTheme.vue';
+import SettingsUIInput from '~/components/Settings/UI/SettingsUIInput.vue';
 const userSettingsStore = useUserSettingsStore();
 const appearance = useThemeAppearance();
 const uiStore = useUiStore();
@@ -282,7 +292,7 @@ watch(
             v-for="(result, i) in filteredOptions"
             :id="`command-palette-option-${i}`"
             :key="i"
-            :ref="(el: Element | null) => setOptionRef(el as HTMLElement, i)"
+            :ref="(el) => setOptionRef(el as HTMLElement | null, i)"
             role="option"
             :aria-selected="highlightedIndex === i"
             class="h-9 cursor-pointer px-3 py-1 hover:bg-(--sub-alt-color) flex items-center justify-between command-palette-option"

@@ -19,9 +19,7 @@ async function testFiles(directory) {
 }
 
 const files = (
-  await Promise.all(
-    ['app', 'server', 'packages/epub/test', 'review'].map(testFiles),
-  )
+  await Promise.all(['app', 'shared', 'review'].map(testFiles))
 )
   .flat()
   .sort();

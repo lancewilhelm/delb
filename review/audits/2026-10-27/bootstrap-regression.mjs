@@ -2,7 +2,7 @@ import { fetchAuth } from '../../fetch-auth.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
-import { createClient } from '@libsql/client';
+import { createClient } from '../../sqlite-client.mjs';
 
 const base = (
   process.env.DELB_REVIEW_URL ||

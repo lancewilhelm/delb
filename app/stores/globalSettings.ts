@@ -1,3 +1,6 @@
+import { useAuth } from '~/composables/useAuth';
+import { $fetch } from '~/utils/apiFetch';
+import { ref } from 'vue';
 import { defineStore } from 'pinia';
 
 export interface GlobalSettings {

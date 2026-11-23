@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { $fetch } from '~/utils/apiFetch';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 type Progress = {

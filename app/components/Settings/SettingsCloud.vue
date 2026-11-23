@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { $fetch } from '~/utils/apiFetch';
+import { ref } from 'vue';
+import ModalWindow from '~/components/ModalWindow.vue';
+import SettingsUIGroup from '~/components/Settings/UI/SettingsUIGroup.vue';
 const showNukeConfirm = ref(false);
 async function nukeData() {
   await $fetch('/api/nuke');

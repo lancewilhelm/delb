@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useThemeAppearance } from '~/composables/useThemeAppearance';
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { computed, onBeforeUnmount, ref } from 'vue';
 const props = defineProps<{
   theme: {
     name: string;

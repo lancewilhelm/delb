@@ -1,9 +1,8 @@
 <script setup lang="ts">
-definePageMeta({
-  // Allow everyone to hit a 404, even when auth is enabled.
-  auth: false,
-});
-
+import { useHead } from '~/composables/useHead';
+import { computed } from 'vue';
+import { RouterLink, useRoute } from 'vue-router';
+import AppHeader from '~/components/AppHeader.vue';
 useHead({
   title: 'Page not found',
 });
@@ -32,12 +31,12 @@ const path = computed(() => String(route.fullPath || ''));
         </div>
 
         <div class="flex flex-wrap gap-2 pt-2">
-          <NuxtLink
+          <RouterLink
             to="/"
             class="px-3 py-2 rounded-md bg-(--main-color) text-(--contrast-inverse-color) hover:opacity-90 text-sm"
           >
             Go home
-          </NuxtLink>
+          </RouterLink>
 
           <button
             type="button"

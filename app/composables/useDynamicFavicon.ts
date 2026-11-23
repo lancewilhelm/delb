@@ -1,5 +1,7 @@
-import themeList from '@/assets/json/themes.json';
-import { useUserSettingsStore } from '@/stores/userSettings';
+import { computed } from 'vue';
+import themeList from '~/assets/json/themes.json';
+import { useThemeAppearance } from '~/composables/useThemeAppearance';
+import { useUserSettingsStore } from '~/stores/userSettings';
 import { normalizeCustomTheme } from '~/utils/customTheme';
 
 export function useDynamicFavicon() {

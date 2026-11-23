@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue';
 const props = defineProps<{ open: boolean; label: string }>();
 const emit = defineEmits<{ close: [] }>();
 const dialog = ref<HTMLElement | null>(null);

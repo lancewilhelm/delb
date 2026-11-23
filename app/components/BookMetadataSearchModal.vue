@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import { useGlobalSettingsStore } from '~/stores/globalSettings';
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { $fetch } from '~/utils/apiFetch';
+import { computed, reactive, ref, watch } from 'vue';
+import BookCover from '~/components/BookCover.vue';
+import ModalWindow from '~/components/ModalWindow.vue';
 interface GoogleBookVolumeInfo {
   title?: string;
   authors?: string[];

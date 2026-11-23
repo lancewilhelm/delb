@@ -1,3 +1,11 @@
+import { useAuth } from '~/composables/useAuth';
+import { useBookViewFields } from '~/composables/useBookViewFields';
+import { useThemeAppearance } from '~/composables/useThemeAppearance';
+import { useUiStore } from '~/stores/ui';
+import { fontFamilyOptions, useUserSettingsStore } from '~/stores/userSettings';
+import { debounce } from '~/utils/debounce';
+import { navigateTo } from '~/utils/navigation';
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch, type Ref } from 'vue';
 import fuzzysort from 'fuzzysort';
 import themesList from '~/assets/json/themes.json';
 import { normalizeCustomTheme } from '~/utils/customTheme';

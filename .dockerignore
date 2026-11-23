@@ -3,8 +3,9 @@
 .DS_Store
 
 # Local build artifacts
-.nuxt
-.output
+dist
+bin
+delb
 
 # Local dependencies
 node_modules

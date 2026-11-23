@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useResizeObserver } from '@vueuse/core';
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 interface Props {
   text?: string;
   pauseTime?: number; // Time to pause at start and end (ms)

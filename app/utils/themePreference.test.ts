@@ -19,15 +19,10 @@ test('system changes, previews, fixed selection and resuming system resolve thro
       this.activeSettings.themePreference = patch.themePreference;
     },
   });
-  const states = new Map<string, ReturnType<typeof ref>>();
-  const useState = (key: string, initial: () => unknown) => {
-    if (!states.has(key)) states.set(key, ref(initial()));
-    return states.get(key);
-  };
   const composableSource = readFileSync(
     new URL('../composables/useThemeAppearance.ts', import.meta.url),
     'utf8',
-  ).replace(/^import .*;\n/gm, '');
+  );
   const composableModule = {
     exports: {} as typeof import('../composables/useThemeAppearance'),
   };
@@ -36,10 +31,12 @@ test('system changes, previews, fixed selection and resuming system resolve thro
     {
       module: composableModule,
       exports: composableModule.exports,
-      useUserSettingsStore: () => store,
-      useState,
-      computed,
-      resolveTheme,
+      require: (name: string) => {
+        if (name === 'vue') return { computed, ref };
+        if (name === '~/stores/userSettings') return { useUserSettingsStore: () => store };
+        if (name === '~/utils/themePreference') return { resolveTheme };
+        throw new Error(`Unexpected import: ${name}`);
+      },
     },
   );
   const appearance = composableModule.exports.useThemeAppearance();
@@ -52,15 +49,12 @@ test('system changes, previews, fixed selection and resuming system resolve thro
   };
   const applied: string[] = [];
   const pluginSource = readFileSync(
-    new URL('../plugins/init-theme.client.ts', import.meta.url),
+    new URL('../plugins/init-theme.ts', import.meta.url),
     'utf8',
   );
-  let mount: () => void = () => {
-    throw new Error('Mount hook was not registered');
-  };
   const pluginModule = {
     exports: {} as {
-      default: (app: { hook: (name: string, callback: () => void) => void }) => void;
+      initTheme: () => void;
     },
   };
   runInNewContext(
@@ -68,26 +62,26 @@ test('system changes, previews, fixed selection and resuming system resolve thro
     {
       module: pluginModule,
       exports: pluginModule.exports,
-      defineNuxtPlugin: (fn: () => void) => fn,
-      useUserSettingsStore: () => store,
-      useThemeAppearance: () => appearance,
-      window: { matchMedia: () => media },
-      watch,
-      loadTheme: (theme: string) => {
-        applied.push(theme);
-        return Promise.resolve();
+      require: (name: string) => {
+        if (name === 'vue') return { watch };
+        if (name === '~/stores/userSettings') return { useUserSettingsStore: () => store };
+        if (name === '~/composables/useThemeAppearance') return { useThemeAppearance: () => appearance };
+        if (name === '~/utils/theme') {
+          return {
+            loadTheme: (theme: string) => {
+              applied.push(theme);
+              return Promise.resolve();
+            },
+          };
+        }
+        throw new Error(`Unexpected import: ${name}`);
       },
+      window: { matchMedia: () => media },
       console,
     },
   );
-  pluginModule.exports.default({
-    hook(name, callback) {
-      assert.equal(name, 'app:mounted');
-      mount = callback;
-    },
-  });
   assert.equal(applied.length, 0);
-  mount();
+  pluginModule.exports.initTheme();
   assert.equal(applied.at(-1), 'guage_light');
   change({ matches: true });
   assert.equal(applied.at(-1), 'guage_dark');

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
-import sharp from 'sharp';
-import { createClient } from '@libsql/client';
+import sharp from './test-image.mjs';
+import { createClient } from './sqlite-client.mjs';
 import { fetchAuth } from './fetch-auth.mjs';
 const base = (
   process.env.DELB_REVIEW_URL ||

@@ -1,9 +1,30 @@
 <script setup lang="ts">
+import { useCollectionsStore } from '~/stores/collections';
+import { $fetch } from '~/utils/apiFetch';
+import { computed, onMounted, ref } from 'vue';
 import EditCollectionModal from '~/components/Collections/EditCollectionModal.vue';
 import type { Collection } from '~/stores/collections';
-import type { previewCollectionMigration } from '~~/server/utils/collections/migration';
 
-type Preview = Awaited<ReturnType<typeof previewCollectionMigration>>;
+type Preview = {
+  state: 'exclusive' | 'legacy' | 'migrating';
+  fingerprint: string;
+  privateCollections: number;
+  users: number;
+  recoveredBooks: number;
+  blockers: string[];
+  splits: {
+    bookId: string;
+    title: string;
+    calibreBookId?: number | null;
+    collections: { id: string; name: string }[];
+  }[];
+  retainedChoices: { bookId: string; collectionId: string }[];
+  retainedDropboxTargetId: string | null;
+  dropboxTargets: {
+    needsChoice: boolean;
+    options: { id: string; name: string }[];
+  };
+};
 type AdminCollection = Collection & { ownerEmail: string; bookCount: number };
 const preview = ref<Preview | null>(null);
 const collections = ref<AdminCollection[]>([]);

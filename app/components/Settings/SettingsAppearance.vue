@@ -1,4 +1,17 @@
 <script setup lang="ts">
+import { useIsMobileDevice } from '~/composables/useIsMobileDevice';
+import { useThemeAppearance } from '~/composables/useThemeAppearance';
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { computed } from 'vue';
+import BooksViewFieldsSettings from '~/components/Books/BooksViewFieldsSettings.vue';
+import SettingsAppearanceCustomTheme from '~/components/Settings/SettingsAppearanceCustomTheme.vue';
+import SettingsAppearanceFonts from '~/components/Settings/SettingsAppearanceFonts.vue';
+import SettingsUIGroup from '~/components/Settings/UI/SettingsUIGroup.vue';
+import SettingsUIInput from '~/components/Settings/UI/SettingsUIInput.vue';
+import SettingsUISlider from '~/components/Settings/UI/SettingsUISlider.vue';
+import SettingsUISubGroup from '~/components/Settings/UI/SettingsUISubGroup.vue';
+import SettingsUITheme from '~/components/Settings/UI/SettingsUITheme.vue';
+import SettingsUIToggle from '~/components/Settings/UI/SettingsUIToggle.vue';
 import themesList from '~/assets/json/themes.json';
 import { normalizeCustomTheme } from '~/utils/customTheme';
 import {
@@ -548,9 +561,7 @@ function handleSortChange(target: string) {
         </div>
       </SettingsUISubGroup>
       <SettingsUISubGroup title="Custom Theme" icon="lucide:paintbrush">
-        <ClientOnly>
-          <SettingsAppearanceCustomTheme />
-        </ClientOnly>
+        <SettingsAppearanceCustomTheme />
       </SettingsUISubGroup>
     </SettingsUIGroup>
   </div>

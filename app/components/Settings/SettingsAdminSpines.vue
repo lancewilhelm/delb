@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { $fetch } from '~/utils/apiFetch';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import SettingsUIGroup from '~/components/Settings/UI/SettingsUIGroup.vue';
 import {
   maxSpinePromptLength,
   spinePromptPlaceholders,
