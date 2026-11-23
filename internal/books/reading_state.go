@@ -1972,22 +1972,6 @@ func (s *Service) handleGetDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var globalTbrCount int
-	if err := s.db.QueryRowContext(r.Context(), `
-		SELECT COUNT(*)
-		FROM user_book_status ubs
-		WHERE ubs.user_id = ?
-		  AND ubs.status = 'to_be_read'
-		  AND EXISTS (
-			SELECT 1 FROM collection_books cb
-			INNER JOIN collection_members cm ON cm.collection_id = cb.collection_id
-			WHERE cb.book_id = ubs.book_id AND cm.user_id = ?
-		  )
-	`, userID, userID).Scan(&globalTbrCount); err != nil {
-		s.writeErrWithFallback(w, "GET /api/dashboard globalTbr failed", "Failed to load dashboard", err)
-		return
-	}
-
 	visClause := `EXISTS (
 		SELECT 1 FROM collection_books cb
 		INNER JOIN collection_members cm ON cm.collection_id = cb.collection_id
@@ -2148,7 +2132,7 @@ func (s *Service) handleGetDashboard(w http.ResponseWriter, r *http.Request) {
 			"counts": map[string]int{
 				"total":      cTotal,
 				"none":       cNone,
-				"to_be_read": globalTbrCount,
+				"to_be_read": cTbr,
 				"reading":    cReading,
 				"finished":   cFinished,
 				"dnf":        cDnf,

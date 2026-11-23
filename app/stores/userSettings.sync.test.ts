@@ -209,3 +209,33 @@ test('a delayed pull cannot overwrite an acknowledged local save', async () => {
   assert.equal(new Date(store.updatedAt).getTime(), acknowledged);
   assert.equal(store.synced, true);
 });
+
+test('concurrent pull merges showDetailSpine independently of other coverStyle edits', async () => {
+  let resolvePull!: (value: unknown) => void;
+  const { store } = createStore(
+    () =>
+      new Promise((resolve) => {
+        resolvePull = resolve;
+      }),
+  );
+  store.updatedAt = '2030-01-01T00:00:00.000Z';
+  const pull = store.pull();
+  const showDetailSpine = store.settingRef<boolean>(
+    'coverStyle.showDetailSpine',
+  );
+  showDetailSpine.value = false;
+  resolvePull({
+    data: {
+      userSettings: {
+        settings: {
+          coverStyle: { detailSpineGloss: false, showDetailSpine: true },
+        },
+        updatedAt: '2030-01-01T00:00:10.000Z',
+      },
+    },
+  });
+  await pull;
+  assert.equal(store.activeSettings.coverStyle.showDetailSpine, false);
+  assert.equal(store.activeSettings.coverStyle.detailSpineGloss, false);
+  assert.equal(store.synced, false);
+});

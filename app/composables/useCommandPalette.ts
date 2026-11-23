@@ -214,6 +214,15 @@ export function useCommandPalette() {
           },
         },
         {
+          label: 'show spine on book details',
+          icon: 'lucide:panel-left',
+          toggle: {
+            model: userSettingsStore.settingRef<boolean>(
+              'coverStyle.showDetailSpine',
+            ),
+          },
+        },
+        {
           label: 'reading status badges',
           icon: 'lucide:badge-check',
           toggle: {

@@ -5,15 +5,12 @@ import { $fetch } from '~/utils/apiFetch';
 import { buildBookCoverUrl } from '~/utils/covers';
 import { invalidateBookDetail } from '~/utils/bookPreviewCache';
 import { clearDashboardCache } from '~/utils/dashboardCache';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import {
-  computed,
-  onBeforeUnmount,
-  onMounted,
-  reactive,
-  ref,
-  watch,
-} from 'vue';
-import { useRouter } from 'vue-router';
+  onBeforeRouteLeave,
+  onBeforeRouteUpdate,
+  useRouter,
+} from 'vue-router';
 import AppHeader from '~/components/AppHeader.vue';
 import BookCover from '~/components/BookCover.vue';
 import BookMetadataSearchModal from '~/components/BookMetadataSearchModal.vue';
@@ -21,6 +18,16 @@ import UiChip from '~/components/ui/UiChip.vue';
 import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 import BookDescriptionEditor from '~/components/Books/BookDescriptionEditor.vue';
 import SpineArtworkEditor from '~/components/Books/SpineArtworkEditor.vue';
+import {
+  formatDateOnly,
+  getBookEditorLeavePromptMessage,
+  hasBookEditorUnsavedChanges,
+  normalizeIdentifierType,
+  normalizeIdentifierValue,
+  parseIdentifierRows,
+  serializeIdentifierRows,
+  sortBaselineAuthors,
+} from '~/utils/bookEditorDirty';
 import {
   extractFetchErrorMessage,
   readResponseError,
@@ -101,62 +108,6 @@ interface MetadataImportSelection {
 
 function normalizeNameFromExternal(input: string): string {
   return (input ?? '').toString().replace(/\s+/g, ' ').trim();
-}
-
-function normalizeIdentifierValue(input: string): string {
-  // keep lean: trim and strip spaces/hyphens for isbn values if user pasted formatted
-  const v = (input ?? '').toString().trim();
-  return v.replace(/[\s-]+/g, '');
-}
-
-type BookIdentifierRow = { type: string; value: string };
-
-function normalizeIdentifierType(input: string): string {
-  return (input ?? '').toString().trim().toLowerCase();
-}
-
-function parseIdentifierRows(input: string): BookIdentifierRow[] {
-  const lines = (input ?? '')
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean);
-
-  const rows: BookIdentifierRow[] = [];
-
-  for (const line of lines) {
-    const idx = line.indexOf(':');
-    if (idx > 0) {
-      const t = normalizeIdentifierType(line.slice(0, idx));
-      const v = normalizeIdentifierValue(line.slice(idx + 1));
-      if (t && v) rows.push({ type: t, value: v });
-      continue;
-    }
-
-    // Allow raw ISBN pasted as a line; treat as unknown type.
-    const v = normalizeIdentifierValue(line);
-    if (v) rows.push({ type: 'isbn', value: v });
-  }
-
-  // De-dupe by (type,value) case-insensitively
-  const seen = new Set<string>();
-  const out: BookIdentifierRow[] = [];
-  for (const r of rows) {
-    const k = `${r.type}:${r.value}`.toLowerCase();
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push(r);
-  }
-  return out;
-}
-
-function serializeIdentifierRows(rows: BookIdentifierRow[]): string {
-  return (rows ?? [])
-    .map(
-      (r) =>
-        `${normalizeIdentifierType(r.type)}:${normalizeIdentifierValue(r.value)}`,
-    )
-    .filter((x) => x.trim().length > 0)
-    .join('\n');
 }
 
 function extractIsbnsFromGoogle(item: GoogleBookItem): {
@@ -295,6 +246,7 @@ const spineEditor = ref<{
   save: () => Promise<void>;
   reset: () => void;
   busy: boolean;
+  changed: boolean;
   generating: boolean;
   source: string | null;
   previewStyle: Record<string, string>;
@@ -690,22 +642,6 @@ function splitTokens(input: string): string[] {
     .filter((s) => s.length > 0);
 }
 
-function formatDateOnly(input: string): string {
-  const raw = (input ?? '').toString().trim();
-  if (!raw) return '';
-
-  // If server stored an ISO timestamp, strip to YYYY-MM-DD.
-  const isoPrefix = raw.match(/^(\d{4}-\d{2}-\d{2})/);
-  if (isoPrefix?.[1]) return isoPrefix[1];
-
-  // If someone typed slashes (YYYY/MM/DD), normalize.
-  const slash = raw.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
-  if (slash) return `${slash[1]}-${slash[2]}-${slash[3]}`;
-
-  // Otherwise leave it as-is (but UI hints encourage YYYY-MM-DD).
-  return raw;
-}
-
 /**
  * Pure chip helpers (avoid Vue template ref auto-unwrapping issues).
  */
@@ -1031,17 +967,10 @@ function bookToForm(b: Book) {
 
   // Hydrate author chips from the ordered author list.
   // We keep both `id` and `name` so chips can be linked to DB authors.
-  authorChips.value = (b.authors ?? [])
-    .slice()
-    .sort((a, c) => {
-      const aPos = typeof a.position === 'number' ? a.position : 10_000;
-      const cPos = typeof c.position === 'number' ? c.position : 10_000;
-      return aPos - cPos;
-    })
-    .map((a) => ({
-      id: a.id,
-      name: a.name,
-    }));
+  authorChips.value = sortBaselineAuthors(b.authors).map((a) => ({
+    id: a.id,
+    name: a.name,
+  }));
 
   authorInput.value = '';
   authorSuggestions.value = [];
@@ -1078,6 +1007,8 @@ function bookToForm(b: Book) {
     );
 
   form.identifiers = serializeIdentifierRows(ids);
+  identifierTypeInput.value = '';
+  identifierValueInput.value = '';
 
   // Single-value typeaheads
   publisherInput.value = form.publisher;
@@ -1292,7 +1223,7 @@ async function createBook() {
     await uploadPendingCoverIfAny();
 
     setSuccess('Created.');
-    backToBook();
+    backToBook({ skipUnsavedWarning: true });
   } catch (e: unknown) {
     setError(e instanceof Error ? e.message : 'Failed to create book.');
   } finally {
@@ -1344,7 +1275,7 @@ async function updateBook() {
     clearDashboardCache();
 
     // After a successful save, return to the book page
-    backToBook();
+    backToBook({ skipUnsavedWarning: true });
   } catch (e: unknown) {
     setError(e instanceof Error ? e.message : 'Failed to save.');
   } finally {
@@ -1373,7 +1304,66 @@ function resetForm() {
   bookToForm(book.value);
 }
 
-function backToBook() {
+const hasUnsavedChanges = computed(() =>
+  hasBookEditorUnsavedChanges({
+    baseline: book.value,
+    form,
+    authorChips: authorChips.value,
+    authorInput: authorInput.value,
+    tagChips: tagChips.value,
+    tagInput: tagInput.value,
+    identifierTypeInput: identifierTypeInput.value,
+    identifierValueInput: identifierValueInput.value,
+    hasSelectedCoverFile: Boolean(selectedCoverFile.value),
+    coverResetPending: coverResetPending.value,
+    spineChanged: Boolean(spineEditor.value?.changed),
+    spineGenerating: Boolean(spineEditor.value?.generating),
+  }),
+);
+
+let allowNextRouteLeave = false;
+
+function leavePromptMessage(): string | null {
+  return getBookEditorLeavePromptMessage({
+    hasUnsavedChanges: hasUnsavedChanges.value,
+    spineGenerating: Boolean(spineEditor.value?.generating),
+    saving: saving.value,
+  });
+}
+
+function canLeave(): boolean {
+  const message = leavePromptMessage();
+  return !message || confirm(message);
+}
+
+function confirmLeaveIfNeeded(): boolean {
+  if (allowNextRouteLeave) {
+    allowNextRouteLeave = false;
+    return true;
+  }
+  return canLeave();
+}
+
+defineExpose({ canLeave, hasUnsavedChanges });
+
+onBeforeRouteLeave(() => confirmLeaveIfNeeded());
+onBeforeRouteUpdate((to, from) => {
+  if (to.params.id === from.params.id) return true;
+  return confirmLeaveIfNeeded();
+});
+
+function unloadWarning(event: BeforeUnloadEvent) {
+  if (allowNextRouteLeave) return;
+  if (leavePromptMessage()) {
+    event.preventDefault();
+    event.returnValue = '';
+  }
+}
+
+function backToBook(options?: { skipUnsavedWarning?: boolean }) {
+  if (options?.skipUnsavedWarning) {
+    allowNextRouteLeave = true;
+  }
   if (activeBookId.value) {
     const targetPath = `/books/${encodeURIComponent(activeBookId.value)}`;
 
@@ -1725,6 +1715,8 @@ async function handleMetadataSelect(selection: MetadataImportSelection) {
 }
 
 onMounted(() => {
+  window.addEventListener('beforeunload', unloadWarning);
+
   if (isCreateMode.value) {
     const blank = makeEmptyBook();
     book.value = blank;
@@ -1733,6 +1725,10 @@ onMounted(() => {
   }
 
   loadBook();
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', unloadWarning);
 });
 
 watch(
@@ -1764,7 +1760,7 @@ watch(
           v-tooltip="backTooltip"
           name="lucide:arrow-left"
           class="text-3xl opacity-80 hover:opacity-100 cursor-pointer self-start"
-          @click="backToBook"
+          @click="backToBook()"
         />
 
         <!-- Metadata header -->

@@ -344,3 +344,52 @@ test('spine gloss can be changed independently of cover gloss and saved per devi
   restored.mobile.value = true;
   assert.equal(restored.store.activeSettings.coverStyle.detailSpineGloss, true);
 });
+
+test('detail spine visibility defaults on, normalizes invalid values, and persists per device profile', () => {
+  const legacy = createStore();
+  legacy.store.applyRemoteSettings({
+    coverStyle: { glossySpine: false, detailSpineGloss: false },
+  } as unknown as Partial<UserSettings>);
+  assert.equal(legacy.store.activeSettings.coverStyle.glossySpine, false);
+  assert.equal(legacy.store.activeSettings.coverStyle.detailSpineGloss, false);
+  assert.equal(legacy.store.activeSettings.coverStyle.showDetailSpine, true);
+
+  const invalid = createStore();
+  const corrupted = JSON.parse(JSON.stringify(invalid.store.settings));
+  corrupted.coverStyle.showDetailSpine = 'false';
+  corrupted.mobile.enabled = true;
+  corrupted.mobile.settings.coverStyle.showDetailSpine = null;
+  invalid.store.applyRemoteSettings(corrupted);
+  assert.equal(invalid.store.activeSettings.coverStyle.showDetailSpine, true);
+  invalid.mobile.value = true;
+  assert.equal(invalid.store.activeSettings.coverStyle.showDetailSpine, true);
+
+  const { store, mobile } = createStore();
+  const showDetailSpine = store.settingRef<boolean>(
+    'coverStyle.showDetailSpine',
+  );
+  const spineGloss = store.settingRef<boolean>('coverStyle.detailSpineGloss');
+  assert.equal(showDetailSpine.value, true);
+  showDetailSpine.value = false;
+  assert.equal(store.activeSettings.coverStyle.showDetailSpine, false);
+  assert.equal(spineGloss.value, true);
+
+  store.setMobileEnabled(true);
+  mobile.value = true;
+  assert.equal(showDetailSpine.value, false);
+  showDetailSpine.value = true;
+  mobile.value = false;
+  assert.equal(showDetailSpine.value, false);
+
+  const restored = createStore();
+  restored.store.applyRemoteSettings(
+    JSON.parse(JSON.stringify(store.settings)),
+  );
+  assert.equal(restored.store.activeSettings.coverStyle.showDetailSpine, false);
+  assert.equal(restored.store.activeSettings.coverStyle.detailSpineGloss, true);
+  restored.mobile.value = true;
+  assert.equal(restored.store.activeSettings.coverStyle.showDetailSpine, true);
+
+  restored.store.$reset();
+  assert.equal(restored.store.activeSettings.coverStyle.showDetailSpine, true);
+});

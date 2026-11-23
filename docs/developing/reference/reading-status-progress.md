@@ -42,7 +42,7 @@ Status metadata lives on `user_book_status` and is user-scoped:
 
 `user_book_rationale` stores one private plain-text rationale per user and book, independently of `user_book_status`. Clearing status retains the rationale. Reads and writes require current book visibility and use the authenticated user's identity.
 
-The dedicated TBR page loads the full ranked queue. Its inline editor and book details use the same rationale endpoints. The dashboard TBR count is global to the reader, while other counts retain their selected collection scope.
+The dedicated TBR page loads the full ranked queue. Its inline editor and book details use the same rationale endpoints. On the dashboard, all counts—including **To be read**—follow the selected collection scope.
 
 Migration `0006_tbr_queue` normalizes existing accessible ranks and installs access-change triggers on `collection_members` and `collection_books`. These triggers observe loss and restoration in the same transaction as sharing changes, including cascades. A revoke-and-restore cycle therefore appends the book even when no queue request occurs between the two operations. A book remains ranked while any collection still grants access.
 
