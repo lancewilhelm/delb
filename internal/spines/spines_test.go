@@ -373,6 +373,50 @@ func TestSpineAndSpineGenerationEndToEnd(t *testing.T) {
 	}
 	_ = json.Unmarshal(raw, &spRes)
 
+	// Versioned spine image gets private browser caching + ETag + 304 support.
+	verReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/books/"+bookID+"/spine?v="+spRes.Revision, nil)
+	verReq.Header.Set("Cookie", viewerCookie)
+	verResp, err := http.DefaultClient.Do(verReq)
+	if err != nil {
+		t.Fatalf("versioned spine GET: %v", err)
+	}
+	_, _ = io.ReadAll(verResp.Body)
+	verResp.Body.Close()
+	if verResp.StatusCode != http.StatusOK ||
+		verResp.Header.Get("Cache-Control") != "private, max-age=300, stale-while-revalidate=3600" ||
+		verResp.Header.Get("Vary") != "Cookie" ||
+		verResp.Header.Get("ETag") == "" {
+		t.Fatalf("unexpected versioned spine headers: status=%d cc=%q vary=%q etag=%q",
+			verResp.StatusCode, verResp.Header.Get("Cache-Control"), verResp.Header.Get("Vary"), verResp.Header.Get("ETag"))
+	}
+	inmReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/books/"+bookID+"/spine?v="+spRes.Revision, nil)
+	inmReq.Header.Set("Cookie", viewerCookie)
+	inmReq.Header.Set("If-None-Match", verResp.Header.Get("ETag"))
+	inmResp, err := http.DefaultClient.Do(inmReq)
+	if err != nil {
+		t.Fatalf("spine 304: %v", err)
+	}
+	inmResp.Body.Close()
+	if inmResp.StatusCode != http.StatusNotModified {
+		t.Fatalf("expected 304 Not Modified for spine ETag, got %d", inmResp.StatusCode)
+	}
+	// Unversioned or mismatched ?v= keeps strict must-revalidate, and metadata stays no-store.
+	unvReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/books/"+bookID+"/spine?v=stale", nil)
+	unvReq.Header.Set("Cookie", viewerCookie)
+	unvResp, err := http.DefaultClient.Do(unvReq)
+	if err != nil {
+		t.Fatalf("stale-version spine GET: %v", err)
+	}
+	_, _ = io.ReadAll(unvResp.Body)
+	unvResp.Body.Close()
+	if unvResp.Header.Get("Cache-Control") != "private, max-age=0, must-revalidate" {
+		t.Fatalf("stale-version spine Cache-Control = %q", unvResp.Header.Get("Cache-Control"))
+	}
+	metaResp, _ := reqJSON(viewerCookie, http.MethodGet, "/api/books/"+bookID+"/spine?variant=metadata", nil)
+	if metaResp.Header.Get("Cache-Control") != "private, no-store" {
+		t.Fatalf("spine metadata Cache-Control = %q", metaResp.Header.Get("Cache-Control"))
+	}
+
 	// Concurrent edits at same revision -> one 200, one 409
 	var wg sync.WaitGroup
 	codes := make([]int, 2)

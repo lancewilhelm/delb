@@ -37,6 +37,7 @@ const PERSISTED_USER_STORES = [
 const sessionState = ref<Session | null>(null);
 const userState = ref<User | null>(null);
 const sessionFetchingState = ref(false);
+const sessionInitializedState = ref(false);
 let inFlightSessionFetch: Promise<SessionPayload | null> | null = null;
 
 function clearUserStoresAndStorage(clearAuthUserId: boolean) {
@@ -99,6 +100,7 @@ export function useAuth() {
 
         return data;
       } finally {
+        sessionInitializedState.value = true;
         sessionFetching.value = false;
         inFlightSessionFetch = null;
       }
@@ -127,6 +129,7 @@ export function useAuth() {
   return {
     session,
     user,
+    sessionInitialized: sessionInitializedState,
     loggedIn: computed(() => !!session.value),
     signIn: client.signIn,
     signUp: client.signUp,

@@ -224,7 +224,10 @@ export function createAppRouter() {
       return;
     }
 
-    const { loggedIn, options } = useAuth();
+    const { loggedIn, options, sessionInitialized, fetchSession } = useAuth();
+    if (!sessionInitialized.value) {
+      await fetchSession();
+    }
     const routeAuth =
       to.meta?.auth && typeof to.meta.auth === 'object' ? to.meta.auth : {};
     const only = routeAuth.only;

@@ -3,12 +3,14 @@ package spines
 import (
 	"bytes"
 	"context"
+	"crypto/sha1"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -180,17 +182,66 @@ func (s *Service) handleBookSpine(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		var (
-			origB64  string
-			origType string
-			imgB64   string
-		)
+		// Read only the lightweight indexed revision first so matching
+		// If-None-Match requests return 304 without touching large image blobs.
+		var rev string
 		err := s.db.QueryRowContext(r.Context(), `
-			SELECT original_base64, original_type, image_base64
+			SELECT revision
 			FROM book_spines
 			WHERE book_id = ?
 			LIMIT 1
-		`, bookID).Scan(&origB64, &origType, &imgB64)
+		`, bookID).Scan(&rev)
+		if errors.Is(err, sql.ErrNoRows) {
+			httpapi.WriteError(w, http.StatusNotFound, "No spine artwork")
+			return
+		}
+		if err != nil {
+			s.writeErr(w, "GET /api/books/{id}/spine revision query failed", err)
+			return
+		}
+
+		sum := sha1.Sum([]byte(fmt.Sprintf("%s:%s:%s", bookID, variant, rev)))
+		etag := `"` + hex.EncodeToString(sum[:]) + `"`
+		w.Header().Set("ETag", etag)
+		if v := strings.TrimSpace(r.URL.Query().Get("v")); v != "" && v == rev {
+			// Revision-pinned spine URLs cache-bust automatically on any edit.
+			w.Header().Set("Cache-Control", "private, max-age=300, stale-while-revalidate=3600")
+		} else {
+			w.Header().Set("Cache-Control", "private, max-age=0, must-revalidate")
+		}
+
+		if inm := r.Header.Get("If-None-Match"); inm != "" {
+			for _, part := range strings.Split(inm, ",") {
+				t := strings.TrimSpace(part)
+				if t == etag || t == "*" {
+					w.WriteHeader(http.StatusNotModified)
+					return
+				}
+			}
+		}
+
+		// Select ONLY the blob column needed for the requested variant so
+		// rendering shelves never reads multi-megabyte original_base64 blobs.
+		var (
+			ct     string
+			rawB64 string
+		)
+		if variant == "source" {
+			err = s.db.QueryRowContext(r.Context(), `
+				SELECT original_type, original_base64
+				FROM book_spines
+				WHERE book_id = ?
+				LIMIT 1
+			`, bookID).Scan(&ct, &rawB64)
+		} else {
+			ct = "image/webp"
+			err = s.db.QueryRowContext(r.Context(), `
+				SELECT image_base64
+				FROM book_spines
+				WHERE book_id = ?
+				LIMIT 1
+			`, bookID).Scan(&rawB64)
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			httpapi.WriteError(w, http.StatusNotFound, "No spine artwork")
 			return
@@ -200,12 +251,6 @@ func (s *Service) handleBookSpine(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		ct := "image/webp"
-		rawB64 := imgB64
-		if variant == "source" {
-			ct = origType
-			rawB64 = origB64
-		}
 		data, err := base64.StdEncoding.DecodeString(rawB64)
 		if err != nil {
 			s.writeErr(w, "GET /api/books/{id}/spine base64 decode failed", err)
