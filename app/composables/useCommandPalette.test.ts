@@ -23,6 +23,7 @@ function createPalette() {
     appearanceContrast: 100,
     coverStyle: {
       detailSpineGloss: true,
+      showDetailSpine: true,
       showReadingStatus: false,
       authorsMaxCovers: 8,
     },
@@ -53,6 +54,14 @@ function createPalette() {
         get: () => settings.coverStyle.showReadingStatus,
         set: (value: boolean) => {
           settings.coverStyle.showReadingStatus = value;
+        },
+      });
+    }
+    if (path === 'coverStyle.showDetailSpine') {
+      return computed({
+        get: () => settings.coverStyle.showDetailSpine,
+        set: (value: boolean) => {
+          settings.coverStyle.showDetailSpine = value;
         },
       });
     }
@@ -168,4 +177,18 @@ test('system theme assignment and close retain the intended mode', async () => {
   assert.equal(ui.commandPaletteVisible, false);
   await nextTick();
   assert.equal(palette.selectedOption.value, undefined);
+});
+
+test('command palette toggles show spine on book details', () => {
+  const { palette, settings } = createPalette();
+  palette.query.value = 'show spine on book details';
+  const result = palette.filteredOptions.value.find(
+    (item) => item.option.label === 'show spine on book details',
+  );
+  assert.equal(result?.path, 'cover style');
+  assert.equal(settings.coverStyle.showDetailSpine, true);
+  palette.selectOption(result?.option);
+  assert.equal(settings.coverStyle.showDetailSpine, false);
+  palette.selectOption(result?.option);
+  assert.equal(settings.coverStyle.showDetailSpine, true);
 });

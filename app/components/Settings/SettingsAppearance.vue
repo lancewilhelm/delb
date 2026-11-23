@@ -62,6 +62,9 @@ const coverStyleGlossy = userSettingsStore.settingRef<boolean>(
 const detailSpineGloss = userSettingsStore.settingRef<boolean>(
   'coverStyle.detailSpineGloss',
 );
+const showDetailSpine = userSettingsStore.settingRef<boolean>(
+  'coverStyle.showDetailSpine',
+);
 
 const coverStyleRoundedRight = userSettingsStore.settingRef<boolean>(
   'coverStyle.roundedRight',
@@ -306,6 +309,11 @@ function handleSortChange(target: string) {
         v-model="detailSpineGloss"
         title="Spine gloss"
         description="Adds a glossy effect to spines on bookshelves and the book detail page."
+      />
+      <SettingsUIToggle
+        v-model="showDetailSpine"
+        title="Show spine on book details"
+        description="Display custom spine artwork next to the cover on book detail pages."
       />
       <SettingsUIToggle
         v-model="coverStyleRoundedRight"
