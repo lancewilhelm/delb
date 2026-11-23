@@ -202,6 +202,7 @@ try {
     5,
     'books across exclusive collections are counted once',
   );
+  assert.equal(first.data.data.counts.to_be_read, 1);
   assert.deepEqual(
     first.data.data.shelf.books.map((book) => [book.id, book.progress]),
     [[reading, 42]],
@@ -229,6 +230,7 @@ try {
     [newer],
   );
   assert.equal(scoped.data.data.counts.total, 2);
+  assert.equal(scoped.data.data.counts.to_be_read, 0);
   const other = await request('/api/dashboard?shelf=finished', b.cookie);
   assert.deepEqual(
     other.data.data.shelf.books,

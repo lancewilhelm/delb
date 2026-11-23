@@ -104,10 +104,18 @@ try {
     reader.cookie,
   );
   assert.equal(dashboard.data.data.counts.total, 1);
-  assert.equal(dashboard.data.data.counts.to_be_read, 63);
+  assert.equal(dashboard.data.data.counts.to_be_read, 1);
+  const sharedDashboard = await request(
+    `/api/dashboard?collectionId=${shared}`,
+    reader.cookie,
+  );
+  assert.equal(sharedDashboard.data.data.counts.total, 62);
+  assert.equal(sharedDashboard.data.data.counts.to_be_read, 62);
+  const allDashboard = await request('/api/dashboard', reader.cookie);
+  assert.equal(allDashboard.data.data.counts.to_be_read, 63);
   assert.equal((await request('/api/tbr', owner.cookie)).data.data.count, 0);
   console.log(
-    'PASS TBR authentication, full queue, deduplication and global dashboard count',
+    'PASS TBR authentication, full queue, deduplication and collection-scoped dashboard count',
   );
 
   const notePath = `/api/books/${ids[1]}/rationale`;

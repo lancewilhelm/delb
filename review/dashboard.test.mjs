@@ -602,14 +602,14 @@ test('Recently read preserves calendar dates across browser timezones', async (t
   }
 });
 
-test('dashboard status links preserve filters and TBR opens its dedicated queue', async () => {
+test('dashboard status links preserve filters and target status-filtered books', async () => {
   const view = await dashboard();
   const statusLinks = view.links.filter((link) => link.to !== '/books');
   assert.deepEqual(
     statusLinks.map((link) => link.to),
     [
       '/books?status=reading',
-      '/to-be-read',
+      '/books?status=to_be_read',
       '/books?status=finished',
       '/books?status=dnf',
       '/books?status=none',

@@ -446,3 +446,173 @@ func TestBooksEndToEndHTTP(t *testing.T) {
 		t.Fatalf("expected 409 duplicate conflict, got %d body=%v", dupResp.StatusCode, dupBody)
 	}
 }
+
+func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
+	ctx := context.Background()
+	tmp := t.TempDir()
+	dbPath := filepath.Join(tmp, "dashboard-tbr.db")
+	libDir := filepath.Join(tmp, "library")
+	opened, err := db.Open(ctx, "file:"+dbPath)
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	defer opened.DB.Close()
+	if _, err := db.Migrate(ctx, opened.DB, opened.FilePath, opened.IsMemory, delb.MigrationsFS); err != nil {
+		t.Fatalf("db.Migrate: %v", err)
+	}
+
+	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
+	authSvc := auth.NewService(auth.ServiceOptions{
+		DB:     opened.DB,
+		Secret: "dashboard-tbr-secret-0123456789abcdef0123456789",
+		Logger: discard,
+	})
+	collectionsSvc := collections.NewService(collections.ServiceOptions{
+		DB:          opened.DB,
+		AuthService: authSvc,
+		LibraryDir:  libDir,
+		Logger:      discard,
+	})
+	booksSvc := books.NewService(books.ServiceOptions{
+		DB:          opened.DB,
+		AuthService: authSvc,
+		LibraryDir:  libDir,
+		Logger:      discard,
+	})
+
+	handler := httpapi.NewHandler(httpapi.RouterOptions{
+		DB:          opened.DB,
+		Logger:      discard,
+		AuthService: authSvc,
+		Services:    []httpapi.RouteRegistrar{collectionsSvc, booksSvc},
+	})
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+
+	doJSON := func(method, path string, body any) (*http.Response, map[string]any) {
+		t.Helper()
+		var r io.Reader
+		if body != nil {
+			b, _ := json.Marshal(body)
+			r = bytes.NewReader(b)
+		}
+		req, _ := http.NewRequest(method, srv.URL+path, r)
+		req.Header.Set("Origin", srv.URL)
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("%s %s: %v", method, path, err)
+		}
+		raw, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		var parsed map[string]any
+		_ = json.Unmarshal(raw, &parsed)
+		return resp, parsed
+	}
+
+	// Sign up user.
+	resp, _ := doJSON(http.MethodPost, "/api/auth/sign-up/email", map[string]any{
+		"name":     "Reader",
+		"email":    "reader@example.test",
+		"password": "StrongPassword123!",
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("sign-up status = %d", resp.StatusCode)
+	}
+
+	createCollection := func(name string) string {
+		t.Helper()
+		r, body := doJSON(http.MethodPost, "/api/collections", map[string]any{"name": name})
+		if r.StatusCode != http.StatusOK {
+			t.Fatalf("create collection %q status = %d body = %v", name, r.StatusCode, body)
+		}
+		data := body["data"].(map[string]any)
+		col := data["collection"].(map[string]any)
+		return col["id"].(string)
+	}
+
+	createBook := func(title, collectionID, status string) string {
+		t.Helper()
+		r, body := doJSON(http.MethodPost, "/api/books", map[string]any{
+			"title":         title,
+			"authors":       []string{"Test Author"},
+			"collectionIds": []string{collectionID},
+		})
+		if r.StatusCode != http.StatusOK {
+			t.Fatalf("create book %q status = %d body = %v", title, r.StatusCode, body)
+		}
+		data := body["data"].(map[string]any)
+		book := data["book"].(map[string]any)
+		id := book["id"].(string)
+		if status != "" {
+			sr, sbody := doJSON(http.MethodPost, "/api/books/"+id+"/status", map[string]any{"status": status})
+			if sr.StatusCode != http.StatusOK {
+				t.Fatalf("set status %q for %q status = %d body = %v", status, title, sr.StatusCode, sbody)
+			}
+		}
+		return id
+	}
+
+	colA := createCollection("Collection A")
+	colB := createCollection("Collection B")
+
+	createBook("A TBR 1", colA, "to_be_read")
+	createBook("A TBR 2", colA, "to_be_read")
+	createBook("A Reading", colA, "reading")
+	createBook("B TBR 1", colB, "to_be_read")
+	createBook("B Finished", colB, "finished")
+
+	assertDashboard := func(path string, wantTotal, wantTbr, wantReading, wantFinished, wantShelfLen int) {
+		t.Helper()
+		r, body := doJSON(http.MethodGet, path, nil)
+		if r.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s status = %d body = %v", path, r.StatusCode, body)
+		}
+		data := body["data"].(map[string]any)
+		counts := data["counts"].(map[string]any)
+		if got := int(counts["total"].(float64)); got != wantTotal {
+			t.Fatalf("GET %s total = %d, want %d", path, got, wantTotal)
+		}
+		if got := int(counts["to_be_read"].(float64)); got != wantTbr {
+			t.Fatalf("GET %s to_be_read = %d, want %d", path, got, wantTbr)
+		}
+		if got := int(counts["reading"].(float64)); got != wantReading {
+			t.Fatalf("GET %s reading = %d, want %d", path, got, wantReading)
+		}
+		if got := int(counts["finished"].(float64)); got != wantFinished {
+			t.Fatalf("GET %s finished = %d, want %d", path, got, wantFinished)
+		}
+		shelf := data["shelf"].(map[string]any)
+		booksArr := shelf["books"].([]any)
+		if len(booksArr) != wantShelfLen {
+			t.Fatalf("GET %s shelf books len = %d, want %d", path, len(booksArr), wantShelfLen)
+		}
+	}
+
+	// All accessible collections (no collectionId): TBR count spans all accessible collections.
+	assertDashboard("/api/dashboard?shelf=tbr", 5, 3, 1, 1, 3)
+
+	// Collection A: TBR count matches Collection A only (2), not global (3).
+	assertDashboard("/api/dashboard?shelf=tbr&collectionId="+colA, 3, 2, 1, 0, 2)
+
+	// Collection B: TBR count matches Collection B only (1), not global (3).
+	assertDashboard("/api/dashboard?shelf=tbr&collectionId="+colB, 2, 1, 0, 1, 1)
+
+	// Unknown / inaccessible collection returns 0 for all counts including to_be_read.
+	assertDashboard("/api/dashboard?shelf=tbr&collectionId=nonexistent-collection", 0, 0, 0, 0, 0)
+
+	// Global ranked TBR queue endpoint (/api/tbr) still returns all 3 accessible TBR books.
+	tbrResp, tbrBody := doJSON(http.MethodGet, "/api/tbr", nil)
+	if tbrResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/tbr status = %d body = %v", tbrResp.StatusCode, tbrBody)
+	}
+	tbrData := tbrBody["data"].(map[string]any)
+	if got := int(tbrData["count"].(float64)); got != 3 {
+		t.Fatalf("GET /api/tbr count = %d, want 3", got)
+	}
+}
