@@ -17,7 +17,7 @@ Uploads run sequentially in the dialog. Check each file's result when uploading 
 
 ## Add a book from metadata
 
-This mode needs outbound access to an enabled metadata provider. Google Books uses a public API. Hardcover requires an administrator-configured token.
+This mode needs outbound access to an enabled metadata provider. Google Books uses a public API and supports an optional administrator-configured API key to avoid shared quota limits. Hardcover requires an administrator-configured token.
 
 1. Select **By metadata**.
 2. Enter an ISBN, title, or author query.

@@ -358,3 +358,111 @@ func TestGlobalSettingsHardcoverAndSpinePrompt(t *testing.T) {
 		t.Fatalf("restore spine-prompt = (%d, %v)", code, restored)
 	}
 }
+
+func TestGoogleBooksAPIKeySettings(t *testing.T) {
+	env := newSettingsTestEnv(t)
+	ownerCookie := env.signup("Owner", "owner@example.invalid")
+	userCookie := env.signup("Reader", "reader@example.invalid")
+
+	const rawSecret = "AIzaSy-Test-Google-Books-Secret-987654321"
+
+	// Unauthenticated -> 401
+	code, _, _ := env.req(http.MethodPut, "/api/settings/admin/google-books-api-key", "", map[string]any{
+		"apiKey": rawSecret,
+	}, nil)
+	if code != http.StatusUnauthorized {
+		t.Fatalf("unauth PUT google-books-api-key = %d, want 401", code)
+	}
+
+	// Non-admin -> 403
+	code, _, _ = env.req(http.MethodPut, "/api/settings/admin/google-books-api-key", userCookie, map[string]any{
+		"apiKey": rawSecret,
+	}, nil)
+	if code != http.StatusForbidden {
+		t.Fatalf("non-admin PUT google-books-api-key = %d, want 403", code)
+	}
+
+	// Invalid payloads -> 400
+	for _, payload := range []map[string]any{
+		{},
+		{"apiKey": nil},
+		{"apiKey": 12345},
+	} {
+		code, _, _ = env.req(http.MethodPut, "/api/settings/admin/google-books-api-key", ownerCookie, payload, nil)
+		if code != http.StatusBadRequest {
+			t.Fatalf("invalid PUT google-books-api-key (%v) = %d, want 400", payload, code)
+		}
+	}
+
+	// Initially not configured
+	code, body, _ := env.req(http.MethodGet, "/api/settings", ownerCookie, nil, nil)
+	if code != http.StatusOK {
+		t.Fatalf("initial GET /api/settings = %d", code)
+	}
+	caps := body["data"].(map[string]any)["capabilities"].(map[string]any)
+	if caps["googleBooksApiKeyConfigured"] != false {
+		t.Fatalf("expected googleBooksApiKeyConfigured=false initially, got %v", caps)
+	}
+
+	// Admin saves key with surrounding whitespace -> trimmed, cleared=false, secret never returned
+	code, body, _ = env.req(http.MethodPut, "/api/settings/admin/google-books-api-key", ownerCookie, map[string]any{
+		"apiKey": "  " + rawSecret + "  ",
+	}, nil)
+	if code != http.StatusOK || body["success"] != true || body["data"].(map[string]any)["cleared"] != false {
+		t.Fatalf("save google-books-api-key = (%d, %v)", code, body)
+	}
+	putBytes, _ := json.Marshal(body)
+	if strings.Contains(string(putBytes), rawSecret) {
+		t.Fatalf("PUT response leaked raw API key: %s", string(putBytes))
+	}
+
+	// Verify DB stores trimmed key under expected ID
+	var stored string
+	if err := env.opened.DB.QueryRowContext(context.Background(), `SELECT value FROM global_secrets WHERE id = ?`, settings.GoogleBooksSecretID).Scan(&stored); err != nil {
+		t.Fatalf("query stored secret: %v", err)
+	}
+	if stored != rawSecret {
+		t.Fatalf("stored secret = %q, want %q", stored, rawSecret)
+	}
+
+	// GET /api/settings exposes only capability boolean for both admin and non-admin, never the raw key
+	for _, cookie := range []string{ownerCookie, userCookie} {
+		code, body, _ = env.req(http.MethodGet, "/api/settings", cookie, nil, nil)
+		if code != http.StatusOK {
+			t.Fatalf("GET /api/settings = %d", code)
+		}
+		getBytes, _ := json.Marshal(body)
+		if strings.Contains(string(getBytes), rawSecret) {
+			t.Fatalf("GET /api/settings leaked raw API key: %s", string(getBytes))
+		}
+		caps = body["data"].(map[string]any)["capabilities"].(map[string]any)
+		if caps["googleBooksApiKeyConfigured"] != true {
+			t.Fatalf("expected googleBooksApiKeyConfigured=true, got %v", caps)
+		}
+	}
+
+	// Clear key with whitespace -> cleared=true, row removed, capability=false
+	code, body, _ = env.req(http.MethodPut, "/api/settings/admin/google-books-api-key", ownerCookie, map[string]any{
+		"apiKey": "   ",
+	}, nil)
+	if code != http.StatusOK || body["success"] != true || body["data"].(map[string]any)["cleared"] != true {
+		t.Fatalf("clear google-books-api-key = (%d, %v)", code, body)
+	}
+
+	var count int
+	if err := env.opened.DB.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM global_secrets WHERE id = ?`, settings.GoogleBooksSecretID).Scan(&count); err != nil {
+		t.Fatalf("count secret rows: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected secret row to be deleted on clear, got count=%d", count)
+	}
+
+	code, body, _ = env.req(http.MethodGet, "/api/settings", ownerCookie, nil, nil)
+	if code != http.StatusOK {
+		t.Fatalf("GET /api/settings after clear = %d", code)
+	}
+	caps = body["data"].(map[string]any)["capabilities"].(map[string]any)
+	if caps["googleBooksApiKeyConfigured"] != false {
+		t.Fatalf("expected googleBooksApiKeyConfigured=false after clear, got %v", caps)
+	}
+}

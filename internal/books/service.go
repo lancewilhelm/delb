@@ -32,20 +32,22 @@ func isValidBookStatus(s string) bool {
 
 // ServiceOptions configures the Books/Catalog/ReadingState/TBR/Dashboard/Search service.
 type ServiceOptions struct {
-	DB          *sql.DB
-	AuthService *auth.Service
-	LibraryDir  string
-	Logger      *slog.Logger
-	HTTPClient  *http.Client
+	DB                  *sql.DB
+	AuthService         *auth.Service
+	LibraryDir          string
+	Logger              *slog.Logger
+	HTTPClient          *http.Client
+	GoogleBooksEndpoint string
 }
 
 // Service implements all Phase 2B HTTP endpoints.
 type Service struct {
-	db         *sql.DB
-	auth       *auth.Service
-	libraryDir string
-	logger     *slog.Logger
-	httpClient *http.Client
+	db                  *sql.DB
+	auth                *auth.Service
+	libraryDir          string
+	logger              *slog.Logger
+	httpClient          *http.Client
+	googleBooksEndpoint string
 }
 
 func NewService(opts ServiceOptions) *Service {
@@ -65,12 +67,17 @@ func NewService(opts ServiceOptions) *Service {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 15 * time.Second}
 	}
+	gbEndpoint := strings.TrimSpace(opts.GoogleBooksEndpoint)
+	if gbEndpoint == "" {
+		gbEndpoint = googleBooksEndpoint
+	}
 	return &Service{
-		db:         opts.DB,
-		auth:       opts.AuthService,
-		libraryDir: libraryDir,
-		logger:     logger,
-		httpClient: httpClient,
+		db:                  opts.DB,
+		auth:                opts.AuthService,
+		libraryDir:          libraryDir,
+		logger:              logger,
+		httpClient:          httpClient,
+		googleBooksEndpoint: gbEndpoint,
 	}
 }
 

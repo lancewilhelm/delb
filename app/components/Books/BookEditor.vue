@@ -5,7 +5,14 @@ import { $fetch } from '~/utils/apiFetch';
 import { buildBookCoverUrl } from '~/utils/covers';
 import { invalidateBookDetail } from '~/utils/bookPreviewCache';
 import { clearDashboardCache } from '~/utils/dashboardCache';
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import {
+  computed,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from 'vue';
 import { useRouter } from 'vue-router';
 import AppHeader from '~/components/AppHeader.vue';
 import BookCover from '~/components/BookCover.vue';
@@ -14,7 +21,10 @@ import UiChip from '~/components/ui/UiChip.vue';
 import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 import BookDescriptionEditor from '~/components/Books/BookDescriptionEditor.vue';
 import SpineArtworkEditor from '~/components/Books/SpineArtworkEditor.vue';
-import { readResponseError } from '~/utils/responseError';
+import {
+  extractFetchErrorMessage,
+  readResponseError,
+} from '~/utils/responseError';
 
 defineOptions({ name: 'BookEditor' });
 
@@ -1569,7 +1579,10 @@ async function handleAutoFetchMetadata() {
       },
     });
   } catch (e: unknown) {
-    setError(e instanceof Error ? e.message : 'Failed to auto-fetch metadata.');
+    setError(
+      extractFetchErrorMessage(e) ||
+        (e instanceof Error ? e.message : 'Failed to auto-fetch metadata.'),
+    );
   } finally {
     autoFetchingMetadata.value = false;
   }
