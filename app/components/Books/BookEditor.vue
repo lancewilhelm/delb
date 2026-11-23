@@ -5,21 +5,27 @@ import { $fetch } from '~/utils/apiFetch';
 import { buildBookCoverUrl } from '~/utils/covers';
 import { invalidateBookDetail } from '~/utils/bookPreviewCache';
 import { clearDashboardCache } from '~/utils/dashboardCache';
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import {
-  onBeforeRouteLeave,
-  onBeforeRouteUpdate,
-  useRouter,
-} from 'vue-router';
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from 'vue';
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRouter } from 'vue-router';
 import AppHeader from '~/components/AppHeader.vue';
 import BookCover from '~/components/BookCover.vue';
 import BookMetadataSearchModal from '~/components/BookMetadataSearchModal.vue';
+import ModalWindow from '~/components/ModalWindow.vue';
 import UiChip from '~/components/ui/UiChip.vue';
 import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 import BookDescriptionEditor from '~/components/Books/BookDescriptionEditor.vue';
 import SpineArtworkEditor from '~/components/Books/SpineArtworkEditor.vue';
 import {
   formatDateOnly,
+  getBookEditorLeavePrompt,
   getBookEditorLeavePromptMessage,
   hasBookEditorUnsavedChanges,
   normalizeIdentifierType,
@@ -27,6 +33,7 @@ import {
   parseIdentifierRows,
   serializeIdentifierRows,
   sortBaselineAuthors,
+  type BookEditorLeavePrompt,
 } from '~/utils/bookEditorDirty';
 import {
   extractFetchErrorMessage,
@@ -1170,7 +1177,10 @@ function validateRequiredFields(payload: ReturnType<typeof buildPayload>) {
   return true;
 }
 
-async function createBook() {
+async function createBook(options?: {
+  navigateAfter?: boolean;
+}): Promise<boolean> {
+  const navigateAfter = options?.navigateAfter ?? true;
   saving.value = true;
   errorMessage.value = null;
   successMessage.value = null;
@@ -1179,7 +1189,7 @@ async function createBook() {
     commitPendingChips();
     const payload = buildPayload();
 
-    if (!validateRequiredFields(payload)) return;
+    if (!validateRequiredFields(payload)) return false;
 
     const res = await fetch('/api/books', {
       method: 'POST',
@@ -1198,7 +1208,7 @@ async function createBook() {
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       setError(text || `Failed to create (${res.status}).`);
-      return;
+      return false;
     }
 
     const json = (await res.json()) as {
@@ -1210,7 +1220,7 @@ async function createBook() {
     const createdId = json?.data?.book?.id ?? '';
     if (!createdId) {
       setError(json?.message || 'Failed to create book.');
-      return;
+      return false;
     }
 
     currentBookId.value = createdId;
@@ -1223,17 +1233,24 @@ async function createBook() {
     await uploadPendingCoverIfAny();
 
     setSuccess('Created.');
-    backToBook({ skipUnsavedWarning: true });
+    if (navigateAfter) {
+      backToBook({ skipUnsavedWarning: true });
+    }
+    return true;
   } catch (e: unknown) {
     setError(e instanceof Error ? e.message : 'Failed to create book.');
+    return false;
   } finally {
     saving.value = false;
   }
 }
 
-async function updateBook() {
-  if (!book.value) return;
+async function updateBook(options?: {
+  navigateAfter?: boolean;
+}): Promise<boolean> {
+  if (!book.value) return false;
 
+  const navigateAfter = options?.navigateAfter ?? true;
   saving.value = true;
   errorMessage.value = null;
   successMessage.value = null;
@@ -1242,7 +1259,7 @@ async function updateBook() {
     commitPendingChips();
     const payload = buildPayload();
 
-    if (!validateRequiredFields(payload)) return;
+    if (!validateRequiredFields(payload)) return false;
 
     const res = await fetch(`/api/books/${encodeURIComponent(book.value.id)}`, {
       method: 'PUT',
@@ -1256,7 +1273,7 @@ async function updateBook() {
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       setError(text || `Failed to save (${res.status}).`);
-      return;
+      return false;
     }
 
     // Book, cover, and spine are separate writes; retain a failed spine draft for retry.
@@ -1267,7 +1284,7 @@ async function updateBook() {
       setError(
         `Book details and any cover changes were saved. ${error instanceof Error ? error.message : 'The spine could not be saved.'}`,
       );
-      return;
+      return false;
     }
 
     setSuccess('Saved.');
@@ -1275,22 +1292,25 @@ async function updateBook() {
     clearDashboardCache();
 
     // After a successful save, return to the book page
-    backToBook({ skipUnsavedWarning: true });
+    if (navigateAfter) {
+      backToBook({ skipUnsavedWarning: true });
+    }
+    return true;
   } catch (e: unknown) {
     setError(e instanceof Error ? e.message : 'Failed to save.');
+    return false;
   } finally {
     saving.value = false;
   }
 }
 
-async function save() {
-  if (saving.value) return;
+async function save(options?: { navigateAfter?: boolean }): Promise<boolean> {
+  if (saving.value) return false;
 
   if (isCreateMode.value) {
-    await createBook();
-  } else {
-    await updateBook();
+    return createBook(options);
   }
+  return updateBook(options);
 }
 
 function resetForm() {
@@ -1323,6 +1343,13 @@ const hasUnsavedChanges = computed(() =>
 
 let allowNextRouteLeave = false;
 
+const leaveConfirmOpen = ref(false);
+const leaveConfirmSaving = ref(false);
+const leavePrompt = ref<BookEditorLeavePrompt | null>(null);
+const leaveStayButton = ref<HTMLButtonElement | null>(null);
+let pendingLeaveResolve: ((allow: boolean) => void) | null = null;
+let previousFocusBeforeLeaveModal: HTMLElement | null = null;
+
 function leavePromptMessage(): string | null {
   return getBookEditorLeavePromptMessage({
     hasUnsavedChanges: hasUnsavedChanges.value,
@@ -1331,20 +1358,89 @@ function leavePromptMessage(): string | null {
   });
 }
 
-function canLeave(): boolean {
-  const message = leavePromptMessage();
-  return !message || confirm(message);
+function resolvePendingLeave(allow: boolean) {
+  const resolve = pendingLeaveResolve;
+  pendingLeaveResolve = null;
+  leaveConfirmOpen.value = false;
+  leaveConfirmSaving.value = false;
+  leavePrompt.value = null;
+  if (!allow) {
+    previousFocusBeforeLeaveModal?.focus();
+  }
+  previousFocusBeforeLeaveModal = null;
+  resolve?.(allow);
 }
 
-function confirmLeaveIfNeeded(): boolean {
+function cancelLeaveConfirm() {
+  if (!leaveConfirmOpen.value || leaveConfirmSaving.value) return;
+  resolvePendingLeave(false);
+}
+
+function discardAndLeave() {
+  if (!leaveConfirmOpen.value || leaveConfirmSaving.value) return;
+  resolvePendingLeave(true);
+}
+
+async function saveAndLeave() {
+  if (!leaveConfirmOpen.value || leaveConfirmSaving.value) return;
+  leaveConfirmSaving.value = true;
+  try {
+    const saved = await save({ navigateAfter: false });
+    resolvePendingLeave(saved);
+  } catch {
+    resolvePendingLeave(false);
+  }
+}
+
+function canLeave(): Promise<boolean> {
+  const prompt = getBookEditorLeavePrompt({
+    hasUnsavedChanges: hasUnsavedChanges.value,
+    spineGenerating: Boolean(spineEditor.value?.generating),
+    saving: saving.value,
+    isCreateMode: isCreateMode.value,
+    canSave: !saveDisabled.value,
+  });
+  if (!prompt) return Promise.resolve(true);
+
+  if (pendingLeaveResolve) {
+    pendingLeaveResolve(false);
+    pendingLeaveResolve = null;
+  }
+
+  previousFocusBeforeLeaveModal =
+    typeof document !== 'undefined' &&
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+
+  leavePrompt.value = prompt;
+  leaveConfirmSaving.value = false;
+  leaveConfirmOpen.value = true;
+  void nextTick(() => {
+    leaveStayButton.value?.focus();
+  });
+
+  return new Promise<boolean>((resolve) => {
+    pendingLeaveResolve = resolve;
+  });
+}
+
+function confirmLeaveIfNeeded(): Promise<boolean> {
   if (allowNextRouteLeave) {
     allowNextRouteLeave = false;
-    return true;
+    return Promise.resolve(true);
   }
   return canLeave();
 }
 
-defineExpose({ canLeave, hasUnsavedChanges });
+defineExpose({
+  canLeave,
+  hasUnsavedChanges,
+  leaveConfirmOpen,
+  cancelLeaveConfirm,
+  discardAndLeave,
+  saveAndLeave,
+});
 
 onBeforeRouteLeave(() => confirmLeaveIfNeeded());
 onBeforeRouteUpdate((to, from) => {
@@ -1729,6 +1825,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', unloadWarning);
+  if (pendingLeaveResolve) {
+    resolvePendingLeave(false);
+  }
 });
 
 watch(
@@ -1786,7 +1885,7 @@ watch(
               class="px-3 py-2 rounded-md bg-(--main-color) text-(--contrast-inverse-color) hover:bg-(--main-color)/90! text-sm disabled:opacity-60 disabled:cursor-not-allowed"
               type="button"
               :disabled="saveDisabled"
-              @click="save"
+              @click="save()"
             >
               <span v-if="saving">Saving...</span>
               <span v-else>{{ saveLabel }}</span>
@@ -1989,7 +2088,7 @@ watch(
             :cover-pending="!!selectedCoverFile || coverResetPending"
             :disabled="saving"
             :open="spineModalOpen"
-            @close="spineModalOpen = false"
+            @close="if (!leaveConfirmOpen) spineModalOpen = false;"
           />
         </div>
 
@@ -2776,8 +2875,74 @@ watch(
     <BookMetadataSearchModal
       :open="metadataSearchOpen"
       :initial-query="metadataSearchQuery"
-      @close="closeMetadataSearch"
+      @close="if (!leaveConfirmOpen) closeMetadataSearch();"
       @select="handleMetadataSelect"
     />
+
+    <!-- Unsaved Changes Confirmation Modal -->
+    <ModalWindow :open="leaveConfirmOpen" @close="cancelLeaveConfirm">
+      <div
+        v-if="leavePrompt"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="book-editor-leave-title"
+        aria-describedby="book-editor-leave-message"
+        class="flex flex-col gap-4 max-w-md w-full"
+      >
+        <div class="flex items-start gap-3">
+          <Icon
+            name="lucide:triangle-alert"
+            class="text-xl text-(--contrast-error-color) shrink-0 mt-0.5"
+            aria-hidden="true"
+          />
+          <div class="flex flex-col gap-1 min-w-0">
+            <h2
+              id="book-editor-leave-title"
+              class="text-base font-semibold text-(--contrast-main-color)"
+            >
+              {{ leavePrompt.title }}
+            </h2>
+            <p
+              id="book-editor-leave-message"
+              class="text-sm text-(--contrast-text-color) opacity-85"
+            >
+              {{ leavePrompt.message }}
+            </p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
+          <button
+            ref="leaveStayButton"
+            type="button"
+            class="px-3 py-2 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-sm cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            :disabled="leaveConfirmSaving"
+            @click="cancelLeaveConfirm"
+          >
+            {{ leavePrompt.stayLabel }}
+          </button>
+
+          <button
+            type="button"
+            class="px-3 py-2 rounded-md border border-(--error-color) text-(--contrast-error-color) hover:bg-(--error-color)/10 text-sm cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            :disabled="leaveConfirmSaving"
+            @click="discardAndLeave"
+          >
+            {{ leavePrompt.discardLabel }}
+          </button>
+
+          <button
+            v-if="leavePrompt.canSaveAndLeave"
+            type="button"
+            class="px-3 py-2 rounded-md bg-(--main-color) text-(--contrast-inverse-color) hover:bg-(--main-color)/90! text-sm cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            :disabled="leaveConfirmSaving || saveDisabled"
+            @click="saveAndLeave"
+          >
+            <span v-if="leaveConfirmSaving">Saving...</span>
+            <span v-else>{{ leavePrompt.saveAndLeaveLabel }}</span>
+          </button>
+        </div>
+      </div>
+    </ModalWindow>
   </div>
 </template>

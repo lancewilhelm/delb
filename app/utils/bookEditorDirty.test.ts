@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   formatDateOnly,
+  getBookEditorLeavePrompt,
   getBookEditorLeavePromptMessage,
   hasBookEditorUnsavedChanges,
   serializeIdentifierRows,
@@ -249,4 +250,74 @@ test('leave prompt message matches clean, unsaved, generating, and saving states
     }),
     'Your book changes are still saving. Leave anyway?',
   );
+});
+
+test('structured leave prompt provides tailored copy and save-and-leave availability', () => {
+  assert.equal(
+    getBookEditorLeavePrompt({
+      hasUnsavedChanges: false,
+      spineGenerating: false,
+      saving: false,
+      canSave: true,
+    }),
+    null,
+  );
+
+  const unsavedEdit = getBookEditorLeavePrompt({
+    hasUnsavedChanges: true,
+    spineGenerating: false,
+    saving: false,
+    isCreateMode: false,
+    canSave: true,
+  });
+  assert.ok(unsavedEdit);
+  assert.equal(unsavedEdit.title, 'Unsaved changes');
+  assert.equal(unsavedEdit.stayLabel, 'Keep editing');
+  assert.equal(unsavedEdit.discardLabel, 'Discard & leave');
+  assert.equal(unsavedEdit.canSaveAndLeave, true);
+  assert.equal(unsavedEdit.saveAndLeaveLabel, 'Save & leave');
+
+  const unsavedCreate = getBookEditorLeavePrompt({
+    hasUnsavedChanges: true,
+    spineGenerating: false,
+    saving: false,
+    isCreateMode: true,
+    canSave: true,
+  });
+  assert.ok(unsavedCreate);
+  assert.equal(unsavedCreate.canSaveAndLeave, true);
+  assert.equal(unsavedCreate.saveAndLeaveLabel, 'Create & leave');
+
+  const unsavedInvalid = getBookEditorLeavePrompt({
+    hasUnsavedChanges: true,
+    spineGenerating: false,
+    saving: false,
+    canSave: false,
+  });
+  assert.ok(unsavedInvalid);
+  assert.equal(unsavedInvalid.canSaveAndLeave, false);
+
+  const generating = getBookEditorLeavePrompt({
+    hasUnsavedChanges: true,
+    spineGenerating: true,
+    saving: false,
+    canSave: true,
+  });
+  assert.ok(generating);
+  assert.equal(generating.title, 'Spine generation in progress');
+  assert.equal(generating.stayLabel, 'Keep waiting');
+  assert.equal(generating.discardLabel, 'Discard & leave');
+  assert.equal(generating.canSaveAndLeave, false);
+
+  const saving = getBookEditorLeavePrompt({
+    hasUnsavedChanges: true,
+    spineGenerating: false,
+    saving: true,
+    canSave: false,
+  });
+  assert.ok(saving);
+  assert.equal(saving.title, 'Save in progress');
+  assert.equal(saving.stayLabel, 'Keep waiting');
+  assert.equal(saving.discardLabel, 'Leave anyway');
+  assert.equal(saving.canSaveAndLeave, false);
 });

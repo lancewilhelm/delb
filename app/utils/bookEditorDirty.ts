@@ -49,6 +49,20 @@ export type BookEditorLeaveGuardState = {
   saving: boolean;
 };
 
+export type BookEditorLeavePrompt = {
+  title: string;
+  message: string;
+  discardLabel: string;
+  stayLabel: string;
+  canSaveAndLeave: boolean;
+  saveAndLeaveLabel: string;
+};
+
+export type BookEditorLeavePromptOptions = BookEditorLeaveGuardState & {
+  isCreateMode?: boolean;
+  canSave?: boolean;
+};
+
 export function normalizeIdentifierType(input: string): string {
   return (input ?? '').toString().trim().toLowerCase();
 }
@@ -210,6 +224,45 @@ export function hasBookEditorUnsavedChanges(
   if (!nameListsEqual(currentTags, baselineTags)) return true;
 
   return false;
+}
+
+export function getBookEditorLeavePrompt(
+  state: BookEditorLeavePromptOptions,
+): BookEditorLeavePrompt | null {
+  if (state.saving) {
+    return {
+      title: 'Save in progress',
+      message:
+        'Your book changes are still being saved. Leaving now may interrupt the save.',
+      discardLabel: 'Leave anyway',
+      stayLabel: 'Keep waiting',
+      canSaveAndLeave: false,
+      saveAndLeaveLabel: '',
+    };
+  }
+  if (state.spineGenerating) {
+    return {
+      title: 'Spine generation in progress',
+      message:
+        'A spine is currently being generated. Leaving now will cancel and discard it.',
+      discardLabel: 'Discard & leave',
+      stayLabel: 'Keep waiting',
+      canSaveAndLeave: false,
+      saveAndLeaveLabel: '',
+    };
+  }
+  if (state.hasUnsavedChanges) {
+    return {
+      title: 'Unsaved changes',
+      message:
+        'You have unsaved changes to this book, including any pending cover or spine edits. Leaving now will discard them.',
+      discardLabel: 'Discard & leave',
+      stayLabel: 'Keep editing',
+      canSaveAndLeave: Boolean(state.canSave),
+      saveAndLeaveLabel: state.isCreateMode ? 'Create & leave' : 'Save & leave',
+    };
+  }
+  return null;
 }
 
 export function getBookEditorLeavePromptMessage(
