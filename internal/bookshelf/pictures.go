@@ -2,10 +2,14 @@ package bookshelf
 
 import (
 	"context"
+	"crypto/sha1"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -246,27 +250,27 @@ func (s *Service) uploadPicture(ctx context.Context, userID string, scope Pictur
 	return &uploadedPictureResult{ID: id, Width: width, Height: height}, nil
 }
 
-func (s *Service) readPicture(ctx context.Context, userID string, scope PictureScope, assetID string) ([]byte, error) {
+func (s *Service) readPicture(ctx context.Context, userID string, scope PictureScope, assetID string, ifNoneMatch string) ([]byte, string, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, err
+		return nil, "", false, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	if err := pictureAccess(ctx, tx, userID, scope, false); err != nil {
-		return nil, err
+		return nil, "", false, err
 	}
 
 	col := scope.whereColumn()
-	var b64 string
+	var exists int
 	err = tx.QueryRowContext(ctx, `
-		SELECT image_base64 FROM shelf_picture_assets WHERE `+col+` = ? AND id = ? LIMIT 1
-	`, scope.ID, assetID).Scan(&b64)
+		SELECT 1 FROM shelf_picture_assets WHERE `+col+` = ? AND id = ? LIMIT 1
+	`, scope.ID, assetID).Scan(&exists)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, httpapi.NewError(http.StatusNotFound, "Picture not found")
+		return nil, "", false, httpapi.NewError(http.StatusNotFound, "Picture not found")
 	}
 	if err != nil {
-		return nil, err
+		return nil, "", false, err
 	}
 
 	if scope.Kind == "collection" {
@@ -275,7 +279,7 @@ func (s *Service) readPicture(ctx context.Context, userID string, scope PictureS
 			SELECT role FROM collection_members WHERE collection_id = ? AND user_id = ? LIMIT 1
 		`, scope.ID, userID).Scan(&role)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return nil, err
+			return nil, "", false, err
 		}
 		if role == "viewer" {
 			var rawArr string
@@ -283,10 +287,10 @@ func (s *Service) readPicture(ctx context.Context, userID string, scope PictureS
 				SELECT arrangement FROM collection_bookshelves WHERE collection_id = ? LIMIT 1
 			`, scope.ID).Scan(&rawArr)
 			if errors.Is(err, sql.ErrNoRows) {
-				return nil, httpapi.NewError(http.StatusNotFound, "Picture not found")
+				return nil, "", false, httpapi.NewError(http.StatusNotFound, "Picture not found")
 			}
 			if err != nil {
-				return nil, err
+				return nil, "", false, err
 			}
 			layout := ParseBookshelfJSON([]byte(rawArr))
 			referenced := false
@@ -299,15 +303,44 @@ func (s *Service) readPicture(ctx context.Context, userID string, scope PictureS
 				}
 			}
 			if !referenced {
-				return nil, httpapi.NewError(http.StatusNotFound, "Picture not found")
+				return nil, "", false, httpapi.NewError(http.StatusNotFound, "Picture not found")
 			}
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, err
+	sum := sha1.Sum([]byte(fmt.Sprintf("%s:%s:%s", scope.Kind, scope.ID, assetID)))
+	etag := `"` + hex.EncodeToString(sum[:]) + `"`
+	if ifNoneMatch != "" {
+		for _, part := range strings.Split(ifNoneMatch, ",") {
+			t := strings.TrimSpace(part)
+			if t == etag || t == "*" {
+				if err := tx.Commit(); err != nil {
+					return nil, "", false, err
+				}
+				return nil, etag, true, nil
+			}
+		}
 	}
-	return base64.StdEncoding.DecodeString(b64)
+
+	var b64 string
+	err = tx.QueryRowContext(ctx, `
+		SELECT image_base64 FROM shelf_picture_assets WHERE `+col+` = ? AND id = ? LIMIT 1
+	`, scope.ID, assetID).Scan(&b64)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, "", false, httpapi.NewError(http.StatusNotFound, "Picture not found")
+	}
+	if err != nil {
+		return nil, "", false, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, "", false, err
+	}
+	imgBytes, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return nil, "", false, err
+	}
+	return imgBytes, etag, false, nil
 }
 
 // /api/bookshelf-pictures/{scope}/{id}
@@ -332,9 +365,16 @@ func (s *Service) handleBookshelfPictures(w http.ResponseWriter, r *http.Request
 			return
 		}
 		assetID := r.URL.Query().Get("asset")
-		imgBytes, err := s.readPicture(r.Context(), swu.User.ID, scope, assetID)
+		imgBytes, etag, notModified, err := s.readPicture(r.Context(), swu.User.ID, scope, assetID, r.Header.Get("If-None-Match"))
 		if err != nil {
 			s.writeErr(w, "GET /api/bookshelf-pictures failed", err)
+			return
+		}
+		// Uploaded picture assets are immutable per UUID `asset` ID.
+		w.Header().Set("Cache-Control", "private, max-age=300, stale-while-revalidate=3600")
+		w.Header().Set("ETag", etag)
+		if notModified {
+			w.WriteHeader(http.StatusNotModified)
 			return
 		}
 		w.Header().Set("Content-Type", "image/webp")

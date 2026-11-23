@@ -45,7 +45,7 @@ watch(
         )
           emit('load');
       },
-      { root: props.root },
+      { root: props.root, rootMargin: '600px 0px' },
     );
     observer = currentObserver;
     currentObserver.observe(sentinel.value);

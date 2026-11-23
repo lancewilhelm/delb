@@ -2,6 +2,10 @@
 import { computed } from 'vue';
 import BookshelfSpine from './BookshelfSpine.vue';
 import type { BookViewBook } from '~/utils/bookFields';
+import {
+  cancelBookDetailPrefetch,
+  scheduleBookDetailPrefetch,
+} from '~/utils/bookPreviewCache';
 import { placementStyle } from '~/utils/bookshelfPlacement';
 import {
   itemWidth,
@@ -85,6 +89,14 @@ function renderShelf(shelfIndex: number) {
   const bottom = top + shelf.height * props.scale;
   return bottom >= -600 && top <= props.viewportHeight + 600;
 }
+function onSpinePrefetchIntent(bookId: string) {
+  if (props.editing || props.dragging) return;
+  scheduleBookDetailPrefetch(bookId);
+}
+
+function onSpineCancelPrefetch(bookId: string) {
+  cancelBookDetailPrefetch(bookId);
+}
 </script>
 
 <template>
@@ -146,6 +158,10 @@ function renderShelf(shelfIndex: number) {
             :style="placementStyle(book, item, index)"
             :aria-label="`${bookFor(book.id).title}${editing ? ', arrange book' : ', open book'}`"
             @pointerdown.stop="emit('move-book', $event, shelf, item, book)"
+            @pointerenter="onSpinePrefetchIntent(book.id)"
+            @pointerleave="onSpineCancelPrefetch(book.id)"
+            @focusin="onSpinePrefetchIntent(book.id)"
+            @focusout="onSpineCancelPrefetch(book.id)"
             @click="emit('select-book', $event, book.id)"
           >
             <BookshelfSpine

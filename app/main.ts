@@ -35,14 +35,18 @@ async function bootstrap() {
 
   const router = createAppRouter();
   setAppRouter(router);
-  app.use(router);
 
   initContrast();
   initFont();
 
+  // Resolve the auth session BEFORE installing the router (`app.use(router)`
+  // triggers the initial navigation immediately). Otherwise `router.beforeEach`
+  // can race with `fetchSession()`, see `loggedIn === false`, redirect to
+  // `/login`, and then bounce back to `/` once the session finishes loading.
   await useAuth().fetchSession();
   const pullSettingsAfterMount = initSync();
 
+  app.use(router);
   await router.isReady();
   app.mount('#app');
 

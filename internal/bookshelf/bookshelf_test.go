@@ -438,10 +438,27 @@ func TestCollectionBookshelfPicturesAndPersonalShelves(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatalf("save collection bookshelf with picture = %d %s", resp.StatusCode, string(raw))
 	}
-	// Now viewer CAN read picture as image/webp
+	// Now viewer CAN read picture as image/webp with private caching + ETag + 304 support
 	resp, _ = env.reqJSON(&viewer, http.MethodGet, picPath+"?asset="+picRes.ID, nil)
 	if resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "image/webp") {
 		t.Fatalf("viewer referenced picture = %d ct=%s", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	if resp.Header.Get("Cache-Control") != "private, max-age=300, stale-while-revalidate=3600" ||
+		resp.Header.Get("ETag") == "" ||
+		resp.Header.Get("Vary") != "Cookie" {
+		t.Fatalf("unexpected picture cache headers: cc=%q etag=%q vary=%q",
+			resp.Header.Get("Cache-Control"), resp.Header.Get("ETag"), resp.Header.Get("Vary"))
+	}
+	inmReq, _ := http.NewRequest(http.MethodGet, env.server.URL+picPath+"?asset="+picRes.ID, nil)
+	inmReq.Header.Set("Cookie", viewer.cookie)
+	inmReq.Header.Set("If-None-Match", resp.Header.Get("ETag"))
+	inmResp, err := http.DefaultClient.Do(inmReq)
+	if err != nil {
+		t.Fatalf("picture 304: %v", err)
+	}
+	inmResp.Body.Close()
+	if inmResp.StatusCode != http.StatusNotModified {
+		t.Fatalf("expected 304 Not Modified for picture ETag, got %d", inmResp.StatusCode)
 	}
 
 	// Personal shelf lifecycle & viewer resize protection

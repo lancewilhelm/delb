@@ -1,8 +1,20 @@
 <script setup lang="ts">
 import { useUserSettingsStore } from '~/stores/userSettings';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import type { BookViewBook } from '~/utils/bookFields';
 import type { ShelfBook } from '~~/shared/bookshelf';
+
+const loadedSpineSrcs = new Set<string>();
+const MAX_LOADED_SPINE_SRCS = 1000;
+
+function rememberLoadedSpine(src: string) {
+  if (loadedSpineSrcs.has(src)) return;
+  loadedSpineSrcs.add(src);
+  if (loadedSpineSrcs.size > MAX_LOADED_SPINE_SRCS) {
+    const oldest = loadedSpineSrcs.values().next().value;
+    if (oldest !== undefined) loadedSpineSrcs.delete(oldest);
+  }
+}
 
 const userSettingsStore = useUserSettingsStore();
 const props = defineProps<{
@@ -27,15 +39,39 @@ const color = computed(() => {
     hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   return colors[hash % colors.length];
 });
-const failed = ref(false);
-const loaded = ref(false);
-watch(
-  () => [props.book.id, props.book.spineRevision],
-  () => {
-    failed.value = false;
-    loaded.value = false;
-  },
+const spineSrc = computed(() =>
+  props.book.spineRevision
+    ? `/api/books/${encodeURIComponent(props.book.id)}/spine?v=${encodeURIComponent(props.book.spineRevision)}`
+    : null,
 );
+const imgEl = ref<HTMLImageElement | null>(null);
+const failed = ref(false);
+const loaded = ref(Boolean(spineSrc.value && loadedSpineSrcs.has(spineSrc.value)));
+
+function onSpineLoad() {
+  if (spineSrc.value) rememberLoadedSpine(spineSrc.value);
+  loaded.value = true;
+}
+
+function onSpineError() {
+  if (spineSrc.value) loadedSpineSrcs.delete(spineSrc.value);
+  failed.value = true;
+}
+
+function syncCompleteState() {
+  const el = imgEl.value;
+  if (el && el.complete && el.naturalWidth > 0) {
+    onSpineLoad();
+  }
+}
+
+watch(spineSrc, (next) => {
+  failed.value = false;
+  loaded.value = Boolean(next && loadedSpineSrcs.has(next));
+});
+
+onMounted(syncCompleteState);
+
 const author = computed(
   () =>
     props.book.authorNames?.join(', ') ||
@@ -59,22 +95,22 @@ const author = computed(
     :style="{ background: color }"
   >
     <img
-      v-if="book.spineRevision && !failed"
+      v-if="spineSrc && !failed"
+      ref="imgEl"
       class="spine-art"
       :class="{ sideways: horizontal, pending: !loaded }"
-      loading="lazy"
       decoding="async"
       :style="
         horizontal
           ? { width: `${placement.width}px`, height: `${placement.height}px` }
           : undefined
       "
-      :src="`/api/books/${encodeURIComponent(book.id)}/spine?v=${encodeURIComponent(book.spineRevision)}`"
+      :src="spineSrc"
       :alt="`Spine for ${book.title}`"
-      @load="loaded = true"
-      @error="failed = true"
+      @load="onSpineLoad"
+      @error="onSpineError"
     />
-    <template v-if="!book.spineRevision || failed || !loaded"
+    <template v-if="!spineSrc || failed || !loaded"
       ><span class="spine-title">{{ book.title }}</span
       ><span class="spine-author">{{ author }}</span></template
     >

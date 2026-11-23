@@ -87,8 +87,8 @@ const props = withDefaults(
     emptyMessage: 'No books yet. Use Upload in the header to add one.',
     sort: 'dateAdded',
     sortDir: 'desc',
-    rootMargin: '200px',
-    bufferRows: 2,
+    rootMargin: '1000px',
+    bufferRows: 4,
     debug: false,
     selectionEnabled: true,
   },
@@ -235,6 +235,7 @@ function onScroll() {
   const container = scrollContainerRef.value;
   if (!container) return;
   scrollTop.value = container.scrollTop;
+  maybeLoadMoreNearBottom();
 }
 
 function getBookIndex(bookId: string) {
@@ -413,6 +414,19 @@ function reset(preserveSelection = false) {
   }
 }
 
+function maybeLoadMoreNearBottom() {
+  if (!hasMore.value || loading.value) return;
+  const container = scrollContainerRef.value;
+  if (!container) return;
+  const thresholdPx = Math.max(1000, containerSize.value.height);
+  const remainingPx =
+    listMetrics.value.totalHeight -
+    (scrollTop.value + containerSize.value.height);
+  if (remainingPx <= thresholdPx) {
+    void loadNextPage();
+  }
+}
+
 async function fetchPage(opts: { cursor?: string | null; append: boolean }) {
   if (loading.value) return;
 
@@ -477,7 +491,14 @@ async function fetchPage(opts: { cursor?: string | null; append: boolean }) {
     errorMessage.value = msg;
     emit('error', msg);
   } finally {
-    if (generation === requestGeneration) loading.value = false;
+    if (generation === requestGeneration) {
+      loading.value = false;
+      if (hasMore.value && scrollContainerRef.value) {
+        void nextTick().then(() => {
+          if (generation === requestGeneration) maybeLoadMoreNearBottom();
+        });
+      }
+    }
   }
 }
 
