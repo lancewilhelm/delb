@@ -48,7 +48,7 @@ The same shared book can have different statuses, positions, ratings, rationale,
 
 Better Auth uses `users`, `sessions`, `accounts`, and `verifications`. System roles are distinct from collection roles.
 
-`user_settings` stores a JSON account document and a millisecond revision timestamp. That document includes desktop settings and an optional mobile override profile. `global_settings` stores installation-wide settings. `global_secrets` stores server-side credentials such as the Hardcover token; settings responses expose availability rather than the token.
+`user_settings` stores a JSON account document and a millisecond revision timestamp. That document includes desktop settings and an optional mobile override profile. `global_settings` stores installation-wide settings. `global_secrets` stores server-side credentials such as the Hardcover token and optional Google Books API key; settings responses expose availability rather than the secret values.
 
 `system_state` records completed initialization such as the owner-bootstrap claim. Avoid interpreting an empty user list as permission to rewrite that durable bootstrap history.
 

@@ -2,6 +2,7 @@
 import { useAuth } from '~/composables/useAuth';
 import { useGlobalSettingsStore } from '~/stores/globalSettings';
 import { $fetch } from '~/utils/apiFetch';
+import { extractFetchErrorMessage } from '~/utils/responseError';
 import { computed, reactive, ref, watch } from 'vue';
 import SettingsUIGroup from '~/components/Settings/UI/SettingsUIGroup.vue';
 defineOptions({ name: 'SettingsAdminMetadata' });
@@ -23,14 +24,24 @@ const provider = computed({
 
 // Local input so you can type without immediately persisting each keystroke
 const tokenInput = ref<string>('');
+const googleBooksApiKeyInput = ref<string>('');
 watch(
-  () => globalSettingsStore.capabilities?.hardcoverAvailable,
+  () => [
+    globalSettingsStore.capabilities?.hardcoverAvailable,
+    globalSettingsStore.capabilities?.googleBooksApiKeyConfigured,
+  ],
   () => {
     // no-op; this exists so the template reacts when capabilities change
   },
 );
 
 const saveState = reactive({
+  saving: false,
+  error: '',
+  ok: '',
+});
+
+const googleBooksSaveState = reactive({
   saving: false,
   error: '',
   ok: '',
@@ -47,7 +58,10 @@ async function saveToken() {
 
   saveState.saving = true;
   try {
-    await $fetch('/api/settings/admin/hardcover-token', {
+    const res = await $fetch<{
+      success?: boolean;
+      data?: { cleared?: boolean };
+    }>('/api/settings/admin/hardcover-token', {
       method: 'PUT',
       body: { token: tokenInput.value },
     });
@@ -56,10 +70,12 @@ async function saveToken() {
     await globalSettingsStore.pullLatest();
 
     tokenInput.value = '';
-    saveState.ok = 'Hardcover token updated.';
+    saveState.ok = res?.data?.cleared
+      ? 'Hardcover token cleared.'
+      : 'Hardcover token updated.';
   } catch (e: unknown) {
     saveState.error =
-      e instanceof Error ? e.message : 'Failed to update Hardcover token.';
+      extractFetchErrorMessage(e) || 'Failed to update Hardcover token.';
   } finally {
     saveState.saving = false;
   }
@@ -68,6 +84,45 @@ async function saveToken() {
 async function clearToken() {
   tokenInput.value = '';
   await saveToken();
+}
+
+async function saveGoogleBooksApiKey() {
+  googleBooksSaveState.error = '';
+  googleBooksSaveState.ok = '';
+
+  if (!isAdmin.value) {
+    googleBooksSaveState.error =
+      'You must be an admin to update Google Books settings.';
+    return;
+  }
+
+  googleBooksSaveState.saving = true;
+  try {
+    const res = await $fetch<{
+      success?: boolean;
+      data?: { cleared?: boolean };
+    }>('/api/settings/admin/google-books-api-key', {
+      method: 'PUT',
+      body: { apiKey: googleBooksApiKeyInput.value },
+    });
+
+    await globalSettingsStore.pullLatest();
+
+    googleBooksApiKeyInput.value = '';
+    googleBooksSaveState.ok = res?.data?.cleared
+      ? 'Google Books API key cleared.'
+      : 'Google Books API key updated.';
+  } catch (e: unknown) {
+    googleBooksSaveState.error =
+      extractFetchErrorMessage(e) || 'Failed to update Google Books API key.';
+  } finally {
+    googleBooksSaveState.saving = false;
+  }
+}
+
+async function clearGoogleBooksApiKey() {
+  googleBooksApiKeyInput.value = '';
+  await saveGoogleBooksApiKey();
 }
 </script>
 
@@ -173,6 +228,85 @@ async function clearToken() {
               <span class="font-mono">/api/settings</span> responses. The client
               only receives a non-secret capability flag indicating whether
               Hardcover is available.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t border-(--contrast-border-color) pt-4">
+        <div class="flex flex-col gap-2">
+          <div class="text-sm font-semibold">Google Books API key</div>
+
+          <div class="text-xs opacity-70">
+            Optional Google Cloud API key with the Books API enabled.
+            Unauthenticated Google Books requests share an anonymous quota that
+            can fail with HTTP 429 errors. The API key is stored server-side and
+            is never returned to the client.
+          </div>
+
+          <input
+            v-model="googleBooksApiKeyInput"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Google Books API key (stored server-side)"
+            class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
+            :disabled="!isAdmin || googleBooksSaveState.saving"
+            @keyup.enter="saveGoogleBooksApiKey"
+          />
+
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex gap-1 text-xs opacity-70 min-w-0">
+              <span class="font-semibold">Status:</span>
+              <span
+                v-if="
+                  globalSettingsStore.capabilities?.googleBooksApiKeyConfigured
+                "
+                class="opacity-80"
+              >
+                configured
+              </span>
+              <span v-else class="opacity-60">not configured</span>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                class="px-3 py-2 rounded-lg bg-(--main-color) text-(--contrast-inverse-color) disabled:opacity-50 disabled:cursor-not-allowed"
+                :disabled="!isAdmin || googleBooksSaveState.saving"
+                @click="saveGoogleBooksApiKey"
+              >
+                {{ googleBooksSaveState.saving ? 'saving...' : 'save' }}
+              </button>
+
+              <button
+                type="button"
+                class="px-3 py-2 rounded-lg border border-(--contrast-border-color) disabled:opacity-50 disabled:cursor-not-allowed"
+                :disabled="!isAdmin || googleBooksSaveState.saving"
+                @click="clearGoogleBooksApiKey"
+              >
+                clear
+              </button>
+            </div>
+          </div>
+
+          <div
+            v-if="googleBooksSaveState.error"
+            class="text-sm text-(--contrast-error-color)"
+          >
+            {{ googleBooksSaveState.error }}
+          </div>
+          <div v-else-if="googleBooksSaveState.ok" class="text-sm opacity-80">
+            {{ googleBooksSaveState.ok }}
+          </div>
+
+          <div class="mt-2 text-xs opacity-70">
+            <div class="font-semibold">Security note</div>
+            <div>
+              This API key is stored server-side and is never included in
+              <span class="font-mono">/api/settings</span> responses. The client
+              only receives a non-secret capability flag indicating whether a
+              Google Books API key is configured.
             </div>
           </div>
         </div>

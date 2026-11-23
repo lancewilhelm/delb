@@ -53,6 +53,161 @@ func (s *Service) getHardcoverToken(ctx context.Context) (string, error) {
 	return bearerPrefixRe.ReplaceAllString(strings.TrimSpace(raw), ""), nil
 }
 
+func (s *Service) getGoogleBooksAPIKey(ctx context.Context) (string, error) {
+	var raw string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM global_secrets WHERE id = 'googleBooksApiKey' LIMIT 1`).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(raw), nil
+}
+
+type googleAPIErrorResp struct {
+	Error struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Status  string `json:"status"`
+		Errors  []struct {
+			Reason string `json:"reason"`
+		} `json:"errors"`
+	} `json:"error"`
+}
+
+func isGoogleBooksQuotaError(statusCode int, body []byte) bool {
+	if statusCode == http.StatusTooManyRequests {
+		return true
+	}
+	var parsed googleAPIErrorResp
+	if json.Unmarshal(body, &parsed) == nil {
+		if parsed.Error.Code == http.StatusTooManyRequests ||
+			strings.EqualFold(parsed.Error.Status, "RESOURCE_EXHAUSTED") {
+			return true
+		}
+		for _, item := range parsed.Error.Errors {
+			switch strings.ToLower(strings.TrimSpace(item.Reason)) {
+			case "ratelimitexceeded", "userratelimitexceeded", "dailylimitexceeded", "quotaexceeded":
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isGoogleBooksInvalidKeyError(statusCode int, body []byte) bool {
+	if statusCode != http.StatusBadRequest && statusCode != http.StatusForbidden {
+		return false
+	}
+	var parsed googleAPIErrorResp
+	if json.Unmarshal(body, &parsed) == nil {
+		for _, item := range parsed.Error.Errors {
+			if strings.EqualFold(strings.TrimSpace(item.Reason), "keyInvalid") {
+				return true
+			}
+		}
+		if strings.Contains(strings.ToLower(parsed.Error.Message), "api key not valid") {
+			return true
+		}
+	}
+	return false
+}
+
+func sanitizeUpstreamError(err error, secret string) string {
+	if err == nil {
+		return ""
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && urlErr != nil {
+		cleanURL := urlErr.URL
+		if parsed, parseErr := url.Parse(urlErr.URL); parseErr == nil {
+			q := parsed.Query()
+			if q.Has("key") {
+				q.Set("key", "REDACTED")
+				parsed.RawQuery = q.Encode()
+			}
+			cleanURL = parsed.String()
+		}
+		msg := urlErr.Op + " " + cleanURL + ": " + urlErr.Err.Error()
+		if secret != "" {
+			msg = strings.ReplaceAll(msg, secret, "[REDACTED]")
+			msg = strings.ReplaceAll(msg, url.QueryEscape(secret), "[REDACTED]")
+		}
+		return msg
+	}
+	msg := err.Error()
+	if secret != "" {
+		msg = strings.ReplaceAll(msg, secret, "[REDACTED]")
+		msg = strings.ReplaceAll(msg, url.QueryEscape(secret), "[REDACTED]")
+	}
+	return msg
+}
+
+func (s *Service) fetchGoogleBooksVolumes(ctx context.Context, query string, maxResults int) ([]byte, error) {
+	apiKey, err := s.getGoogleBooksAPIKey(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	endpoint := s.googleBooksEndpoint
+	if endpoint == "" {
+		endpoint = googleBooksEndpoint
+	}
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, httpapi.NewError(http.StatusBadGateway, "Failed to fetch metadata from Google Books.")
+	}
+	params := u.Query()
+	params.Set("q", query)
+	params.Set("maxResults", strconv.Itoa(maxResults))
+	if apiKey != "" {
+		params.Set("key", apiKey)
+	}
+	u.RawQuery = params.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, httpapi.NewError(http.StatusBadGateway, "Failed to fetch metadata from Google Books.")
+	}
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		s.logger.Error("Google Books API request failed", "error", sanitizeUpstreamError(err, apiKey))
+		return nil, httpapi.NewError(http.StatusBadGateway, "Failed to fetch metadata from Google Books.")
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+		if isGoogleBooksQuotaError(resp.StatusCode, errBody) {
+			if apiKey == "" {
+				return nil, httpapi.NewError(
+					http.StatusTooManyRequests,
+					"Google Books API quota exceeded. Configure a Google Books API key in Admin Settings → Metadata, or switch to Hardcover.",
+				)
+			}
+			return nil, httpapi.NewError(
+				http.StatusTooManyRequests,
+				"Google Books API quota exceeded for the configured API key. Check your Google Cloud quota in Admin Settings → Metadata, or switch to Hardcover.",
+			)
+		}
+		if apiKey != "" && isGoogleBooksInvalidKeyError(resp.StatusCode, errBody) {
+			return nil, httpapi.NewError(
+				http.StatusBadGateway,
+				"Google Books rejected the configured API key. Check the key in Admin Settings → Metadata.",
+			)
+		}
+		s.logger.Error("Google Books API non-2xx response", "status", resp.StatusCode)
+		return nil, httpapi.NewError(http.StatusBadGateway, "Failed to fetch metadata from Google Books.")
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
+	if err != nil {
+		return nil, httpapi.NewError(http.StatusBadGateway, "Failed to fetch metadata from Google Books.")
+	}
+	return body, nil
+}
+
 func (s *Service) getDefaultMetadataProvider(ctx context.Context) string {
 	var raw string
 	err := s.db.QueryRowContext(ctx, `SELECT settings FROM global_settings LIMIT 1`).Scan(&raw)
@@ -75,31 +230,9 @@ func (s *Service) handleMetadataSearch(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, `Search query parameter "q" is required`)
 		return
 	}
-	u, _ := url.Parse(googleBooksEndpoint)
-	params := u.Query()
-	params.Set("q", q)
-	params.Set("maxResults", "20")
-	u.RawQuery = params.Encode()
-
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, u.String(), nil)
+	body, err := s.fetchGoogleBooksVolumes(r.Context(), q, 20)
 	if err != nil {
-		httpapi.WriteError(w, http.StatusInternalServerError, "Failed to fetch metadata from Google Books")
-		return
-	}
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		s.logger.Error("GET /api/books/metadata/search upstream error", "error", err)
-		httpapi.WriteError(w, http.StatusInternalServerError, "Failed to fetch metadata from Google Books")
-		return
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		httpapi.WriteError(w, http.StatusInternalServerError, "Failed to fetch metadata from Google Books")
-		return
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
-	if err != nil {
-		httpapi.WriteError(w, http.StatusInternalServerError, "Failed to fetch metadata from Google Books")
+		s.writeErrWithFallback(w, "GET /api/books/metadata/search upstream error", "Failed to fetch metadata from Google Books", err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -383,11 +516,11 @@ func (s *Service) handleMetadataCover(w http.ResponseWriter, r *http.Request) {
 }
 
 type googleVolumeInfo struct {
-	Title               string `json:"title,omitempty"`
+	Title               string   `json:"title,omitempty"`
 	Authors             []string `json:"authors,omitempty"`
-	Publisher           string `json:"publisher,omitempty"`
-	PublishedDate       string `json:"publishedDate,omitempty"`
-	Description         string `json:"description,omitempty"`
+	Publisher           string   `json:"publisher,omitempty"`
+	PublishedDate       string   `json:"publishedDate,omitempty"`
+	Description         string   `json:"description,omitempty"`
 	IndustryIdentifiers []struct {
 		Type       string `json:"type"`
 		Identifier string `json:"identifier"`
@@ -491,27 +624,18 @@ func (s *Service) fetchTopMetadataItem(ctx context.Context, query string) (strin
 		return provider, item, nil
 	}
 
-	u, _ := url.Parse(googleBooksEndpoint)
-	params := u.Query()
-	params.Set("q", query)
-	params.Set("maxResults", "1")
-	u.RawQuery = params.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	body, err := s.fetchGoogleBooksVolumes(ctx, query, 1)
 	if err != nil {
-		return provider, nil, httpapi.NewError(http.StatusBadGateway, "Failed to fetch metadata from Google Books.")
-	}
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return provider, nil, httpapi.NewError(http.StatusBadGateway, "Failed to fetch metadata from Google Books.")
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var httpErr *httpapi.HTTPError
+		if errors.As(err, &httpErr) {
+			return provider, nil, httpErr
+		}
 		return provider, nil, httpapi.NewError(http.StatusBadGateway, "Failed to fetch metadata from Google Books.")
 	}
 	var gbResp struct {
 		Items []googleBookItem `json:"items"`
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 5*1024*1024)).Decode(&gbResp); err != nil {
+	if err := json.Unmarshal(body, &gbResp); err != nil {
 		return provider, nil, httpapi.NewError(http.StatusBadGateway, "Failed to fetch metadata from Google Books.")
 	}
 	if len(gbResp.Items) == 0 {

@@ -131,6 +131,7 @@ func TestRouterPhase2AOwnedAndUnportedProxied(t *testing.T) {
 		{http.MethodPut, "/api/settings/user", http.StatusUnauthorized},
 		{http.MethodPut, "/api/settings/global", http.StatusUnauthorized},
 		{http.MethodPut, "/api/settings/admin/hardcover-token", http.StatusUnauthorized},
+		{http.MethodPut, "/api/settings/admin/google-books-api-key", http.StatusUnauthorized},
 		{http.MethodGet, "/api/settings/admin/spine-prompt", http.StatusUnauthorized},
 		{http.MethodDelete, "/api/users/delete", http.StatusUnauthorized},
 		{http.MethodGet, "/api/collections", http.StatusUnauthorized},

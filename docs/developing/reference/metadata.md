@@ -4,12 +4,12 @@ Delb searches Google Books and Hardcover through server endpoints. The Add book 
 
 ## Provider availability
 
-| Provider     | Search endpoint                                  | Configuration                       |
-| ------------ | ------------------------------------------------ | ----------------------------------- |
-| Google Books | `GET /api/books/metadata/search?q=...`           | Public API through the server proxy |
-| Hardcover    | `GET /api/books/metadata/hardcover/search?q=...` | Admin-configured server-side token  |
+| Provider     | Search endpoint                                  | Configuration                                               |
+| ------------ | ------------------------------------------------ | ----------------------------------------------------------- |
+| Google Books | `GET /api/books/metadata/search?q=...`           | Public API through the server proxy; optional admin API key |
+| Hardcover    | `GET /api/books/metadata/hardcover/search?q=...` | Admin-configured server-side token                          |
 
-The search modal can enable multiple providers and remembers choices in account settings. Hardcover is unavailable to the client when the server's capability flag says no token is configured. Tokens remain on the server and are not returned as account settings.
+The search modal can enable multiple providers and remembers choices in account settings. Hardcover is unavailable to the client when the server's capability flag says no token is configured. Google Books works without a key but can hit shared anonymous quota limits (`429 RESOURCE_EXHAUSTED`); administrators can configure a Google Books API key in Admin Settings → Metadata. Secrets remain on the server and are not returned as account settings.
 
 ## Creation and selective editing
 

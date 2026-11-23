@@ -28,7 +28,10 @@ import {
   serializeIdentifierRows,
   sortBaselineAuthors,
 } from '~/utils/bookEditorDirty';
-import { readResponseError } from '~/utils/responseError';
+import {
+  extractFetchErrorMessage,
+  readResponseError,
+} from '~/utils/responseError';
 
 defineOptions({ name: 'BookEditor' });
 
@@ -1566,7 +1569,10 @@ async function handleAutoFetchMetadata() {
       },
     });
   } catch (e: unknown) {
-    setError(e instanceof Error ? e.message : 'Failed to auto-fetch metadata.');
+    setError(
+      extractFetchErrorMessage(e) ||
+        (e instanceof Error ? e.message : 'Failed to auto-fetch metadata.'),
+    );
   } finally {
     autoFetchingMetadata.value = false;
   }

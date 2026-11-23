@@ -18,3 +18,28 @@ export async function readResponseError(
     return text;
   }
 }
+
+/** Extract the server-provided error message from an ofetch/FetchError or Error. */
+export function extractFetchErrorMessage(error: unknown): string | null {
+  if (typeof error !== 'object' || error === null) return null;
+  const err = error as {
+    data?: unknown;
+    statusMessage?: unknown;
+    message?: unknown;
+  };
+  if (typeof err.data === 'object' && err.data !== null) {
+    const data = err.data as { message?: unknown; statusMessage?: unknown };
+    for (const message of [data.message, data.statusMessage]) {
+      if (typeof message === 'string' && message.trim()) {
+        return message.trim();
+      }
+    }
+  }
+  if (typeof err.statusMessage === 'string' && err.statusMessage.trim()) {
+    return err.statusMessage.trim();
+  }
+  if (typeof err.message === 'string' && err.message.trim()) {
+    return err.message.trim();
+  }
+  return null;
+}

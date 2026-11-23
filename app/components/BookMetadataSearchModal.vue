@@ -2,6 +2,7 @@
 import { useGlobalSettingsStore } from '~/stores/globalSettings';
 import { useUserSettingsStore } from '~/stores/userSettings';
 import { $fetch } from '~/utils/apiFetch';
+import { extractFetchErrorMessage } from '~/utils/responseError';
 import { computed, reactive, ref, watch } from 'vue';
 import BookCover from '~/components/BookCover.vue';
 import ModalWindow from '~/components/ModalWindow.vue';
@@ -407,14 +408,24 @@ async function performSearch() {
     const merged = resultsByProvider.flatMap((result) =>
       result.status === 'fulfilled' ? result.value : [],
     );
-    const failed = tasks
-      .filter((_, i) => resultsByProvider[i]?.status === 'rejected')
-      .map((task) => task.name);
+    const failedMessages = tasks.flatMap((task, i) => {
+      const result = resultsByProvider[i];
+      if (result?.status !== 'rejected') return [];
+      const detail = extractFetchErrorMessage(result.reason);
+      if (detail) {
+        if (detail.toLowerCase().includes(task.name.toLowerCase())) {
+          return [detail];
+        }
+        return [`${task.name}: ${detail}`];
+      }
+      return [`Search failed for ${task.name}.`];
+    });
 
     if (!isActive()) return;
 
-    if (failed.length)
-      errorMessage.value = `Search failed for ${failed.join(', ')}.`;
+    if (failedMessages.length) {
+      errorMessage.value = failedMessages.join(' ');
+    }
     if (merged.length > 0) {
       searchResults.value = merged;
 
@@ -425,7 +436,7 @@ async function performSearch() {
         }
       });
     } else {
-      if (!failed.length) errorMessage.value = 'No results found';
+      if (!failedMessages.length) errorMessage.value = 'No results found';
     }
   } catch (error) {
     console.error('Search error:', error);

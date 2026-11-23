@@ -23,6 +23,7 @@ import (
 const (
 	GlobalSettingsID         = "00000000-0000-0000-0000-000000000000"
 	HardcoverSecretID        = "hardcoverToken"
+	GoogleBooksSecretID      = "googleBooksApiKey"
 	spinePromptStateKey      = "spine-generation-prompt"
 	maxSpinePromptLength     = 12000
 	maxSpinePromptBodyBytes  = 256 * 1024
@@ -67,6 +68,7 @@ func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/settings/user", httpapi.RequireSessionFunc(s.auth, s.logger, s.handlePutUserSettings))
 	mux.HandleFunc("PUT /api/settings/global", s.handlePutGlobalSettings)
 	mux.HandleFunc("PUT /api/settings/admin/hardcover-token", s.handlePutHardcoverToken)
+	mux.HandleFunc("PUT /api/settings/admin/google-books-api-key", s.handlePutGoogleBooksAPIKey)
 	mux.HandleFunc("/api/settings/admin/spine-prompt", s.handleSpinePrompt)
 }
 
@@ -83,7 +85,8 @@ type globalSettingsRow struct {
 }
 
 type capabilitiesPayload struct {
-	HardcoverAvailable bool `json:"hardcoverAvailable"`
+	HardcoverAvailable          bool `json:"hardcoverAvailable"`
+	GoogleBooksAPIKeyConfigured bool `json:"googleBooksApiKeyConfigured"`
 }
 
 func (s *Service) handleGetSettings(w http.ResponseWriter, r *http.Request) {
@@ -111,13 +114,21 @@ func (s *Service) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	googleBooksKeyConfigured, err := s.hasGoogleBooksAPIKey(r.Context())
+	if err != nil {
+		s.logger.Error("GET /api/settings: failed to read capabilities", "error", err)
+		httpapi.WriteError(w, http.StatusInternalServerError, "Failed to fetch settings")
+		return
+	}
+
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data": map[string]any{
 			"userSettings":   userRow,
 			"globalSettings": globalRow,
 			"capabilities": capabilitiesPayload{
-				HardcoverAvailable: hardcoverAvail,
+				HardcoverAvailable:          hardcoverAvail,
+				GoogleBooksAPIKeyConfigured: googleBooksKeyConfigured,
 			},
 		},
 	})
@@ -323,6 +334,65 @@ func (s *Service) handlePutHardcoverToken(w http.ResponseWriter, r *http.Request
 	})
 }
 
+func (s *Service) handlePutGoogleBooksAPIKey(w http.ResponseWriter, r *http.Request) {
+	swu, err := s.auth.Authenticate(w, r)
+	if err != nil {
+		s.logger.Error("PUT /api/settings/admin/google-books-api-key: session lookup failed", "error", err)
+		httpapi.WriteError(w, http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+	if swu == nil {
+		httpapi.WriteError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	if swu.User.Role != "admin" && swu.User.Role != "owner" {
+		httpapi.WriteError(w, http.StatusForbidden, "Forbidden")
+		return
+	}
+
+	var body struct {
+		APIKey json.RawMessage `json:"apiKey"`
+	}
+	if err := httpapi.DecodeJSON(r, &body, httpapi.DefaultMaxBodyBytes, true); err != nil {
+		httpapi.WriteHTTPError(w, err)
+		return
+	}
+
+	var apiKeyRaw string
+	if len(body.APIKey) == 0 || string(body.APIKey) == "null" || json.Unmarshal(body.APIKey, &apiKeyRaw) != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "Missing or invalid `apiKey` (string) in body")
+		return
+	}
+
+	normalized := strings.TrimSpace(apiKeyRaw)
+	if normalized == "" {
+		_, err = s.db.ExecContext(r.Context(), `
+			DELETE FROM global_secrets WHERE id = ?
+		`, GoogleBooksSecretID)
+	} else {
+		now := time.Now().UTC().Unix()
+		_, err = s.db.ExecContext(r.Context(), `
+			INSERT INTO global_secrets (id, value, updated_at)
+			VALUES (?, ?, ?)
+			ON CONFLICT(id) DO UPDATE SET
+				value = excluded.value,
+				updated_at = excluded.updated_at
+		`, GoogleBooksSecretID, normalized, now)
+	}
+	if err != nil {
+		s.logger.Error("PUT /api/settings/admin/google-books-api-key: update failed", "error", err)
+		httpapi.WriteError(w, http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+
+	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"data": map[string]bool{
+			"cleared": normalized == "",
+		},
+	})
+}
+
 func (s *Service) handleSpinePrompt(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		secFetchSite := strings.TrimSpace(r.Header.Get("Sec-Fetch-Site"))
@@ -512,6 +582,20 @@ func (s *Service) hasHardcoverToken(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	return normalizeHardcoverToken(val) != "", nil
+}
+
+func (s *Service) hasGoogleBooksAPIKey(ctx context.Context) (bool, error) {
+	var val string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT value FROM global_secrets WHERE id = ? LIMIT 1
+	`, GoogleBooksSecretID).Scan(&val)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(val) != "", nil
 }
 
 func (s *Service) readSpineGenerationPrompt(ctx context.Context) (map[string]any, error) {

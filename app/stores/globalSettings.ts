@@ -67,6 +67,7 @@ type GlobalSettingsApiGetResponse = {
     } | null;
     capabilities?: {
       hardcoverAvailable?: boolean;
+      googleBooksApiKeyConfigured?: boolean;
     };
   };
 };
@@ -93,8 +94,12 @@ export const useGlobalSettingsStore = defineStore(
      * Metadata provider capabilities returned by the server.
      * This deliberately contains NO secrets; it's safe to persist client-side.
      */
-    const capabilities = ref<{ hardcoverAvailable: boolean }>({
+    const capabilities = ref<{
+      hardcoverAvailable: boolean;
+      googleBooksApiKeyConfigured: boolean;
+    }>({
       hardcoverAvailable: false,
+      googleBooksApiKeyConfigured: false,
     });
 
     /**
@@ -134,6 +139,8 @@ export const useGlobalSettingsStore = defineStore(
       // Capabilities (safe, non-secret flags from server)
       capabilities.value = {
         hardcoverAvailable: !!res.data?.capabilities?.hardcoverAvailable,
+        googleBooksApiKeyConfigured:
+          !!res.data?.capabilities?.googleBooksApiKeyConfigured,
       };
 
       const remote = res.data?.globalSettings;
@@ -167,6 +174,10 @@ export const useGlobalSettingsStore = defineStore(
     function $reset() {
       settings.value = getDefaultSettings();
       updatedAt.value = new Date(0);
+      capabilities.value = {
+        hardcoverAvailable: false,
+        googleBooksApiKeyConfigured: false,
+      };
     }
 
     return {
