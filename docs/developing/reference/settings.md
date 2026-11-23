@@ -84,6 +84,10 @@ The badge appears in the top-right of grid, list, and dashboard shelf covers. It
 
 `coverStyle.detailSpineGloss` defaults to `true`. **Spine gloss** in **Appearance → Cover Style** controls the shared gloss overlay on bookshelf spines and spine artwork in the book detail page. It uses the active desktop or mobile profile and is independent of the cover gloss setting, `coverStyle.glossySpine`. `coverStyle.grayscale` applies to both covers and spines.
 
+## Book detail spine display
+
+`coverStyle.showDetailSpine` defaults to `true`. **Show spine on book details** in **Appearance → Cover Style** controls whether custom spine artwork is shown beside the cover on book detail pages. It uses the active desktop or mobile profile and does not affect bookshelf views or the book editor. When disabled, book detail pages render the standalone cover and skip requesting the spine image.
+
 ## Spine generation prompt
 
 The administrator can edit the shared generation prompt in **Settings → Admin → Spine generation**. The saved template is stored in `system_state` and applies to subsequent generation requests. It is a single prompt sent to the image endpoint, not a separate system-role message. The template must include `{{title}}`, `{{authors}}`, `{{reference}}`, and `{{instructions}}`. The server substitutes the book metadata, reference-image instructions, and the editor's additional instructions when building each request.

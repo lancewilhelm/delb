@@ -60,6 +60,7 @@ export interface BaseUserSettings {
   coverStyle: {
     glossySpine: boolean;
     detailSpineGloss: boolean;
+    showDetailSpine: boolean;
     roundedRight: boolean;
     grayscale: boolean;
     showReadingStatus: boolean;
@@ -148,6 +149,7 @@ function getBaseDefaults(): BaseUserSettings {
     coverStyle: {
       glossySpine: true,
       detailSpineGloss: true,
+      showDetailSpine: true,
       roundedRight: false,
       grayscale: false,
       showReadingStatus: false,
@@ -281,6 +283,13 @@ function normalizeProfileSettings(
           : DEFAULT_BOOKSHELF_COLOR,
       texture:
         settings.bookshelfStyle?.texture === 'smooth' ? 'smooth' : 'wood',
+    },
+    coverStyle: {
+      ...settings.coverStyle,
+      showDetailSpine:
+        typeof settings.coverStyle?.showDetailSpine === 'boolean'
+          ? settings.coverStyle.showDetailSpine
+          : true,
     },
     ...(settings.customTheme !== undefined ||
     Object.values(settings.themePreference).includes('custom')

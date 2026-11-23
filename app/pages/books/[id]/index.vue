@@ -1220,7 +1220,11 @@ const { copy } = useClipboard();
         <div class="flex flex-col items-center gap-4">
           <!-- Keep a consistent aspect ratio; cover itself is max 320px wide -->
           <div
-            v-if="book.spineRevision && !spineFailed"
+            v-if="
+              userSettingsStore.activeSettings.coverStyle.showDetailSpine &&
+              book.spineRevision &&
+              !spineFailed
+            "
             class="detail-artwork"
             :style="{ gridTemplateColumns: `${spineRatio}fr 0.666667fr` }"
           >
