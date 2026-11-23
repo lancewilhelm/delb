@@ -9,7 +9,12 @@ import { RouterLink, useRoute, useRouter } from 'vue-router';
 import AppHeader from '~/components/AppHeader.vue';
 import BookThumbnail from '~/components/BookThumbnail.vue';
 import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
+import { primeBookPreviews } from '~/utils/bookPreviewCache';
 import type { BookStatusChange } from '~/utils/bookReadingStatus';
+import {
+  readDashboardCache,
+  writeDashboardCache,
+} from '~/utils/dashboardCache';
 import type {
   DashboardBook,
   DashboardCounts,
@@ -79,6 +84,40 @@ let controller: AbortController | undefined;
 let loadedScope: string | undefined;
 let disposed = false;
 
+function toShelfBooks(shelfData: DashboardData['shelf']): ShelfBook[] {
+  const status = shelfData.kind === 'tbr' ? 'to_be_read' : shelfData.kind;
+  return shelfData.books.map((book) => ({
+    ...book,
+    status,
+  }));
+}
+
+function hydrateDashboardFromCache(): boolean {
+  const cached = readDashboardCache(
+    user.value?.id,
+    scope.value,
+    selectedShelf.value,
+  );
+  if (cached.counts) {
+    counts.value = cached.counts;
+    loadedScope = scope.value;
+  }
+  if (cached.shelf) {
+    const page = toShelfBooks(cached.shelf);
+    shelfBooks.value = page;
+    nextOffset.value = cached.shelf.nextOffset;
+    loading.value = false;
+    primeBookPreviews(page);
+    return true;
+  }
+  return false;
+}
+
+// Immediately populate cached counts and shelf books (if available for this
+// user/scope/shelf) so navigating back to Dashboard or refreshing doesn't
+// flash "—" placeholders while live data refreshes in the background.
+hydrateDashboardFromCache();
+
 function onBookStatusChanged(change: BookStatusChange) {
   const index = shelfBooks.value.findIndex((book) => book.id === change.bookId);
   const book = shelfBooks.value[index];
@@ -91,6 +130,17 @@ function onBookStatusChanged(change: BookStatusChange) {
   }
   if (nextOffset.value !== null)
     nextOffset.value = Math.max(0, nextOffset.value - 1);
+
+  if (counts.value) {
+    writeDashboardCache(user.value?.id, scope.value, selectedShelf.value, {
+      counts: counts.value,
+      shelf: {
+        kind: selectedShelf.value,
+        books: shelfBooks.value,
+        nextOffset: nextOffset.value,
+      },
+    });
+  }
 
   // An in-flight page used the old offset and may contain stale counts.
   if (loadingMore.value) {
@@ -124,10 +174,11 @@ async function loadDashboard(append = false) {
   const request = ++requestNumber;
   controller?.abort();
   controller = new AbortController();
-  loading.value = !append;
+  const hasWarmShelf = !append && hydrateDashboardFromCache();
+  loading.value = !append && !hasWarmShelf;
   loadingMore.value = append;
   errorMessage.value = '';
-  if (!append) {
+  if (!append && !hasWarmShelf) {
     shelfBooks.value = [];
     nextOffset.value = null;
     if (loadedScope !== scope.value) counts.value = null;
@@ -146,17 +197,19 @@ async function loadDashboard(append = false) {
     );
     if (request !== requestNumber) return;
     counts.value = response.data.counts;
-    const status =
-      response.data.shelf.kind === 'tbr'
-        ? 'to_be_read'
-        : response.data.shelf.kind;
-    const page: ShelfBook[] = response.data.shelf.books.map((book) => ({
-      ...book,
-      status,
-    }));
+    const page = toShelfBooks(response.data.shelf);
+    primeBookPreviews(page);
     shelfBooks.value = append ? [...shelfBooks.value, ...page] : page;
     nextOffset.value = response.data.shelf.nextOffset;
     loadedScope = scope.value;
+    writeDashboardCache(user.value?.id, scope.value, selectedShelf.value, {
+      counts: response.data.counts,
+      shelf: {
+        kind: response.data.shelf.kind,
+        books: shelfBooks.value,
+        nextOffset: nextOffset.value,
+      },
+    });
   } catch {
     if (request !== requestNumber) return;
     errorMessage.value = 'Could not load this shelf. Please try again.';
@@ -208,10 +261,13 @@ function readDate(value: string) {
 watch([scope, selectedShelf], () => {
   void loadDashboard();
 });
-onMounted(async () => {
+onMounted(() => {
+  // Fire collections and dashboard in parallel instead of awaiting collections
+  // first; if fetchCollections() reconciles activeSelection, the scope watcher
+  // automatically re-fetches for the updated scope.
   if (!collectionsStore.collections.length)
-    await collectionsStore.fetchCollections();
-  await loadDashboard();
+    void collectionsStore.fetchCollections();
+  void loadDashboard();
 });
 onBeforeUnmount(() => {
   disposed = true;

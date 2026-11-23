@@ -5,6 +5,8 @@ import { useGlobalSettingsStore } from '~/stores/globalSettings';
 import { useUiStore } from '~/stores/ui';
 import { useUserSettingsStore } from '~/stores/userSettings';
 import { $fetch } from '~/utils/apiFetch';
+import { clearBookPreviewCache } from '~/utils/bookPreviewCache';
+import { clearDashboardCache } from '~/utils/dashboardCache';
 import {
   createDelbAuthClient,
   type AuthFetcher,
@@ -48,6 +50,8 @@ function clearUserStoresAndStorage(clearAuthUserId: boolean) {
   uiStore.$reset();
   collectionsStore.$reset();
   useBooksIndexFiltersStore().clearAll();
+  clearBookPreviewCache();
+  clearDashboardCache();
 
   if (typeof localStorage !== 'undefined') {
     for (const key of PERSISTED_USER_STORES) {

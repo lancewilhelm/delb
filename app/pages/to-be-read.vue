@@ -9,6 +9,7 @@ import BookCover from '~/components/BookCover.vue';
 import BooksTbrRationaleEditor from '~/components/Books/TbrRationaleEditor.vue';
 import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 import type { TbrBook } from '~/types/tbr';
+import { primeBookPreviews } from '~/utils/bookPreviewCache';
 import { sanitizeDescriptionHtml } from '~/utils/descriptionHtml';
 useHead({ title: 'To be read' });
 const ui = useUiStore();
@@ -52,6 +53,12 @@ async function refresh() {
       ? { ...book, rationale: saved.value }
       : book;
   });
+  primeBookPreviews(
+    books.value.map((book) => ({
+      ...book,
+      status: 'to_be_read' as const,
+    })),
+  );
 }
 
 async function load() {

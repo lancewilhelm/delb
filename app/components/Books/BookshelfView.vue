@@ -19,6 +19,7 @@ import {
   saveBookshelfView,
 } from '~/utils/bookshelfViewPosition';
 import type { BookViewBook } from '~/utils/bookFields';
+import { primeBookPreviews } from '~/utils/bookPreviewCache';
 import {
   SHELF_WIDTH,
   SHELF_CASE_GAP,
@@ -463,6 +464,7 @@ async function load() {
     catalogToken.value = saved.token;
     canEdit.value = saved.canEdit;
     catalog.value = books;
+    primeBookPreviews(books);
     arrangement.value = parsed;
     adjustments.value = saved.adjustments;
     matches.value = new Set(books.map((book) => book.id));
@@ -500,6 +502,7 @@ async function refreshCatalog() {
     const parsed = parseBookshelf(saved.arrangement);
     if (!parsed) throw new Error('The current arrangement could not be read.');
     catalog.value = saved.books;
+    primeBookPreviews(saved.books);
     arrangement.value = parsed;
     revision.value = saved.revision;
     catalogToken.value = saved.token;

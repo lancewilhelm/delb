@@ -9,6 +9,7 @@ import {
   type BookStatusChange,
 } from '~/utils/bookReadingStatus';
 import type { BookViewBook } from '~/utils/bookFields';
+import { primeBookPreviews } from '~/utils/bookPreviewCache';
 /* eslint-disable vue/require-default-prop */
 defineOptions({ name: 'BooksInfiniteGrid' });
 
@@ -562,6 +563,7 @@ async function fetchPage(opts: { cursor?: string | null; append: boolean }) {
     if (generation !== requestGeneration) return;
     const page = res?.data?.books ?? [];
     const cursor = (res?.data?.nextCursor ?? null) as string | null;
+    primeBookPreviews(page);
 
     if (opts.append) {
       const seen = new Set(books.value.map((b) => b.id));

@@ -3,6 +3,8 @@ import { useGlobalSettingsStore } from '~/stores/globalSettings';
 import { useUserSettingsStore } from '~/stores/userSettings';
 import { $fetch } from '~/utils/apiFetch';
 import { buildBookCoverUrl } from '~/utils/covers';
+import { invalidateBookDetail } from '~/utils/bookPreviewCache';
+import { clearDashboardCache } from '~/utils/dashboardCache';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import AppHeader from '~/components/AppHeader.vue';
@@ -1328,6 +1330,8 @@ async function updateBook() {
     }
 
     setSuccess('Saved.');
+    invalidateBookDetail(book.value.id);
+    clearDashboardCache();
 
     // After a successful save, return to the book page
     backToBook();

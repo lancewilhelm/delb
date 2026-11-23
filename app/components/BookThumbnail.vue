@@ -2,11 +2,16 @@
 import { useBookReadingStatusMenu } from '~/composables/useBookReadingStatusMenu';
 import { $fetch } from '~/utils/apiFetch';
 import { navigateTo } from '~/utils/navigation';
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import BookCover from '~/components/BookCover.vue';
 import BooksBookCopyBadges from '~/components/Books/BookCopyBadges.vue';
 import BooksBookStatusBadge from '~/components/Books/BookStatusBadge.vue';
 import BooksMetadataField from '~/components/Books/BooksMetadataField.vue';
+import {
+  cancelBookDetailPrefetch,
+  primeBookPreviews,
+  scheduleBookDetailPrefetch,
+} from '~/utils/bookPreviewCache';
 import type { BookStatusChange } from '~/utils/bookReadingStatus';
 import type { CoverMenuItem } from '~/utils/coverMenu';
 import { readDownloadFilename } from '~/utils/downloadFilename';
@@ -239,8 +244,24 @@ function onOpenBook(e?: MouseEvent) {
     return;
   }
 
+  primeBookPreviews([props.book]);
   navigateTo(`/books/${props.book.id}`);
 }
+
+function onPrefetchIntent() {
+  if (props.selectable || props.measureMetadata || !props.book.id) return;
+  primeBookPreviews([props.book]);
+  scheduleBookDetailPrefetch(props.book.id);
+}
+
+function onCancelPrefetchIntent() {
+  if (!props.book.id) return;
+  cancelBookDetailPrefetch(props.book.id);
+}
+
+onBeforeUnmount(() => {
+  onCancelPrefetchIntent();
+});
 
 function onToggleSelect(e: MouseEvent) {
   emit('toggle-select', props.book.id, { shiftKey: e.shiftKey });
@@ -252,7 +273,13 @@ const visibleFields = computed(() =>
 </script>
 
 <template>
-  <div :class="['w-full', props.class]">
+  <div
+    :class="['w-full', props.class]"
+    @pointerenter="onPrefetchIntent"
+    @pointerleave="onCancelPrefetchIntent"
+    @focusin="onPrefetchIntent"
+    @focusout="onCancelPrefetchIntent"
+  >
     <div class="flex flex-col gap-1">
       <div class="relative">
         <BookCover

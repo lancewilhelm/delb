@@ -48,6 +48,8 @@ function mount(fetch, props, { compiledCode = code, globals = {} } = {}) {
       if (name === 'vue') return vue;
       if (name === 'vue-router') return { RouterLink: StubLink };
       if (name === '~/utils/apiFetch') return { $fetch: fetch };
+      if (name === '~/utils/bookPreviewCache')
+        return { primeBookPreviews: () => undefined };
       if (name === '~/utils/descriptionHtml')
         return { sanitizeDescriptionHtml: (value) => value };
       if (name === '~/composables/useHead')

@@ -657,7 +657,15 @@ func (s *Service) handleGetBookCover(w http.ResponseWriter, r *http.Request) {
 	etag := `"` + hex.EncodeToString(sum[:]) + `"`
 
 	w.Header().Set("Content-Type", coverContentTypeFromExt(filepath.Ext(chosenAbs)))
-	w.Header().Set("Cache-Control", "private, max-age=0, must-revalidate")
+	if strings.TrimSpace(r.URL.Query().Get("v")) != "" {
+		// Versioned cover URLs include `?v=<updatedAtMs>` so edits/uploads
+		// immediately cache-bust to a new URL. Allow short private browser
+		// caching + stale-while-revalidate to eliminate redundant round-trips
+		// across grid -> detail navigation while never caching in shared proxies.
+		w.Header().Set("Cache-Control", "private, max-age=300, stale-while-revalidate=3600")
+	} else {
+		w.Header().Set("Cache-Control", "private, max-age=0, must-revalidate")
+	}
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Vary", "Cookie")
 

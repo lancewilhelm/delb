@@ -60,6 +60,8 @@ async function loadEditor(
     loadBook: async () => {
       reloaded = true;
     },
+    invalidateBookDetail: () => {},
+    clearDashboardCache: () => {},
     backToBook: () => {
       navigated = true;
     },

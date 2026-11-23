@@ -6,6 +6,12 @@ import { useUserSettingsStore } from '~/stores/userSettings';
 import { $fetch } from '~/utils/apiFetch';
 import { navigateTo } from '~/utils/navigation';
 import { buildBookCoverUrl } from '~/utils/covers';
+import {
+  fetchBookDetail,
+  getBookPreview,
+  invalidateBookDetail,
+} from '~/utils/bookPreviewCache';
+import { clearDashboardCache } from '~/utils/dashboardCache';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import AppHeader from '~/components/AppHeader.vue';
@@ -81,21 +87,6 @@ type Book = {
   pages?: number | null;
 
   createdAt: string | number | Date;
-};
-
-type BookGetResponse = {
-  data?: {
-    book?: Book;
-    authors?: { id: string; name: string; position?: number | null }[];
-    files?: {
-      id: string;
-      bookId: string;
-      format: string;
-      relativePath: string;
-    }[];
-  };
-  success?: boolean;
-  message?: string;
 };
 
 type CollectionRole = 'owner' | 'editor' | 'viewer';
@@ -262,6 +253,8 @@ async function saveStatus(next: UserBookStatus | null) {
     }
 
     applyStatusResponse(json?.data);
+    invalidateBookDetail(bookId.value);
+    clearDashboardCache();
     progressHistoryRevision.value++;
   } catch (err) {
     const e = err as FetchErrorLike;
@@ -315,6 +308,8 @@ async function saveStatusDates(payload: {
     }
 
     applyStatusResponse(json?.data);
+    invalidateBookDetail(bookId.value);
+    clearDashboardCache();
     progressHistoryRevision.value++;
   } catch (err) {
     const e = err as FetchErrorLike;
@@ -379,6 +374,7 @@ async function saveTbrRank(next: string) {
     }
 
     applyStatusResponse(json?.data);
+    invalidateBookDetail(bookId.value);
   } catch (err) {
     const e = err as FetchErrorLike;
     statusMetaErrorMessage.value =
@@ -425,6 +421,7 @@ async function saveProgressSync(next: boolean) {
       book.value.userProgressSyncEnabled =
         json?.data?.progressSyncEnabled ?? false;
     }
+    invalidateBookDetail(bookId.value);
     syncProgressSyncValue();
   } catch (err) {
     const e = err as FetchErrorLike;
@@ -565,6 +562,7 @@ async function setCopy(kind: 'physical' | 'audiobook', value: boolean) {
       throw new Error('You cannot edit this book.');
     if (kind === 'physical') book.value.hasPhysicalCopy = value;
     else book.value.hasAudiobookCopy = value;
+    invalidateBookDetail(book.value.id);
   } catch (error) {
     copiesError.value =
       error instanceof Error ? error.message : 'Could not save copies.';
@@ -601,15 +599,18 @@ const canEditCollectionsForBook = computed(() =>
   ),
 );
 
-async function loadBookCollections() {
-  if (!bookId.value) return;
+async function loadBookCollections(
+  targetBookId = bookId.value,
+  generation?: number,
+) {
+  if (!targetBookId) return;
 
   collectionsLoading.value = true;
   collectionsErrorMessage.value = null;
 
   try {
     const res = await fetch(
-      `/api/books/${encodeURIComponent(bookId.value)}/collections`,
+      `/api/books/${encodeURIComponent(targetBookId)}/collections`,
       { method: 'GET' },
     );
 
@@ -621,8 +622,10 @@ async function loadBookCollections() {
       .json()
       .catch(() => null)) as BookCollectionsGetResponse | null;
 
+    if (generation !== undefined && generation !== bookLoadGeneration) return;
     bookCollections.value = json?.data?.collections ?? [];
   } catch (err) {
+    if (generation !== undefined && generation !== bookLoadGeneration) return;
     const e = err as FetchErrorLike;
     collectionsErrorMessage.value =
       e?.data?.message ||
@@ -631,7 +634,9 @@ async function loadBookCollections() {
       'Failed to load book collections';
     bookCollections.value = [];
   } finally {
-    collectionsLoading.value = false;
+    if (generation === undefined || generation === bookLoadGeneration) {
+      collectionsLoading.value = false;
+    }
   }
 }
 
@@ -642,6 +647,8 @@ function closeCollectionsManager() {
   collectionsManageOpen.value = false;
 }
 async function onBookMoved() {
+  invalidateBookDetail(bookId.value);
+  clearDashboardCache();
   await loadBookCollections();
 }
 
@@ -736,6 +743,7 @@ async function setRating(newRating: number | null) {
 
     ratingValue.value = saved;
     if (book.value) book.value.userRating = saved;
+    invalidateBookDetail(bookId.value);
   } finally {
     ratingSaving.value = false;
   }
@@ -1054,6 +1062,8 @@ async function deleteBook() {
       throw new Error(`Delete failed (${res.status})`);
     }
 
+    invalidateBookDetail(bookId.value);
+    clearDashboardCache();
     showDeleteConfirm.value = false;
     // await navigateTo('/');
     router.back();
@@ -1069,60 +1079,65 @@ async function deleteBook() {
   }
 }
 
-async function loadBook() {
-  if (!bookId.value) return;
+let bookLoadGeneration = 0;
 
+function applyLoadedBook(loaded: Book | null) {
+  book.value = loaded;
+  syncStatusDateInputs();
+  syncProgressSyncValue();
+  if (!progressDateInput.value) {
+    progressDateInput.value = formatDateInput(new Date());
+  }
+  ratingValue.value = loaded?.userRating ?? null;
+  if (loaded?.title) {
+    useHead({ title: loaded.title });
+  }
+}
+
+function hydratePreview(id: string): boolean {
+  if (!id) return false;
+  const preview = getBookPreview(id) as Book | null;
+  if (!preview) return false;
+  applyLoadedBook(preview);
+  return true;
+}
+
+// Seed immediately from cached card/prefetch state before mount so navigating
+// from grid/list/dashboard paints cover + title + metadata on frame 0.
+const initiallyHydrated = hydratePreview(bookId.value);
+if (!initiallyHydrated && bookId.value) {
   loading.value = true;
+}
+
+async function loadBook() {
+  const id = bookId.value;
+  if (!id) return;
+
+  const generation = ++bookLoadGeneration;
   errorMessage.value = null;
 
+  const hasWarmBook =
+    book.value?.id === id ? true : hydratePreview(id);
+  loading.value = !hasWarmBook;
+
+  // Fire book detail, per-book collections, and global collections list in
+  // parallel so the hero cover and metadata never wait behind collections.
+  const collectionsPromise = loadBookCollections(id, generation);
+  if (!collectionsStore.collections.length) {
+    void collectionsStore.fetchCollections();
+  }
+
   try {
-    const res = await fetch(`/api/books/${encodeURIComponent(bookId.value)}`, {
-      method: 'GET',
-    });
+    const loaded = (await fetchBookDetail(id)) as Book | null;
+    if (generation !== bookLoadGeneration) return;
 
-    if (!res.ok) {
-      throw new Error(`Failed to load book (${res.status})`);
-    }
-
-    const json = (await res.json().catch(() => null)) as BookGetResponse | null;
-
-    book.value = json?.data?.book ?? null;
-    syncStatusDateInputs();
-    syncProgressSyncValue();
-    if (!progressDateInput.value) {
-      progressDateInput.value = formatDateInput(new Date());
-    }
-
-    // Initialize per-user rating state from API response
-    ratingValue.value = book.value?.userRating ?? null;
-
-    // Allow either nested `book.authors/files` or top-level `data.authors/files`
-    if (book.value) {
-      if (!book.value.authors && json?.data?.authors) {
-        book.value.authors = json.data.authors.map((a) => ({
-          id: a.id,
-          name: a.name,
-        }));
-      }
-      if (!book.value.files && json?.data?.files) {
-        book.value.files = json.data.files.map((f) => ({
-          id: f.id,
-          format: f.format,
-          relativePath: f.relativePath,
-        }));
-      }
-    }
+    applyLoadedBook(loaded);
 
     if (!book.value) {
       errorMessage.value = 'Book not found';
-    } else {
-      useHead({ title: book.value.title });
-
-      // Collections require the global list (for the editable destination options)
-      await collectionsStore.fetchCollections();
-      await loadBookCollections();
     }
   } catch (err) {
+    if (generation !== bookLoadGeneration) return;
     const e = err as FetchErrorLike;
     errorMessage.value =
       e?.data?.message ||
@@ -1138,18 +1153,23 @@ async function loadBook() {
     collectionsErrorMessage.value = null;
     collectionsSaveError.value = null;
   } finally {
-    loading.value = false;
+    if (generation === bookLoadGeneration) {
+      loading.value = false;
+    }
   }
+
+  await collectionsPromise;
 }
 
 onMounted(() => {
-  loadBook();
+  void loadBook();
 });
 
 watch(
   () => bookId.value,
   () => {
-    loadBook();
+    bookCollections.value = [];
+    void loadBook();
   },
 );
 
@@ -1218,6 +1238,8 @@ const { copy } = useClipboard();
               <img
                 :src="`/api/books/${encodeURIComponent(book.id)}/spine?v=${encodeURIComponent(book.spineRevision)}`"
                 :alt="`Spine for ${book.title}`"
+                loading="eager"
+                fetchpriority="high"
                 @load="onSpineLoaded"
                 @error="spineFailed = true"
               />
@@ -1226,6 +1248,7 @@ const { copy } = useClipboard();
               :src="coverThumbUrl"
               :alt="`Cover for ${book.title}`"
               :title="book.title"
+              priority
               class="cursor-pointer w-full! h-auto! aspect-2/3"
               @click="openCoverViewer"
             />
@@ -1235,6 +1258,7 @@ const { copy } = useClipboard();
             :src="coverThumbUrl"
             :alt="`Cover for ${book.title}`"
             :title="book.title"
+            priority
             class="cursor-pointer w-50! sm:w-80! h-auto! aspect-2/3 self-start justify-self-center"
             @click="openCoverViewer"
           />
