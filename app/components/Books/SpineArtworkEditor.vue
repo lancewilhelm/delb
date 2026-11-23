@@ -510,6 +510,7 @@ defineExpose({
   save,
   reset,
   busy,
+  changed,
   generating,
   source,
   previewStyle,
