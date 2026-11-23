@@ -42,6 +42,7 @@ for (const name of ['Grid', 'List']) {
       nextTick: async () => {},
       setupObserver() {},
       hasMore: { value: true },
+      primeBookPreviews() {},
       emit() {},
       $fetch: (url, opts) =>
         new Promise((resolve, reject) =>

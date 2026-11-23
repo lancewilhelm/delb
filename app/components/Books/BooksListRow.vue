@@ -3,11 +3,16 @@ import { useResizeObserver } from '@vueuse/core';
 import { useBookReadingStatusMenu } from '~/composables/useBookReadingStatusMenu';
 import { $fetch } from '~/utils/apiFetch';
 import { navigateTo } from '~/utils/navigation';
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import BookCover from '~/components/BookCover.vue';
 import BooksBookCopyBadges from '~/components/Books/BookCopyBadges.vue';
 import BooksBookStatusBadge from '~/components/Books/BookStatusBadge.vue';
 import BooksMetadataField from '~/components/Books/BooksMetadataField.vue';
+import {
+  cancelBookDetailPrefetch,
+  primeBookPreviews,
+  scheduleBookDetailPrefetch,
+} from '~/utils/bookPreviewCache';
 import type { BookStatusChange } from '~/utils/bookReadingStatus';
 import type { CoverMenuItem } from '~/utils/coverMenu';
 import { readDownloadFilename } from '~/utils/downloadFilename';
@@ -257,8 +262,24 @@ function onRowClick(e?: MouseEvent) {
     emit('toggle-select', props.book.id, { shiftKey: e?.shiftKey });
     return;
   }
+  primeBookPreviews([props.book]);
   navigateTo(`/books/${props.book.id}`);
 }
+
+function onPrefetchIntent() {
+  if (props.selectable || !props.book.id) return;
+  primeBookPreviews([props.book]);
+  scheduleBookDetailPrefetch(props.book.id);
+}
+
+function onCancelPrefetchIntent() {
+  if (!props.book.id) return;
+  cancelBookDetailPrefetch(props.book.id);
+}
+
+onBeforeUnmount(() => {
+  onCancelPrefetchIntent();
+});
 </script>
 
 <template>
@@ -270,6 +291,10 @@ function onRowClick(e?: MouseEvent) {
       props.selected ? 'bg-(--sub-color)/15' : '',
     ]"
     :style="rowStyle"
+    @pointerenter="onPrefetchIntent"
+    @pointerleave="onCancelPrefetchIntent"
+    @focusin="onPrefetchIntent"
+    @focusout="onCancelPrefetchIntent"
   >
     <div class="flex items-center gap-4 w-full min-w-0">
       <div class="shrink-0 relative" :style="coverStyle">

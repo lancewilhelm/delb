@@ -49,6 +49,13 @@ type Props = {
   class?: string | undefined;
 
   /**
+   * If `true`, hints the browser to fetch and decode the cover eagerly with
+   * high priority (use for above-the-fold hero covers on the detail page).
+   * Defaults to `false`.
+   */
+  priority?: boolean;
+
+  /**
    * Optional right-click/long-press context menu items.
    * When empty/omitted, context menu is disabled.
    */
@@ -62,6 +69,7 @@ const props = withDefaults(defineProps<Props>(), {
   title: 'Book title',
   showPlaceholder: true,
   showResolution: false,
+  priority: false,
   class: undefined,
   contextMenuItems: () => [],
 });
@@ -368,7 +376,9 @@ const menuItems = computed(() => rootMenuItems.value);
       <img
         :src="activeSrc || undefined"
         :alt="props.alt"
-        loading="lazy"
+        :loading="props.priority ? 'eager' : 'lazy'"
+        :fetchpriority="props.priority ? 'high' : undefined"
+        :decoding="props.priority ? 'sync' : 'async'"
         draggable="false"
         class="w-full! h-full! object-cover"
         @load="onImgLoad"

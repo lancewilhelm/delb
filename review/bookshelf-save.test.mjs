@@ -63,6 +63,7 @@ async function shelfEditor() {
     adjustments: ref([]),
     fetchAll: () => fetchCatalog(),
     loadMatches: async () => {},
+    primeBookPreviews: () => {},
     errorText: (error) =>
       error instanceof Error ? error.message : 'Please try again.',
     saving: ref(false),

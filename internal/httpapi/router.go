@@ -75,5 +75,5 @@ func NewHandler(opts RouterOptions) http.Handler {
 			handler = opts.Middleware[i](handler)
 		}
 	}
-	return handler
+	return GzipMiddleware(handler)
 }

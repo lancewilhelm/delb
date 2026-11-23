@@ -300,6 +300,70 @@ func TestBooksEndToEndHTTP(t *testing.T) {
 		t.Fatalf("download failed: status=%d len=%d cd=%q", dlResp.StatusCode, len(dlBytes), dlResp.Header.Get("Content-Disposition"))
 	}
 
+	// Upload a cover and verify smart private caching headers for versioned vs unversioned URLs.
+	var coverPNG bytes.Buffer
+	coverImg := image.NewRGBA(image.Rect(0, 0, 20, 30))
+	coverImg.Set(0, 0, color.RGBA{R: 40, G: 80, B: 160, A: 255})
+	if err := png.Encode(&coverPNG, coverImg); err != nil {
+		t.Fatalf("encode cover png: %v", err)
+	}
+	var coverBody bytes.Buffer
+	cmw := multipart.NewWriter(&coverBody)
+	cfw, _ := cmw.CreateFormFile("file", "cover.png")
+	_, _ = cfw.Write(coverPNG.Bytes())
+	_ = cmw.Close()
+	cUpReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/books/"+bookID+"/cover", &coverBody)
+	cUpReq.Header.Set("Origin", srv.URL)
+	cUpReq.Header.Set("Content-Type", cmw.FormDataContentType())
+	cUpResp, err := client.Do(cUpReq)
+	if err != nil {
+		t.Fatalf("cover upload: %v", err)
+	}
+	cUpResp.Body.Close()
+	if cUpResp.StatusCode != http.StatusOK {
+		t.Fatalf("cover upload = %d", cUpResp.StatusCode)
+	}
+
+	// Unversioned cover keeps strict must-revalidate.
+	unvResp, err := client.Get(srv.URL + "/api/books/" + bookID + "/cover?variant=thumb")
+	if err != nil {
+		t.Fatalf("unversioned cover: %v", err)
+	}
+	_, _ = io.ReadAll(unvResp.Body)
+	unvResp.Body.Close()
+	if unvResp.StatusCode != http.StatusOK ||
+		unvResp.Header.Get("Cache-Control") != "private, max-age=0, must-revalidate" ||
+		unvResp.Header.Get("Vary") != "Cookie" ||
+		unvResp.Header.Get("ETag") == "" {
+		t.Fatalf("unexpected unversioned cover headers: status=%d cc=%q vary=%q etag=%q",
+			unvResp.StatusCode, unvResp.Header.Get("Cache-Control"), unvResp.Header.Get("Vary"), unvResp.Header.Get("ETag"))
+	}
+
+	// Versioned cover (?v=...) gets private browser caching + SWR and still honors ETag 304.
+	verResp, err := client.Get(srv.URL + "/api/books/" + bookID + "/cover?variant=thumb&v=123456789")
+	if err != nil {
+		t.Fatalf("versioned cover: %v", err)
+	}
+	_, _ = io.ReadAll(verResp.Body)
+	verResp.Body.Close()
+	if verResp.StatusCode != http.StatusOK ||
+		verResp.Header.Get("Cache-Control") != "private, max-age=300, stale-while-revalidate=3600" ||
+		verResp.Header.Get("Vary") != "Cookie" ||
+		verResp.Header.Get("ETag") == "" {
+		t.Fatalf("unexpected versioned cover headers: status=%d cc=%q vary=%q etag=%q",
+			verResp.StatusCode, verResp.Header.Get("Cache-Control"), verResp.Header.Get("Vary"), verResp.Header.Get("ETag"))
+	}
+	inmReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/books/"+bookID+"/cover?variant=thumb&v=123456789", nil)
+	inmReq.Header.Set("If-None-Match", verResp.Header.Get("ETag"))
+	inmResp, err := client.Do(inmReq)
+	if err != nil {
+		t.Fatalf("cover 304: %v", err)
+	}
+	inmResp.Body.Close()
+	if inmResp.StatusCode != http.StatusNotModified {
+		t.Fatalf("expected 304 Not Modified on matching ETag, got %d", inmResp.StatusCode)
+	}
+
 	// Rating, Status (reading + TBR), Rationale, Reading position & progress sync, Dashboard.
 	if r, _ := doJSON(http.MethodPost, "/api/books/"+bookID+"/rating", map[string]any{"rating": 5}); r.StatusCode != http.StatusOK {
 		t.Fatalf("rating = %d", r.StatusCode)

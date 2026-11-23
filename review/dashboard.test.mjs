@@ -43,6 +43,16 @@ function evaluate(source, globals = {}, linkCapture = null) {
       }
       if (name === '~/utils/apiFetch')
         return { $fetch: globals.$fetch ?? (async () => ({})) };
+      if (name === '~/utils/bookPreviewCache')
+        return { primeBookPreviews: () => undefined };
+      if (name === '~/utils/dashboardCache')
+        return (
+          globals.dashboardCache ?? {
+            readDashboardCache: () => ({ counts: null, shelf: null }),
+            writeDashboardCache: () => undefined,
+            clearDashboardCache: () => undefined,
+          }
+        );
       if (name === '~/composables/useAuth')
         return { useAuth: globals.useAuth };
       if (name === '~/composables/useHead')
