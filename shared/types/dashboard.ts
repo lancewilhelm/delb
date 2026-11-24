@@ -18,6 +18,8 @@ export type DashboardBook = {
   updatedAt: string;
   progress: number | null;
   finishedDate: string | null;
+  /** Set when the book has spine artwork (`/api/books/:id/spine?v=`). */
+  spineRevision?: string | null;
 };
 
 export type DashboardData = {

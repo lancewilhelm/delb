@@ -43,7 +43,7 @@ Status and shelf tiles draw their art in one of six styles: Collage, Fan, Stack,
 | No status  | Pile       |
 | Shelves    | Fan        |
 
-Every style works from a single cover up. Pile tiles hold up to ten books. Wall fills 25 slots: lists with 25 or more books show no repeats, smaller lists repeat covers in a pattern where no copy touches another, and lists under four books draw as Fan. Shelf shows the first book face-out (with its finish date on Finished) and the rest as spines. DNF art is desaturated.
+Every style works from a single cover up. Pile tiles hold up to ten books. Wall fills 25 slots: lists with 25 or more books show no repeats, smaller lists repeat covers in a pattern where no copy touches another, and lists under four books draw as Fan. Shelf shows the first book face-out (with its finish date on Finished) and the rest as spines. A book with spine artwork shows that artwork in its own proportions; other books, or artwork that fails to load, get a generated colored spine. DNF art is desaturated.
 
 Pile lands in a new random scatter every time the page loads. Readers can drag a book in a pile: it lifts, tilts with the motion, then drops, slides, and settles. Books overlap rather than collide. A drag does not open the tile. With reduced motion, books are placed without the drop-in or tilt.
 
@@ -55,7 +55,7 @@ Pile lands in a new random scatter every time the page loads. Readers can drag a
 | -------------- | ------------------------------------------ | ------- |
 | `collectionId` | Accessible collection ID, or empty for All | All     |
 
-The response contains `data.counts`, `data.recent`, and `data.lists`. `recent` holds up to 45 visible books, newest first. `lists` holds up to 25 books for each of `reading`, `to_be_read`, `finished`, `dnf`, and `none`. Each book includes its ID, title, cover pointer, update timestamp, progress, and `finishedDate` calendar date. The shared response type is [DashboardOverview](../../../shared/types/dashboard.ts).
+The response contains `data.counts`, `data.recent`, and `data.lists`. `recent` holds up to 45 visible books, newest first. `lists` holds up to 25 books for each of `reading`, `to_be_read`, `finished`, `dnf`, and `none`. Each book includes its ID, title, cover pointer, update timestamp, progress, `finishedDate` calendar date, and `spineRevision` (set when the book has spine artwork). The shared response type is [DashboardOverview](../../../shared/types/dashboard.ts).
 
 | List       | Order                                                       |
 | ---------- | ----------------------------------------------------------- |
@@ -69,7 +69,7 @@ Book ID resolves equal sort values. The API converts the stored finish date into
 
 Unauthenticated requests return 401. An inaccessible collection returns zero counts and empty lists. Responses use `Cache-Control: private, no-store`.
 
-The shelf tiles use `GET /api/shelves?previews=25`, enough to fill a Wall tile's 25 slots. `previews` accepts 1–25 and defaults to 4 (the Shelves page).
+The shelf tiles use `GET /api/shelves?previews=25`, enough to fill a Wall tile's 25 slots. `previews` accepts 1–25 and defaults to 4 (the Shelves page). Each preview includes the book's `spineRevision`.
 
 `GET /api/dashboard?shelf=&collectionId=&offset=` still returns counts and one paged shelf (`reading`, `finished` with a date, or `tbr`), twelve books per page. The dashboard page no longer uses it.
 

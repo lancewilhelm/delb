@@ -499,7 +499,7 @@ func TestCollectionBookshelfPicturesAndPersonalShelves(t *testing.T) {
 		t.Fatalf("GET /api/shelves = %d %s", resp.StatusCode, string(raw))
 	}
 	resp, raw = env.reqJSON(&viewer, http.MethodGet, "/api/shelves?previews=25", nil)
-	if resp.StatusCode != 200 || !strings.Contains(string(raw), bookID) {
+	if resp.StatusCode != 200 || !strings.Contains(string(raw), bookID) || !strings.Contains(string(raw), `"spineRevision"`) {
 		t.Fatalf("GET /api/shelves?previews=25 = %d %s", resp.StatusCode, string(raw))
 	}
 	for _, bad := range []string{"0", "26", "x"} {

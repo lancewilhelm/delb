@@ -563,7 +563,7 @@ func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
 
 	createBook("A TBR 1", colA, "to_be_read")
 	createBook("A TBR 2", colA, "to_be_read")
-	createBook("A Reading", colA, "reading")
+	readingID := createBook("A Reading", colA, "reading")
 	createBook("B TBR 1", colB, "to_be_read")
 	createBook("B Finished", colB, "finished")
 
@@ -654,6 +654,21 @@ func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
 		"to_be_read": {"A TBR 1", "A TBR 2"},
 	})
 	assertOverview("/api/dashboard/overview?collectionId=nonexistent-collection", 0, 0, map[string][]string{})
+
+	// Spine artwork revisions reach the overview so Shelf card art can show real spines.
+	if _, err := opened.DB.ExecContext(ctx, `
+		INSERT INTO book_spines (book_id, original_base64, original_type, image_base64, edits, revision)
+		VALUES (?, '', 'image/png', '', '{}', 'spine-rev-1')`, readingID); err != nil {
+		t.Fatalf("insert spine: %v", err)
+	}
+	_, spineBody := doJSON(http.MethodGet, "/api/dashboard/overview", nil)
+	spineLists := spineBody["data"].(map[string]any)["lists"].(map[string]any)
+	if got := spineLists["reading"].([]any)[0].(map[string]any)["spineRevision"]; got != "spine-rev-1" {
+		t.Fatalf("reading spineRevision = %v, want spine-rev-1", got)
+	}
+	if got := spineLists["to_be_read"].([]any)[0].(map[string]any)["spineRevision"]; got != nil {
+		t.Fatalf("to_be_read spineRevision = %v, want null", got)
+	}
 	anonReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/dashboard/overview", nil)
 	anonResp, err := http.DefaultClient.Do(anonReq)
 	if err != nil {

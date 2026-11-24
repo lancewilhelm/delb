@@ -180,7 +180,11 @@ const shelfTiles = computed(() =>
     title: shelf.name,
     count: shelf.count,
     // Shelf previews don't say whether a cover exists; the cover falls back on error.
-    books: shelf.previews.map((book) => ({ id: book.id, title: book.title })),
+    books: shelf.previews.map((book) => ({
+      id: book.id,
+      title: book.title,
+      spineRevision: book.spineRevision,
+    })),
     line: 'Personal shelf',
     to: `/shelves/${encodeURIComponent(shelf.id)}`,
   })),

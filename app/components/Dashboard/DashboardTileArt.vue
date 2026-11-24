@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
+import { useUserSettingsStore } from '~/stores/userSettings';
 import DashboardCover from '~/components/Dashboard/DashboardCover.vue';
 import DashboardPile from '~/components/Dashboard/DashboardPile.vue';
 import { hashString, wallSlots, type CardArtStyle } from '~/utils/dashboardArt';
@@ -10,6 +11,8 @@ type ArtBook = {
   coverImagePath?: string | null;
   updatedAt?: string;
   finishedDate?: string | null;
+  /** Set when the book has spine artwork. */
+  spineRevision?: string | null;
 };
 
 const props = defineProps<{
@@ -70,20 +73,41 @@ const SPINE_SIZES = [
   [72, 14],
   [62, 11],
 ] as const;
+const userSettingsStore = useUserSettingsStore();
+const grayscale = computed(
+  () => userSettingsStore.activeSettings.coverStyle.grayscale,
+);
+// Spine art that failed to load falls back to a generated colored spine.
+const failedSpines = ref(new Set<string>());
+function onSpineError(bookId: string) {
+  failedSpines.value = new Set(failedSpines.value).add(bookId);
+}
+
 const shelf = computed(() => {
   const [first, ...rest] = props.books.slice(0, 5);
   return {
     first,
     sticker: first?.finishedDate ? shortDate(first.finishedDate) : null,
-    spines: rest.map((book, i) => ({
-      book,
-      lean: i === rest.length - 1 && rest.length > 2,
-      style: {
-        height: `${SPINE_SIZES[i]![0]}cqh`,
-        width: `${SPINE_SIZES[i]![1]}cqw`,
-        background: SPINE_COLORS[hashString(book.id) % SPINE_COLORS.length],
-      },
-    })),
+    spines: rest.map((book, i) => {
+      const art =
+        book.spineRevision && !failedSpines.value.has(book.id)
+          ? `/api/books/${encodeURIComponent(book.id)}/spine?v=${encodeURIComponent(book.spineRevision)}`
+          : null;
+      return {
+        book,
+        art,
+        lean: i === rest.length - 1 && rest.length > 2,
+        // Spine art keeps its own proportions; generated spines use set widths.
+        style: art
+          ? { height: `${SPINE_SIZES[i]![0]}cqh` }
+          : {
+              height: `${SPINE_SIZES[i]![0]}cqh`,
+              width: `${SPINE_SIZES[i]![1]}cqw`,
+              backgroundColor:
+                SPINE_COLORS[hashString(book.id) % SPINE_COLORS.length],
+            },
+      };
+    }),
   };
 });
 
@@ -143,9 +167,17 @@ function shortDate(value: string) {
         v-for="spine in shelf.spines"
         :key="spine.book.id"
         class="shelf-spine"
-        :class="{ lean: spine.lean }"
+        :class="{ lean: spine.lean, 'has-art': spine.art, grayscale }"
         :style="spine.style"
-        ><span>{{ spine.book.title }}</span></span
+        ><img
+          v-if="spine.art"
+          :src="spine.art"
+          alt=""
+          loading="lazy"
+          decoding="async"
+          draggable="false"
+          @error="onSpineError(spine.book.id)"
+        /><span v-else>{{ spine.book.title }}</span></span
       >
     </div>
 
@@ -306,6 +338,19 @@ function shortDate(value: string) {
   font:
     600 10px/1 Georgia,
     serif;
+}
+.shelf-spine.has-art {
+  background-image: none;
+}
+.shelf-spine.has-art > img {
+  display: block;
+  height: 100%;
+  width: auto;
+  max-width: 24cqw;
+  object-fit: cover;
+}
+.shelf-spine.grayscale {
+  filter: grayscale(1);
 }
 .shelf-spine.lean {
   transform: rotate(9deg);

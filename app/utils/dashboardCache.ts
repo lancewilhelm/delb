@@ -5,7 +5,7 @@ export type DashboardShelfSummary = {
   id: string;
   name: string;
   count: number;
-  previews: { id: string; title: string }[];
+  previews: { id: string; title: string; spineRevision?: string | null }[];
 };
 
 const STORAGE_PREFIX = 'delb.dashboardCache.v2:';

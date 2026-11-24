@@ -436,6 +436,8 @@ func validateShelfName(raw string) (string, error) {
 type ShelfPreviewDTO struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
+	// SpineRevision is set when the book has spine artwork.
+	SpineRevision *string `json:"spineRevision"`
 }
 
 // ShelfSummaryDTO mirrors server/utils/shelves/model.ts listShelves items.
@@ -504,7 +506,7 @@ func (s *Service) ListShelvesWithPreviews(ctx context.Context, userID string, pr
 		}
 		previews := make([]ShelfPreviewDTO, limit)
 		for i := 0; i < limit; i++ {
-			previews[i] = ShelfPreviewDTO{ID: vis[i].ID, Title: vis[i].Title}
+			previews[i] = ShelfPreviewDTO{ID: vis[i].ID, Title: vis[i].Title, SpineRevision: vis[i].SpineRevision}
 		}
 		out = append(out, ShelfSummaryDTO{
 			ID:       b.id,

@@ -18,6 +18,8 @@ type dashboardBook struct {
 	UpdatedAt        string   `json:"updatedAt"`
 	Progress         *float64 `json:"progress"`
 	FinishedDate     *string  `json:"finishedDate"`
+	// SpineRevision is set when the book has spine artwork (GET /api/books/{id}/spine?v=).
+	SpineRevision *string `json:"spineRevision"`
 }
 
 // Dashboard overview limits. The All books wall needs enough distinct covers
@@ -101,7 +103,8 @@ func (s *Service) queryDashboardBooks(
 			b.id, b.title, b.cover_image_path, b.has_physical_copy, b.has_audiobook_copy, b.updated_at,
 			pos.progress, pos.updated_at,
 			pl.progress_percent, pl.page_number, pl.source, pl.occurred_at, pl.created_at,
-			ubs.finished_at
+			ubs.finished_at,
+			(SELECT revision FROM book_spines WHERE book_id = b.id)
 		FROM books b
 		LEFT JOIN user_book_status ubs ON ubs.book_id = b.id AND ubs.user_id = ?
 		LEFT JOIN user_book_reading_position pos ON pos.book_id = b.id AND pos.user_id = ?
@@ -137,12 +140,13 @@ func (s *Service) queryDashboardBooks(
 			logOccurred sql.NullInt64
 			logCreated  sql.NullInt64
 			finishedAt  sql.NullInt64
+			spineRev    sql.NullString
 		)
 		if err := rows.Scan(
 			&id, &title, &cover, &hasPhys, &hasAudio, &updatedAt,
 			&posProg, &posUpd,
 			&logProg, &logPage, &logSource, &logOccurred, &logCreated,
-			&finishedAt,
+			&finishedAt, &spineRev,
 		); err != nil {
 			return nil, err
 		}
@@ -176,6 +180,7 @@ func (s *Service) queryDashboardBooks(
 			UpdatedAt:        formatUnixSecISO(updatedAt),
 			Progress:         progOut,
 			FinishedDate:     finDate,
+			SpineRevision:    nullStringPtr(spineRev),
 		})
 	}
 	if err := rows.Err(); err != nil {
