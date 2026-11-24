@@ -129,6 +129,9 @@ const hasArt = computed(() => props.count > 0 && props.books.length > 0);
 .dash-tile-art {
   position: absolute;
   inset: 0;
+  /* Its own stacking layer: cover z-indexes (fan, stack, pile) stay below
+     the tag and the ⋯ menu whether or not the tile is hovered. */
+  isolation: isolate;
 }
 .is-dimmed .dash-tile-art {
   filter: grayscale(0.85) brightness(0.88);

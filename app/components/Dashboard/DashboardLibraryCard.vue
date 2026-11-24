@@ -243,6 +243,8 @@ const note = computed(() => {
 .lib-art {
   position: absolute;
   inset: 0;
+  /* Its own stacking layer, below the text and the ⋯ menu. */
+  z-index: 0;
   overflow: hidden;
 }
 .lib-wall {
