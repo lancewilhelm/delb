@@ -11,10 +11,14 @@ import * as vue from 'vue';
 const StubNull = { render: () => null };
 const libraryCards = [];
 const LibraryStub = {
-  props: ['libraryArt', 'showStatusBar'],
-  emits: ['set-art'],
+  props: ['libraryArt', 'showStatusBar', 'wallMotion', 'recent'],
+  emits: ['set-art', 'need-more'],
   setup(props, { emit }) {
-    libraryCards.push({ props, setArt: (style) => emit('set-art', style) });
+    libraryCards.push({
+      props,
+      setArt: (style) => emit('set-art', style),
+      needMore: () => emit('need-more'),
+    });
     return () => null;
   },
 };
@@ -49,6 +53,14 @@ function evaluate(source, globals = {}, linkCapture = null) {
       if (name === 'vue') return vue;
       if (name === '@vueuse/core')
         return { useElementSize: () => ({ width: vue.ref(0) }) };
+      if (name === '~/composables/useWallDrift')
+        return {
+          useWallDrift: () => ({
+            rowStart: vue.ref(0),
+            active: vue.computed(() => false),
+            reset() {},
+          }),
+        };
       if (name === 'pinia') return { defineStore };
       if (name === 'vue-router') return { RouterLink };
       if (name === '~/utils/apiFetch')
@@ -480,4 +492,65 @@ test('the All books card switches between Wall and Pile through settings', async
   await flush();
   assert.equal(settings.activeSettings.dashboard.libraryArt, 'pile');
   assert.equal(card.props.libraryArt, 'pile');
+});
+
+test('a drifting wall loads older covers in pages and drops them on collection change', async (t) => {
+  const collections = vue.reactive({
+    collections: [{}],
+    activeSelection: { kind: 'all' },
+    activeCollection: null,
+  });
+  const { requests } = harness(t, collections);
+  const firstPage = {
+    success: true,
+    data: {
+      ...overview('Book').data,
+      counts: { ...counts, total: 100 },
+      recent: Array.from({ length: 45 }, (_, i) => book(`r${i}`)),
+    },
+  };
+  requests.find((r) => r.url === '/api/dashboard/overview').resolve(firstPage);
+  await flush();
+  const card = () => libraryCards.at(-1);
+  assert.equal(card().props.wallMotion, 'off', 'drift is opt-in');
+  assert.equal(card().props.recent.length, 45);
+
+  card().needMore();
+  card().needMore();
+  await flush();
+  const pages = () => requests.filter((r) => r.url === '/api/dashboard/recent');
+  assert.equal(pages().length, 1, 'one page at a time');
+  assert.equal(pages()[0].query.offset, 45);
+  pages()[0].resolve({
+    data: {
+      books: Array.from({ length: 45 }, (_, i) => book(`r${45 + i}`)),
+      nextOffset: 90,
+    },
+  });
+  await flush();
+  assert.equal(card().props.recent.length, 90);
+  card().needMore();
+  await flush();
+  assert.equal(pages()[1].query.offset, 90);
+
+  collections.activeSelection = { kind: 'collection', collectionId: 'c2' };
+  await flush();
+  pages()[1].resolve({ data: { books: [book('stale')], nextOffset: null } });
+  await flush();
+  assert.equal(
+    card().props.recent.length,
+    0,
+    'no covers from the old collection',
+  );
+  requests
+    .filter((r) => r.url === '/api/dashboard/overview')
+    .at(-1)
+    .resolve(firstPage);
+  await flush();
+  assert.equal(
+    card().props.recent.length,
+    45,
+    'older covers reset per collection',
+  );
+  assert.ok(!card().props.recent.some((b) => b.id === 'stale'));
 });

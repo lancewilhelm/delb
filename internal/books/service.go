@@ -133,6 +133,7 @@ func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/tbr", reqSess(s.handleGetTbr))
 	mux.HandleFunc("GET /api/dashboard", s.handleGetDashboard)
 	mux.HandleFunc("GET /api/dashboard/overview", s.handleGetDashboardOverview)
+	mux.HandleFunc("GET /api/dashboard/recent", s.handleGetDashboardRecent)
 
 	// Catalog entities & global search
 	mux.HandleFunc("GET /api/authors", reqSess(s.handleListAuthors))

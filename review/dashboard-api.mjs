@@ -268,6 +268,19 @@ try {
     overviewScoped.data.data.lists.finished.map((book) => book.id),
     [newer],
   );
+  assert.equal((await request('/api/dashboard/recent')).status, 401);
+  assert.equal(
+    (await request('/api/dashboard/recent?offset=-1', a.cookie)).status,
+    400,
+  );
+  const recentPage = await request('/api/dashboard/recent?offset=2', a.cookie);
+  assert.equal(recentPage.status, 200);
+  assert.deepEqual(
+    recentPage.data.data.books.map((book) => book.id),
+    overview.data.data.recent.slice(2).map((book) => book.id),
+    'wall pages continue the overview order',
+  );
+  assert.equal(recentPage.data.data.nextOffset, null);
   const overviewOther = await request('/api/dashboard/overview', b.cookie);
   assert.deepEqual(
     overviewOther.data.data.lists.finished,

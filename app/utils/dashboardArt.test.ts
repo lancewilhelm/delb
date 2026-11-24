@@ -8,6 +8,7 @@ import {
   pileLayout,
   resolveCardArt,
   statusSegments,
+  wallBookIndex,
   wallSlots,
 } from './dashboardArt.ts';
 
@@ -150,5 +151,45 @@ test('status segments skip empty statuses', () => {
       none: 0,
     }),
     [],
+  );
+});
+
+test('drifting wall rows never place a cover next to a copy of itself', () => {
+  const clashes = (cols: number, count: number, strided: boolean) => {
+    for (let row = 0; row < 60; row++) {
+      for (let col = 0; col < cols; col++) {
+        const here = wallBookIndex(row, col, cols, count, strided);
+        for (const [dr, dc] of [
+          [0, 1],
+          [1, 0],
+          [1, 1],
+          [1, -1],
+        ] as const) {
+          const c2 = col + dc;
+          if (c2 < 0 || c2 >= cols) continue;
+          if (here === wallBookIndex(row + dr, c2, cols, count, strided))
+            return `cols=${cols} n=${count} row=${row} col=${col}`;
+        }
+      }
+    }
+    return null;
+  };
+  // Small libraries use the stride; larger ones run in order and wrap.
+  for (let n = 4; n <= 15; n++) assert.equal(clashes(7, n, true), null);
+  for (let n = 11; n <= 120; n++) assert.equal(clashes(9, n, false), null);
+  // Reading order matches the static wall's first rows.
+  assert.equal(wallBookIndex(1, 2, 9, 45, false), 11);
+  assert.equal(wallBookIndex(5, 0, 9, 45, false), 0, 'wraps to the newest');
+});
+
+test('wall motion defaults off and drops unknown directions', () => {
+  assert.equal(normalizeDashboardSettings({}).wallMotion, 'off');
+  assert.equal(
+    normalizeDashboardSettings({ wallMotion: 'up' }).wallMotion,
+    'up',
+  );
+  assert.equal(
+    normalizeDashboardSettings({ wallMotion: 'sideways' }).wallMotion,
+    'off',
   );
 });

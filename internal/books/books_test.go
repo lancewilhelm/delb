@@ -655,6 +655,32 @@ func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
 	})
 	assertOverview("/api/dashboard/overview?collectionId=nonexistent-collection", 0, 0, map[string][]string{})
 
+	// The cover wall pages past the overview, newest first, in the same scope.
+	recentPage := func(path string) ([]string, any) {
+		t.Helper()
+		r, body := doJSON(http.MethodGet, path, nil)
+		if r.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s status = %d body = %v", path, r.StatusCode, body)
+		}
+		data := body["data"].(map[string]any)
+		titles := []string{}
+		for _, entry := range data["books"].([]any) {
+			titles = append(titles, entry.(map[string]any)["title"].(string))
+		}
+		return titles, data["nextOffset"]
+	}
+	if titles, next := recentPage("/api/dashboard/recent?offset=3"); len(titles) != 2 || next != nil {
+		t.Fatalf("recent offset=3 = %v next=%v, want 2 books and no next page", titles, next)
+	}
+	if titles, _ := recentPage("/api/dashboard/recent?offset=0&collectionId=" + colB); len(titles) != 2 {
+		t.Fatalf("recent in collection B = %v, want 2 books", titles)
+	}
+	for _, bad := range []string{"-1", "x", "01"} {
+		if r, _ := doJSON(http.MethodGet, "/api/dashboard/recent?offset="+bad, nil); r.StatusCode != http.StatusBadRequest {
+			t.Fatalf("recent offset=%s status = %d, want 400", bad, r.StatusCode)
+		}
+	}
+
 	// Spine artwork revisions reach the overview so Shelf card art can show real spines.
 	if _, err := opened.DB.ExecContext(ctx, `
 		INSERT INTO book_spines (book_id, original_base64, original_type, image_base64, edits, revision)

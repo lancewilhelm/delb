@@ -130,6 +130,36 @@ function setLibraryArt(style: LibraryArtStyle) {
   void userSettingsStore.updateSettingAtPath('dashboard.libraryArt', style);
 }
 
+// ---- Drifting wall: older covers beyond the overview's first page ----------
+const moreRecent = ref<DashboardBook[]>([]);
+const wallBooks = computed(() => [
+  ...(overview.value?.recent ?? []),
+  ...moreRecent.value,
+]);
+let moreRequest = 0;
+let loadingMore = false;
+
+async function loadMoreRecent() {
+  const total = overview.value?.counts.total ?? 0;
+  const offset = wallBooks.value.length;
+  if (loadingMore || disposed || offset >= total) return;
+  loadingMore = true;
+  const request = ++moreRequest;
+  try {
+    const response = await $fetch<{
+      data: { books: DashboardBook[]; nextOffset: number | null };
+    }>('/api/dashboard/recent', {
+      query: { collectionId: scope.value, offset },
+    });
+    if (request !== moreRequest) return;
+    moreRecent.value = [...moreRecent.value, ...response.data.books];
+  } catch {
+    // The wall keeps looping the covers it has; the next row asks again.
+  } finally {
+    if (request === moreRequest) loadingMore = false;
+  }
+}
+
 // ---- Lists -----------------------------------------------------------------
 function readDate(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -204,6 +234,10 @@ function onStatusChange(change: BookStatusChange) {
 }
 
 watch(scope, () => {
+  // Older covers belong to the previous collection.
+  ++moreRequest;
+  loadingMore = false;
+  moreRecent.value = [];
   void loadOverview();
 });
 onMounted(() => {
@@ -240,10 +274,12 @@ onBeforeUnmount(() => {
 
         <DashboardLibraryCard
           :counts="overview?.counts ?? null"
-          :recent="overview?.recent ?? []"
+          :recent="wallBooks"
           :show-status-bar="dashboardSettings.showStatusBar"
           :library-art="dashboardSettings.libraryArt"
+          :wall-motion="dashboardSettings.wallMotion"
           @set-art="setLibraryArt"
+          @need-more="loadMoreRecent"
         />
 
         <p v-if="loading" class="dashboard-message" role="status">Loading…</p>

@@ -23,6 +23,7 @@ import {
   CARD_ART_STYLES,
   type CardArtDefault,
   type LibraryArtStyle,
+  type WallMotion,
 } from '~/utils/dashboardArt';
 import type { BaseUserSettings } from '~/stores/userSettings';
 import {
@@ -58,6 +59,9 @@ const dashboardStatusBar = userSettingsStore.settingRef<boolean>(
 );
 const dashboardLibraryArt = userSettingsStore.settingRef<LibraryArtStyle>(
   'dashboard.libraryArt',
+);
+const dashboardWallMotion = userSettingsStore.settingRef<WallMotion>(
+  'dashboard.wallMotion',
 );
 const dashboardCardArt = userSettingsStore.settingRef<CardArtDefault>(
   'dashboard.cardArt.default',
@@ -374,6 +378,36 @@ function handleSortChange(target: string) {
               @click="dashboardLibraryArt = 'pile'"
             >
               Pile
+            </button>
+          </div>
+        </div>
+        <div class="bookshelf-texture-choice">
+          <span
+            ><strong>Wall motion</strong
+            ><small
+              >Let the All books wall drift slowly upward, bringing in more of
+              your covers as it goes. Off when your system reduces
+              motion.</small
+            ></span
+          >
+          <div
+            class="bookshelf-texture-options"
+            role="group"
+            aria-label="Wall motion"
+          >
+            <button
+              type="button"
+              :aria-pressed="dashboardWallMotion === 'off'"
+              @click="dashboardWallMotion = 'off'"
+            >
+              Off
+            </button>
+            <button
+              type="button"
+              :aria-pressed="dashboardWallMotion === 'up'"
+              @click="dashboardWallMotion = 'up'"
+            >
+              Drift up
             </button>
           </div>
         </div>

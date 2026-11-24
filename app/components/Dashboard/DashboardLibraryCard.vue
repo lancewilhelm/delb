@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { useElementSize } from '@vueuse/core';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import DashboardArtMenu from '~/components/Dashboard/DashboardArtMenu.vue';
 import DashboardCover from '~/components/Dashboard/DashboardCover.vue';
 import DashboardPile from '~/components/Dashboard/DashboardPile.vue';
+import { useWallDrift } from '~/composables/useWallDrift';
 import { useBooksIndexFiltersStore } from '~/stores/booksIndexFilters';
 import { useUiStore } from '~/stores/ui';
 import {
@@ -12,9 +13,10 @@ import {
   STATUS_ORDER,
   heroArtMode,
   statusSegments,
-  wallSlots,
+  wallBookIndex,
   type LibraryArtStyle,
   type PileRegion,
+  type WallMotion,
 } from '~/utils/dashboardArt';
 import type { DashboardBook, DashboardCounts } from '#shared/types/dashboard';
 
@@ -24,9 +26,15 @@ const props = defineProps<{
   showStatusBar: boolean;
   /** Wall or Pile, from the reader's dashboard settings. */
   libraryArt: LibraryArtStyle;
+  /** Whether the wall drifts (Appearance → Dashboard). */
+  wallMotion: WallMotion;
 }>();
 
-const emit = defineEmits<{ (e: 'set-art', style: LibraryArtStyle): void }>();
+const emit = defineEmits<{
+  (e: 'set-art', style: LibraryArtStyle): void;
+  /** A drifting wall is close to the end of the loaded covers. */
+  (e: 'need-more'): void;
+}>();
 
 const artOptions = [
   { value: 'wall', label: 'Wall' },
@@ -56,16 +64,56 @@ const pile = computed(() => ({
     : { x0: 0.46, x1: 1, y0: 0.04, y1: 1 }) satisfies PileRegion,
 }));
 
-// Big libraries: many small covers. Small ones: fewer, larger covers, repeated
-// so a cover never touches a copy of itself.
+// Big libraries: many small covers in reading order. Small ones: fewer, larger
+// covers, repeated so a cover never touches a copy of itself.
+const isWall = computed(
+  () => mode.value === 'wall' || mode.value === 'wall-small',
+);
+const wallCols = computed(() => (mode.value === 'wall-small' ? 7 : 9));
+const wallEl = ref<HTMLElement | null>(null);
+const trackEl = ref<HTMLElement | null>(null);
+const drift = useWallDrift({
+  wall: wallEl,
+  track: trackEl,
+  cols: wallCols,
+  enabled: computed(() => props.wallMotion === 'up' && isWall.value),
+});
+// A drifting wall renders extra rows so new covers are ready before they show.
+const wallRows = computed(() =>
+  drift.active.value ? 7 : mode.value === 'wall-small' ? 4 : 5,
+);
 const wall = computed(() => {
   const small = mode.value === 'wall-small';
-  const cols = small ? 7 : 9;
-  return {
-    cols,
-    books: wallSlots(props.recent, cols, small ? 28 : 45),
-  };
+  const cols = wallCols.value;
+  const start = drift.active.value ? drift.rowStart.value : 0;
+  const slots = [];
+  for (let r = 0; r < wallRows.value; r++) {
+    const row = start + r;
+    for (let col = 0; col < cols; col++) {
+      const index = wallBookIndex(row, col, cols, props.recent.length, small);
+      slots.push({ key: `${row}:${col}`, book: props.recent[index]! });
+    }
+  }
+  return { cols, slots };
 });
+
+// Ask for the next page of covers about three rows before the drift needs it.
+watch(
+  () => [drift.active.value, drift.rowStart.value, props.recent.length],
+  () => {
+    if (!drift.active.value || mode.value !== 'wall') return;
+    const needed = (drift.rowStart.value + wallRows.value + 3) * wallCols.value;
+    const total = props.counts?.total ?? 0;
+    if (needed >= props.recent.length && props.recent.length < total)
+      emit('need-more');
+  },
+  { immediate: true },
+);
+// A different collection starts its wall from the top.
+watch(
+  () => props.recent[0]?.id,
+  () => drift.reset(),
+);
 const spotlightGhosts = computed(() => Math.max(0, 5 - props.recent.length));
 
 const segments = computed(() =>
@@ -109,16 +157,18 @@ const note = computed(() => {
         :cover-height="pile.coverHeight"
         :region="pile.region"
       />
-      <div
-        v-else-if="mode === 'wall' || mode === 'wall-small'"
-        class="lib-wall"
-        :style="{ '--cols': wall.cols }"
-      >
-        <DashboardCover
-          v-for="(book, i) in wall.books"
-          :key="`${book.id}-${i}`"
-          :book="book"
-        />
+      <div v-else-if="isWall" ref="wallEl" class="lib-wall">
+        <div
+          ref="trackEl"
+          class="lib-wall-track"
+          :style="{ '--cols': wall.cols }"
+        >
+          <DashboardCover
+            v-for="slot in wall.slots"
+            :key="slot.key"
+            :book="slot.book"
+          />
+        </div>
       </div>
       <div v-else-if="mode === 'spotlight'" class="lib-spot">
         <DashboardCover
@@ -253,10 +303,13 @@ const note = computed(() => {
   position: absolute;
   left: 30%;
   top: 50%;
+  transform: translateY(-50%) rotate(-12deg);
+}
+.lib-wall-track {
   display: grid;
   grid-template-columns: repeat(var(--cols), var(--cw));
   gap: var(--gap);
-  transform: translateY(-50%) rotate(-12deg);
+  will-change: transform;
 }
 .mode-wall-small .lib-wall {
   --cw: 118px;

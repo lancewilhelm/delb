@@ -19,6 +19,8 @@ The card's **⋯** menu, or **Appearance → Dashboard → All books art**, choo
 
 Pile drops up to 24 of the newest covers (20 on narrow cards) into a draggable pile, using the same physics as Pile tiles. The books stay to the right of the text, or above it on narrow cards. A pile suits any size, so it is used whenever the collection has at least one book.
 
+**Appearance → Dashboard → Wall motion** can set the Wall to **Drift up** (default **Off**). The grid then moves slowly upward along its columns. Each time a row leaves the top, a new row of older covers arrives at the bottom. The page fetches the next 45 covers about three rows before they are needed, and loops back to the newest once the whole collection has been shown. Copies never touch, including where the list wraps. Drift stays off when the system asks for reduced motion, and pauses while the card is off screen or the tab is hidden. The ⋯ menu does not offer motion; only the setting does.
+
 Wall depends on how many recent covers the collection has, so a small collection never looks broken:
 
 | Covers | Art                                                                        |
@@ -68,6 +70,8 @@ The response contains `data.counts`, `data.recent`, and `data.lists`. `recent` h
 Book ID resolves equal sort values. The API converts the stored finish date into a `YYYY-MM-DD` calendar date in the server's timezone; the browser formats it without a timezone conversion.
 
 Unauthenticated requests return 401. An inaccessible collection returns zero counts and empty lists. Responses use `Cache-Control: private, no-store`.
+
+`GET /api/dashboard/recent?collectionId=&offset=` pages through the same newest-first books after the overview's first 45, for a drifting wall. Each page holds up to 45 books, and a null `nextOffset` ends the list. An invalid offset returns 400.
 
 The shelf tiles use `GET /api/shelves?previews=25`, enough to fill a Wall tile's 25 slots. `previews` accepts 1–25 and defaults to 4 (the Shelves page). Each preview includes the book's `spineRevision`.
 

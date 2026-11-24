@@ -38,10 +38,16 @@ export const AUTO_CARD_ART: Record<DashboardListKey | 'shelf', CardArtStyle> = {
 export const LIBRARY_ART_STYLES = ['wall', 'pile'] as const;
 export type LibraryArtStyle = (typeof LIBRARY_ART_STYLES)[number];
 
+/** Motion for the All books wall. More directions may follow. */
+export const WALL_MOTIONS = ['off', 'up'] as const;
+export type WallMotion = (typeof WALL_MOTIONS)[number];
+
 export type DashboardSettings = {
   showStatusBar: boolean;
   /** All books card art. */
   libraryArt: LibraryArtStyle;
+  /** Whether the All books wall slowly drifts, and which way. */
+  wallMotion: WallMotion;
   cardArt: {
     default: CardArtDefault;
     /** Per-tile choices keyed by list key (`reading`, `shelf:<id>`, …). */
@@ -55,6 +61,7 @@ export function defaultDashboardSettings(): DashboardSettings {
   return {
     showStatusBar: true,
     libraryArt: 'wall',
+    wallMotion: 'off',
     cardArt: { default: 'auto', overrides: {} },
   };
 }
@@ -99,6 +106,9 @@ export function normalizeDashboardSettings(value: unknown): DashboardSettings {
     )
       ? (source.libraryArt as LibraryArtStyle)
       : defaults.libraryArt,
+    wallMotion: (WALL_MOTIONS as readonly unknown[]).includes(source.wallMotion)
+      ? (source.wallMotion as WallMotion)
+      : defaults.wallMotion,
     cardArt: {
       default:
         rawDefault === 'auto' || isCardArtStyle(rawDefault)
@@ -140,6 +150,24 @@ export function wallSlots<T>(items: T[], cols: number, slots: number): T[] {
     { length: slots },
     (_, i) => items[((i % cols) + Math.floor(i / cols) * 2) % items.length]!,
   );
+}
+
+/**
+ * Which loaded book fills a wall slot, for any row (a drifting wall keeps
+ * adding rows). `strided` is for small libraries: the column + row×2 stride
+ * keeps copies apart with 4+ books. Otherwise books run in reading order and
+ * wrap; with 11+ books in a 9-column wall no copy touches another.
+ */
+export function wallBookIndex(
+  row: number,
+  col: number,
+  cols: number,
+  count: number,
+  strided: boolean,
+): number {
+  if (count <= 0) return 0;
+  const raw = strided ? col + row * 2 : row * cols + col;
+  return ((raw % count) + count) % count;
 }
 
 export type HeroArtMode = 'wall' | 'wall-small' | 'spotlight' | 'empty';

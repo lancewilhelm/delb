@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
+	"strconv"
 
 	"github.com/lancewilhelm/delb/internal/httpapi"
 )
@@ -29,6 +30,9 @@ const (
 	dashboardRecentLimit  = 45
 	dashboardPreviewLimit = 25
 )
+
+// dashboardRecentOrder is the newest-first order of the All books cover wall.
+const dashboardRecentOrder = `b.created_at DESC, b.id ASC`
 
 // dashboardStatusLists defines each overview list: its status filter and order.
 var dashboardStatusLists = []struct {
@@ -215,7 +219,7 @@ func (s *Service) handleGetDashboardOverview(w http.ResponseWriter, r *http.Requ
 		s.writeErrWithFallback(w, "GET /api/dashboard/overview counts failed", failMsg, err)
 		return
 	}
-	recent, err := s.queryDashboardBooks(ctx, userID, visClause, visArgs, `1 = 1`, `b.created_at DESC, b.id ASC`, dashboardRecentLimit, 0)
+	recent, err := s.queryDashboardBooks(ctx, userID, visClause, visArgs, `1 = 1`, dashboardRecentOrder, dashboardRecentLimit, 0)
 	if err != nil {
 		s.writeErrWithFallback(w, "GET /api/dashboard/overview recent failed", failMsg, err)
 		return
@@ -239,6 +243,55 @@ func (s *Service) handleGetDashboardOverview(w http.ResponseWriter, r *http.Requ
 			"counts": counts,
 			"recent": recent,
 			"lists":  lists,
+		},
+	})
+}
+
+// GET /api/dashboard/recent?collectionId=&offset=
+//
+// Pages through the All books cover wall's books (newest first) after the
+// overview's first page, so a drifting wall can keep showing new covers.
+func (s *Service) handleGetDashboardRecent(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "private, no-store")
+
+	swu, err := s.auth.Authenticate(w, r)
+	if err != nil {
+		s.writeErr(w, "GET /api/dashboard/recent auth failed", err)
+		return
+	}
+	if swu == nil {
+		httpapi.WriteError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	q := r.URL.Query()
+	rawOffset := q.Get("offset")
+	if rawOffset == "" {
+		rawOffset = "0"
+	}
+	offset, err := strconv.ParseInt(rawOffset, 10, 64)
+	if !nonNegIntStrRe.MatchString(rawOffset) || err != nil || offset > 9007199254740991 {
+		httpapi.WriteError(w, http.StatusBadRequest, "Invalid offset")
+		return
+	}
+	userID := swu.User.ID
+	visClause, visArgs := dashboardVisibility(userID, q.Get("collectionId"))
+
+	found, err := s.queryDashboardBooks(r.Context(), userID, visClause, visArgs, `1 = 1`, dashboardRecentOrder, dashboardRecentLimit+1, offset)
+	if err != nil {
+		s.writeErrWithFallback(w, "GET /api/dashboard/recent failed", "Failed to load covers", err)
+		return
+	}
+	var nextOffset *int64
+	if len(found) > dashboardRecentLimit {
+		found = found[:dashboardRecentLimit]
+		next := offset + dashboardRecentLimit
+		nextOffset = &next
+	}
+	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"data": map[string]any{
+			"books":      found,
+			"nextOffset": nextOffset,
 		},
 	})
 }
