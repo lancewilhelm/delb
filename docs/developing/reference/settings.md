@@ -80,7 +80,9 @@ See [book view design record](../../archive/book-view-settings.md), [system arch
 
 `dashboard.libraryArt` is `wall` or `pile` and defaults to `wall`. **All books art** in **Appearance → Dashboard**, or the All books card's **⋯** menu, sets it. Unknown values fall back to `wall`.
 
-`dashboard.wallMotion` is `off` or `up` and defaults to `off`. **Wall motion** in **Appearance → Dashboard** sets it; the card's **⋯** menu does not. With `up`, the All books wall drifts slowly upward unless the system asks for reduced motion. Unknown values fall back to `off`, which leaves room for more directions later.
+`dashboard.wallMotion` is `off` or `up` and defaults to `off`. **Wall motion** in **Appearance → Dashboard** and the command palette's **dashboard › wall drift up** toggle set it; the card's **⋯** menu does not. With `up`, the All books wall drifts slowly upward unless the system asks for reduced motion. Unknown values fall back to `off`, which leaves room for more directions later.
+
+`dashboard.wallDriftSpeed` is a whole number from 1 to 10 and defaults to 3. Each level adds 3 CSS pixels per second, so the default drifts at 9. **Drift speed** in **Appearance → Dashboard** (shown while Wall motion is Drift up) and the command palette's **dashboard › wall drift speed** slider set it. Other values are rounded and clamped; non-numbers fall back to 3.
 
 `dashboard.cardArt.default` is `auto` or one of `collage`, `fan`, `stack`, `shelf`, `pile`, or `wall`, and defaults to `auto`. **Card art** in **Appearance → Dashboard** sets it. `dashboard.cardArt.overrides` maps a tile key (`reading`, `to_be_read`, `finished`, `dnf`, `none`, or `shelf:<id>`) to that tile's style; each tile's **⋯** menu writes it. Choosing **Use default** writes `null`, which normalization removes, and **Reset … to the default** clears every override. Unknown styles are dropped. Both settings use the active desktop or mobile profile. See the [dashboard reference](dashboard.md) for what each style draws.
 

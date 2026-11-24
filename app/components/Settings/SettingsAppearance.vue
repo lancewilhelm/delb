@@ -22,6 +22,9 @@ import {
   CARD_ART_LABELS,
   CARD_ART_STYLES,
   type CardArtDefault,
+  DEFAULT_WALL_DRIFT_SPEED,
+  MAX_WALL_DRIFT_SPEED,
+  MIN_WALL_DRIFT_SPEED,
   type LibraryArtStyle,
   type WallMotion,
 } from '~/utils/dashboardArt';
@@ -62,6 +65,9 @@ const dashboardLibraryArt = userSettingsStore.settingRef<LibraryArtStyle>(
 );
 const dashboardWallMotion = userSettingsStore.settingRef<WallMotion>(
   'dashboard.wallMotion',
+);
+const dashboardWallDriftSpeed = userSettingsStore.settingRef<number>(
+  'dashboard.wallDriftSpeed',
 );
 const dashboardCardArt = userSettingsStore.settingRef<CardArtDefault>(
   'dashboard.cardArt.default',
@@ -411,6 +417,16 @@ function handleSortChange(target: string) {
             </button>
           </div>
         </div>
+        <SettingsUISlider
+          v-if="dashboardWallMotion === 'up'"
+          v-model="dashboardWallDriftSpeed"
+          title="Drift speed"
+          :description="`1 is the slowest, 10 the fastest (default: ${DEFAULT_WALL_DRIFT_SPEED})`"
+          :min="MIN_WALL_DRIFT_SPEED"
+          :max="MAX_WALL_DRIFT_SPEED"
+          :step="1"
+          :value-input="true"
+        />
         <div class="bookshelf-texture-choice">
           <span
             ><strong>Card art</strong

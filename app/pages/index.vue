@@ -278,6 +278,7 @@ onBeforeUnmount(() => {
           :show-status-bar="dashboardSettings.showStatusBar"
           :library-art="dashboardSettings.libraryArt"
           :wall-motion="dashboardSettings.wallMotion"
+          :wall-drift-speed="dashboardSettings.wallDriftSpeed"
           @set-art="setLibraryArt"
           @need-more="loadMoreRecent"
         />

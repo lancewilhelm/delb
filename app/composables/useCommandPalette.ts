@@ -15,6 +15,11 @@ import {
   MAX_APPEARANCE_CONTRAST,
 } from '~/utils/appearanceContrast';
 import { searchPaletteOptions } from '~/utils/commandPaletteSearch';
+import {
+  MAX_WALL_DRIFT_SPEED,
+  MIN_WALL_DRIFT_SPEED,
+  type WallMotion,
+} from '~/utils/dashboardArt';
 
 interface Theme {
   name: string;
@@ -79,6 +84,17 @@ export function useCommandPalette() {
 
   const uiStore = useUiStore();
   const userSettingsStore = useUserSettingsStore();
+
+  // The palette toggles on/off; the setting stores a direction for later.
+  const wallMotion = userSettingsStore.settingRef<WallMotion>(
+    'dashboard.wallMotion',
+  );
+  const wallDrift = computed<boolean>({
+    get: () => wallMotion.value === 'up',
+    set: (on) => {
+      wallMotion.value = on ? 'up' : 'off';
+    },
+  });
 
   const options = ref<Option[]>([
     {
@@ -362,6 +378,30 @@ export function useCommandPalette() {
             min: 56,
             max: 160,
             suffix: 'px',
+          },
+        },
+      ],
+    },
+    {
+      label: 'dashboard',
+      icon: 'lucide:layout-dashboard',
+      options: [
+        {
+          label: 'wall drift up',
+          icon: 'lucide:arrow-up',
+          toggle: { model: wallDrift },
+        },
+        {
+          label: 'wall drift speed',
+          icon: 'lucide:gauge',
+          slider: {
+            model: userSettingsStore.settingRef<number>(
+              'dashboard.wallDriftSpeed',
+            ),
+            min: MIN_WALL_DRIFT_SPEED,
+            max: MAX_WALL_DRIFT_SPEED,
+            step: 1,
+            suffix: '',
           },
         },
       ],

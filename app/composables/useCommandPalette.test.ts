@@ -17,7 +17,8 @@ function createPalette() {
     .replace(/import themesList from [^;]+;/, '')
     .replace(/import \{ normalizeCustomTheme \} from [^;]+;/, '')
     .replace(/import \{[\s\S]*?\} from '~\/utils\/appearanceContrast';/, '')
-    .replace(/import \{ searchPaletteOptions \} from [^;]+;/, '');
+    .replace(/import \{ searchPaletteOptions \} from [^;]+;/, '')
+    .replace(/import \{[\s\S]*?\} from '~\/utils\/dashboardArt';/, '');
   const code = transformSync(source, { loader: 'ts', format: 'cjs' }).code;
   const settings = reactive({
     appearanceContrast: 100,
@@ -38,6 +39,7 @@ function createPalette() {
     customTheme: undefined,
     bookGrid: { gap: 12, coverWidthPresetPx: 172 },
     bookList: { rowHeightPx: 84 },
+    dashboard: { wallMotion: 'off', wallDriftSpeed: 3 },
   });
   const mobile = reactive({ enabled: false, searchButton: true });
   function settingRef(path: string) {
@@ -54,6 +56,22 @@ function createPalette() {
         get: () => settings.coverStyle.showReadingStatus,
         set: (value: boolean) => {
           settings.coverStyle.showReadingStatus = value;
+        },
+      });
+    }
+    if (path === 'dashboard.wallDriftSpeed') {
+      return computed({
+        get: () => settings.dashboard.wallDriftSpeed,
+        set: (value: number) => {
+          settings.dashboard.wallDriftSpeed = value;
+        },
+      });
+    }
+    if (path === 'dashboard.wallMotion') {
+      return computed({
+        get: () => settings.dashboard.wallMotion,
+        set: (value: string) => {
+          settings.dashboard.wallMotion = value;
         },
       });
     }
@@ -120,6 +138,8 @@ function createPalette() {
     DEFAULT_APPEARANCE_CONTRAST: 100,
     MIN_APPEARANCE_CONTRAST: 50,
     MAX_APPEARANCE_CONTRAST: 200,
+    MIN_WALL_DRIFT_SPEED: 1,
+    MAX_WALL_DRIFT_SPEED: 10,
     useUiStore: () => ui,
     useUserSettingsStore: () => store,
     useThemeAppearance: () => appearance,
@@ -191,4 +211,36 @@ test('command palette toggles show spine on book details', () => {
   assert.equal(settings.coverStyle.showDetailSpine, false);
   palette.selectOption(result?.option);
   assert.equal(settings.coverStyle.showDetailSpine, true);
+});
+
+test('command palette toggles the All books wall drift', () => {
+  const { palette, settings } = createPalette();
+  palette.query.value = 'wall drift';
+  const result = palette.filteredOptions.value.find(
+    (item) => item.option.label === 'wall drift up',
+  );
+  assert.equal(result?.path, 'dashboard');
+  assert.equal(result?.option.toggle?.model, false);
+  palette.selectOption(result?.option);
+  assert.equal(settings.dashboard.wallMotion, 'up');
+  assert.equal(result?.option.toggle?.model, true);
+  palette.selectOption(result?.option);
+  assert.equal(settings.dashboard.wallMotion, 'off');
+});
+
+test('command palette sets the wall drift speed', () => {
+  const { palette, settings } = createPalette();
+  palette.query.value = 'drift speed';
+  const result = palette.filteredOptions.value.find(
+    (item) => item.option.label === 'wall drift speed',
+  );
+  assert.equal(result?.path, 'dashboard');
+  palette.selectOption(result?.option);
+  const slider = palette.selectedOption.value?.slider;
+  if (!slider) throw new Error('Missing drift speed slider');
+  assert.equal(slider.min, 1);
+  assert.equal(slider.max, 10);
+  assert.equal(slider.model, 3);
+  slider.model = 6;
+  assert.equal(settings.dashboard.wallDriftSpeed, 6);
 });

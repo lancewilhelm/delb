@@ -42,12 +42,26 @@ export type LibraryArtStyle = (typeof LIBRARY_ART_STYLES)[number];
 export const WALL_MOTIONS = ['off', 'up'] as const;
 export type WallMotion = (typeof WALL_MOTIONS)[number];
 
+/** Drift speed levels. Each level adds 3 CSS pixels per second. */
+export const MIN_WALL_DRIFT_SPEED = 1;
+export const MAX_WALL_DRIFT_SPEED = 10;
+export const DEFAULT_WALL_DRIFT_SPEED = 3;
+
+/** Pixels per second for a drift speed level (the default, 3, is 9 px/s). */
+export function wallDriftPxPerSecond(level: number): number {
+  return (
+    3 * Math.min(MAX_WALL_DRIFT_SPEED, Math.max(MIN_WALL_DRIFT_SPEED, level))
+  );
+}
+
 export type DashboardSettings = {
   showStatusBar: boolean;
   /** All books card art. */
   libraryArt: LibraryArtStyle;
   /** Whether the All books wall slowly drifts, and which way. */
   wallMotion: WallMotion;
+  /** Drift speed level, from 1 (slowest) to 10. */
+  wallDriftSpeed: number;
   cardArt: {
     default: CardArtDefault;
     /** Per-tile choices keyed by list key (`reading`, `shelf:<id>`, …). */
@@ -62,6 +76,7 @@ export function defaultDashboardSettings(): DashboardSettings {
     showStatusBar: true,
     libraryArt: 'wall',
     wallMotion: 'off',
+    wallDriftSpeed: DEFAULT_WALL_DRIFT_SPEED,
     cardArt: { default: 'auto', overrides: {} },
   };
 }
@@ -109,6 +124,14 @@ export function normalizeDashboardSettings(value: unknown): DashboardSettings {
     wallMotion: (WALL_MOTIONS as readonly unknown[]).includes(source.wallMotion)
       ? (source.wallMotion as WallMotion)
       : defaults.wallMotion,
+    wallDriftSpeed:
+      typeof source.wallDriftSpeed === 'number' &&
+      Number.isFinite(source.wallDriftSpeed)
+        ? Math.min(
+            MAX_WALL_DRIFT_SPEED,
+            Math.max(MIN_WALL_DRIFT_SPEED, Math.round(source.wallDriftSpeed)),
+          )
+        : defaults.wallDriftSpeed,
     cardArt: {
       default:
         rawDefault === 'auto' || isCardArtStyle(rawDefault)

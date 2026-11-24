@@ -14,6 +14,8 @@ import {
   heroArtMode,
   statusSegments,
   wallBookIndex,
+  wallDriftPxPerSecond,
+  DEFAULT_WALL_DRIFT_SPEED,
   type LibraryArtStyle,
   type PileRegion,
   type WallMotion,
@@ -28,6 +30,8 @@ const props = defineProps<{
   libraryArt: LibraryArtStyle;
   /** Whether the wall drifts (Appearance → Dashboard). */
   wallMotion: WallMotion;
+  /** Drift speed level, 1–10. */
+  wallDriftSpeed?: number;
 }>();
 
 const emit = defineEmits<{
@@ -77,6 +81,9 @@ const drift = useWallDrift({
   track: trackEl,
   cols: wallCols,
   enabled: computed(() => props.wallMotion === 'up' && isWall.value),
+  pxPerSecond: computed(() =>
+    wallDriftPxPerSecond(props.wallDriftSpeed ?? DEFAULT_WALL_DRIFT_SPEED),
+  ),
 });
 // A drifting wall renders extra rows so new covers are ready before they show.
 const wallRows = computed(() =>

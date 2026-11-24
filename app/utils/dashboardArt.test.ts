@@ -9,6 +9,7 @@ import {
   resolveCardArt,
   statusSegments,
   wallBookIndex,
+  wallDriftPxPerSecond,
   wallSlots,
 } from './dashboardArt.ts';
 
@@ -192,4 +193,26 @@ test('wall motion defaults off and drops unknown directions', () => {
     normalizeDashboardSettings({ wallMotion: 'sideways' }).wallMotion,
     'off',
   );
+});
+
+test('drift speed is a 1–10 level that defaults to 9 px/s', () => {
+  assert.equal(normalizeDashboardSettings({}).wallDriftSpeed, 3);
+  assert.equal(wallDriftPxPerSecond(3), 9);
+  assert.equal(
+    normalizeDashboardSettings({ wallDriftSpeed: 7.4 }).wallDriftSpeed,
+    7,
+  );
+  assert.equal(
+    normalizeDashboardSettings({ wallDriftSpeed: 99 }).wallDriftSpeed,
+    10,
+  );
+  assert.equal(
+    normalizeDashboardSettings({ wallDriftSpeed: 0 }).wallDriftSpeed,
+    1,
+  );
+  assert.equal(
+    normalizeDashboardSettings({ wallDriftSpeed: 'fast' }).wallDriftSpeed,
+    3,
+  );
+  assert.equal(wallDriftPxPerSecond(10), 30);
 });

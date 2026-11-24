@@ -12,9 +12,6 @@ import {
   type Ref,
 } from 'vue';
 
-/** Drift speed along the wall's columns, in CSS pixels per second. */
-const DRIFT_PX_PER_SECOND = 9;
-
 /**
  * Slowly moves a cover grid upward along its columns, forever.
  *
@@ -31,6 +28,8 @@ export function useWallDrift(options: {
   track: Ref<HTMLElement | null>;
   cols: Ref<number>;
   enabled: Ref<boolean>;
+  /** Speed along the wall's columns, in CSS pixels per second. */
+  pxPerSecond: Ref<number>;
 }) {
   const rowStart = ref(0);
   const reducedMotion = usePreferredReducedMotion();
@@ -61,7 +60,7 @@ export function useWallDrift(options: {
     last = time;
     pitch ||= measurePitch();
     if (pitch > 0) {
-      offset += DRIFT_PX_PER_SECOND * dt;
+      offset += options.pxPerSecond.value * dt;
       if (offset >= pitch) {
         offset -= pitch;
         rowStart.value += 1;
