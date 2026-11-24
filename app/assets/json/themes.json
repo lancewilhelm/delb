@@ -1,5 +1,21 @@
 [
   {
+    "name": "sage_light",
+    "bgColor": "#f2f4f2",
+    "mainColor": "#3b5c47",
+    "subColor": "#9eb0a3",
+    "textColor": "#262e29",
+    "errorColor": "#b3483f"
+  },
+  {
+    "name": "sage_nord",
+    "bgColor": "#242933",
+    "mainColor": "#98be9b",
+    "subColor": "#5b6c61",
+    "textColor": "#dfe7e1",
+    "errorColor": "#bf616a"
+  },
+  {
     "name": "night_fairy",
     "bgColor": "#1a1a1a",
     "mainColor": "#fbf4b6",
