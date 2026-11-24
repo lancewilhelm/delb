@@ -74,6 +74,14 @@ Collection membership controls cover/file visibility. Settings persistence does 
 
 See [book view design record](../../archive/book-view-settings.md), [system architecture](../architecture.md), and [the verification record](../documentation-status.md).
 
+## Dashboard
+
+`dashboard.showStatusBar` defaults to `true`. **Status bar** in **Appearance → Dashboard** shows or hides the color-coded reading-status bar on the dashboard's All books card. The status links below it remain either way.
+
+`dashboard.libraryArt` is `wall` or `pile` and defaults to `wall`. **All books art** in **Appearance → Dashboard**, or the All books card's **⋯** menu, sets it. Unknown values fall back to `wall`.
+
+`dashboard.cardArt.default` is `auto` or one of `collage`, `fan`, `stack`, `shelf`, `pile`, or `wall`, and defaults to `auto`. **Card art** in **Appearance → Dashboard** sets it. `dashboard.cardArt.overrides` maps a tile key (`reading`, `to_be_read`, `finished`, `dnf`, `none`, or `shelf:<id>`) to that tile's style; each tile's **⋯** menu writes it. Choosing **Use default** writes `null`, which normalization removes, and **Reset … to the default** clears every override. Unknown styles are dropped. Both settings use the active desktop or mobile profile. See the [dashboard reference](dashboard.md) for what each style draws.
+
 ## Cover reading-status badges
 
 `coverStyle.showReadingStatus` defaults to `false`. **Reading status badges** in **Appearance → Cover Style** updates this setting through the existing settings sync and active desktop or mobile profile.

@@ -498,6 +498,16 @@ func TestCollectionBookshelfPicturesAndPersonalShelves(t *testing.T) {
 	if resp.StatusCode != 200 || !strings.Contains(string(raw), `"Renamed"`) {
 		t.Fatalf("GET /api/shelves = %d %s", resp.StatusCode, string(raw))
 	}
+	resp, raw = env.reqJSON(&viewer, http.MethodGet, "/api/shelves?previews=25", nil)
+	if resp.StatusCode != 200 || !strings.Contains(string(raw), bookID) {
+		t.Fatalf("GET /api/shelves?previews=25 = %d %s", resp.StatusCode, string(raw))
+	}
+	for _, bad := range []string{"0", "26", "x"} {
+		resp, _ = env.reqJSON(&viewer, http.MethodGet, "/api/shelves?previews="+bad, nil)
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("GET /api/shelves?previews=%s = %d, want 400", bad, resp.StatusCode)
+		}
+	}
 	resp, _ = env.reqJSON(&viewer, http.MethodDelete, "/api/shelves/"+shelfID, nil)
 	if resp.StatusCode != 200 {
 		t.Fatalf("DELETE shelf = %d", resp.StatusCode)

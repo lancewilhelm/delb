@@ -22,15 +22,18 @@ New users join the shared default as editors. It can already contain books. You 
 
 **All** includes books in shared collections where you are a member. It does not expose every book stored on the installation.
 
-## Choose a dashboard shelf
+## Use the dashboard
 
-1. Select **Delb** to open the dashboard.
-2. Choose **Continue reading** or **Recently read** above the books.
-3. Select **Show more** when more books are available.
+Select **Delb** to open the dashboard. It describes the collection selected in the header.
 
-Continue reading shows your latest logged progress or saved reader percentage. Recently read shows finished books with a date read, newest first. The counts above the tabs describe your selected collection, except To be read. To be read counts your private queue across all accessible collections and opens its dedicated page.
+- The **All books** card shows your total, covers of recently added books, and a link for each reading status. Select **Browse all books** to open every book with filters cleared.
+- **Continue reading** shows your latest logged progress or saved reader percentage. Right-click or long-press a cover to change its reading status.
+- **Reading status** has a tile for each status. To be read opens your ranked queue; the others open the Books view filtered to that status.
+- **Your shelves** has a tile for each personal shelf and a **New shelf** tile.
 
-See the [dashboard reference](../developing/reference/dashboard.md) for shelf order and data rules.
+Each tile's **⋯** menu changes its card art: Collage, Fan, Stack, Shelf, Pile, or Wall. The All books card's **⋯** menu switches between Wall and Pile. In a Pile you can drag the books around. **Appearance → Dashboard** sets these defaults and turns the status bar on the All books card on or off.
+
+See the [dashboard reference](../developing/reference/dashboard.md) for list order and data rules.
 
 ![Dashboard with collection counts above the reading shelf tabs](../images/dashboard.png)
 

@@ -1972,30 +1972,9 @@ func (s *Service) handleGetDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	visClause := `EXISTS (
-		SELECT 1 FROM collection_books cb
-		INNER JOIN collection_members cm ON cm.collection_id = cb.collection_id
-		WHERE cb.book_id = b.id AND cm.user_id = ?`
-	visArgs := []any{userID}
-	if collectionID != "" {
-		visClause += ` AND cb.collection_id = ?`
-		visArgs = append(visArgs, collectionID)
-	}
-	visClause += `)`
-
-	var cTotal, cNone, cTbr, cReading, cFinished, cDnf int
-	countArgs := append([]any{userID}, visArgs...)
-	if err := s.db.QueryRowContext(r.Context(), `
-		SELECT
-			COUNT(*),
-			COUNT(CASE WHEN ubs.status IS NULL THEN 1 END),
-			COUNT(CASE WHEN ubs.status = 'to_be_read' THEN 1 END),
-			COUNT(CASE WHEN ubs.status = 'reading' THEN 1 END),
-			COUNT(CASE WHEN ubs.status = 'finished' THEN 1 END),
-			COUNT(CASE WHEN ubs.status = 'dnf' THEN 1 END)
-		FROM books b
-		LEFT JOIN user_book_status ubs ON ubs.book_id = b.id AND ubs.user_id = ?
-		WHERE `+visClause, countArgs...).Scan(&cTotal, &cNone, &cTbr, &cReading, &cFinished, &cDnf); err != nil {
+	visClause, visArgs := dashboardVisibility(userID, collectionID)
+	counts, err := s.dashboardCounts(r.Context(), userID, visClause, visArgs)
+	if err != nil {
 		s.writeErrWithFallback(w, "GET /api/dashboard counts failed", "Failed to load dashboard", err)
 		return
 	}
@@ -2014,107 +1993,9 @@ func (s *Service) handleGetDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	const pageSize = 12
-	shelfArgs := []any{userID, userID, userID, userID}
-	shelfArgs = append(shelfArgs, visArgs...)
-	shelfArgs = append(shelfArgs, pageSize+1, offset)
-
-	rows, err := s.db.QueryContext(r.Context(), `
-		SELECT
-			b.id, b.title, b.cover_image_path, b.has_physical_copy, b.has_audiobook_copy, b.updated_at,
-			pos.progress, pos.updated_at,
-			pl.progress_percent, pl.page_number, pl.source, pl.occurred_at, pl.created_at,
-			ubs.finished_at
-		FROM books b
-		LEFT JOIN user_book_status ubs ON ubs.book_id = b.id AND ubs.user_id = ?
-		LEFT JOIN user_book_reading_position pos ON pos.book_id = b.id AND pos.user_id = ?
-		LEFT JOIN user_book_progress_log pl ON pl.user_id = ? AND pl.id = (
-			SELECT id FROM user_book_progress_log
-			WHERE user_id = ? AND book_id = b.id
-			ORDER BY `+progressHistoryOrderSQL+`
-			LIMIT 1
-		)
-		WHERE `+visClause+` AND `+filterSQL+`
-		ORDER BY `+orderSQL+`
-		LIMIT ? OFFSET ?
-	`, shelfArgs...)
+	found, err := s.queryDashboardBooks(r.Context(), userID, visClause, visArgs, filterSQL, orderSQL, pageSize+1, offset)
 	if err != nil {
 		s.writeErrWithFallback(w, "GET /api/dashboard shelf query failed", "Failed to load dashboard", err)
-		return
-	}
-	defer func() { _ = rows.Close() }()
-
-	type dashBook struct {
-		ID               string   `json:"id"`
-		Title            string   `json:"title"`
-		CoverImagePath   *string  `json:"coverImagePath"`
-		HasPhysicalCopy  bool     `json:"hasPhysicalCopy"`
-		HasAudiobookCopy bool     `json:"hasAudiobookCopy"`
-		UpdatedAt        string   `json:"updatedAt"`
-		Progress         *float64 `json:"progress"`
-		FinishedDate     *string  `json:"finishedDate"`
-	}
-
-	found := make([]dashBook, 0, pageSize+1)
-	for rows.Next() {
-		var (
-			id               string
-			title            string
-			cover            sql.NullString
-			hasPhys          int64
-			hasAudio         int64
-			updatedAt        int64
-			posProg          sql.NullFloat64
-			posUpd           sql.NullInt64
-			logProg          sql.NullFloat64
-			logPage          sql.NullInt64
-			logSource        sql.NullString
-			logOccurred      sql.NullInt64
-			logCreated       sql.NullInt64
-			finishedAt       sql.NullInt64
-		)
-		if err := rows.Scan(
-			&id, &title, &cover, &hasPhys, &hasAudio, &updatedAt,
-			&posProg, &posUpd,
-			&logProg, &logPage, &logSource, &logOccurred, &logCreated,
-			&finishedAt,
-		); err != nil {
-			s.writeErrWithFallback(w, "GET /api/dashboard shelf scan failed", "Failed to load dashboard", err)
-			return
-		}
-		var logRow *progressLogRow
-		if logProg.Valid && logSource.Valid && logOccurred.Valid && logCreated.Valid {
-			logRow = &progressLogRow{
-				progressPercent: logProg.Float64,
-				pageNumber:      nullInt64Ptr(logPage),
-				source:          logSource.String,
-				occurredAtSec:   logOccurred.Int64,
-				createdAtSec:    logCreated.Int64,
-			}
-		}
-		latest := computeLatestReadingProgress(logRow, nullFloat64Ptr(posProg), nullInt64Ptr(posUpd))
-		var progOut *float64
-		if latest != nil {
-			p := latest.ProgressPercent
-			progOut = &p
-		}
-		var finDate *string
-		if finishedAt.Valid {
-			fd := calendarDateLocal(finishedAt.Int64)
-			finDate = &fd
-		}
-		found = append(found, dashBook{
-			ID:               id,
-			Title:            title,
-			CoverImagePath:   nullStringPtr(cover),
-			HasPhysicalCopy:  hasPhys != 0,
-			HasAudiobookCopy: hasAudio != 0,
-			UpdatedAt:        formatUnixSecISO(updatedAt),
-			Progress:         progOut,
-			FinishedDate:     finDate,
-		})
-	}
-	if err := rows.Err(); err != nil {
-		s.writeErrWithFallback(w, "GET /api/dashboard shelf rows err", "Failed to load dashboard", err)
 		return
 	}
 
@@ -2129,14 +2010,7 @@ func (s *Service) handleGetDashboard(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data": map[string]any{
-			"counts": map[string]int{
-				"total":      cTotal,
-				"none":       cNone,
-				"to_be_read": cTbr,
-				"reading":    cReading,
-				"finished":   cFinished,
-				"dnf":        cDnf,
-			},
+			"counts": counts,
 			"shelf": map[string]any{
 				"kind":       shelf,
 				"books":      booksOut,

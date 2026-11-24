@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf16"
@@ -445,8 +446,20 @@ type ShelfSummaryDTO struct {
 	Previews []ShelfPreviewDTO `json:"previews"`
 }
 
+// Shelf preview counts: the Shelves page shows 4; the dashboard's card art can
+// ask for up to 25 (the Wall tile's 5×5 grid).
+const (
+	defaultShelfPreviews = 4
+	maxShelfPreviews     = 25
+)
+
 // ListShelves returns all personal shelves owned by userID with visible counts and previews.
 func (s *Service) ListShelves(ctx context.Context, userID string) ([]ShelfSummaryDTO, error) {
+	return s.ListShelvesWithPreviews(ctx, userID, defaultShelfPreviews)
+}
+
+// ListShelvesWithPreviews is ListShelves with up to previewLimit preview books per shelf.
+func (s *Service) ListShelvesWithPreviews(ctx context.Context, userID string, previewLimit int) ([]ShelfSummaryDTO, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -486,8 +499,8 @@ func (s *Service) ListShelves(ctx context.Context, userID string) ([]ShelfSummar
 			return nil, err
 		}
 		limit := len(vis)
-		if limit > 4 {
-			limit = 4
+		if limit > previewLimit {
+			limit = previewLimit
 		}
 		previews := make([]ShelfPreviewDTO, limit)
 		for i := 0; i < limit; i++ {
@@ -510,7 +523,16 @@ func (s *Service) ListShelves(ctx context.Context, userID string) ([]ShelfSummar
 func (s *Service) handleListShelves(w http.ResponseWriter, r *http.Request) {
 	userID := httpapi.SessionFromContext(r.Context()).User.ID
 
-	out, err := s.ListShelves(r.Context(), userID)
+	previews := defaultShelfPreviews
+	if raw := r.URL.Query().Get("previews"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > maxShelfPreviews {
+			httpapi.WriteError(w, http.StatusBadRequest, "Invalid previews count")
+			return
+		}
+		previews = n
+	}
+	out, err := s.ListShelvesWithPreviews(r.Context(), userID, previews)
 	if err != nil {
 		s.writeErr(w, "GET /api/shelves failed", err)
 		return

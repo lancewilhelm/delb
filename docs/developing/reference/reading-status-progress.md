@@ -52,7 +52,7 @@ The four access triggers share the same visibility and rank-order rule. A future
 
 ## Cover context menu
 
-Book grid and list covers offer **Reading status** with **To be read**, **Reading**, **Finished**, **DNF**, and **No status**. The dashboard Continue reading and Recently read covers offer the same menu. Choices apply to the signed-in user, including on reference-only books.
+Book grid and list covers offer **Reading status** with **To be read**, **Reading**, **Finished**, **DNF**, and **No status**. The dashboard Continue reading covers offer the same menu. Choices apply to the signed-in user, including on reference-only books.
 
 Opening the menu fetches the current status. Saving uses the single-book status endpoint and the transition rules above. The menu marks the current choice, disables actions while saving, and retains errors for retry. A successful save updates the loaded book and its badge in place. A book that no longer matches a status filter is removed locally. Loaded pages, pagination cursors, and scroll position remain intact. Dashboard counts and the selected shelf update locally. Bulk selection mode keeps its existing separate status action.
 
@@ -81,4 +81,4 @@ Progress logs live in `user_book_progress_log` to support charting and history.
 
 ## Displayed progress
 
-The book details Progress section shows the latest saved reader percentage or progress log and up to 50 recent history entries. The dashboard Continue reading shelf uses the same latest-progress rule. A log dated on an earlier day stays in history instead of replacing more recent progress; a date-only manual entry for the current day is ordered by when it was saved. Progress history and reader positions remain private to each user. Showing progress does not move the reader position.
+The book details Progress section shows the latest saved reader percentage or progress log and up to 50 recent history entries. The dashboard Continue reading section uses the same latest-progress rule. A log dated on an earlier day stays in history instead of replacing more recent progress; a date-only manual entry for the current day is ordered by when it was saved. Progress history and reader positions remain private to each user. Showing progress does not move the reader position.

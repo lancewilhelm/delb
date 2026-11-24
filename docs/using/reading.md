@@ -55,12 +55,12 @@ Changes affect your account's status, not the status of other collection members
 
 ## Order your To be read queue
 
-1. Select **To be read** in the view menu, or select **View all** from the dashboard's **To be read** shelf.
+1. Select **To be read** in the view menu, or select the dashboard's **To be read** tile.
 2. Drag a book's handle with a mouse or touch, or use its up and down arrows.
 3. Click **Add rationale** or an existing rationale to edit it on the page.
 4. Select **Save** to keep the note or **Cancel** to discard the edit.
 
-Your private queue includes books from every collection you can access. Rank 1 is the book you most want to read. On the dashboard, the **To be read** count and shelf track the selected collection, matching the other counts.
+Your private queue includes books from every collection you can access. Rank 1 is the book you most want to read. On the dashboard, the **To be read** count and tile track the selected collection, matching the other counts.
 
 Book details show the same rationale and offer numeric rank entry for longer moves. A rationale remains after you start, finish, or remove a book from TBR. Clear the text and save to remove the rationale. If saving fails, the editor keeps your draft for retry.
 

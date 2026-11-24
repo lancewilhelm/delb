@@ -9,14 +9,27 @@ import { createPersistedState } from 'pinia-plugin-persistedstate';
 import * as vue from 'vue';
 
 const StubNull = { render: () => null };
-const StubBookThumbnail = {
+const libraryCards = [];
+const LibraryStub = {
+  props: ['libraryArt', 'showStatusBar'],
+  emits: ['set-art'],
+  setup(props, { emit }) {
+    libraryCards.push({ props, setArt: (style) => emit('set-art', style) });
+    return () => null;
+  },
+};
+const continueCards = [];
+const ContinueStub = {
   props: ['book'],
-  render() {
-    return vue.h(
-      'span',
-      { 'data-status': this.book.status },
-      this.book.title,
-    );
+  emits: ['status-change'],
+  setup(props, { emit }) {
+    continueCards.push({
+      props,
+      change: (status) =>
+        emit('status-change', { bookId: props.book.id, status }),
+    });
+    return () =>
+      vue.h('span', `${props.book.title} ${props.book.progress?.toFixed(1)}%`);
   },
 };
 
@@ -26,44 +39,47 @@ function evaluate(source, globals = {}, linkCapture = null) {
   const RouterLink = {
     props: ['to'],
     setup(props, { attrs, slots }) {
-      if (linkCapture) linkCapture.push({ to: props.to, onClick: attrs.onClick });
+      if (linkCapture)
+        linkCapture.push({ to: props.to, onClick: attrs.onClick });
       return () => vue.h('a', { ...attrs, href: props.to }, slots.default?.());
     },
   };
   new Function('require', 'module', 'exports', ...Object.keys(globals), code)(
     (name) => {
       if (name === 'vue') return vue;
+      if (name === '@vueuse/core')
+        return { useElementSize: () => ({ width: vue.ref(0) }) };
       if (name === 'pinia') return { defineStore };
-      if (name === 'vue-router') {
-        return {
-          RouterLink,
-          useRoute: globals.useRoute ?? (() => ({ query: {} })),
-          useRouter: globals.useRouter ?? (() => ({ replace: () => undefined })),
-        };
-      }
+      if (name === 'vue-router') return { RouterLink };
       if (name === '~/utils/apiFetch')
         return { $fetch: globals.$fetch ?? (async () => ({})) };
       if (name === '~/utils/bookPreviewCache')
         return { primeBookPreviews: () => undefined };
       if (name === '~/utils/dashboardCache')
-        return (
-          globals.dashboardCache ?? {
-            readDashboardCache: () => ({ counts: null, shelf: null }),
-            writeDashboardCache: () => undefined,
-            clearDashboardCache: () => undefined,
-          }
-        );
-      if (name === '~/composables/useAuth')
-        return { useAuth: globals.useAuth };
+        return {
+          readDashboardCache: () => null,
+          writeDashboardCache: () => undefined,
+          readShelvesCache: () => null,
+          writeShelvesCache: () => undefined,
+        };
+      if (name === '~/utils/dashboardArt') return dashboardArt;
+      if (name === '~/composables/useAuth') return { useAuth: globals.useAuth };
       if (name === '~/composables/useHead')
         return { useHead: globals.useHead ?? (() => undefined) };
       if (name === '~/stores/collections')
         return { useCollectionsStore: globals.useCollectionsStore };
       if (name === '~/stores/booksIndexFilters')
         return { useBooksIndexFiltersStore: globals.useBooksIndexFiltersStore };
-      if (name === '~/stores/ui') return { useUiStore: globals.useUiStore };
-      if (name === '~/components/BookThumbnail.vue')
-        return { __esModule: true, default: StubBookThumbnail };
+      if (name === '~/stores/ui')
+        return { useUiStore: globals.useUiStore ?? (() => ({})) };
+      if (name === '~/stores/userSettings')
+        return { useUserSettingsStore: globals.useUserSettingsStore };
+      if (name === '~/components/Dashboard/DashboardContinueCard.vue')
+        return { __esModule: true, default: ContinueStub };
+      if (name === '~/components/Dashboard/DashboardLibraryCard.vue')
+        return { __esModule: true, default: LibraryStub };
+      if (name === '~/components/Dashboard/DashboardListTile.vue')
+        return { __esModule: true, default: globals.TileStub ?? StubNull };
       if (name.startsWith('~/components/'))
         return { __esModule: true, default: StubNull };
       throw new Error(`Unexpected require in dashboard.test.mjs: ${name}`);
@@ -75,17 +91,64 @@ function evaluate(source, globals = {}, linkCapture = null) {
   return module.exports;
 }
 
+const dashboardArt = evaluate(
+  readFileSync(
+    new URL('../app/utils/dashboardArt.ts', import.meta.url),
+    'utf8',
+  ),
+);
+
 function loadStore(name) {
   return evaluate(
     readFileSync(new URL(`../app/stores/${name}.ts`, import.meta.url), 'utf8'),
   );
 }
 
+function compile(filename, globals, links) {
+  const { descriptor, errors } = parse(
+    readFileSync(new URL(filename, import.meta.url), 'utf8'),
+  );
+  assert.deepEqual(errors, []);
+  const compiled = compileScript(descriptor, {
+    id: 'dashboard-test',
+    inlineTemplate: true,
+  });
+  return evaluate(compiled.content, globals, links).default;
+}
+
 const { useBooksIndexFiltersStore } = loadStore('booksIndexFilters');
 const { useUiStore } = loadStore('ui');
 const { useCollectionsStore } = loadStore('collections');
 
-async function dashboard() {
+const counts = {
+  total: 20,
+  reading: 2,
+  to_be_read: 5,
+  finished: 10,
+  dnf: 0,
+  none: 3,
+};
+const book = (id, extra = {}) => ({
+  id,
+  title: id,
+  coverImagePath: null,
+  hasPhysicalCopy: false,
+  hasAudiobookCopy: false,
+  updatedAt: '2026-11-01T00:00:00Z',
+  progress: null,
+  finishedDate: null,
+  ...extra,
+});
+
+/** Server-renders the All books card with persisted browsing state. */
+async function libraryCard() {
+  const links = [];
+  let card = null;
+  const cardProps = {
+    counts,
+    recent: Array.from({ length: 20 }, (_, i) => book(`recent-${i}`)),
+    showStatusBar: true,
+  };
   const values = new Map();
   const storage = {
     getItem: (key) => values.get(key) ?? null,
@@ -93,7 +156,8 @@ async function dashboard() {
   };
   const pinia = createPinia();
   pinia.use(createPersistedState({ storage }));
-  const app = vue.createSSRApp({ render: () => vue.h(page) });
+  // Pinia plugins (persistence) only attach once pinia is installed on an app.
+  const app = vue.createSSRApp({ render: () => vue.h(card, cardProps) });
   app.use(pinia);
   const filters = useBooksIndexFiltersStore(pinia);
   const ui = useUiStore(pinia);
@@ -113,44 +177,18 @@ async function dashboard() {
   const initialUi = JSON.stringify(ui.$state);
   const initialCollections = JSON.stringify(collections.$state);
 
-  const { descriptor, errors } = parse(
-    readFileSync(new URL('../app/pages/index.vue', import.meta.url), 'utf8'),
-  );
-  assert.deepEqual(errors, []);
-  const compiled = compileScript(descriptor, {
-    id: 'dashboard-test',
-    inlineTemplate: true,
-  });
-  const links = [];
-  const { default: page } = evaluate(
-    compiled.content,
+  card = compile(
+    '../app/components/Dashboard/DashboardLibraryCard.vue',
     {
-      useHead: () => undefined,
-      useAuth: () => ({ user: vue.ref({ name: 'Reader' }) }),
-      useRoute: () => ({ query: {} }),
-      useRouter: () => ({ replace: () => undefined }),
-      useCollectionsStore: () => collections,
       useBooksIndexFiltersStore: () => filters,
+      useUiStore: () => ui,
     },
     links,
   );
-  app.component('NuxtLink', {
-    props: ['to'],
-    setup(props, { attrs, slots }) {
-      links.push({ to: props.to, onClick: attrs.onClick });
-      return () => vue.h('a', { href: props.to }, slots.default?.());
-    },
-  });
-  for (const name of [
-    'AppHeader',
-    'ViewSelectorDropdown',
-    'Icon',
-    'BookThumbnail',
-  ]) {
-    app.component(name, { render: () => null });
-  }
-  await renderToString(app);
+  app.component('Icon', StubNull);
+  const html = await renderToString(app);
   return {
+    html,
     filters,
     ui,
     collections,
@@ -162,26 +200,18 @@ async function dashboard() {
   };
 }
 
-test('dashboard All books clears every persisted filter and preserves browsing preferences', async () => {
-  const view = await dashboard();
-  assert.equal(JSON.stringify(view.filters.$state), view.initialFilters);
+test('All books clears every persisted filter and preserves browsing preferences', async () => {
+  const view = await libraryCard();
   const allBooks = view.links.find((link) => link.to === '/books');
-  assert.ok(allBooks, 'the dashboard links to All books');
+  assert.ok(allBooks, 'the All books card links to the Books view');
   await allBooks.onClick?.();
 
-  assert.equal(
-    view.filters.isApplied,
-    false,
-    'All books clears active filters',
-  );
+  assert.equal(view.filters.isApplied, false, 'All books clears filters');
   assert.equal(view.filters.addedStart, '');
   assert.equal(view.filters.addedEnd, '');
   assert.deepEqual(view.filters.selectedStatuses, []);
   assert.equal(view.filters.includeNoStatus, false);
   assert.equal(view.filters.filesFilter, 'any');
-  assert.deepEqual(view.filters.statusQuery, {});
-  assert.deepEqual(view.filters.addedDateQuery, {});
-  assert.deepEqual(view.filters.filesQuery, {});
   assert.equal(JSON.stringify(view.ui.$state), view.initialUi);
   assert.equal(
     JSON.stringify(view.collections.$state),
@@ -199,7 +229,25 @@ test('dashboard All books clears every persisted filter and preserves browsing p
   );
 });
 
-function mountedComponent(filename, globals, rootProps = {}) {
+test('status chips preserve filters and link only non-empty statuses', async () => {
+  const view = await libraryCard();
+  const statusLinks = view.links.filter((link) => link.to !== '/books');
+  assert.deepEqual(
+    statusLinks.map((link) => link.to),
+    [
+      '/books?status=reading',
+      '/books?status=to_be_read',
+      '/books?status=finished',
+      '/books?status=none',
+    ],
+  );
+  for (const link of statusLinks) await link.onClick?.();
+  assert.equal(JSON.stringify(view.filters.$state), view.initialFilters);
+  assert.match(view.html, /aria-label="Reading status: Reading 10%/);
+});
+
+// ---- Page behavior (custom renderer, no DOM) --------------------------------
+function mountedPage(globals) {
   const node = (tag, text = '') => ({
     tag,
     text,
@@ -245,35 +293,9 @@ function mountedComponent(filename, globals, rootProps = {}) {
       element.parent = null;
     },
   });
-  const { descriptor } = parse(
-    readFileSync(new URL(filename, import.meta.url), 'utf8'),
-  );
-  const compiled = compileScript(descriptor, {
-    id: 'interaction-test',
-    inlineTemplate: true,
-  });
-  const { default: component } = evaluate(compiled.content, globals);
-  const app = renderer.createApp({ render: () => vue.h(component, rootProps) });
-  app.directive('tooltip', {});
-  for (const name of ['AppHeader', 'ViewSelectorDropdown', 'Icon'])
-    app.component(name, { render: () => null });
-  app.component('BookThumbnail', {
-    props: ['book'],
-    render() {
-      return vue.h(
-        'span',
-        { 'data-status': this.book.status },
-        this.book.title,
-      );
-    },
-  });
-  app.component('NuxtLink', {
-    props: ['to'],
-    setup:
-      (props, { attrs, slots }) =>
-      () =>
-        vue.h('a', { ...attrs, href: props.to }, slots.default?.()),
-  });
+  const page = compile('../app/pages/index.vue', globals);
+  const app = renderer.createApp({ render: () => vue.h(page) });
+  app.component('Icon', StubNull);
   const root = node('root');
   app.mount(root);
   const all = (element = root) => [element, ...element.children.flatMap(all)];
@@ -292,330 +314,170 @@ async function flush() {
   for (let index = 0; index < 4; index++) await vue.nextTick();
 }
 
-test('shelf changes reject stale scope responses and loading more can retry without losing books', async (t) => {
-  const route = vue.reactive({ query: {} });
+function settingsStore() {
+  const store = vue.reactive({
+    activeSettings: { dashboard: dashboardArt.defaultDashboardSettings() },
+    patches: [],
+    updateSettingAtPath(path, value) {
+      assert.equal(path, 'dashboard.libraryArt');
+      store.activeSettings.dashboard = dashboardArt.normalizeDashboardSettings({
+        ...structuredClone(vue.toRaw(store.activeSettings.dashboard)),
+        libraryArt: value,
+      });
+    },
+    updateSettings(patch) {
+      store.patches.push(patch);
+      const next = structuredClone(vue.toRaw(store.activeSettings.dashboard));
+      Object.assign(next.cardArt.overrides, patch.dashboard.cardArt.overrides);
+      store.activeSettings.dashboard =
+        dashboardArt.normalizeDashboardSettings(next);
+    },
+  });
+  return store;
+}
+
+function harness(
+  t,
+  collections = { collections: [{}], activeSelection: { kind: 'all' } },
+) {
+  const requests = [];
+  const tiles = [];
+  const TileStub = {
+    props: ['listKey', 'artStyle', 'books', 'to', 'count', 'overridden'],
+    emits: ['set-art'],
+    setup(props, { emit }) {
+      tiles.push({ props, setArt: (style) => emit('set-art', style) });
+      return () => vue.h('span', { 'data-tile': props.listKey });
+    },
+  };
+  const settings = settingsStore();
+  const view = mountedPage({
+    useHead() {},
+    useAuth: () => ({ user: vue.ref({ id: 'u1', name: 'Reader' }) }),
+    useCollectionsStore: () => collections,
+    useUserSettingsStore: () => settings,
+    TileStub,
+    $fetch: (url, options) =>
+      new Promise((resolve, reject) =>
+        requests.push({ url, ...options, resolve, reject }),
+      ),
+  });
+  t.after(() => view.app.unmount());
+  return { view, requests, tiles, settings };
+}
+
+const overview = (title) => ({
+  success: true,
+  data: {
+    counts,
+    recent: [book(title)],
+    lists: {
+      reading: [book(title, { progress: 42 })],
+      to_be_read: [book('Queued')],
+      finished: [book('Done', { finishedDate: '2026-11-02' })],
+      dnf: [],
+      none: [],
+    },
+  },
+});
+
+test('collection changes ignore stale overview responses and errors can retry', async (t) => {
   const collections = vue.reactive({
     collections: [{}],
     activeSelection: { kind: 'all' },
     activeCollection: null,
   });
-  const requests = [];
-  const view = mountedComponent('../app/pages/index.vue', {
-    definePageMeta() {},
-    useHead() {},
-    useAuth: () => ({ user: vue.ref({ name: 'Reader' }) }),
-    useCollectionsStore: () => collections,
-    useBooksIndexFiltersStore: () => ({ clearAll() {} }),
-    useRoute: () => route,
-    useRouter: () => ({
-      replace: ({ query }) => {
-        route.query = query;
-      },
-    }),
-    $fetch: (_url, options) =>
-      new Promise((resolve, reject) =>
-        requests.push({ ...options, resolve, reject }),
-      ),
-  });
-  t.after(() => view.app.unmount());
-  const result = (title, kind, nextOffset = null) => ({
-    success: true,
-    data: {
-      counts: {
-        total: 20,
-        reading: 1,
-        finished: 19,
-        none: 0,
-        to_be_read: 0,
-        dnf: 0,
-      },
-      shelf: {
-        kind,
-        nextOffset,
-        books: [
+  const { view, requests } = harness(t, collections);
+  const overviews = () =>
+    requests.filter((r) => r.url === '/api/dashboard/overview');
+  const shelves = requests.find((r) => r.url === '/api/shelves');
+  assert.equal(shelves.query.previews, 25, 'shelves ask for card-art previews');
+  assert.equal(overviews().length, 1);
+  assert.ok(view.text().includes('Loading…'));
+
+  collections.activeSelection = { kind: 'collection', collectionId: 'scope-b' };
+  await flush();
+  assert.equal(overviews()[0].signal.aborted, true);
+  assert.equal(overviews()[1].query.collectionId, 'scope-b');
+
+  overviews()[0].resolve(overview('Old scope book'));
+  await flush();
+  assert.ok(!view.text().includes('Old scope book'));
+
+  overviews()[1].reject(new Error('offline'));
+  await flush();
+  assert.ok(view.text().includes('Could not load your dashboard'));
+  view.button('Retry').props.onClick();
+  await flush();
+  assert.equal(overviews()[2].query.collectionId, 'scope-b');
+  overviews()[2].resolve(overview('New scope book'));
+  await flush();
+  assert.ok(view.text().includes('New scope book'), 'Continue reading shows');
+  assert.ok(view.text().includes('42.0%'));
+  assert.ok(!view.text().includes('Could not load your dashboard'));
+
+  // Re-saving Reading keeps the overview; moving a book out reloads it.
+  const card = continueCards.findLast(
+    (c) => c.props.book.id === 'New scope book',
+  );
+  card.change('reading');
+  await flush();
+  assert.equal(overviews().length, 3);
+  card.change('finished');
+  await flush();
+  assert.equal(overviews().length, 4, 'status change reloads the overview');
+  assert.equal(overviews()[3].query.collectionId, 'scope-b');
+});
+
+test('status tiles use Auto art, link to their lists, and save per-tile choices', async (t) => {
+  const { requests, tiles, settings } = harness(t);
+  requests
+    .find((r) => r.url === '/api/dashboard/overview')
+    .resolve(overview('Book'));
+  requests
+    .find((r) => r.url === '/api/shelves')
+    .resolve({
+      data: {
+        shelves: [
           {
-            id: title,
-            title,
-            updatedAt: '2026-01-01',
-            progress: 10,
-            finishedDate: null,
+            id: 's1',
+            name: 'Favs',
+            count: 2,
+            previews: [{ id: 'a', title: 'A' }],
           },
         ],
       },
-    },
-  });
-  assert.equal(requests.length, 1);
-  assert.ok(view.text().includes('Loading…'));
-  view.button('Recently finished').props.onClick();
-  await flush();
-  assert.equal(requests[0].signal.aborted, true);
-  assert.equal(requests[1].query.shelf, 'finished');
-  collections.activeSelection = {
-    kind: 'collection',
-    collectionId: 'new-scope',
-  };
-  await flush();
-  assert.equal(requests[2].query.collectionId, 'new-scope');
-  requests[1].resolve(result('Old scope finished book', 'finished'));
-  await flush();
-  assert.ok(!view.text().includes('Old scope finished book'));
-  requests[2].resolve(result('New scope finished book', 'finished', 12));
-  await flush();
-  assert.ok(view.text().includes('New scope finished book'));
-  view.button('Show more').props.onClick();
-  await flush();
-  assert.equal(requests[3].query.offset, 12);
-  requests[3].reject(new Error('offline'));
-  await flush();
-  assert.ok(view.text().includes('New scope finished book'));
-  assert.ok(view.text().includes('Could not load this shelf'));
-  view.button('Retry').props.onClick();
-  await flush();
-  assert.equal(requests[4].query.offset, 12);
-  requests[4].resolve(result('Next page finished book', 'finished'));
-  await flush();
-  assert.ok(
-    view.text().includes('New scope finished book') &&
-      view.text().includes('Next page finished book'),
-  );
-  assert.equal(view.button('Show more'), undefined);
-  view
-    .all()
-    .find(
-      (element) =>
-        element.tag === 'span' && element.text === 'New scope finished book',
-    )
-    .props.onStatusChange({
-      bookId: 'New scope finished book',
-      status: 'reading',
     });
   await flush();
-  assert.equal(
-    requests.length,
-    5,
-    'status changes retain the loaded shelf without a new request',
-  );
-  assert.ok(view.text().includes('Next page finished book'));
-  assert.ok(!view.text().includes('New scope finished book'));
-  const countValues = view
-    .all()
-    .filter((element) => element.props.class === 'dashboard-count-value')
-    .map((element) => element.text);
-  assert.equal(countValues[1], '2');
-  assert.equal(countValues[3], '18');
-  requests[0].resolve(result('Stale initial reading', 'reading'));
-  await flush();
-  assert.ok(!view.text().includes('Stale initial reading'));
-  view.button('To be read').props.onClick();
-  await flush();
-  assert.equal(requests[5].query.shelf, 'tbr');
-  requests[5].resolve(result('Queued book', 'tbr'));
-  await flush();
-  const queuedBook = view
-    .all()
-    .find(
-      (element) => element.tag === 'span' && element.text === 'Queued book',
-    );
-  assert.equal(queuedBook.props['data-status'], 'to_be_read');
-});
-
-test('status changes preserve shelf contents and adjust a pending page without skipping books', async (t) => {
-  for (const shelf of ['reading', 'finished', 'tbr']) {
-    const status = shelf === 'tbr' ? 'to_be_read' : shelf;
-    const requests = [];
-    const view = mountedComponent('../app/pages/index.vue', {
-      definePageMeta() {},
-      useHead() {},
-      useAuth: () => ({ user: vue.ref({ name: 'Reader' }) }),
-      useCollectionsStore: () => ({
-        collections: [{}],
-        activeSelection: { kind: 'all' },
-      }),
-      useBooksIndexFiltersStore: () => ({ clearAll() {} }),
-      useRoute: () => ({ query: { shelf } }),
-      useRouter: () => ({ replace() {} }),
-      $fetch: (_url, options) =>
-        new Promise((resolve) => requests.push({ ...options, resolve })),
-    });
-    t.after(() => view.app.unmount());
-    const counts = {
-      total: 20,
-      none: 0,
-      to_be_read: 0,
-      reading: 0,
-      finished: 0,
-      dnf: 0,
-      [status]: 20,
-    };
-    const response = (ids, nextOffset, saved = false) => ({
-      success: true,
-      data: {
-        counts: saved ? { ...counts, [status]: 19, none: 1 } : counts,
-        shelf: {
-          kind: shelf,
-          nextOffset,
-          books: ids.map((id) => ({
-            id,
-            title: id,
-            updatedAt: '2026-11-04',
-            progress: 10,
-            finishedDate: shelf === 'finished' ? '2026-11-04' : null,
-          })),
-        },
-      },
-    });
-    assert.equal(requests[0].query.shelf, shelf);
-    if (shelf === 'tbr') {
-      assert.ok(
-        view
-          .all()
-          .some(
-            (element) =>
-              element.tag === 'a' &&
-              element.props.href === '/to-be-read' &&
-              element.props.class === 'dashboard-view-all',
-          ),
-      );
-    }
-    requests[0].resolve(
-      response(
-        Array.from({ length: 12 }, (_, i) => `book-${i}`),
-        12,
-      ),
-    );
-    await flush();
-    const firstBook = view
-      .all()
-      .find((element) => element.tag === 'span' && element.text === 'book-0');
-    assert.equal(
-      firstBook.props['data-status'],
-      status,
-      'shelf status reaches cover badges',
-    );
-    firstBook.props.onStatusChange({ bookId: 'book-0', status });
-    await flush();
-    assert.equal(
-      requests.length,
-      1,
-      'keeping the current status does not reload the shelf',
-    );
-    view.button('Show more').props.onClick();
-    await flush();
-    assert.equal(requests[1].query.offset, 12);
-    firstBook.props.onStatusChange({ bookId: 'book-0', status: null });
-    await flush();
-    assert.equal(
-      requests[1].signal.aborted,
-      true,
-      'pending page used the old offset',
-    );
-    assert.equal(
-      requests[2].query.offset,
-      11,
-      'removed row is subtracted from the next offset',
-    );
-    assert.ok(!view.text().includes('book-0'));
-    assert.ok(
-      view.text().includes('book-11'),
-      'other loaded books remain visible',
-    );
-    requests[1].resolve(response(['stale-page'], null));
-    await flush();
-    assert.ok(!view.text().includes('stale-page'));
-    requests[2].resolve(
-      response(
-        Array.from({ length: 8 }, (_, i) => `book-${i + 12}`),
-        null,
-        true,
-      ),
-    );
-    await flush();
-    assert.equal(
-      view.all().filter((element) => element.props['data-status'] === status)
-        .length,
-      19,
-    );
-    assert.equal(view.button('Show more'), undefined);
-    const countValues = view
-      .all()
-      .filter((element) => element.props.class === 'dashboard-count-value')
-      .map((element) => element.text);
-    assert.equal(
-      countValues[status === 'reading' ? 1 : status === 'to_be_read' ? 2 : 3],
-      '19',
-    );
-    assert.equal(countValues[5], '1');
-    view.app.unmount();
-  }
-});
-
-test('Recently read preserves calendar dates across browser timezones', async (t) => {
-  const previousTimezone = process.env.TZ;
-  t.after(() => {
-    if (previousTimezone === undefined) delete process.env.TZ;
-    else process.env.TZ = previousTimezone;
-  });
-  for (const timezone of ['America/New_York', 'Pacific/Kiritimati']) {
-    process.env.TZ = timezone;
-    const view = mountedComponent('../app/pages/index.vue', {
-      definePageMeta() {},
-      useHead() {},
-      useAuth: () => ({ user: vue.ref({ name: 'Reader' }) }),
-      useCollectionsStore: () => ({
-        collections: [{}],
-        activeSelection: { kind: 'all' },
-      }),
-      useBooksIndexFiltersStore: () => ({ clearAll() {} }),
-      useRoute: () => ({ query: { shelf: 'finished' } }),
-      useRouter: () => ({ replace() {} }),
-      $fetch: async () => ({
-        success: true,
-        data: {
-          counts: {
-            total: 1,
-            reading: 0,
-            finished: 1,
-            none: 0,
-            to_be_read: 0,
-            dnf: 0,
-          },
-          shelf: {
-            kind: 'finished',
-            nextOffset: null,
-            books: [
-              {
-                id: 'date',
-                title: 'Date test',
-                updatedAt: '2026-11-02',
-                finishedDate: '2026-11-02',
-                progress: null,
-              },
-            ],
-          },
-        },
-      }),
-    });
-    t.after(() => view.app.unmount());
-    await flush();
-    assert.match(view.text(), /Read Nov 2, 2026/);
-    view.app.unmount();
-  }
-});
-
-test('dashboard status links preserve filters and target status-filtered books', async () => {
-  const view = await dashboard();
-  const statusLinks = view.links.filter((link) => link.to !== '/books');
+  const tile = (key) => tiles.findLast((entry) => entry.props.listKey === key);
   assert.deepEqual(
-    statusLinks.map((link) => link.to),
-    [
-      '/books?status=reading',
-      '/books?status=to_be_read',
-      '/books?status=finished',
-      '/books?status=dnf',
-      '/books?status=none',
-      '/books?status=reading',
-    ],
+    ['reading', 'to_be_read', 'finished', 'dnf', 'none', 'shelf:s1'].map(
+      (key) => tile(key).props.artStyle,
+    ),
+    ['stack', 'fan', 'shelf', 'stack', 'pile', 'fan'],
   );
-  for (const link of statusLinks) await link.onClick?.();
-  assert.equal(JSON.stringify(view.filters.$state), view.initialFilters);
+  assert.equal(tile('to_be_read').props.to, '/to-be-read');
+  assert.equal(tile('finished').props.to, '/books?status=finished');
+  assert.equal(tile('shelf:s1').props.to, '/shelves/s1');
+
+  tile('to_be_read').setArt('wall');
+  await flush();
+  assert.equal(tile('to_be_read').props.artStyle, 'wall');
+  assert.equal(tile('to_be_read').props.overridden, true);
+  tile('to_be_read').setArt(null);
+  await flush();
+  assert.equal(tile('to_be_read').props.artStyle, 'fan', 'reset to Auto');
+  assert.deepEqual(settings.activeSettings.dashboard.cardArt.overrides, {});
+});
+
+test('the All books card switches between Wall and Pile through settings', async (t) => {
+  const { settings } = harness(t);
+  await flush();
+  const card = libraryCards.at(-1);
+  assert.equal(card.props.libraryArt, 'wall', 'Wall is the default');
+  assert.equal(card.props.showStatusBar, true);
+  card.setArt('pile');
+  await flush();
+  assert.equal(settings.activeSettings.dashboard.libraryArt, 'pile');
+  assert.equal(card.props.libraryArt, 'pile');
 });

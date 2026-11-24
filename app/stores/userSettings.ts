@@ -15,6 +15,11 @@ import {
   normalizeAppearanceContrast,
 } from '~/utils/appearanceContrast';
 import {
+  defaultDashboardSettings,
+  normalizeDashboardSettings,
+  type DashboardSettings,
+} from '~/utils/dashboardArt';
+import {
   defaultThemePreference,
   normalizeThemePreference,
   type ThemePreference,
@@ -112,6 +117,11 @@ export interface BaseUserSettings {
   };
 
   /**
+   * Dashboard: the collection status bar and each tile's card art.
+   */
+  dashboard: DashboardSettings;
+
+  /**
    * Reader settings
    */
   reader: {
@@ -177,6 +187,7 @@ function getBaseDefaults(): BaseUserSettings {
     bookDelete: {
       defaultMode: 'everything',
     },
+    dashboard: defaultDashboardSettings(),
     reader: {
       fontSize: 100,
       lineHeight: 120,
@@ -295,6 +306,7 @@ function normalizeProfileSettings(
     Object.values(settings.themePreference).includes('custom')
       ? { customTheme: normalizeCustomTheme(settings.customTheme) }
       : {}),
+    dashboard: normalizeDashboardSettings(settings.dashboard),
     reader: {
       ...settings.reader,
       theme: normalizeReaderTheme(settings.reader?.theme),

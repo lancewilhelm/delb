@@ -15,6 +15,10 @@ import {
   defaultThemePreference,
   normalizeThemePreference,
 } from '../utils/themePreference';
+import {
+  defaultDashboardSettings,
+  normalizeDashboardSettings,
+} from '../utils/dashboardArt';
 
 const pref = (fixed: string) => ({
   ...defaultThemePreference(),
@@ -36,7 +40,8 @@ function createStore(
     .replace(/import [\s\S]*?from '~\/utils\/bookFields';/, '')
     .replace(/import [\s\S]*?from '~\/utils\/customTheme';/, '')
     .replace(/import [\s\S]*?from '~\/utils\/appearanceContrast';/, '')
-    .replace(/import [\s\S]*?from '~\/utils\/themePreference';/, '');
+    .replace(/import [\s\S]*?from '~\/utils\/themePreference';/, '')
+    .replace(/import [\s\S]*?from '~\/utils\/dashboardArt';/, '');
   const code = transformSync(source, { loader: 'ts', format: 'cjs' }).code;
   const module = { exports: {} as typeof import('./userSettings') };
   const session = ref<{ id: string } | null>({ id: 'first' });
@@ -53,6 +58,8 @@ function createStore(
     normalizeAppearanceContrast,
     defaultThemePreference,
     normalizeThemePreference,
+    defaultDashboardSettings,
+    normalizeDashboardSettings,
     Date: class extends Date {
       static override now() {
         return now();

@@ -1,0 +1,243 @@
+import type {
+  DashboardCounts,
+  DashboardListKey,
+} from '#shared/types/dashboard';
+
+/** Card art styles a dashboard tile can use. */
+export const CARD_ART_STYLES = [
+  'collage',
+  'fan',
+  'stack',
+  'shelf',
+  'pile',
+  'wall',
+] as const;
+export type CardArtStyle = (typeof CARD_ART_STYLES)[number];
+export type CardArtDefault = 'auto' | CardArtStyle;
+
+export const CARD_ART_LABELS: Record<CardArtStyle, string> = {
+  collage: 'Collage',
+  fan: 'Fan',
+  stack: 'Stack',
+  shelf: 'Shelf',
+  pile: 'Pile',
+  wall: 'Wall',
+};
+
+/** "Auto" gives each list its own signature style. */
+export const AUTO_CARD_ART: Record<DashboardListKey | 'shelf', CardArtStyle> = {
+  reading: 'stack',
+  to_be_read: 'fan',
+  finished: 'shelf',
+  dnf: 'stack',
+  none: 'pile',
+  shelf: 'fan',
+};
+
+/** Art styles for the All books card. */
+export const LIBRARY_ART_STYLES = ['wall', 'pile'] as const;
+export type LibraryArtStyle = (typeof LIBRARY_ART_STYLES)[number];
+
+export type DashboardSettings = {
+  showStatusBar: boolean;
+  /** All books card art. */
+  libraryArt: LibraryArtStyle;
+  cardArt: {
+    default: CardArtDefault;
+    /** Per-tile choices keyed by list key (`reading`, `shelf:<id>`, …). */
+    overrides: Record<string, CardArtStyle>;
+  };
+};
+
+const MAX_CARD_ART_OVERRIDES = 200;
+
+export function defaultDashboardSettings(): DashboardSettings {
+  return {
+    showStatusBar: true,
+    libraryArt: 'wall',
+    cardArt: { default: 'auto', overrides: {} },
+  };
+}
+
+export function isCardArtStyle(value: unknown): value is CardArtStyle {
+  return (
+    typeof value === 'string' &&
+    (CARD_ART_STYLES as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * Validates stored dashboard settings. Override entries that are not a known
+ * style (including `null`, which the tile menu writes to reset a tile) are dropped.
+ */
+export function normalizeDashboardSettings(value: unknown): DashboardSettings {
+  const defaults = defaultDashboardSettings();
+  if (!value || typeof value !== 'object') return defaults;
+  const source = value as Record<string, unknown>;
+  const cardArt =
+    source.cardArt && typeof source.cardArt === 'object'
+      ? (source.cardArt as Record<string, unknown>)
+      : {};
+  const rawDefault = cardArt.default;
+  const overrides: Record<string, CardArtStyle> = {};
+  if (cardArt.overrides && typeof cardArt.overrides === 'object') {
+    for (const [key, style] of Object.entries(
+      cardArt.overrides as Record<string, unknown>,
+    )) {
+      if (Object.keys(overrides).length >= MAX_CARD_ART_OVERRIDES) break;
+      if (key && key.length <= 200 && isCardArtStyle(style))
+        overrides[key] = style;
+    }
+  }
+  return {
+    showStatusBar:
+      typeof source.showStatusBar === 'boolean'
+        ? source.showStatusBar
+        : defaults.showStatusBar,
+    libraryArt: (LIBRARY_ART_STYLES as readonly unknown[]).includes(
+      source.libraryArt,
+    )
+      ? (source.libraryArt as LibraryArtStyle)
+      : defaults.libraryArt,
+    cardArt: {
+      default:
+        rawDefault === 'auto' || isCardArtStyle(rawDefault)
+          ? rawDefault
+          : 'auto',
+      overrides,
+    },
+  };
+}
+
+/** The style a tile should use: its override, else the default, else Auto. */
+export function resolveCardArt(
+  listKey: string,
+  kind: DashboardListKey | 'shelf',
+  settings: DashboardSettings['cardArt'],
+): CardArtStyle {
+  const override = settings.overrides[listKey];
+  if (override) return override;
+  return settings.default === 'auto' ? AUTO_CARD_ART[kind] : settings.default;
+}
+
+/** Wall needs four distinct covers so repeats never touch; fewer show as Fan. */
+export function displayedCardArt(
+  style: CardArtStyle,
+  coverCount: number,
+): CardArtStyle {
+  return style === 'wall' && coverCount < 4 ? 'fan' : style;
+}
+
+/**
+ * Fills a `cols`-wide grid with `slots` covers. With fewer covers than slots,
+ * the column + row×2 stride guarantees (for 4+ covers) that no cover touches a
+ * copy of itself beside, above, or diagonally.
+ */
+export function wallSlots<T>(items: T[], cols: number, slots: number): T[] {
+  if (!items.length) return [];
+  if (items.length >= slots) return items.slice(0, slots);
+  return Array.from(
+    { length: slots },
+    (_, i) => items[((i % cols) + Math.floor(i / cols) * 2) % items.length]!,
+  );
+}
+
+export type HeroArtMode = 'wall' | 'wall-small' | 'spotlight' | 'empty';
+
+/** How the All books card draws its art for a given number of covers. */
+export function heroArtMode(coverCount: number): HeroArtMode {
+  if (coverCount >= 16) return 'wall';
+  if (coverCount >= 4) return 'wall-small';
+  if (coverCount >= 1) return 'spotlight';
+  return 'empty';
+}
+
+export function hashString(value: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+/** Small seeded PRNG (mulberry32): same seed, same sequence. */
+export function seededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export type PilePlacement = {
+  /** Left edge, as a fraction of the tile width. */
+  x: number;
+  /** Top edge, as a fraction of the tile height. */
+  y: number;
+  /** Rotation in degrees. */
+  r: number;
+};
+
+/** Part of a pile's box the books may occupy, as fractions of its size. */
+export type PileRegion = { x0: number; x1: number; y0: number; y1: number };
+export const FULL_PILE_REGION: PileRegion = { x0: 0, x1: 1, y0: 0.1, y1: 1 };
+
+/**
+ * Seeded scatter for a pile: the same seed and books give the same layout.
+ * Callers add a per-page-load value to the seed for a fresh throw each visit.
+ * `aspect` is box width ÷ height; `coverHeight` is a fraction of box height.
+ */
+export function pileLayout(
+  ids: string[],
+  seedKey: string,
+  options: {
+    aspect?: number;
+    coverHeight?: number;
+    region?: PileRegion;
+  } = {},
+): PilePlacement[] {
+  const { aspect = 1, coverHeight = 0.5, region = FULL_PILE_REGION } = options;
+  const random = seededRandom(hashString(`${seedKey}:${ids.join(',')}`));
+  const coverWidth = (coverHeight * 2) / 3 / aspect;
+  const xMin = region.x0 - 0.03;
+  const xMax = Math.max(xMin, region.x1 + 0.03 - coverWidth);
+  const yMin = region.y0 + 0.02;
+  const yMax = Math.max(yMin, region.y1 - coverHeight * 0.95);
+  return ids.map(() => ({
+    x: xMin + random() * (xMax - xMin),
+    y: yMin + random() * (yMax - yMin),
+    r: (random() - 0.5) * 44,
+  }));
+}
+
+export const STATUS_ORDER: DashboardListKey[] = [
+  'reading',
+  'to_be_read',
+  'finished',
+  'dnf',
+  'none',
+];
+
+export const STATUS_LABELS: Record<DashboardListKey, string> = {
+  reading: 'Reading',
+  to_be_read: 'To be read',
+  finished: 'Finished',
+  dnf: 'DNF',
+  none: 'No status',
+};
+
+/** Non-empty status segments for the collection status bar, as percentages. */
+export function statusSegments(
+  counts: DashboardCounts,
+): { key: DashboardListKey; count: number; percent: number }[] {
+  if (!counts.total) return [];
+  return STATUS_ORDER.filter((key) => counts[key] > 0).map((key) => ({
+    key,
+    count: counts[key],
+    percent: (counts[key] / counts.total) * 100,
+  }));
+}

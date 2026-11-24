@@ -28,3 +28,16 @@ export type DashboardData = {
     nextOffset: number | null;
   };
 };
+
+/** Status lists previewed on the dashboard overview. */
+export type DashboardListKey =
+  'reading' | 'to_be_read' | 'finished' | 'dnf' | 'none';
+
+/** `GET /api/dashboard/overview` response data. */
+export type DashboardOverview = {
+  counts: DashboardCounts;
+  /** Most recently added visible books, newest first (cover wall). */
+  recent: DashboardBook[];
+  /** Up to 25 books per status list, in that list's order. */
+  lists: Record<DashboardListKey, DashboardBook[]>;
+};

@@ -16,6 +16,10 @@ import {
   defaultThemePreference,
   normalizeThemePreference,
 } from '../utils/themePreference';
+import {
+  defaultDashboardSettings,
+  normalizeDashboardSettings,
+} from '../utils/dashboardArt';
 
 // Supply Nuxt auto-imports to exercise the actual store without a Nuxt server.
 function createStore() {
@@ -26,7 +30,8 @@ function createStore() {
     .replace(/import [\s\S]*?from '~\/utils\/bookFields';/, '')
     .replace(/import [\s\S]*?from '~\/utils\/customTheme';/, '')
     .replace(/import [\s\S]*?from '~\/utils\/appearanceContrast';/, '')
-    .replace(/import [\s\S]*?from '~\/utils\/themePreference';/, '');
+    .replace(/import [\s\S]*?from '~\/utils\/themePreference';/, '')
+    .replace(/import [\s\S]*?from '~\/utils\/dashboardArt';/, '');
   const code = transformSync(source, { loader: 'ts', format: 'cjs' }).code;
   const mobile = ref(false);
   const module = {
@@ -45,6 +50,8 @@ function createStore() {
     normalizeAppearanceContrast,
     defaultThemePreference,
     normalizeThemePreference,
+    defaultDashboardSettings,
+    normalizeDashboardSettings,
     useIsMobileDevice: () => mobile,
     useAuth: () => ({ session: ref(null) }),
     useDebounceFn: () => () => {},

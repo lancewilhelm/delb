@@ -24,9 +24,9 @@ Global search uses book visibility across your accessible collections. Do not as
 
 Open **Filters** and enter text in **Filter by title** to narrow the current Books view as you type. The title filter works with the selected collection and other filters in both grid and list views. Clear the text to restore those results. While the title filter is active, select books individually for bulk actions.
 
-Open the Books filter controls to narrow by reading status, date added, file presence, or physical and audiobook copy marks. Status filters use your personal status, including **No status**. Copy filters use shared marks; **Not marked** does not mean no copy exists. Dashboard status totals also link to filtered Books views.
+Open the Books filter controls to narrow by reading status, date added, file presence, or physical and audiobook copy marks. Status filters use your personal status, including **No status**. Copy filters use shared marks; **Not marked** does not mean no copy exists. The dashboard's status links and tiles also open filtered Books views.
 
-Select **All books** on the dashboard to clear status, date-added, file-presence, and copy filters. Your sort order, grid or list choice, view settings, and selected collection stay the same.
+Select **Browse all books** on the dashboard to clear status, date-added, file-presence, and copy filters. Your sort order, grid or list choice, view settings, and selected collection stay the same.
 
 Clear applied filters when a book seems to be missing. Then check the collection picker. Empty results can mean no matching books, an empty collection, or lost access to a shared collection.
 

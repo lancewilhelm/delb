@@ -19,6 +19,13 @@ import {
   type BookshelfTexture,
 } from '~/stores/userSettings';
 import {
+  CARD_ART_LABELS,
+  CARD_ART_STYLES,
+  type CardArtDefault,
+  type LibraryArtStyle,
+} from '~/utils/dashboardArt';
+import type { BaseUserSettings } from '~/stores/userSettings';
+import {
   DEFAULT_APPEARANCE_CONTRAST,
   MIN_APPEARANCE_CONTRAST,
   MAX_APPEARANCE_CONTRAST,
@@ -42,6 +49,41 @@ const bookshelfColor = userSettingsStore.settingRef<string>(
 const bookshelfTexture = userSettingsStore.settingRef<BookshelfTexture>(
   'bookshelfStyle.texture',
 );
+
+// ------------------------------
+// Dashboard
+// ------------------------------
+const dashboardStatusBar = userSettingsStore.settingRef<boolean>(
+  'dashboard.showStatusBar',
+);
+const dashboardLibraryArt = userSettingsStore.settingRef<LibraryArtStyle>(
+  'dashboard.libraryArt',
+);
+const dashboardCardArt = userSettingsStore.settingRef<CardArtDefault>(
+  'dashboard.cardArt.default',
+);
+const cardArtOptions: { value: CardArtDefault; label: string }[] = [
+  { value: 'auto', label: 'Auto' },
+  ...CARD_ART_STYLES.map((style) => ({
+    value: style,
+    label: CARD_ART_LABELS[style],
+  })),
+];
+const cardArtOverrideCount = computed(
+  () =>
+    Object.keys(userSettingsStore.activeSettings.dashboard.cardArt.overrides)
+      .length,
+);
+function resetCardArtOverrides() {
+  const overrides = Object.fromEntries(
+    Object.keys(
+      userSettingsStore.activeSettings.dashboard.cardArt.overrides,
+    ).map((key) => [key, null]),
+  );
+  void userSettingsStore.updateSettings({
+    dashboard: { cardArt: { overrides } },
+  } as unknown as Partial<BaseUserSettings>);
+}
 
 // ------------------------------
 // Mobile settings
@@ -292,6 +334,81 @@ function handleSortChange(target: string) {
           "
         >
           Reset bookshelf appearance
+        </button>
+      </div>
+    </SettingsUIGroup>
+    <SettingsUIGroup
+      title="Dashboard"
+      icon="lucide:layout-dashboard"
+      description="choose how the dashboard summarizes your library"
+    >
+      <SettingsUIToggle
+        v-model="dashboardStatusBar"
+        title="Status bar"
+        description="Show a color-coded bar of reading statuses on the All books card."
+      />
+      <div class="bookshelf-appearance">
+        <div class="bookshelf-texture-choice">
+          <span
+            ><strong>All books art</strong
+            ><small
+              >A tilted wall of recent covers, or a pile you can pick up and
+              toss.</small
+            ></span
+          >
+          <div
+            class="bookshelf-texture-options"
+            role="group"
+            aria-label="All books art"
+          >
+            <button
+              type="button"
+              :aria-pressed="dashboardLibraryArt === 'wall'"
+              @click="dashboardLibraryArt = 'wall'"
+            >
+              Wall
+            </button>
+            <button
+              type="button"
+              :aria-pressed="dashboardLibraryArt === 'pile'"
+              @click="dashboardLibraryArt = 'pile'"
+            >
+              Pile
+            </button>
+          </div>
+        </div>
+        <div class="bookshelf-texture-choice">
+          <span
+            ><strong>Card art</strong
+            ><small
+              >The default art for status and shelf cards. Auto gives each list
+              its own style. Change a single card from its ⋯ menu.</small
+            ></span
+          >
+          <div
+            class="bookshelf-texture-options flex-wrap"
+            role="group"
+            aria-label="Default card art"
+          >
+            <button
+              v-for="option in cardArtOptions"
+              :key="option.value"
+              type="button"
+              :aria-pressed="dashboardCardArt === option.value"
+              @click="dashboardCardArt = option.value"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </div>
+        <button
+          v-if="cardArtOverrideCount"
+          type="button"
+          class="bookshelf-reset"
+          @click="resetCardArtOverrides"
+        >
+          Reset {{ cardArtOverrideCount }}
+          {{ cardArtOverrideCount === 1 ? 'card' : 'cards' }} to the default
         </button>
       </div>
     </SettingsUIGroup>

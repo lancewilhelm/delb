@@ -606,6 +606,64 @@ func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
 	// Unknown / inaccessible collection returns 0 for all counts including to_be_read.
 	assertDashboard("/api/dashboard?shelf=tbr&collectionId=nonexistent-collection", 0, 0, 0, 0, 0)
 
+	// Overview: counts, the recent-cover wall and every status preview share one scope.
+	assertOverview := func(path string, wantTotal, wantRecent int, wantLists map[string][]string) {
+		t.Helper()
+		r, body := doJSON(http.MethodGet, path, nil)
+		if r.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s status = %d body = %v", path, r.StatusCode, body)
+		}
+		if cc := r.Header.Get("Cache-Control"); cc != "private, no-store" {
+			t.Fatalf("GET %s Cache-Control = %q", path, cc)
+		}
+		data := body["data"].(map[string]any)
+		if got := int(data["counts"].(map[string]any)["total"].(float64)); got != wantTotal {
+			t.Fatalf("GET %s total = %d, want %d", path, got, wantTotal)
+		}
+		if got := len(data["recent"].([]any)); got != wantRecent {
+			t.Fatalf("GET %s recent len = %d, want %d", path, got, wantRecent)
+		}
+		lists := data["lists"].(map[string]any)
+		for _, key := range []string{"reading", "to_be_read", "finished", "dnf", "none"} {
+			raw, ok := lists[key].([]any)
+			if !ok {
+				t.Fatalf("GET %s lists.%s missing or not an array: %v", path, key, lists[key])
+			}
+			got := map[string]bool{}
+			for _, entry := range raw {
+				got[entry.(map[string]any)["title"].(string)] = true
+			}
+			want := wantLists[key]
+			if len(got) != len(want) {
+				t.Fatalf("GET %s lists.%s = %v, want %v", path, key, got, want)
+			}
+			for _, title := range want {
+				if !got[title] {
+					t.Fatalf("GET %s lists.%s missing %q (got %v)", path, key, title, got)
+				}
+			}
+		}
+	}
+	assertOverview("/api/dashboard/overview", 5, 5, map[string][]string{
+		"reading":    {"A Reading"},
+		"to_be_read": {"A TBR 1", "A TBR 2", "B TBR 1"},
+		"finished":   {"B Finished"},
+	})
+	assertOverview("/api/dashboard/overview?collectionId="+colA, 3, 3, map[string][]string{
+		"reading":    {"A Reading"},
+		"to_be_read": {"A TBR 1", "A TBR 2"},
+	})
+	assertOverview("/api/dashboard/overview?collectionId=nonexistent-collection", 0, 0, map[string][]string{})
+	anonReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/dashboard/overview", nil)
+	anonResp, err := http.DefaultClient.Do(anonReq)
+	if err != nil {
+		t.Fatalf("anonymous overview: %v", err)
+	}
+	anonResp.Body.Close()
+	if anonResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anonymous overview status = %d, want 401", anonResp.StatusCode)
+	}
+
 	// Global ranked TBR queue endpoint (/api/tbr) still returns all 3 accessible TBR books.
 	tbrResp, tbrBody := doJSON(http.MethodGet, "/api/tbr", nil)
 	if tbrResp.StatusCode != http.StatusOK {

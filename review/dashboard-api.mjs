@@ -239,6 +239,42 @@ try {
   );
   assert.equal(other.data.data.counts.total, 3);
   assert.equal(other.data.data.counts.none, 3);
+  assert.equal((await request('/api/dashboard/overview')).status, 401);
+  const overview = await request('/api/dashboard/overview', a.cookie);
+  assert.equal(overview.status, 200);
+  assert.equal(overview.headers.get('cache-control'), 'private, no-store');
+  assert.deepEqual(overview.data.data.counts, first.data.data.counts);
+  assert.equal(overview.data.data.recent.length, 5);
+  assert.ok(!overview.data.data.recent.some((book) => book.id === hidden));
+  assert.deepEqual(
+    overview.data.data.lists.reading.map((book) => [book.id, book.progress]),
+    [[reading, 42]],
+  );
+  assert.deepEqual(
+    overview.data.data.lists.finished.map((book) => book.id),
+    [newer, older, undated],
+    'overview Finished keeps undated books, last',
+  );
+  assert.deepEqual(
+    overview.data.data.lists.to_be_read.map((book) => book.id),
+    [queued],
+  );
+  const overviewScoped = await request(
+    `/api/dashboard/overview?collectionId=${shared}`,
+    a.cookie,
+  );
+  assert.equal(overviewScoped.data.data.counts.total, 2);
+  assert.deepEqual(
+    overviewScoped.data.data.lists.finished.map((book) => book.id),
+    [newer],
+  );
+  const overviewOther = await request('/api/dashboard/overview', b.cookie);
+  assert.deepEqual(
+    overviewOther.data.data.lists.finished,
+    [],
+    'overview lists use only the reader’s own statuses',
+  );
+  assert.equal(overviewOther.data.data.lists.none.length, 3);
   await db.execute({
     sql: 'DELETE FROM collection_members WHERE collection_id=? AND user_id=?',
     args: [shared, b.id],
@@ -258,7 +294,7 @@ try {
   );
   assert.ok(!recent.data.data.shelf.books.some((book) => book.id === hidden));
   console.log(
-    'PASS dashboard API: auth, validation, collection visibility, finish-date order, private reading history, revoked access, and deferred favorites',
+    'PASS dashboard API: auth, validation, collection visibility, finish-date order, overview lists, private reading history, revoked access, and deferred favorites',
   );
 } finally {
   db.close();

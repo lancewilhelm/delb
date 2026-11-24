@@ -1,43 +1,34 @@
-import type {
-  DashboardCounts,
-  DashboardData,
-  DashboardShelf,
-} from '#shared/types/dashboard';
+import type { DashboardOverview } from '#shared/types/dashboard';
 
-const STORAGE_PREFIX = 'delb.dashboardCache.v1:';
-const MAX_ENTRIES = 24;
-
-type CachedDashboardEntry = {
-  counts: DashboardCounts;
-  shelf: DashboardData['shelf'];
-  cachedAt: number;
+/** A personal shelf as the dashboard shows it (`GET /api/shelves`). */
+export type DashboardShelfSummary = {
+  id: string;
+  name: string;
+  count: number;
+  previews: { id: string; title: string }[];
 };
 
-const memoryCache = new Map<string, CachedDashboardEntry>();
-const countsCache = new Map<string, DashboardCounts>();
+const STORAGE_PREFIX = 'delb.dashboardCache.v2:';
+const LEGACY_PREFIXES = ['delb.dashboardCache.v1:'];
+const MAX_ENTRIES = 24;
 
-function cacheKey(userId: string, scope: string, shelf: DashboardShelf) {
-  return `${userId}::${scope || 'all'}::${shelf}`;
-}
+type CacheEntry<T> = { data: T; cachedAt: number };
 
-function countsKey(userId: string, scope: string) {
-  return `${userId}::${scope || 'all'}`;
-}
+const memoryCache = new Map<string, CacheEntry<unknown>>();
 
-function readStoredEntry(key: string): CachedDashboardEntry | null {
+function readStored<T>(key: string): CacheEntry<T> | null {
   if (typeof localStorage === 'undefined') return null;
   try {
     const raw = localStorage.getItem(`${STORAGE_PREFIX}${key}`);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as CachedDashboardEntry | null;
-    if (!parsed || !parsed.counts || !parsed.shelf) return null;
-    return parsed;
+    const parsed = JSON.parse(raw) as CacheEntry<T> | null;
+    return parsed && parsed.data ? parsed : null;
   } catch {
     return null;
   }
 }
 
-function writeStoredEntry(key: string, entry: CachedDashboardEntry) {
+function writeStored(key: string, entry: CacheEntry<unknown>) {
   if (typeof localStorage === 'undefined') return;
   try {
     localStorage.setItem(`${STORAGE_PREFIX}${key}`, JSON.stringify(entry));
@@ -46,101 +37,87 @@ function writeStoredEntry(key: string, entry: CachedDashboardEntry) {
   }
 }
 
-export function readDashboardCache(
-  userId: string | undefined | null,
-  scope: string,
-  shelf: DashboardShelf,
-): {
-  counts: DashboardCounts | null;
-  shelf: DashboardData['shelf'] | null;
-} {
-  const uid = userId?.trim();
-  if (!uid) return { counts: null, shelf: null };
-
-  const key = cacheKey(uid, scope, shelf);
-  let entry = memoryCache.get(key) ?? null;
+function read<T>(key: string): T | null {
+  let entry = memoryCache.get(key) as CacheEntry<T> | undefined;
   if (!entry) {
-    entry = readStoredEntry(key);
-    if (entry) {
-      memoryCache.set(key, entry);
-      countsCache.set(countsKey(uid, scope), entry.counts);
-    }
+    const stored = readStored<T>(key);
+    if (!stored) return null;
+    entry = stored;
+    memoryCache.set(key, entry);
   }
-  if (entry) {
-    return {
-      counts: { ...entry.counts },
-      shelf: {
-        ...entry.shelf,
-        books: entry.shelf.books.map((book) => ({ ...book })),
-      },
-    };
-  }
-
-  // Fallback: even when switching to a shelf tab we haven't opened yet,
-  // reuse the scope's already-known counts so the stat bar never flashes "—".
-  const existingCounts = countsCache.get(countsKey(uid, scope));
-  if (existingCounts) {
-    return { counts: { ...existingCounts }, shelf: null };
-  }
-
-  // Also check other shelf entries in localStorage for this user+scope.
-  for (const fallbackShelf of ['reading', 'finished', 'tbr'] as const) {
-    if (fallbackShelf === shelf) continue;
-    const other = readStoredEntry(cacheKey(uid, scope, fallbackShelf));
-    if (other) {
-      countsCache.set(countsKey(uid, scope), other.counts);
-      return { counts: { ...other.counts }, shelf: null };
-    }
-  }
-
-  return { counts: null, shelf: null };
+  return structuredClone(entry.data);
 }
 
-export function writeDashboardCache(
-  userId: string | undefined | null,
-  scope: string,
-  shelf: DashboardShelf,
-  data: DashboardData,
-) {
-  const uid = userId?.trim();
-  if (!uid) return;
-
-  const entry: CachedDashboardEntry = {
-    counts: { ...data.counts },
-    shelf: {
-      ...data.shelf,
-      books: data.shelf.books.map((book) => ({ ...book })),
-    },
-    cachedAt: Date.now(),
-  };
-
-  const key = cacheKey(uid, scope, shelf);
-  if (memoryCache.has(key)) memoryCache.delete(key);
+function write<T>(key: string, data: T) {
+  const entry = { data: structuredClone(data), cachedAt: Date.now() };
+  memoryCache.delete(key);
   memoryCache.set(key, entry);
   while (memoryCache.size > MAX_ENTRIES) {
     const oldest = memoryCache.keys().next().value;
     if (oldest === undefined) break;
     memoryCache.delete(oldest);
   }
-  countsCache.set(countsKey(uid, scope), entry.counts);
-  writeStoredEntry(key, entry);
+  writeStored(key, entry);
+}
+
+const overviewKey = (userId: string, scope: string) =>
+  `${userId}::${scope || 'all'}::overview`;
+const shelvesKey = (userId: string) => `${userId}::shelves`;
+
+/**
+ * Last dashboard overview for this user and collection scope, so returning to
+ * the dashboard paints immediately while fresh data loads.
+ */
+export function readDashboardCache(
+  userId: string | undefined | null,
+  scope: string,
+): DashboardOverview | null {
+  const uid = userId?.trim();
+  return uid ? read<DashboardOverview>(overviewKey(uid, scope)) : null;
+}
+
+export function writeDashboardCache(
+  userId: string | undefined | null,
+  scope: string,
+  data: DashboardOverview,
+) {
+  const uid = userId?.trim();
+  if (uid) write(overviewKey(uid, scope), data);
+}
+
+/** Personal shelves are not collection-scoped: one entry per user. */
+export function readShelvesCache(
+  userId: string | undefined | null,
+): DashboardShelfSummary[] | null {
+  const uid = userId?.trim();
+  return uid ? read<DashboardShelfSummary[]>(shelvesKey(uid)) : null;
+}
+
+export function writeShelvesCache(
+  userId: string | undefined | null,
+  shelves: DashboardShelfSummary[],
+) {
+  const uid = userId?.trim();
+  if (uid) write(shelvesKey(uid), shelves);
 }
 
 export function clearDashboardCache() {
   memoryCache.clear();
-  countsCache.clear();
   if (typeof localStorage === 'undefined') return;
   try {
     const keysToDelete: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && k.startsWith(STORAGE_PREFIX)) {
+      if (
+        k &&
+        [STORAGE_PREFIX, ...LEGACY_PREFIXES].some((prefix) =>
+          k.startsWith(prefix),
+        )
+      ) {
         keysToDelete.push(k);
       }
     }
-    for (const k of keysToDelete) {
-      localStorage.removeItem(k);
-    }
+    for (const k of keysToDelete) localStorage.removeItem(k);
   } catch {
     // Ignore restricted storage contexts.
   }

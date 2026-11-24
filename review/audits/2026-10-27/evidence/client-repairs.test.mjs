@@ -3,6 +3,10 @@ import {
   normalizeBookFields,
 } from '../../../../app/utils/bookFields.ts';
 import { test } from 'node:test';
+import {
+  defaultDashboardSettings,
+  normalizeDashboardSettings,
+} from '../../../../app/utils/dashboardArt.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -119,6 +123,8 @@ test('settings pull keeps local edits while adopting unchanged remote fields', a
     normalizeThemePreference,
     DEFAULT_APPEARANCE_CONTRAST,
     normalizeAppearanceContrast,
+    defaultDashboardSettings,
+    normalizeDashboardSettings,
     console,
   };
   vm.createContext(c);
