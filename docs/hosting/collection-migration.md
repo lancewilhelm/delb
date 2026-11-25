@@ -6,7 +6,7 @@ Existing installations require an administrative data migration after the commit
 
 1. Stop the previous Delb version and its background ingestion.
 2. Back up the database and managed library together, including operation journals. Retain the old application version and configuration.
-3. Apply committed SQL migrations through your normal deployment procedure. Containers apply them at startup. A local checkout uses `pnpm db:migrate`.
+3. Apply committed SQL migrations through your normal deployment procedure. Containers apply them at startup. The standalone binary applies them at startup, or run `delb --migrate-only` to apply them and exit.
 4. Start the new version and sign in as a system administrator or owner.
 5. Open **Settings → Admin → Collections**.
 

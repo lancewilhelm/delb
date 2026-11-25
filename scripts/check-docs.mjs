@@ -55,6 +55,8 @@ function headingAnchors(markdown) {
 const files = [
   path.join(root, 'README.md'),
   path.join(root, 'GLOSSARY.md'),
+  path.join(root, 'CONTRIBUTING.md'),
+  path.join(root, 'AGENTS.md'),
   ...(await markdownFiles(path.join(root, 'docs'))),
 ];
 const failures = [];
