@@ -637,6 +637,8 @@ func (s *Service) handleListBooks(w http.ResponseWriter, r *http.Request) {
 
 	addedStartSec := parseYMDLocalBounds(q.Get("addedStart"), false)
 	addedEndSec := parseYMDLocalBounds(q.Get("addedEnd"), true)
+	finishedStartSec := parseYMDLocalBounds(q.Get("finishedStart"), false)
+	finishedEndSec := parseYMDLocalBounds(q.Get("finishedEnd"), true)
 
 	if shelfID != "" {
 		var existing string
@@ -696,6 +698,11 @@ func (s *Service) handleListBooks(w http.ResponseWriter, r *http.Request) {
 		joins.WriteString(" LEFT JOIN user_book_status ubs ON ubs.book_id = b.id AND ubs.user_id = ? ")
 		args = append(args, userID)
 	}
+	hasFinishedFilter := finishedStartSec != nil || finishedEndSec != nil
+	if sortKey == SortDateFinished || hasFinishedFilter {
+		joins.WriteString(FinishedJoinSQL)
+		args = append(args, userID)
+	}
 
 	where := make([]string, 0, 12)
 	where = append(where, "cb.collection_id IN ("+makePlaceholders(len(targetCollectionIDs))+")")
@@ -742,6 +749,15 @@ func (s *Service) handleListBooks(w http.ResponseWriter, r *http.Request) {
 	if addedEndSec != nil {
 		where = append(where, "CAST(b.created_at AS INTEGER) <= ?")
 		args = append(args, *addedEndSec)
+	}
+	// A finish-date range matches only finished books with a date in range.
+	if finishedStartSec != nil {
+		where = append(where, "fin.finished_at >= ?")
+		args = append(args, *finishedStartSec)
+	}
+	if finishedEndSec != nil {
+		where = append(where, "fin.finished_at <= ?")
+		args = append(args, *finishedEndSec)
 	}
 	if filesFilter == "has" {
 		where = append(where, "EXISTS (SELECT 1 FROM book_files bf WHERE bf.book_id = b.id)")
@@ -798,7 +814,8 @@ func (s *Service) handleListBooks(w http.ResponseWriter, r *http.Request) {
 	var nextCursor *string
 	if hasMore && len(page) > 0 {
 		last := page[len(page)-1]
-		nextCursor = NextBookCursor(sortKey, true, last.ID, last.CreatedAt, last.SortTitle, nullInt64Ptr(last.PublishedAt), nullInt64Ptr(last.Pages))
+		nextCursor = NextBookCursor(sortKey, true, last.ID, last.CreatedAt, last.SortTitle, nullInt64Ptr(last.PublishedAt), nullInt64Ptr(last.Pages),
+			finishedAtForCursor(r.Context(), s.db, sortKey, userID, last.ID))
 	}
 
 	if idsOnly {

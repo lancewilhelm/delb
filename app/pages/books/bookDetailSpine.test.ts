@@ -183,6 +183,7 @@ function mountBookDetail(opts: {
     ),
     '~/components/HoverScrollText.vue': stubModule('hover-scroll-text'),
     '~/components/ModalWindow.vue': stubModule('modal-window'),
+    '~/components/ui/UiDateInput.vue': stubModule('ui-date-input'),
     '~/components/ViewSelectorDropdown.vue': stubModule(
       'view-selector-dropdown',
     ),

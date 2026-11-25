@@ -24,6 +24,7 @@ import BooksBookReviewEditor from '~/components/Books/BookReviewEditor.vue';
 import BooksTbrRationaleEditor from '~/components/Books/TbrRationaleEditor.vue';
 import HoverScrollText from '~/components/HoverScrollText.vue';
 import ModalWindow from '~/components/ModalWindow.vue';
+import UiDateInput from '~/components/ui/UiDateInput.vue';
 import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 import type { BookMoveSelection } from '~/utils/collectionActions';
 import { readDownloadFilename } from '~/utils/downloadFilename';
@@ -1430,16 +1431,14 @@ const { copy } = useClipboard();
                     >
                       Started
                     </div>
-                    <input
+                    <UiDateInput
                       v-model="startedAtInput"
-                      class="px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
-                      type="date"
-                      :disabled="statusMetaSaving"
-                      @change="
-                        () =>
-                          saveStatusDates({
-                            startedAt: startedAtInput || null,
-                          })
+                      input-class="px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
+                      aria-label="Started date"
+                      clearable
+                      @commit="
+                        (value: string) =>
+                          saveStatusDates({ startedAt: value || null })
                       "
                     />
                   </div>
@@ -1450,16 +1449,14 @@ const { copy } = useClipboard();
                     >
                       Finished
                     </div>
-                    <input
+                    <UiDateInput
                       v-model="finishedAtInput"
-                      class="px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
-                      type="date"
-                      :disabled="statusMetaSaving"
-                      @change="
-                        () =>
-                          saveStatusDates({
-                            finishedAt: finishedAtInput || null,
-                          })
+                      input-class="px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
+                      aria-label="Finished date"
+                      clearable
+                      @commit="
+                        (value: string) =>
+                          saveStatusDates({ finishedAt: value || null })
                       "
                     />
                   </div>
@@ -1470,16 +1467,14 @@ const { copy } = useClipboard();
                     >
                       DNF
                     </div>
-                    <input
+                    <UiDateInput
                       v-model="dnfAtInput"
-                      class="px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
-                      type="date"
-                      :disabled="statusMetaSaving"
-                      @change="
-                        () =>
-                          saveStatusDates({
-                            dnfAt: dnfAtInput || null,
-                          })
+                      input-class="px-2 py-1.5 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
+                      aria-label="DNF date"
+                      clearable
+                      @commit="
+                        (value: string) =>
+                          saveStatusDates({ dnfAt: value || null })
                       "
                     />
                   </div>

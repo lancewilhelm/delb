@@ -5,7 +5,7 @@ export type LibraryView =
   'books' | 'authors' | 'series' | 'publishers' | 'tags' | 'to-be-read';
 
 export type BooksSortKey =
-  'dateAdded' | 'alphabetical' | 'publishedDate' | 'pages';
+  'dateAdded' | 'alphabetical' | 'publishedDate' | 'pages' | 'dateFinished';
 export type SortDirection = 'asc' | 'desc';
 export type BooksViewMode = 'grid' | 'list';
 
@@ -54,11 +54,12 @@ export const useUiStore = defineStore(
       // - publishedDate => newest first
       // - alphabetical => A-Z
       // - pages => shortest first (unknown counts always last)
+      // - dateFinished => most recently finished first (no date always last)
       if (key === 'alphabetical' || key === 'pages') {
         booksSortDirection.value = 'asc';
       } else if (key === 'publishedDate') {
         booksSortDirection.value = 'desc';
-      } else if (key === 'dateAdded') {
+      } else if (key === 'dateAdded' || key === 'dateFinished') {
         booksSortDirection.value = 'desc';
       }
     }

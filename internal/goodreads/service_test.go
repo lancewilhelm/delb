@@ -249,7 +249,7 @@ func TestGoodreadsImportEndToEnd(t *testing.T) {
 	queuedID := e.createBook(u, colID, "Already Queued", "C. Writer", "")
 
 	// Existing Delb data that conflicts with the export.
-	e.json(u, http.MethodPost, "/api/books/"+wokID+"/status", map[string]any{"status": "finished", "finishedAt": "2021-02-02"}, nil)
+	e.json(u, http.MethodPost, "/api/books/"+wokID+"/status", map[string]any{"status": "finished", "startedAt": "2021-01-15", "finishedAt": "2021-02-02"}, nil)
 	e.json(u, http.MethodPost, "/api/books/"+wokID+"/rating", map[string]any{"rating": 6}, nil)
 	e.json(u, http.MethodPost, "/api/books/"+queuedID+"/status", map[string]any{"status": "to_be_read"}, nil)
 
@@ -389,7 +389,7 @@ func TestGoodreadsImportEndToEnd(t *testing.T) {
 	}
 	var startedWok sql.NullInt64
 	_ = e.db.QueryRow(`SELECT started_at FROM user_book_status WHERE user_id = ? AND book_id = ?`, u.ID, wokID).Scan(&startedWok)
-	if !startedWok.Valid || startedWok.Int64 != localMidnight(t, "2021-02-02") {
+	if !startedWok.Valid || startedWok.Int64 != localMidnight(t, "2021-01-15") {
 		t.Fatalf("overwrite should keep the earlier start date, got %v", startedWok)
 	}
 }

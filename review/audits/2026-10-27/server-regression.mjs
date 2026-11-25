@@ -348,7 +348,9 @@ const finished = await request(`/api/books/${aBook}/status`, a.cookie, 'POST', {
   status: 'finished',
 });
 assert.equal(finished.status, 200);
-assert.ok(finished.data.data.startedAt && finished.data.data.finishedAt);
+// Finishing records today's finish date but invents no start date.
+assert.ok(finished.data.data.finishedAt);
+assert.equal(finished.data.data.startedAt, null);
 assert.deepEqual(
   (await ranks()).filter((x) => x !== null).sort((x, y) => x - y),
   [1, 2],

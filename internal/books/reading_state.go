@@ -427,19 +427,9 @@ func transitionBookStatusesWithAuth(
 			} else if change.startedAtSet && change.startedAt != nil && (oldStatus == nil || *oldStatus == "to_be_read" || *oldStatus == "reading") {
 				sVal := "reading"
 				status = &sVal
-			} else if change.finishedAtSet && change.finishedAt == nil && oldStatus != nil && *oldStatus == "finished" {
-				sVal := "to_be_read"
-				if startedAt != nil {
-					sVal = "reading"
-				}
-				status = &sVal
-			} else if change.dnfAtSet && change.dnfAt == nil && oldStatus != nil && *oldStatus == "dnf" {
-				sVal := "to_be_read"
-				if startedAt != nil {
-					sVal = "reading"
-				}
-				status = &sVal
 			}
+			// Clearing a date keeps the status: a reader may not remember when
+			// they started or finished a book.
 		}
 
 		oldIndex := -1
@@ -474,29 +464,21 @@ func transitionBookStatusesWithAuth(
 		if change.tbrRankSet && st != "to_be_read" {
 			return statusTransitionResult{}, httpapi.NewError(http.StatusBadRequest, "tbrRank can only be set when status is to_be_read.")
 		}
-		if st == "reading" && startedAt == nil {
+		// Entering a status records today as the date for that status unless
+		// the request gave one. Other dates are never invented, and a date the
+		// reader clears stays empty.
+		entering := oldStatus == nil || *oldStatus != st
+		if entering && st == "reading" && startedAt == nil && !change.startedAtSet {
 			v := nowSec
 			startedAt = &v
 		}
-		if st == "finished" {
-			if finishedAt == nil {
-				v := nowSec
-				finishedAt = &v
-			}
-			if startedAt == nil {
-				v := *finishedAt
-				startedAt = &v
-			}
+		if entering && st == "finished" && finishedAt == nil && !change.finishedAtSet {
+			v := nowSec
+			finishedAt = &v
 		}
-		if st == "dnf" {
-			if dnfAt == nil {
-				v := nowSec
-				dnfAt = &v
-			}
-			if startedAt == nil {
-				v := *dnfAt
-				startedAt = &v
-			}
+		if entering && st == "dnf" && dnfAt == nil && !change.dnfAtSet {
+			v := nowSec
+			dnfAt = &v
 		}
 		if st != "finished" {
 			finishedAt = nil
@@ -560,6 +542,15 @@ func transitionBookStatusesWithAuth(
 			DnfAt:      dnfAt,
 		})
 
+		if st == "finished" && finishedAt == nil {
+			// An unknown finish date has no place in the progress history.
+			if _, err := tx.ExecContext(ctx, `
+				DELETE FROM user_book_progress_log
+				WHERE user_id = ? AND book_id = ? AND source = 'status-finished'
+			`, userID, bookID); err != nil {
+				return statusTransitionResult{}, err
+			}
+		}
 		if st == "finished" && finishedAt != nil {
 			var existingLogID string
 			err := tx.QueryRowContext(ctx, `

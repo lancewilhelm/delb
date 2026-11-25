@@ -41,9 +41,13 @@ To show copy icons on covers, enable **Copy indicators** under **Settings → Ap
 
 1. Open the book detail page.
 2. Choose **To be read**, **Reading**, **Finished**, **DNF**, or **No status** under **Status**.
-3. Review the dates that Delb fills in and edit them if needed.
+3. Review the dates and edit them if needed.
 
-Setting Reading fills a missing start date. Finished fills a finish date and creates a 100% progress entry. DNF records a stop date without creating a progress entry. Returning to To be read clears the reading dates. Clearing status removes the status record.
+Choosing Reading, Finished, or DNF fills in today's date for that status: the start date, the finish date, or the stop date. Delb doesn't invent other dates. For example, finishing a book doesn't set a start date. Every date is optional. Select the clear button next to a date to remove it, and the status stays the same. This is useful when you don't remember when you started or finished a book.
+
+To enter a date, type it or choose it from the calendar. Delb saves the date when you leave the field, press Enter, or pause after completing it. If you leave a date half typed, the field goes back to the saved date.
+
+Finished with a finish date creates a 100% progress entry on that date. DNF records a stop date without creating a progress entry. Returning to To be read clears the reading dates. Clearing status removes the status record.
 
 To change status while browsing, right-click a book cover and open **Reading status**. Choose a status or **No status** to clear it. A check marks your current choice. This works in grid and list views, including books without ebook files. Exit bulk selection mode to use the cover menu.
 

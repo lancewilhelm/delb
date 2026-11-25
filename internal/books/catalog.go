@@ -481,7 +481,11 @@ func (s *Service) handleListEntityBooks(w http.ResponseWriter, r *http.Request, 
 		filterSQL = `bt.tag_id = ?`
 	}
 
-	args := make([]any, 0, len(targetIDs)+6)
+	args := make([]any, 0, len(targetIDs)+7)
+	if sortKey == SortDateFinished {
+		joinSQL += FinishedJoinSQL
+		args = append(args, userID)
+	}
 	args = append(args, entityID)
 	where := []string{
 		filterSQL,
@@ -550,7 +554,8 @@ func (s *Service) handleListEntityBooks(w http.ResponseWriter, r *http.Request, 
 	}
 
 	last := page[len(page)-1]
-	nextCursor := NextBookCursor(sortKey, hasMore, last.ID, last.CreatedAt, last.SortTitle, nullInt64Ptr(last.PublishedAt), nullInt64Ptr(last.Pages))
+	nextCursor := NextBookCursor(sortKey, hasMore, last.ID, last.CreatedAt, last.SortTitle, nullInt64Ptr(last.PublishedAt), nullInt64Ptr(last.Pages),
+		finishedAtForCursor(r.Context(), s.db, sortKey, userID, last.ID))
 
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,

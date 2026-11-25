@@ -13,6 +13,9 @@ export const useBooksIndexFiltersStore = defineStore(
      */
     const addedStart = ref<string>('');
     const addedEnd = ref<string>('');
+    /** The signed-in reader's finish dates, sent as finishedStart/finishedEnd. */
+    const finishedStart = ref<string>('');
+    const finishedEnd = ref<string>('');
 
     const selectedStatuses = ref<UserBookStatus[]>([]);
     const includeNoStatus = ref(false);
@@ -41,6 +44,8 @@ export const useBooksIndexFiltersStore = defineStore(
       const q: Record<string, string> = {};
       if (addedStart.value) q.addedStart = addedStart.value;
       if (addedEnd.value) q.addedEnd = addedEnd.value;
+      if (finishedStart.value) q.finishedStart = finishedStart.value;
+      if (finishedEnd.value) q.finishedEnd = finishedEnd.value;
       return q;
     });
 
@@ -55,6 +60,8 @@ export const useBooksIndexFiltersStore = defineStore(
       return Boolean(
         addedStart.value ||
         addedEnd.value ||
+        finishedStart.value ||
+        finishedEnd.value ||
         selectedStatuses.value.length ||
         includeNoStatus.value ||
         filesFilter.value !== 'any' ||
@@ -66,6 +73,8 @@ export const useBooksIndexFiltersStore = defineStore(
     function clearAll() {
       addedStart.value = '';
       addedEnd.value = '';
+      finishedStart.value = '';
+      finishedEnd.value = '';
       selectedStatuses.value = [];
       includeNoStatus.value = false;
       filesFilter.value = 'any';
@@ -111,6 +120,8 @@ export const useBooksIndexFiltersStore = defineStore(
     return {
       addedStart,
       addedEnd,
+      finishedStart,
+      finishedEnd,
       selectedStatuses,
       includeNoStatus,
       filesFilter,

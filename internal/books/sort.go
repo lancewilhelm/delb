@@ -1,6 +1,8 @@
 package books
 
 import (
+	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"math"
@@ -200,6 +202,9 @@ const (
 	SortAlphabetical  SortKey = "alphabetical"
 	SortPublishedDate SortKey = "publishedDate"
 	SortPages         SortKey = "pages"
+	// SortDateFinished orders by the signed-in reader's finish date. Queries
+	// that use it must include FinishedJoinSQL.
+	SortDateFinished SortKey = "dateFinished"
 
 	SortAsc  SortDir = "asc"
 	SortDesc SortDir = "desc"
@@ -218,10 +223,16 @@ func NormalizeSortKey(raw string) SortKey {
 		return SortPublishedDate
 	case "pages":
 		return SortPages
+	case "dateFinished":
+		return SortDateFinished
 	default:
 		return SortDateAdded
 	}
 }
+
+// FinishedJoinSQL joins the reader's finished status as `fin`. Its one
+// placeholder is the reader's user ID.
+const FinishedJoinSQL = " LEFT JOIN user_book_status fin ON fin.book_id = b.id AND fin.user_id = ? AND fin.status = 'finished' "
 
 func NormalizeSortDir(raw string, sort SortKey) SortDir {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
@@ -288,7 +299,7 @@ func BuildBookSort(sort SortKey, sortDir SortDir, cursor *BookCursor) BookSortCl
 			} else if _, err := strconv.ParseFloat(cursor.V, 64); err != nil {
 				cursor = nil
 			}
-		case SortPages:
+		case SortPages, SortDateFinished:
 			if cursor.V != "" {
 				n, err := strconv.Atoi(cursor.V)
 				if err != nil || n < 0 {
@@ -305,8 +316,12 @@ func BuildBookSort(sort SortKey, sortDir SortDir, cursor *BookCursor) BookSortCl
 		cmpOp = "<"
 	}
 
-	if sort == SortPages {
+	if sort == SortPages || sort == SortDateFinished {
+		// Books without a value sort last in both directions.
 		valExpr := "CASE WHEN typeof(b.pages) = 'integer' AND b.pages >= 0 THEN b.pages ELSE NULL END"
+		if sort == SortDateFinished {
+			valExpr = "fin.finished_at"
+		}
 		unkExpr := "(" + valExpr + " IS NULL)"
 		clause := BookSortClause{
 			OrderSQL: unkExpr + " ASC, " + valExpr + " " + dirSQL + ", b.id " + dirSQL,
@@ -378,7 +393,7 @@ func parseISOToUnixSec(raw string) (int64, bool) {
 }
 
 // NextBookCursor computes the opaque pagination cursor matching server/utils/books/book-sort.ts.
-func NextBookCursor(sort SortKey, hasMore bool, id string, createdAtSec int64, sortTitle string, publishedAtSec *int64, pages *int64) *string {
+func NextBookCursor(sort SortKey, hasMore bool, id string, createdAtSec int64, sortTitle string, publishedAtSec *int64, pages *int64, finishedAtSec *int64) *string {
 	if !hasMore || id == "" {
 		return nil
 	}
@@ -389,6 +404,10 @@ func NextBookCursor(sort SortKey, hasMore bool, id string, createdAtSec int64, s
 			v = strconv.FormatInt(*pages, 10)
 		} else {
 			v = ""
+		}
+	case SortDateFinished:
+		if finishedAtSec != nil && *finishedAtSec >= 0 {
+			v = strconv.FormatInt(*finishedAtSec, 10)
 		}
 	case SortDateAdded:
 		v = formatUnixSecISO(createdAtSec)
@@ -456,4 +475,21 @@ func EscapeLike(s string) string {
 	s = strings.ReplaceAll(s, `%`, `\%`)
 	s = strings.ReplaceAll(s, `_`, `\_`)
 	return s
+}
+
+// finishedAtForCursor returns the reader's finish date for the last book on a
+// page, which the dateFinished cursor needs.
+func finishedAtForCursor(ctx context.Context, db *sql.DB, sort SortKey, userID, bookID string) *int64 {
+	if sort != SortDateFinished || bookID == "" {
+		return nil
+	}
+	var v sql.NullInt64
+	if err := db.QueryRowContext(ctx, `
+		SELECT finished_at FROM user_book_status
+		WHERE user_id = ? AND book_id = ? AND status = 'finished'
+	`, userID, bookID).Scan(&v); err != nil || !v.Valid {
+		return nil
+	}
+	n := v.Int64
+	return &n
 }

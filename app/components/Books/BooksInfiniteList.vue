@@ -2,7 +2,16 @@
 import { useBookSelectionStore } from '~/stores/bookSelection';
 import { useUserSettingsStore } from '~/stores/userSettings';
 import { $fetch } from '~/utils/apiFetch';
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import type { BooksSortKey } from '~/stores/ui';
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from 'vue';
 import BooksListRow from '~/components/Books/BooksListRow.vue';
 import {
   applyBookStatusChange,
@@ -57,7 +66,7 @@ const props = withDefaults(
      * Server-side sort mode.
      * Defaults should be enforced by the server (date added desc).
      */
-    sort?: 'dateAdded' | 'alphabetical' | 'publishedDate' | 'pages';
+    sort?: BooksSortKey;
     /**
      * Server-side sort direction.
      * Defaults should be enforced by the server (desc for dateAdded/publishedDate, asc for alphabetical/pages).
