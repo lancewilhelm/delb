@@ -11,7 +11,8 @@ Follow the main library workflow:
 3. [Browse and find books](using/find-books.md).
 4. [Organize and share collections](using/collections.md).
 5. [Read books and track progress](using/reading.md).
-6. [Connect an agent](using/connect-an-agent.md) to search your library and update personal reading data.
+6. [Import from Goodreads](using/import-goodreads.md) to bring over statuses, ratings, reviews, and shelves.
+7. [Connect an agent](using/connect-an-agent.md) to search your library and update personal reading data.
 
 See the [glossary](../GLOSSARY.md) for library, collection, book view, and reading-data terminology.
 
@@ -32,22 +33,23 @@ Start with the [contributor guide](developing/README.md), then read:
 
 Browse the [feature contracts](developing/reference/README.md) or [UI component references](developing/ui/README.md).
 
-| Topic                                          | Reference                                                                                               |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Collection permissions and endpoints           | [Collections and access control](developing/reference/collections.md)                                   |
-| Reading status, dates, and progress rules      | [Reading status and progress](developing/reference/reading-status-progress.md)                          |
-| EPUB position persistence and reader endpoints | [EPUB reader](developing/reference/epub-reader.md)                                                      |
-| Settings, appearance, and synchronization      | [Settings](developing/reference/settings.md)                                                            |
-| Grid and list field behavior                   | [Book view preferences](using/find-books.md#change-the-grid-or-list)                                    |
-| Navigation and layout behavior                 | [UI layout](developing/reference/library-layout.md)                                                     |
-| Search                                         | [Global search](developing/reference/global-search.md)                                                  |
-| External metadata and covers                   | [Metadata fetcher](developing/reference/metadata.md)                                                    |
-| Calibre migration                              | [Calibre import](hosting/calibre-import.md), [Calibre's schema](developing/reference/calibre-schema.md) |
-| Library integrity checks                       | [Health checks](hosting/health-checks.md)                                                               |
-| Managed files and interrupted operations       | [Storage recovery](hosting/storage-recovery.md)                                                         |
-| Container deployment                           | [Docker](hosting/docker.md)                                                                             |
-| EPUB package                                   | [Independent EPUB cover package](../internal/epub/epub.go)                                            |
-| Component details                              | [UI component reference](developing/ui/README.md)                                                       |
+| Topic                                          | Reference                                                                                                                            |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Collection permissions and endpoints           | [Collections and access control](developing/reference/collections.md)                                                                |
+| Reading status, dates, and progress rules      | [Reading status and progress](developing/reference/reading-status-progress.md)                                                       |
+| EPUB position persistence and reader endpoints | [EPUB reader](developing/reference/epub-reader.md)                                                                                   |
+| Settings, appearance, and synchronization      | [Settings](developing/reference/settings.md)                                                                                         |
+| Grid and list field behavior                   | [Book view preferences](using/find-books.md#change-the-grid-or-list)                                                                 |
+| Navigation and layout behavior                 | [UI layout](developing/reference/library-layout.md)                                                                                  |
+| Search                                         | [Global search](developing/reference/global-search.md)                                                                               |
+| External metadata and covers                   | [Metadata fetcher](developing/reference/metadata.md)                                                                                 |
+| Goodreads import                               | [Import from Goodreads](using/import-goodreads.md), [import rules](developing/reference/reading-status-progress.md#goodreads-import) |
+| Calibre migration                              | [Calibre import](hosting/calibre-import.md), [Calibre's schema](developing/reference/calibre-schema.md)                              |
+| Library integrity checks                       | [Health checks](hosting/health-checks.md)                                                                                            |
+| Managed files and interrupted operations       | [Storage recovery](hosting/storage-recovery.md)                                                                                      |
+| Container deployment                           | [Docker](hosting/docker.md)                                                                                                          |
+| EPUB package                                   | [Independent EPUB cover package](../internal/epub/epub.go)                                                                           |
+| Component details                              | [UI component reference](developing/ui/README.md)                                                                                    |
 
 The architecture and core guides describe the implementation at the revision recorded in [documentation status](developing/documentation-status.md). Historical review records and future-work sections are identified separately from current behavior.
 

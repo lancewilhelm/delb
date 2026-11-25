@@ -1,6 +1,6 @@
 # Read books and track progress
 
-Sign in and open a visible book's detail page. Reading status, ratings, position, and progress belong to your account, even when the book is shared.
+Sign in and open a visible book's detail page. Reading status, ratings, reviews, notes, position, and progress belong to your account, even when the book is shared.
 
 ## Read an EPUB
 
@@ -52,6 +52,18 @@ The menu closes after a successful save. The book's status updates in place, pre
 To show status icons on covers, enable **Reading status badges** under **Settings → Appearance → Cover Style**. Badges start disabled. A bookmark means To be read, an open book means Reading, a check means Finished, and a circle-slash means DNF. Books with no status have no badge. Badges use your theme's accent color.
 
 Changes affect your account's status, not the status of other collection members. See [status and date rules](../developing/reference/reading-status-progress.md) for the complete transitions.
+
+## Write a review and keep notes
+
+The book detail page has a **Review** and a **Notes** section under **Rating**. Only you can see them, even in a shared collection.
+
+1. Select **Write a review**, or select your existing review to edit it.
+2. Select **Contains spoilers** if the review reveals the plot. Delb then hides the review until you select **Show review with spoilers**.
+3. Select **Save**. To remove the review, clear the text and save.
+
+A book has one review per reader and can have several notes. Select **Add a private note** to add one. Each note has **Edit** and **Delete** links. A note is a good place for details such as who borrowed the book. If saving fails, the editor keeps your draft for retry.
+
+To bring reviews and notes from Goodreads, see [import from Goodreads](import-goodreads.md).
 
 ## Order your To be read queue
 

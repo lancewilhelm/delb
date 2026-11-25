@@ -18,7 +18,9 @@ import AppHeader from '~/components/AppHeader.vue';
 import BookCover from '~/components/BookCover.vue';
 import BooksBookMoveModal from '~/components/Books/BookMoveModal.vue';
 import BooksBookPersonalShelves from '~/components/Books/BookPersonalShelves.vue';
+import BooksBookNotes from '~/components/Books/BookNotes.vue';
 import BooksBookProgressHistory from '~/components/Books/BookProgressHistory.vue';
+import BooksBookReviewEditor from '~/components/Books/BookReviewEditor.vue';
 import BooksTbrRationaleEditor from '~/components/Books/TbrRationaleEditor.vue';
 import HoverScrollText from '~/components/HoverScrollText.vue';
 import ModalWindow from '~/components/ModalWindow.vue';
@@ -1116,8 +1118,7 @@ async function loadBook() {
   const generation = ++bookLoadGeneration;
   errorMessage.value = null;
 
-  const hasWarmBook =
-    book.value?.id === id ? true : hydratePreview(id);
+  const hasWarmBook = book.value?.id === id ? true : hydratePreview(id);
   loading.value = !hasWarmBook;
 
   // Fire book detail, per-book collections, and global collections list in
@@ -1779,11 +1780,11 @@ const { copy } = useClipboard();
                   ]"
                 >
                   <!-- eslint-disable vue/no-v-html -->
-                    <div
-                      class="book-description-content"
-                      v-html="safeDescriptionHtml"
-                    />
-                    <!-- eslint-enable vue/no-v-html -->
+                  <div
+                    class="book-description-content"
+                    v-html="safeDescriptionHtml"
+                  />
+                  <!-- eslint-enable vue/no-v-html -->
                 </div>
 
                 <div
@@ -1969,6 +1970,12 @@ const { copy } = useClipboard();
               </div>
             </div>
           </div>
+
+          <BooksBookReviewEditor
+            :key="`review-${book.id}`"
+            :book-id="book.id"
+          />
+          <BooksBookNotes :key="`notes-${book.id}`" :book-id="book.id" />
 
           <ModalWindow
             :open="showDeleteConfirm"

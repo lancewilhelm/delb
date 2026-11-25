@@ -6,6 +6,7 @@ import SettingsAdmin from '~/components/Settings/SettingsAdmin.vue';
 import SettingsAppearance from '~/components/Settings/SettingsAppearance.vue';
 import SettingsConnections from '~/components/Settings/SettingsConnections.vue';
 import SettingsGeneral from '~/components/Settings/SettingsGeneral.vue';
+import SettingsImport from '~/components/Settings/SettingsImport.vue';
 import SettingsTabBarItem from '~/components/Settings/SettingsTabBarItem.vue';
 import { useAuth } from '~/composables/useAuth';
 
@@ -40,6 +41,13 @@ const tabs: Record<string, Tab> = {
     component: SettingsConnections,
     icon: 'lucide:plug',
     path: '/settings/connections',
+    admin: false,
+  },
+  import: {
+    name: 'Import',
+    component: SettingsImport,
+    icon: 'lucide:book-up',
+    path: '/settings/import',
     admin: false,
   },
   appearance: {

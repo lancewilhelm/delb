@@ -1192,3 +1192,36 @@ func makePlaceholders(n int) string {
 	}
 	return strings.TrimRight(strings.Repeat("?,", n), ",")
 }
+
+// EnsureNamedShelf returns the ID of the user's personal shelf with this name,
+// comparing names without regard to case, and creates the shelf when none exists.
+func (s *Service) EnsureNamedShelf(ctx context.Context, userID, name string) (string, bool, error) {
+	clean, err := validateShelfName(name)
+	if err != nil {
+		return "", false, err
+	}
+	var id string
+	err = s.db.QueryRowContext(ctx, `
+		SELECT id FROM personal_shelves
+		WHERE owner_id = ? AND LOWER(name) = LOWER(?)
+		ORDER BY created_at ASC LIMIT 1
+	`, userID, clean).Scan(&id)
+	if err == nil {
+		return id, false, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", false, err
+	}
+	geomBytes, err := json.Marshal(BookshelfGeometry(EmptyBookshelf()))
+	if err != nil {
+		return "", false, err
+	}
+	id = uuid.NewString()
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO personal_shelves (id, owner_id, name, revision, geometry, created_at)
+		VALUES (?, ?, ?, 0, ?, ?)
+	`, id, userID, clean, string(geomBytes), time.Now().UTC().UnixMilli()); err != nil {
+		return "", false, err
+	}
+	return id, true, nil
+}

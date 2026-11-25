@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/httpapi"
 	"github.com/lancewilhelm/delb/internal/storage"
@@ -1082,104 +1081,25 @@ func (s *Service) handleMetadataImportCreate(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Normal creation
-	bookID := uuid.NewString()
-	now := time.Now().UTC().Unix()
-	physInt := 0
-	if hasPhysicalCopy {
-		physInt = 1
-	}
-
-	tx, err := s.db.BeginTx(r.Context(), nil)
+	bookID, err := s.createCatalogEntry(r.Context(), userID, collectionID, catalogEntryInput{
+		Title:           title,
+		Authors:         authorNames,
+		Description:     description,
+		Language:        language,
+		Published:       published,
+		PublishedAt:     publishedAt,
+		Publisher:       publisherName,
+		Series:          seriesName,
+		SeriesIndex:     seriesIndex,
+		Pages:           pages,
+		Categories:      categories,
+		Identifiers:     industryIdentifiers,
+		CoverURL:        coverURL,
+		HasPhysicalCopy: hasPhysicalCopy,
+	})
 	if err != nil {
-		s.writeErr(w, "metadata-import create tx failed", err)
+		s.writeErr(w, "metadata-import create failed", err)
 		return
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := collections.LockCollectionChanges(r.Context(), tx); err != nil {
-		s.writeErr(w, "metadata-import create lock failed", err)
-		return
-	}
-	if _, err := collections.ResolveBookTarget(r.Context(), tx, userID, true, collectionIDs); err != nil {
-		s.writeErr(w, "metadata-import create target failed", err)
-		return
-	}
-
-	var publisherID, seriesID *string
-	var serIdxVal *float64
-	if publisherName != nil {
-		pid, err := findOrCreatePublisherByName(r.Context(), tx, *publisherName)
-		if err != nil {
-			s.writeErr(w, "metadata-import create publisher failed", err)
-			return
-		}
-		publisherID = &pid
-	}
-	if seriesName != nil {
-		sid, err := findOrCreateSeriesByName(r.Context(), tx, *seriesName)
-		if err != nil {
-			s.writeErr(w, "metadata-import create series failed", err)
-			return
-		}
-		seriesID = &sid
-		serIdxVal = seriesIndex
-	}
-
-	if _, err := tx.ExecContext(r.Context(), `
-		INSERT INTO books (
-			id, collection_id, added_by_user_id, added_at,
-			title, sort_title, description, published, published_at,
-			language, pages, has_physical_copy, publisher_id, series_id, series_index,
-			created_by_user_id, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, bookID, collectionID, userID, now,
-		title, MakeTitleSortKey(title), description, published, publishedAt,
-		language, pages, physInt, publisherID, seriesID, serIdxVal,
-		userID, now, now); err != nil {
-		s.writeErr(w, "metadata-import create insert book failed", err)
-		return
-	}
-
-	for i, name := range authorNames {
-		aid, err := findOrCreateAuthorByName(r.Context(), tx, name)
-		if err != nil {
-			s.writeErr(w, "metadata-import create author failed", err)
-			return
-		}
-		if _, err := tx.ExecContext(r.Context(), `INSERT INTO book_authors (book_id, author_id, position) VALUES (?, ?, ?)`, bookID, aid, i+1); err != nil {
-			s.writeErr(w, "metadata-import create book_author failed", err)
-			return
-		}
-	}
-	for _, name := range categories {
-		tid, err := findOrCreateTagByName(r.Context(), tx, name)
-		if err != nil {
-			s.writeErr(w, "metadata-import create tag failed", err)
-			return
-		}
-		if _, err := tx.ExecContext(r.Context(), `INSERT INTO book_tags (book_id, tag_id) VALUES (?, ?)`, bookID, tid); err != nil {
-			s.writeErr(w, "metadata-import create book_tag failed", err)
-			return
-		}
-	}
-	for _, ident := range industryIdentifiers {
-		if _, err := tx.ExecContext(r.Context(), `INSERT INTO book_identifiers (book_id, type, value) VALUES (?, ?, ?)`, bookID, ident.Type, ident.Value); err != nil {
-			s.writeErr(w, "metadata-import create ident failed", err)
-			return
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		s.writeErr(w, "metadata-import create commit failed", err)
-		return
-	}
-
-	s.ensureCanonicalDirBestEffort(authorNames, title, bookID)
-	if coverURL != "" {
-		_ = storage.WithBookStorageLock(r.Context(), s.libraryDir, bookID, func() error {
-			s.fetchAndAttachImportedCoverBestEffort(r.Context(), userID, collectionIDs, bookID, authorNames, title, coverURL, validateExistingDest)
-			return nil
-		})
 	}
 
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{

@@ -24,6 +24,7 @@ import (
 	"github.com/lancewilhelm/delb/internal/config"
 	"github.com/lancewilhelm/delb/internal/db"
 	"github.com/lancewilhelm/delb/internal/dropbox"
+	"github.com/lancewilhelm/delb/internal/goodreads"
 	"github.com/lancewilhelm/delb/internal/httpapi"
 	"github.com/lancewilhelm/delb/internal/logging"
 	"github.com/lancewilhelm/delb/internal/mcp"
@@ -218,6 +219,14 @@ func main() {
 		Logger:           rootLogger.With("component", "mcp"),
 	})
 
+	goodreadsSvc := goodreads.NewService(goodreads.ServiceOptions{
+		DB:               opened.DB,
+		AuthService:      authSvc,
+		BooksService:     booksSvc,
+		BookshelfService: bookshelfSvc,
+		Logger:           rootLogger.With("component", "goodreads"),
+	})
+
 	recoveryGate := storage.StartRecovery(ctx, opened.DB, cfg.LibraryDir, rootLogger.With("component", "storage"))
 
 	dropboxWatcher := dropbox.NewWatcher(dropbox.WatcherOptions{
@@ -258,6 +267,7 @@ func main() {
 			spinesSvc,
 			adminSvc,
 			mcpSvc,
+			goodreadsSvc,
 		},
 		Middleware: []func(http.Handler) http.Handler{
 			recoveryGate.Middleware,

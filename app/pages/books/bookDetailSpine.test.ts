@@ -170,6 +170,8 @@ function mountBookDetail(opts: {
     '~/components/AppHeader.vue': stubModule('app-header'),
     '~/components/BookCover.vue': stubModule('book-cover'),
     '~/components/Books/BookMoveModal.vue': stubModule('book-move-modal'),
+    '~/components/Books/BookNotes.vue': stubModule('book-notes'),
+    '~/components/Books/BookReviewEditor.vue': stubModule('book-review-editor'),
     '~/components/Books/BookPersonalShelves.vue': stubModule(
       'book-personal-shelves',
     ),
