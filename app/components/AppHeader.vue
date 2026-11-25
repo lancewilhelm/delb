@@ -28,7 +28,7 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
 
 <template>
   <div
-    class="z-140 flex justify-between items-center h-10 app-header bg-(--sub-alt-color) border-b border-(--contrast-border-color)"
+    class="z-140 flex justify-between items-center h-[calc(2.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] app-header bg-(--sub-alt-color) border-b border-(--contrast-border-color)"
   >
     <!-- Left: app/home -->
     <div class="flex items-center gap-3 sm:gap-4 px-2 app-header-left">
@@ -107,7 +107,7 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
     <!-- Mobile: Search button at bottom right of scren -->
     <div
       v-if="isMobileDevice && mobileSearchButton"
-      class="absolute bottom-7 right-7 p-4 bg-(--sub-alt-color)/80 border border-(--contrast-border-color) z-1000 rounded-full flex items-center justify-center"
+      class="absolute bottom-[calc(1.75rem+env(safe-area-inset-bottom))] right-7 p-4 bg-(--sub-alt-color)/80 border border-(--contrast-border-color) z-1000 rounded-full flex items-center justify-center"
       @click="uiStore.setGlobalSearchVisible(!uiStore.globalSearchVisible)"
     >
       <Icon
