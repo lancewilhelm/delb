@@ -6,21 +6,18 @@ Use the [feature reference](reference/README.md) for contracts and the [UI compo
 
 ## Set up a local checkout
 
-Use a Node version allowed by [`package.json`](../../package.json), such as Node 22.22.3, and the pinned pnpm version, currently 12.10.1.
+Use a Node version allowed by [`package.json`](../../package.json), such as Node 22.22.3, the pinned pnpm version, currently 12.10.1, and the Go version in [`go.mod`](../../go.mod).
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm prepare:nuxt
-pnpm --filter @delb/epub build
-pnpm db:migrate
 pnpm dev
 ```
 
-Open `http://localhost:3000`. The database defaults to `data/delb.db`; managed files use `library/`. On the first visit, register an account. This creates local application data, so use a dedicated checkout when you need a disposable environment.
+`pnpm dev` builds the Go server, starts Vite with hot reload, and serves both at `http://localhost:3000`. The server applies pending migrations at startup. The database defaults to `data/delb.db`; managed files use `library/`. On the first visit, register an account. This creates local application data, so use a dedicated checkout when you need a disposable environment.
 
 Existing installations require the [administrative collection migration](../hosting/collection-migration.md) after applying committed SQL migrations.
 
-Generate and commit SQL migrations with `pnpm db:generate` when changing the schema. Apply committed migrations with `pnpm db:migrate`. `pnpm db:push` changes a database directly and is not the documented upgrade path for an existing deployment.
+Migrations are SQL files in `.drizzle/migrations` that are written by hand. [AGENTS.md](../../AGENTS.md#schema-changes) lists the files that a new migration must update. Never edit a migration that has already been merged. `bin/delb --migrate-only` applies pending migrations and exits.
 
 ## Run the synthetic demo
 
@@ -32,8 +29,7 @@ From your usual Delb checkout:
 git worktree add --detach ../delb-docs-demo HEAD
 cd ../delb-docs-demo
 pnpm install --frozen-lockfile
-pnpm prepare:nuxt
-pnpm --filter @delb/epub build
+pnpm build
 node review/setup-demo.mjs
 node review/start-demo.mjs
 ```
@@ -82,7 +78,7 @@ For documentation-only changes:
 pnpm docs:check
 ```
 
-This checks local inline Markdown targets and heading anchors in the root README, glossary, and docs. Follow the changed procedures in the synthetic demo and record the result in [documentation status](documentation-status.md).
+This checks local inline Markdown targets and heading anchors in the root README, glossary, CONTRIBUTING.md, AGENTS.md, and docs. Follow the changed procedures in the synthetic demo and record the result in [documentation status](documentation-status.md).
 
 ## Keep docs aligned with behavior
 

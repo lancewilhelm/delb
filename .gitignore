@@ -41,9 +41,6 @@ calibre/
 /dropbox/
 !/dropbox/.gitkeep
 
-# Agents for llm coding
-AGENTS.md
-
 # Disposable security/performance review fixtures and generated output
 .review-home/
 review/baseline/
