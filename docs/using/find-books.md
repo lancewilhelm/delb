@@ -10,7 +10,7 @@ Sign in and select a collection in the header. Choose **All** to include books f
 2. Open a book or an entity to see its available books.
 3. In book grids and lists, use the sort control to choose an order.
 
-Book grids and lists support title, page count, publication date, and date-added sorting in either direction. Entity book lists keep the selected collection scope. The separate series presentation has its own layout.
+Book grids and lists support title, page count, publication date, date-added, and date-finished sorting in either direction. Date finished uses your own finish dates; books without one come last. Entity book lists keep the selected collection scope. The separate series presentation has its own layout.
 
 ## Search across the library
 
@@ -24,9 +24,9 @@ Global search uses book visibility across your accessible collections. Do not as
 
 Open **Filters** and enter text in **Filter by title** to narrow the current Books view as you type. The title filter works with the selected collection and other filters in both grid and list views. Clear the text to restore those results. While the title filter is active, select books individually for bulk actions.
 
-Open the Books filter controls to narrow by reading status, date added, file presence, or physical and audiobook copy marks. Status filters use your personal status, including **No status**. Copy filters use shared marks; **Not marked** does not mean no copy exists. The dashboard's status links and tiles also open filtered Books views.
+Open the Books filter controls to narrow by reading status, date added, finish date, file presence, or physical and audiobook copy marks. The finish-date range shows your finished books with a finish date in that range, such as everything you finished in 2024. Status filters use your personal status, including **No status**. Copy filters use shared marks; **Not marked** does not mean no copy exists. The dashboard's status links and tiles also open filtered Books views.
 
-Select **Browse all books** on the dashboard to clear status, date-added, file-presence, and copy filters. Your sort order, grid or list choice, view settings, and selected collection stay the same.
+Select **Browse all books** on the dashboard to clear status, date-added, finish-date, file-presence, and copy filters. Your sort order, grid or list choice, view settings, and selected collection stay the same.
 
 Clear applied filters when a book seems to be missing. Then check the collection picker. Empty results can mean no matching books, an empty collection, or lost access to a shared collection.
 

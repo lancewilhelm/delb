@@ -14,21 +14,22 @@ Status metadata lives on `user_book_status` and is user-scoped:
 
 ### Behavior rules
 
-- Setting status to `reading` auto-fills `startedAt` if missing.
-- Setting status to `finished` auto-fills `finishedAt` if missing, and sets
-  `startedAt` if missing (same date as `finishedAt`).
-- Setting status to `dnf` auto-fills `dnfAt` if missing, and sets
-  `startedAt` if missing (same date as `dnfAt`).
+Every date is optional. A reader can record no dates, some dates, or all dates.
+
+- Entering `reading` sets `startedAt` to today if it is empty, unless the request includes `startedAt`. Entering `finished` does the same for `finishedAt`, and entering `dnf` does the same for `dnfAt`. A request can send `null` for that date to record the status without a date.
+- Choosing the status that a book already has fills no dates.
+- Entering `finished` or `dnf` never fills `startedAt`.
+- Clearing any date (sending `null`) keeps the status.
 - Leaving `finished` clears `finishedAt`; leaving `dnf` clears `dnfAt`.
 - Switching to `to_be_read` clears `startedAt`, `finishedAt`, and `dnfAt`.
 - `startedAt` is kept as historical data when status changes away from reading.
-- Manual date edits set status to the matching state:
+- Setting a date sets the matching status:
   - `finishedAt` → status `finished`
   - `dnfAt` → status `dnf`
   - `startedAt` → status `reading` (if current status is `to_be_read`/unset)
-- `finishedAt` and `dnfAt` must be on or after `startedAt`.
+- When both are set, `finishedAt` and `dnfAt` must be on or after `startedAt`.
 - DNF does not create a progress log.
-- Finished creates a 100% progress log.
+- Finished with a finish date creates or updates a 100% progress log on that date. Clearing the finish date removes that log entry.
 - Setting a TBR rank keeps the list contiguous:
   - Moving a book down shifts intermediate ranks up.
   - Moving a book up shifts intermediate ranks down.
@@ -84,6 +85,10 @@ Progress logs live in `user_book_progress_log` to support charting and history.
 - Page-number logging requires `books.pages` to be set so percent can be computed.
 - Reader sync is per book and off by default; when enabled it appends
   `source=reader` logs.
+
+## Date fields
+
+The Started, Finished, and DNF fields on the book details page use `UiDateInput` (`app/components/ui/UiDateInput.vue`). Browsers report a partly typed date as soon as it is valid; for example, typing the first digit of a year gives year 0002. So the field keeps its own draft while it has focus. It saves on blur, on Enter, or after a short pause once the date is complete (a four-digit year of at least 1000), which also covers dates chosen from the calendar. An incomplete date reverts on blur. The field stays enabled while a save runs, and a saved value does not replace a draft that the reader is still editing. Each field has a clear button. The Books page date filters use the same field.
 
 ## UI/UX entry points
 

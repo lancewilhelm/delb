@@ -14,6 +14,7 @@ import BooksInfiniteList from '~/components/Books/BooksInfiniteList.vue';
 import BooksSortDropdown from '~/components/Books/SortDropdown.vue';
 import BooksViewToggle from '~/components/Books/BooksViewToggle.vue';
 import ModalWindow from '~/components/ModalWindow.vue';
+import UiDateInput from '~/components/ui/UiDateInput.vue';
 import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 import BookshelfView from '~/components/Books/BookshelfView.vue';
 import type { BookMoveSelection } from '~/utils/collectionActions';
@@ -479,6 +480,22 @@ const addedEnd = computed<string>({
   },
 });
 
+const finishedStart = computed<string>({
+  get: () =>
+    shouldApplyPersistedFilters.value ? booksFiltersStore.finishedStart : '',
+  set: (v) => {
+    booksFiltersStore.finishedStart = v;
+  },
+});
+
+const finishedEnd = computed<string>({
+  get: () =>
+    shouldApplyPersistedFilters.value ? booksFiltersStore.finishedEnd : '',
+  set: (v) => {
+    booksFiltersStore.finishedEnd = v;
+  },
+});
+
 function closeFiltersDropdown() {
   filtersOpen.value = false;
 }
@@ -721,7 +738,9 @@ onMounted(async () => {
             <!-- Books sort + filters -->
             <div class="flex items-center gap-1 self-center">
               <BooksViewToggle
-                :show-bookshelf="!!shelfId || (hydrated && !!activeCollectionId)"
+                :show-bookshelf="
+                  !!shelfId || (hydrated && !!activeCollectionId)
+                "
                 :bookshelf="bookshelfActive"
                 @bookshelf="setBookshelfActive"
               />
@@ -1120,23 +1139,55 @@ onMounted(async () => {
                     <div class="text-sm font-medium opacity-90">Added date</div>
 
                     <div class="grid grid-cols-2 gap-2">
-                      <label class="space-y-1">
+                      <div class="space-y-1">
                         <div class="text-xs opacity-70">Start</div>
-                        <input
+                        <UiDateInput
                           v-model="addedStart"
-                          class="w-full px-2 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
-                          type="date"
+                          aria-label="Added on or after"
+                          input-class="min-w-0 flex-1 px-2 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
                         />
-                      </label>
+                      </div>
 
-                      <label class="space-y-1">
+                      <div class="space-y-1">
                         <div class="text-xs opacity-70">End</div>
-                        <input
+                        <UiDateInput
                           v-model="addedEnd"
-                          class="w-full px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
-                          type="date"
+                          aria-label="Added on or before"
+                          input-class="min-w-0 flex-1 px-2 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
                         />
-                      </label>
+                      </div>
+                    </div>
+
+                    <div
+                      class="border-t border-(--contrast-border-color)"
+                    ></div>
+
+                    <div>
+                      <div class="text-sm font-medium opacity-90">
+                        Finished date
+                      </div>
+                      <div class="text-xs opacity-70">
+                        Your finished books with a finish date in this range
+                      </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                      <div class="space-y-1">
+                        <div class="text-xs opacity-70">Start</div>
+                        <UiDateInput
+                          v-model="finishedStart"
+                          aria-label="Finished on or after"
+                          input-class="min-w-0 flex-1 px-2 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
+                        />
+                      </div>
+
+                      <div class="space-y-1">
+                        <div class="text-xs opacity-70">End</div>
+                        <UiDateInput
+                          v-model="finishedEnd"
+                          aria-label="Finished on or before"
+                          input-class="min-w-0 flex-1 px-2 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm"
+                        />
+                      </div>
                     </div>
 
                     <div

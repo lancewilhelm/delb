@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { useUiStore } from '~/stores/ui';
+import { useUiStore, type BooksSortKey } from '~/stores/ui';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 const uiStore = useUiStore();
 type BooksSortOption = {
-  id: 'dateAdded' | 'alphabetical' | 'publishedDate' | 'pages';
+  id: BooksSortKey;
   label: string;
 };
 
@@ -12,6 +12,7 @@ const booksSortOptions: BooksSortOption[] = [
   { id: 'alphabetical', label: 'Alphabetical' },
   { id: 'publishedDate', label: 'Published date' },
   { id: 'pages', label: 'Pages' },
+  { id: 'dateFinished', label: 'Date finished' },
 ];
 
 const sortOpen = ref(false);
