@@ -78,20 +78,20 @@ func TestMigrateFreshAndIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Migrate fresh: %v", err)
 	}
-	if res.Applied != 19 {
-		t.Fatalf("Applied = %d, want 19", res.Applied)
+	if res.Applied != 20 {
+		t.Fatalf("Applied = %d, want 20", res.Applied)
 	}
 	if res.BackupPath != "" {
 		t.Fatalf("expected no backup on fresh DB, got %q", res.BackupPath)
 	}
 
-	// Verify __drizzle_migrations has 19 rows with Drizzle-compatible hash and timestamp.
+	// Verify __drizzle_migrations has 20 rows with Drizzle-compatible hash and timestamp.
 	var count int
 	if err := opened.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM "__drizzle_migrations"`).Scan(&count); err != nil {
 		t.Fatalf("count __drizzle_migrations: %v", err)
 	}
-	if count != 19 {
-		t.Fatalf("__drizzle_migrations count = %d, want 19", count)
+	if count != 20 {
+		t.Fatalf("__drizzle_migrations count = %d, want 20", count)
 	}
 
 	// Verify hash of first migration matches sha256(0000_medical_naoko.sql).

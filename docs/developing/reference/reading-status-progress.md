@@ -50,6 +50,26 @@ The status transition service handles numeric moves and single/bulk status chang
 
 The four access triggers share the same visibility and rank-order rule. A future migration that rebuilds `collection_members` or `collection_books` must recreate their triggers; SQLite drops triggers attached to a dropped table, and Drizzle's generated table snapshot does not preserve these custom triggers. Exercise membership insert/delete and book-link insert/delete with the production migrations after such a change.
 
+## Reviews and notes
+
+`user_book_reviews` stores one private review per user and book, with a `contains_spoilers` flag. `PUT /api/books/{id}/review` saves the review, and saving blank text deletes it. `book_notes` stores any number of private notes per user and book, through `GET` and `POST /api/books/{id}/notes` and `PUT` and `DELETE /api/books/{id}/notes/{noteId}`. Every endpoint requires current book visibility and uses the authenticated user's identity. Reviews and notes are independent of status, so clearing a status keeps them.
+
+## Goodreads import
+
+The import in `internal/goodreads` reads a Goodreads library export (CSV). It has three endpoints:
+
+- `POST /api/import/goodreads/preview` parses the file and matches each row against the books that the user can see. Matching uses a recorded `goodreads` identifier first, then the ISBN (an ISBN-10 is compared in its ISBN-13 form), then the fuzzy title and author score from duplicate detection. A score of at least 0.95 is a match, a score of at least 0.82 asks the user to confirm, and lower candidates are offered but not chosen. The response includes the user's existing status, rating, and review for every candidate. It writes nothing.
+- `POST /api/import/goodreads/books` creates up to 50 catalog entries per request in a collection that the user can edit. Each entry carries `isbn13`, `isbn10`, and `goodreads` identifiers. With `enrich`, the default metadata provider supplies the description, cover, and other missing fields when its top result matches the title and author. A row whose Goodreads ID already exists on a visible book reuses that book.
+- `POST /api/import/goodreads/apply` writes statuses, ratings, reviews, and notes in one transaction through `books.ApplyImportedReading`. Then it records Goodreads IDs on matched books in collections that the user can edit, and adds books to personal shelves.
+
+`ApplyImportedReading` differs from the status transition service:
+
+- It never fills a missing date with today's date. Goodreads exports no start dates, so an existing start date is kept only when it is not after the imported finish or DNF date.
+- An existing value that differs from the imported one is kept unless the item sets `overwrite`. A missing value is always filled in. Finish and DNF dates are compared by calendar day.
+- A finished status with a date creates or updates the `status-finished` progress log, like a manual status change.
+- Newly queued To be read books are ranked after the existing visible queue. They are ordered by Goodreads queue position, then by the Goodreads date added, then by export order. A book that stays To be read keeps its rank.
+- A note is skipped when the book already has a note with identical text.
+
 ## Cover context menu
 
 Book grid and list covers offer **Reading status** with **To be read**, **Reading**, **Finished**, **DNF**, and **No status**. The dashboard Continue reading covers offer the same menu. Choices apply to the signed-in user, including on reference-only books.

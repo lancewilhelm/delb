@@ -40,7 +40,8 @@ Legacy `is_personal` values and `legacy_collection_books` provide the source for
 | `user_book_progress_log`     | Historical entries with source, percentage, optional page, and occurrence date         |
 | `book_ratings`               | One user/book rating on the integer half-star scale, 1 through 10                      |
 | `user_book_rationale`        | One private plain-text TBR rationale per reader/book, retained independently of status |
-| `book_notes`                 | User/book note records in the schema; not evidence of a complete notes interface       |
+| `user_book_reviews`          | One private review per reader/book, with a spoiler flag                                |
+| `book_notes`                 | Private notes per reader/book; a book can have several                                 |
 
 The same shared book can have different statuses, positions, ratings, rationale, and history for different users. Current endpoints select the authenticated user's records.
 
@@ -62,14 +63,14 @@ Read [storage recovery](../hosting/storage-recovery.md) before changing file del
 
 ## Useful constraints
 
-| Constraint                                                           | Effect                                                                                |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Unique user email                                                    | Collection member lookup identifies an existing account                               |
-| Unique collection/user membership                                    | A member has one role in a collection                                                 |
-| Owner index and lifecycle triggers                                   | Exactly one owner matching the collection owner                                       |
-| Required book collection and read-only projection                    | One collection per book entry                                                         |
-| Unique non-null Calibre book ID                                      | Calibre re-import can identify an existing Delb book                                  |
-| Unique user/book status, position, preference, rating, and rationale | Personal values remain separate across readers                                        |
-| Unique book/identifier type                                          | An identifier type has one value per book; cross-book duplicates still need detection |
+| Constraint                                                                   | Effect                                                                                |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Unique user email                                                            | Collection member lookup identifies an existing account                               |
+| Unique collection/user membership                                            | A member has one role in a collection                                                 |
+| Owner index and lifecycle triggers                                           | Exactly one owner matching the collection owner                                       |
+| Required book collection and read-only projection                            | One collection per book entry                                                         |
+| Unique non-null Calibre book ID                                              | Calibre re-import can identify an existing Delb book                                  |
+| Unique user/book status, position, preference, rating, review, and rationale | Personal values remain separate across readers                                        |
+| Unique book/identifier type                                                  | An identifier type has one value per book; cross-book duplicates still need detection |
 
 Foreign-key cascades and explicit mutation logic remove related rows. They do not automatically remove ebook bytes. File deletion requires the storage operation path.

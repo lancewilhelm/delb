@@ -2096,6 +2096,7 @@ func (s *Service) handleDeleteBook(w http.ResponseWriter, r *http.Request) {
 				`DELETE FROM user_book_status WHERE book_id = ?`,
 				`DELETE FROM book_ratings WHERE book_id = ?`,
 				`DELETE FROM book_notes WHERE book_id = ?`,
+				`DELETE FROM user_book_reviews WHERE book_id = ?`,
 				`DELETE FROM user_book_rationale WHERE book_id = ?`,
 				`DELETE FROM books WHERE id = ?`,
 			}

@@ -93,7 +93,10 @@ const wall = computed(() => {
   const small = mode.value === 'wall-small';
   const cols = wallCols.value;
   const start = drift.active.value ? drift.rowStart.value : 0;
-  const slots = [];
+  const slots: { key: string; book: DashboardBook }[] = [];
+  // While the dashboard loads, the preferred art mode applies before any
+  // covers arrive; an empty wall has nothing to repeat.
+  if (!props.recent.length) return { cols, slots };
   for (let r = 0; r < wallRows.value; r++) {
     const row = start + r;
     for (let col = 0; col < cols; col++) {

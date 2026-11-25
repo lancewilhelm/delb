@@ -222,6 +222,17 @@ var catalogSpecs = []tableSpec{
 		},
 	},
 	{
+		Name: "user_book_reviews",
+		Columns: []colSpec{
+			{Name: "user_id", Kind: colText},
+			{Name: "book_id", Kind: colText},
+			{Name: "text", Kind: colText},
+			{Name: "contains_spoilers", Kind: colInt},
+			{Name: "created_at", Kind: colInt},
+			{Name: "updated_at", Kind: colInt},
+		},
+	},
+	{
 		Name: "global_settings",
 		Columns: []colSpec{
 			{Name: "user_id", Kind: colText},
@@ -247,6 +258,7 @@ var readerTables = []string{
 	"book_ratings",
 	"user_book_rationale",
 	"book_notes",
+	"user_book_reviews",
 }
 
 type sqlRow map[string]any
