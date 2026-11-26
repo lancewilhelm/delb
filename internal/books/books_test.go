@@ -739,8 +739,12 @@ func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
 			t.Fatalf("overview book missing %q: %v", key, readingEntry)
 		}
 	}
+	// A width that nobody set by hand follows the page count, so it is not sent.
+	if readingEntry["shelfWidth"] != nil || readingEntry["shelfHeight"] == nil {
+		t.Fatalf("overview book size = %v×%v, want no width and a stored height", readingEntry["shelfWidth"], readingEntry["shelfHeight"])
+	}
 	if _, err := opened.DB.ExecContext(ctx, `
-		UPDATE book_shelf_dimensions SET width = 41, height = 199 WHERE book_id = ?`, readingID); err != nil {
+		UPDATE book_shelf_dimensions SET width = 41, height = 199, manual_width = 1 WHERE book_id = ?`, readingID); err != nil {
 		t.Fatalf("update shelf dimensions: %v", err)
 	}
 	// spines=1 lists only books with spine artwork, with their stored size.

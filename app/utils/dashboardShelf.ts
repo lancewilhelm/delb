@@ -16,8 +16,9 @@ export type SpineBook = {
   title: string;
   spineRevision?: string | null;
   pages?: number | null;
-  /** Stored bookshelf size; null until the book has one. */
+  /** A spine width set by hand on the bookshelf; null when the width follows the page count. */
   shelfWidth?: number | null;
+  /** The stored spine height; null when the book has none. */
   shelfHeight?: number | null;
 };
 
@@ -28,7 +29,10 @@ export type PlacedSpine<T> = {
   height: number;
 };
 
-/** A spine's size on the bookshelf: its stored size, else an estimate. */
+/**
+ * A spine's size on the bookshelf: a width set by hand, else one from the
+ * current page count, and the stored height, else the bookshelf's estimate.
+ */
 export function spineSize(book: SpineBook): { width: number; height: number } {
   return {
     width: book.shelfWidth ?? estimatedWidth(book.pages),
@@ -36,15 +40,19 @@ export function spineSize(book: SpineBook): { width: number; height: number } {
   };
 }
 
-/** How a row lines up: centered, or against the right end. */
+/** How a row lines up: centered, or running off the right end. */
 export type ShelfAlign = 'center' | 'end';
 
 /**
  * Stands books left to right in a row `rowWidth` units wide, in the given
- * order. A row that fits lines up by `align`. A row longer than the shelf
- * runs past its edges so the cut spines show that it continues: centered
- * rows run past both ends; `end` rows start at the left end and run past
- * the right one. Only spines that show at least in part are returned.
+ * order, and returns the spines that show at least in part.
+ *
+ * `center`: a row that fits is centered; a longer row is centered too, so it
+ * runs past both ends and the cut spines show that it continues.
+ *
+ * `end`: the right end always cuts a spine at its middle, so the row looks
+ * like it carries on. When every book fits, that is the last book; otherwise
+ * it is the book that reaches the right end, and the row starts at the left.
  */
 export function fillShelf<T extends SpineBook>(
   books: T[],
@@ -66,10 +74,13 @@ export function fillShelf<T extends SpineBook>(
   const total = Math.max(0, x - SPINE_GAP);
   const room = rowWidth - 2 * DASHBOARD_SHELF_INSET;
   const overflows = total > room;
-  let shift: number;
-  if (align === 'center') shift = (rowWidth - total) / 2;
-  else if (overflows) shift = 0;
-  else shift = rowWidth - DASHBOARD_SHELF_INSET - total;
+  let shift = (rowWidth - total) / 2;
+  if (align === 'end' && placed.length) {
+    const cut = overflows
+      ? (placed.findLast((spine) => spine.x < rowWidth) ?? placed[0]!)
+      : placed.at(-1)!;
+    shift = rowWidth - (cut.x + cut.width / 2);
+  }
   const spines = placed
     .map((spine) => ({ ...spine, x: spine.x + shift }))
     .filter((spine) => spine.x < rowWidth && spine.x + spine.width > 0);

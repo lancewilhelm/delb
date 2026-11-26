@@ -22,8 +22,9 @@ type dashboardBook struct {
 	// SpineRevision is set when the book has spine artwork (GET /api/books/{id}/spine?v=).
 	SpineRevision *string `json:"spineRevision"`
 	// Pages and the stored bookshelf size let Shelf art size each spine the
-	// way the bookshelf does. ShelfWidth and ShelfHeight are null until the
-	// book has stored bookshelf dimensions.
+	// way the bookshelf does. ShelfWidth is set only when someone set the
+	// width by hand; otherwise the width follows the current page count.
+	// ShelfHeight is the stored height, or null if the book has none.
 	Pages       *int64 `json:"pages"`
 	ShelfWidth  *int64 `json:"shelfWidth"`
 	ShelfHeight *int64 `json:"shelfHeight"`
@@ -139,7 +140,7 @@ func (s *Service) queryDashboardBooks(
 			pl.progress_percent, pl.page_number, pl.source, pl.occurred_at, pl.created_at,
 			ubs.finished_at,
 			(SELECT revision FROM book_spines WHERE book_id = b.id),
-			b.pages, bsd.width, bsd.height
+			b.pages, CASE WHEN bsd.manual_width = 1 THEN bsd.width END, bsd.height
 		FROM books b
 		LEFT JOIN user_book_status ubs ON ubs.book_id = b.id AND ubs.user_id = ?
 		LEFT JOIN user_book_reading_position pos ON pos.book_id = b.id AND pos.user_id = ?

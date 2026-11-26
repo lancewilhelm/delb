@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { estimatedWidth, stableHeight } from '../../shared/bookshelf.ts';
 import {
-  DASHBOARD_SHELF_INSET,
   DASHBOARD_SPINE_MAX_HEIGHT,
   fillShelf,
   spineSize,
@@ -29,7 +28,7 @@ test('spines use the stored bookshelf size, else the bookshelf estimate', () => 
   });
 });
 
-test('a row that fits is centered, or set against the right end', () => {
+test('a row that fits is centered, or runs off the right end at a spine middle', () => {
   const width = 200;
   const centered = fillShelf(books(2), width);
   assert.equal(centered.overflows, false);
@@ -40,7 +39,13 @@ test('a row that fits is centered, or set against the right end', () => {
     'a tall spine is cut down',
   );
   const end = fillShelf(books(2), width, 'end');
-  assert.equal(end.spines[1]!.x + 30, width - DASHBOARD_SHELF_INSET);
+  assert.equal(end.overflows, false);
+  assert.equal(
+    end.spines[1]!.x + 15,
+    width,
+    'the edge cuts the last spine in half',
+  );
+  assert.equal(end.spines[0]!.x, width - 46);
 });
 
 test('a long row runs past the edges and shows only spines in view', () => {
@@ -52,7 +57,9 @@ test('a long row runs past the edges and shows only spines in view', () => {
   assert.ok(last.x + last.width > 100, 'cut at the right end');
   assert.deepEqual(ids(centered), ['b3', 'b4', 'b5', 'b6']);
 
+  // b3 (93–123) reaches the right end; the edge moves to its middle.
   const end = fillShelf(books(10), 100, 'end');
-  assert.equal(end.spines[0]!.x, 0, 'starts at the left end');
+  assert.equal(end.spines.at(-1)!.book.id, 'b3');
+  assert.equal(end.spines.at(-1)!.x + 15, 100, 'the edge cuts b3 in half');
   assert.deepEqual(ids(end), ['b0', 'b1', 'b2', 'b3']);
 });
