@@ -499,13 +499,43 @@ func TestCollectionBookshelfPicturesAndPersonalShelves(t *testing.T) {
 		t.Fatalf("GET /api/shelves = %d %s", resp.StatusCode, string(raw))
 	}
 	resp, raw = env.reqJSON(&viewer, http.MethodGet, "/api/shelves?previews=25", nil)
-	if resp.StatusCode != 200 || !strings.Contains(string(raw), bookID) || !strings.Contains(string(raw), `"spineRevision"`) {
+	if resp.StatusCode != 200 || !strings.Contains(string(raw), bookID) || !strings.Contains(string(raw), `"spineRevision"`) ||
+		!strings.Contains(string(raw), `"pages"`) || !strings.Contains(string(raw), `"shelfWidth"`) {
 		t.Fatalf("GET /api/shelves?previews=25 = %d %s", resp.StatusCode, string(raw))
 	}
 	for _, bad := range []string{"0", "26", "x"} {
 		resp, _ = env.reqJSON(&viewer, http.MethodGet, "/api/shelves?previews="+bad, nil)
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("GET /api/shelves?previews=%s = %d, want 400", bad, resp.StatusCode)
+		}
+	}
+	for _, bad := range []string{"0", "251", "x"} {
+		resp, _ = env.reqJSON(&viewer, http.MethodGet, "/api/shelves?pile="+bad, nil)
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("GET /api/shelves?pile=%s = %d, want 400", bad, resp.StatusCode)
+		}
+	}
+	// A pile sample comes only when asked for, and holds the shelf's visible books.
+	if strings.Contains(string(raw), `"pile"`) {
+		t.Fatalf("GET /api/shelves?previews=25 includes a pile: %s", string(raw))
+	}
+	resp, raw = env.reqJSON(&viewer, http.MethodGet, "/api/shelves?previews=25&pile=100", nil)
+	var withPile struct {
+		Data struct {
+			Shelves []struct {
+				ID   string `json:"id"`
+				Pile []struct {
+					ID string `json:"id"`
+				} `json:"pile"`
+			} `json:"shelves"`
+		} `json:"data"`
+	}
+	if resp.StatusCode != 200 || json.Unmarshal(raw, &withPile) != nil {
+		t.Fatalf("GET /api/shelves?pile=10 = %d %s", resp.StatusCode, string(raw))
+	}
+	for _, shelf := range withPile.Data.Shelves {
+		if shelf.ID == shelfID && (len(shelf.Pile) != 1 || shelf.Pile[0].ID != bookID) {
+			t.Fatalf("shelf pile = %+v, want only %s", shelf.Pile, bookID)
 		}
 	}
 	resp, _ = env.reqJSON(&viewer, http.MethodDelete, "/api/shelves/"+shelfID, nil)

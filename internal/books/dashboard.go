@@ -21,14 +21,26 @@ type dashboardBook struct {
 	FinishedDate     *string  `json:"finishedDate"`
 	// SpineRevision is set when the book has spine artwork (GET /api/books/{id}/spine?v=).
 	SpineRevision *string `json:"spineRevision"`
+	// Pages and the stored bookshelf size let Shelf art size each spine the
+	// way the bookshelf does. ShelfWidth is set only when someone set the
+	// width by hand; otherwise the width follows the current page count.
+	// ShelfHeight is the stored height, or null if the book has none.
+	Pages       *int64 `json:"pages"`
+	ShelfWidth  *int64 `json:"shelfWidth"`
+	ShelfHeight *int64 `json:"shelfHeight"`
 }
 
 // Dashboard overview limits. The All books wall needs enough distinct covers
 // to fill its 9×5 grid; list previews feed the card-art styles, and the Wall
-// tile's 5×5 grid uses the most.
+// tile's 5×5 grid uses the most. Piles get their own random samples: by
+// default up to 24 books on the All books card and 10 on a tile, or the
+// reader's pile size (up to dashboardMaxPile) for both.
 const (
-	dashboardRecentLimit  = 45
-	dashboardPreviewLimit = 25
+	dashboardRecentLimit   = 45
+	dashboardPreviewLimit  = 25
+	dashboardLibraryPile   = 24
+	dashboardListPileLimit = 10
+	dashboardMaxPile       = 250
 )
 
 // dashboardRecentOrder is the newest-first order of the All books cover wall.
@@ -88,18 +100,37 @@ func (s *Service) dashboardCounts(ctx context.Context, userID, visClause string,
 	}, nil
 }
 
-// queryDashboardBooks lists visible books matching filterSQL in orderSQL order,
-// with the reader's latest progress and finish date.
+// dashboardSampleFilter limits a query to a random sample of up to limit
+// visible books that match filterSQL. Picking IDs first keeps the per-book
+// progress lookups off the books that are not chosen.
+func dashboardSampleFilter(userID, visClause string, visArgs []any, filterSQL string, limit int) (string, []any) {
+	args := append([]any{userID}, visArgs...)
+	args = append(args, limit)
+	return `b.id IN (
+		SELECT b.id FROM books b
+		LEFT JOIN user_book_status ubs ON ubs.book_id = b.id AND ubs.user_id = ?
+		WHERE ` + visClause + ` AND ` + filterSQL + `
+		ORDER BY RANDOM()
+		LIMIT ?
+	)`, args
+}
+
+// queryDashboardBooks lists visible books matching filterSQL (with its
+// placeholder values in filterArgs) in orderSQL order, with the reader's
+// latest progress and finish date.
 func (s *Service) queryDashboardBooks(
 	ctx context.Context,
 	userID, visClause string,
 	visArgs []any,
-	filterSQL, orderSQL string,
+	filterSQL string,
+	filterArgs []any,
+	orderSQL string,
 	limit int,
 	offset int64,
 ) ([]dashboardBook, error) {
 	args := []any{userID, userID, userID, userID}
 	args = append(args, visArgs...)
+	args = append(args, filterArgs...)
 	args = append(args, limit, offset)
 
 	rows, err := s.db.QueryContext(ctx, `
@@ -108,10 +139,12 @@ func (s *Service) queryDashboardBooks(
 			pos.progress, pos.updated_at,
 			pl.progress_percent, pl.page_number, pl.source, pl.occurred_at, pl.created_at,
 			ubs.finished_at,
-			(SELECT revision FROM book_spines WHERE book_id = b.id)
+			(SELECT revision FROM book_spines WHERE book_id = b.id),
+			b.pages, CASE WHEN bsd.manual_width = 1 THEN bsd.width END, bsd.height
 		FROM books b
 		LEFT JOIN user_book_status ubs ON ubs.book_id = b.id AND ubs.user_id = ?
 		LEFT JOIN user_book_reading_position pos ON pos.book_id = b.id AND pos.user_id = ?
+		LEFT JOIN book_shelf_dimensions bsd ON bsd.book_id = b.id
 		LEFT JOIN user_book_progress_log pl ON pl.user_id = ? AND pl.id = (
 			SELECT id FROM user_book_progress_log
 			WHERE user_id = ? AND book_id = b.id
@@ -145,12 +178,16 @@ func (s *Service) queryDashboardBooks(
 			logCreated  sql.NullInt64
 			finishedAt  sql.NullInt64
 			spineRev    sql.NullString
+			pages       sql.NullInt64
+			shelfWidth  sql.NullInt64
+			shelfHeight sql.NullInt64
 		)
 		if err := rows.Scan(
 			&id, &title, &cover, &hasPhys, &hasAudio, &updatedAt,
 			&posProg, &posUpd,
 			&logProg, &logPage, &logSource, &logOccurred, &logCreated,
 			&finishedAt, &spineRev,
+			&pages, &shelfWidth, &shelfHeight,
 		); err != nil {
 			return nil, err
 		}
@@ -185,6 +222,9 @@ func (s *Service) queryDashboardBooks(
 			Progress:         progOut,
 			FinishedDate:     finDate,
 			SpineRevision:    nullStringPtr(spineRev),
+			Pages:            nullInt64Ptr(pages),
+			ShelfWidth:       nullInt64Ptr(shelfWidth),
+			ShelfHeight:      nullInt64Ptr(shelfHeight),
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -193,10 +233,11 @@ func (s *Service) queryDashboardBooks(
 	return found, nil
 }
 
-// GET /api/dashboard/overview?collectionId=
+// GET /api/dashboard/overview?collectionId=&pile=
 //
 // One request for the whole dashboard: counts, the most recently added books
-// for the All books cover wall, and a short preview of every status list.
+// for the All books cover wall, a short preview of every status list, and a
+// random sample of each for Pile art. `pile` sets the size of every sample.
 func (s *Service) handleGetDashboardOverview(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
 
@@ -209,6 +250,15 @@ func (s *Service) handleGetDashboardOverview(w http.ResponseWriter, r *http.Requ
 		httpapi.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
+	libraryPile, listPile := dashboardLibraryPile, dashboardListPileLimit
+	if raw := r.URL.Query().Get("pile"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > dashboardMaxPile {
+			httpapi.WriteError(w, http.StatusBadRequest, "Invalid pile size")
+			return
+		}
+		libraryPile, listPile = n, n
+	}
 	userID := swu.User.ID
 	visClause, visArgs := dashboardVisibility(userID, r.URL.Query().Get("collectionId"))
 	ctx := r.Context()
@@ -219,22 +269,39 @@ func (s *Service) handleGetDashboardOverview(w http.ResponseWriter, r *http.Requ
 		s.writeErrWithFallback(w, "GET /api/dashboard/overview counts failed", failMsg, err)
 		return
 	}
-	recent, err := s.queryDashboardBooks(ctx, userID, visClause, visArgs, `1 = 1`, dashboardRecentOrder, dashboardRecentLimit, 0)
+	recent, err := s.queryDashboardBooks(ctx, userID, visClause, visArgs, `1 = 1`, nil, dashboardRecentOrder, dashboardRecentLimit, 0)
 	if err != nil {
 		s.writeErrWithFallback(w, "GET /api/dashboard/overview recent failed", failMsg, err)
 		return
 	}
+	// sample returns a random selection of the books matching filter, in random order.
+	sample := func(filter string, limit int) ([]dashboardBook, error) {
+		sampleSQL, sampleArgs := dashboardSampleFilter(userID, visClause, visArgs, filter, limit)
+		return s.queryDashboardBooks(ctx, userID, visClause, visArgs, sampleSQL, sampleArgs, `RANDOM()`, limit, 0)
+	}
+	piles := make(map[string][]dashboardBook, len(dashboardStatusLists)+1)
+	piles["all"] = []dashboardBook{}
+	if counts["total"] > 0 {
+		if piles["all"], err = sample(`1 = 1`, libraryPile); err != nil {
+			s.writeErrWithFallback(w, "GET /api/dashboard/overview pile failed", failMsg, err)
+			return
+		}
+	}
 	lists := make(map[string][]dashboardBook, len(dashboardStatusLists))
 	for _, list := range dashboardStatusLists {
-		books := []dashboardBook{}
+		books, pile := []dashboardBook{}, []dashboardBook{}
 		if counts[list.key] > 0 {
-			books, err = s.queryDashboardBooks(ctx, userID, visClause, visArgs, list.filter, list.orderBy, dashboardPreviewLimit, 0)
+			books, err = s.queryDashboardBooks(ctx, userID, visClause, visArgs, list.filter, nil, list.orderBy, dashboardPreviewLimit, 0)
+			if err == nil {
+				pile, err = sample(list.filter, listPile)
+			}
 			if err != nil {
 				s.writeErrWithFallback(w, "GET /api/dashboard/overview "+list.key+" failed", failMsg, err)
 				return
 			}
 		}
 		lists[list.key] = books
+		piles[list.key] = pile
 	}
 
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
@@ -243,14 +310,16 @@ func (s *Service) handleGetDashboardOverview(w http.ResponseWriter, r *http.Requ
 			"counts": counts,
 			"recent": recent,
 			"lists":  lists,
+			"piles":  piles,
 		},
 	})
 }
 
-// GET /api/dashboard/recent?collectionId=&offset=
+// GET /api/dashboard/recent?collectionId=&offset=&spines=
 //
 // Pages through the All books cover wall's books (newest first) after the
 // overview's first page, so a drifting wall can keep showing new covers.
+// `spines=1` lists only books with spine artwork, for the Shelf art.
 func (s *Service) handleGetDashboardRecent(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
 
@@ -273,10 +342,19 @@ func (s *Service) handleGetDashboardRecent(w http.ResponseWriter, r *http.Reques
 		httpapi.WriteError(w, http.StatusBadRequest, "Invalid offset")
 		return
 	}
+	filter := `1 = 1`
+	switch q.Get("spines") {
+	case "", "0":
+	case "1":
+		filter = `EXISTS (SELECT 1 FROM book_spines WHERE book_id = b.id)`
+	default:
+		httpapi.WriteError(w, http.StatusBadRequest, "Invalid spines filter")
+		return
+	}
 	userID := swu.User.ID
 	visClause, visArgs := dashboardVisibility(userID, q.Get("collectionId"))
 
-	found, err := s.queryDashboardBooks(r.Context(), userID, visClause, visArgs, `1 = 1`, dashboardRecentOrder, dashboardRecentLimit+1, offset)
+	found, err := s.queryDashboardBooks(r.Context(), userID, visClause, visArgs, filter, nil, dashboardRecentOrder, dashboardRecentLimit+1, offset)
 	if err != nil {
 		s.writeErrWithFallback(w, "GET /api/dashboard/recent failed", "Failed to load covers", err)
 		return

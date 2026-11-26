@@ -25,7 +25,13 @@ import {
   DEFAULT_WALL_DRIFT_SPEED,
   MAX_WALL_DRIFT_SPEED,
   MIN_WALL_DRIFT_SPEED,
+  DEFAULT_CUSTOM_PILE_SIZE,
+  DEFAULT_POUR_SPEED,
+  MAX_PILE_SIZE,
+  MAX_POUR_SPEED,
+  MIN_POUR_SPEED,
   type LibraryArtStyle,
+  type PileSize,
   type WallMotion,
 } from '~/utils/dashboardArt';
 import type { BaseUserSettings } from '~/stores/userSettings';
@@ -62,6 +68,24 @@ const dashboardStatusBar = userSettingsStore.settingRef<boolean>(
 );
 const dashboardLibraryArt = userSettingsStore.settingRef<LibraryArtStyle>(
   'dashboard.libraryArt',
+);
+const dashboardPileSize =
+  userSettingsStore.settingRef<PileSize>('dashboard.pileSize');
+const dashboardShelfSpinesOnly = userSettingsStore.settingRef<boolean>(
+  'dashboard.shelfSpinesOnly',
+);
+/** The custom size, for the slider; only shown while the size is not Auto. */
+const dashboardCustomPileSize = computed<number>({
+  get: () =>
+    typeof dashboardPileSize.value === 'number'
+      ? dashboardPileSize.value
+      : DEFAULT_CUSTOM_PILE_SIZE,
+  set: (value) => {
+    dashboardPileSize.value = value;
+  },
+});
+const dashboardPourSpeed = userSettingsStore.settingRef<number>(
+  'dashboard.pourSpeed',
 );
 const dashboardWallMotion = userSettingsStore.settingRef<WallMotion>(
   'dashboard.wallMotion',
@@ -362,8 +386,8 @@ function handleSortChange(target: string) {
           <span
             ><strong>All books art</strong
             ><small
-              >A tilted wall of recent covers, or a pile you can pick up and
-              toss.</small
+              >A tilted wall of recent covers, a pile you can pick up and toss,
+              or a bookcase of spines.</small
             ></span
           >
           <div
@@ -385,8 +409,69 @@ function handleSortChange(target: string) {
             >
               Pile
             </button>
+            <button
+              type="button"
+              :aria-pressed="dashboardLibraryArt === 'shelf'"
+              @click="dashboardLibraryArt = 'shelf'"
+            >
+              Shelf
+            </button>
           </div>
         </div>
+        <SettingsUIToggle
+          v-if="dashboardLibraryArt === 'shelf'"
+          v-model="dashboardShelfSpinesOnly"
+          title="Spine art only"
+          description="Fill the All books shelf with only the books that have spine art."
+        />
+        <div class="bookshelf-texture-choice">
+          <span
+            ><strong>Pile size</strong
+            ><small
+              >How many books drop into each pile, on the All books card and on
+              Pile cards. Auto drops 24 on All books and 10 on a card.</small
+            ></span
+          >
+          <div
+            class="bookshelf-texture-options flex-wrap"
+            role="group"
+            aria-label="Pile size"
+          >
+            <button
+              type="button"
+              :aria-pressed="dashboardPileSize === 'auto'"
+              @click="dashboardPileSize = 'auto'"
+            >
+              Auto
+            </button>
+            <button
+              type="button"
+              :aria-pressed="dashboardPileSize !== 'auto'"
+              @click="dashboardPileSize = dashboardCustomPileSize"
+            >
+              Custom
+            </button>
+          </div>
+        </div>
+        <SettingsUISlider
+          v-if="dashboardPileSize !== 'auto'"
+          v-model="dashboardCustomPileSize"
+          title="Books per pile"
+          :description="`From 1 to ${MAX_PILE_SIZE}. Big piles load more covers.`"
+          :min="1"
+          :max="MAX_PILE_SIZE"
+          :step="1"
+          :value-input="true"
+        />
+        <SettingsUISlider
+          v-model="dashboardPourSpeed"
+          title="Pour speed"
+          :description="`How quickly a pile's books pour in: 1 is the slowest, 10 the fastest (default: ${DEFAULT_POUR_SPEED})`"
+          :min="MIN_POUR_SPEED"
+          :max="MAX_POUR_SPEED"
+          :step="1"
+          :value-input="true"
+        />
         <div class="bookshelf-texture-choice">
           <span
             ><strong>Wall motion</strong

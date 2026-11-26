@@ -35,8 +35,50 @@ export const AUTO_CARD_ART: Record<DashboardListKey | 'shelf', CardArtStyle> = {
 };
 
 /** Art styles for the All books card. */
-export const LIBRARY_ART_STYLES = ['wall', 'pile'] as const;
+export const LIBRARY_ART_STYLES = ['wall', 'pile', 'shelf'] as const;
 export type LibraryArtStyle = (typeof LIBRARY_ART_STYLES)[number];
+
+/**
+ * How many books each pile holds: Auto, or a whole number from 1 to
+ * MAX_PILE_SIZE. Auto keeps the defaults: 24 on the All books card (20 when
+ * narrow) and 10 on a tile.
+ */
+export type PileSize = 'auto' | number;
+export const MAX_PILE_SIZE = 250;
+/** The size Custom starts at. */
+export const DEFAULT_CUSTOM_PILE_SIZE = 50;
+export const AUTO_LIBRARY_PILE = 24;
+export const AUTO_LIBRARY_PILE_NARROW = 20;
+export const AUTO_TILE_PILE = 10;
+
+/** Books to request for a pile: the reader's size, or Auto's default. */
+export function pileSampleSize(size: PileSize, library: boolean): number {
+  if (size !== 'auto') return size;
+  return library ? AUTO_LIBRARY_PILE : AUTO_TILE_PILE;
+}
+
+/** Pour speed levels: how quickly a pile's books pour in. */
+export const MIN_POUR_SPEED = 1;
+export const MAX_POUR_SPEED = 10;
+export const DEFAULT_POUR_SPEED = 5;
+
+/** How much longer (above 1) or shorter (below 1) a pour takes than the default. */
+export function pourTimeScale(level: number): number {
+  const clamped = Math.min(MAX_POUR_SPEED, Math.max(MIN_POUR_SPEED, level));
+  return DEFAULT_POUR_SPEED / clamped;
+}
+
+/**
+ * Cover height for a pile of `count` books. Bigger piles than `reference`
+ * get smaller covers so the heap stays readable.
+ */
+export function pileCoverHeight(
+  base: number,
+  count: number,
+  reference: number,
+): number {
+  return count > reference ? base * (reference / count) ** 0.3 : base;
+}
 
 /** Motion for the All books wall. More directions may follow. */
 export const WALL_MOTIONS = ['off', 'up'] as const;
@@ -62,6 +104,12 @@ export type DashboardSettings = {
   wallMotion: WallMotion;
   /** Drift speed level, from 1 (slowest) to 10. */
   wallDriftSpeed: number;
+  /** Books in each pile, on the All books card and on tiles. */
+  pileSize: PileSize;
+  /** Whether the All books shelf shows only books with spine artwork. */
+  shelfSpinesOnly: boolean;
+  /** How quickly a pile's books pour in, from 1 (slowest) to 10. */
+  pourSpeed: number;
   cardArt: {
     default: CardArtDefault;
     /** Per-tile choices keyed by list key (`reading`, `shelf:<id>`, …). */
@@ -77,6 +125,9 @@ export function defaultDashboardSettings(): DashboardSettings {
     libraryArt: 'wall',
     wallMotion: 'off',
     wallDriftSpeed: DEFAULT_WALL_DRIFT_SPEED,
+    pileSize: 'auto',
+    shelfSpinesOnly: false,
+    pourSpeed: DEFAULT_POUR_SPEED,
     cardArt: { default: 'auto', overrides: {} },
   };
 }
@@ -132,6 +183,21 @@ export function normalizeDashboardSettings(value: unknown): DashboardSettings {
             Math.max(MIN_WALL_DRIFT_SPEED, Math.round(source.wallDriftSpeed)),
           )
         : defaults.wallDriftSpeed,
+    pileSize:
+      typeof source.pileSize === 'number' && Number.isFinite(source.pileSize)
+        ? Math.min(MAX_PILE_SIZE, Math.max(1, Math.round(source.pileSize)))
+        : defaults.pileSize,
+    pourSpeed:
+      typeof source.pourSpeed === 'number' && Number.isFinite(source.pourSpeed)
+        ? Math.min(
+            MAX_POUR_SPEED,
+            Math.max(MIN_POUR_SPEED, Math.round(source.pourSpeed)),
+          )
+        : defaults.pourSpeed,
+    shelfSpinesOnly:
+      typeof source.shelfSpinesOnly === 'boolean'
+        ? source.shelfSpinesOnly
+        : defaults.shelfSpinesOnly,
     cardArt: {
       default:
         rawDefault === 'auto' || isCardArtStyle(rawDefault)
@@ -231,6 +297,8 @@ export type PilePlacement = {
   y: number;
   /** Rotation in degrees. */
   r: number;
+  /** Whether the book drops in from above (default) or starts at rest. */
+  drop?: boolean;
 };
 
 /** Part of a pile's box the books may occupy, as fractions of its size. */
@@ -263,6 +331,33 @@ export function pileLayout(
     y: yMin + random() * (yMax - yMin),
     r: (random() - 0.5) * 44,
   }));
+}
+
+/** Books a pile shows, and the size of the list they were picked from. */
+export type HeldPile<T> = {
+  /** How many books the list held when these were picked. */
+  count: number;
+  /**
+   * False when the books are not yet a sample of the right size (an older
+   * cached response, or one picked for another pile size). Such a pile shows
+   * no books until a fitting sample arrives.
+   */
+  random: boolean;
+  books: T[];
+};
+
+/**
+ * Keeps the books a pile already shows when fresh data arrives, so a refresh
+ * does not swap them out (each response carries a new random sample). A new
+ * sample replaces them when the list changed size, or when the held books
+ * were not a fitting sample.
+ */
+export function holdPile<T>(
+  held: HeldPile<T> | undefined,
+  next: HeldPile<T>,
+): HeldPile<T> {
+  if (!held || held.count !== next.count) return next;
+  return !held.random && next.random ? next : held;
 }
 
 export const STATUS_ORDER: DashboardListKey[] = [

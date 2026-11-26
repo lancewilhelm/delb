@@ -17,6 +17,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -643,6 +644,27 @@ func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
 				}
 			}
 		}
+		// Each pile is a random sample of its list (every book, while lists are this small).
+		piles := data["piles"].(map[string]any)
+		for _, key := range []string{"all", "reading", "to_be_read", "finished", "dnf", "none"} {
+			raw, ok := piles[key].([]any)
+			if !ok {
+				t.Fatalf("GET %s piles.%s missing or not an array: %v", path, key, piles[key])
+			}
+			want := len(wantLists[key])
+			if key == "all" {
+				want = wantTotal
+			}
+			if len(raw) != want {
+				t.Fatalf("GET %s piles.%s len = %d, want %d", path, key, len(raw), want)
+			}
+			for _, entry := range raw {
+				title := entry.(map[string]any)["title"].(string)
+				if key != "all" && !slices.Contains(wantLists[key], title) {
+					t.Fatalf("GET %s piles.%s has %q, not in its list", path, key, title)
+				}
+			}
+		}
 	}
 	assertOverview("/api/dashboard/overview", 5, 5, map[string][]string{
 		"reading":    {"A Reading"},
@@ -654,6 +676,21 @@ func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
 		"to_be_read": {"A TBR 1", "A TBR 2"},
 	})
 	assertOverview("/api/dashboard/overview?collectionId=nonexistent-collection", 0, 0, map[string][]string{})
+
+	// The reader's pile size sets every sample's size.
+	_, sized := doJSON(http.MethodGet, "/api/dashboard/overview?pile=2", nil)
+	sizedPiles := sized["data"].(map[string]any)["piles"].(map[string]any)
+	if got := len(sizedPiles["all"].([]any)); got != 2 {
+		t.Fatalf("overview pile=2 all len = %d, want 2", got)
+	}
+	if got := len(sizedPiles["to_be_read"].([]any)); got != 2 {
+		t.Fatalf("overview pile=2 to_be_read len = %d, want 2", got)
+	}
+	for _, bad := range []string{"0", "251", "x"} {
+		if r, _ := doJSON(http.MethodGet, "/api/dashboard/overview?pile="+bad, nil); r.StatusCode != http.StatusBadRequest {
+			t.Fatalf("overview pile=%s status = %d, want 400", bad, r.StatusCode)
+		}
+	}
 
 	// The cover wall pages past the overview, newest first, in the same scope.
 	recentPage := func(path string) ([]string, any) {
@@ -694,6 +731,34 @@ func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
 	}
 	if got := spineLists["to_be_read"].([]any)[0].(map[string]any)["spineRevision"]; got != nil {
 		t.Fatalf("to_be_read spineRevision = %v, want null", got)
+	}
+	// Shelf art sizes spines from the page count and any stored bookshelf size.
+	readingEntry := spineLists["reading"].([]any)[0].(map[string]any)
+	for _, key := range []string{"pages", "shelfWidth", "shelfHeight"} {
+		if _, ok := readingEntry[key]; !ok {
+			t.Fatalf("overview book missing %q: %v", key, readingEntry)
+		}
+	}
+	// A width that nobody set by hand follows the page count, so it is not sent.
+	if readingEntry["shelfWidth"] != nil || readingEntry["shelfHeight"] == nil {
+		t.Fatalf("overview book size = %v×%v, want no width and a stored height", readingEntry["shelfWidth"], readingEntry["shelfHeight"])
+	}
+	if _, err := opened.DB.ExecContext(ctx, `
+		UPDATE book_shelf_dimensions SET width = 41, height = 199, manual_width = 1 WHERE book_id = ?`, readingID); err != nil {
+		t.Fatalf("update shelf dimensions: %v", err)
+	}
+	// spines=1 lists only books with spine artwork, with their stored size.
+	_, spineOnly := doJSON(http.MethodGet, "/api/dashboard/recent?spines=1", nil)
+	spineBooks := spineOnly["data"].(map[string]any)["books"].([]any)
+	if len(spineBooks) != 1 {
+		t.Fatalf("recent spines=1 = %v, want only the book with spine art", spineBooks)
+	}
+	spineBook := spineBooks[0].(map[string]any)
+	if spineBook["id"] != readingID || spineBook["shelfWidth"] != float64(41) || spineBook["shelfHeight"] != float64(199) {
+		t.Fatalf("recent spines=1 book = %v, want %s at 41×199", spineBook, readingID)
+	}
+	if r, _ := doJSON(http.MethodGet, "/api/dashboard/recent?spines=yes", nil); r.StatusCode != http.StatusBadRequest {
+		t.Fatalf("recent spines=yes status = %d, want 400", r.StatusCode)
 	}
 	anonReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/dashboard/overview", nil)
 	anonResp, err := http.DefaultClient.Do(anonReq)

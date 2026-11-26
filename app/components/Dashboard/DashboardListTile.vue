@@ -23,6 +23,13 @@ const props = defineProps<{
     updatedAt?: string;
     finishedDate?: string | null;
   }[];
+  /** A random sample for Pile art; without it the pile uses `books`. */
+  pileBooks?: {
+    id: string;
+    title: string;
+    coverImagePath?: string | null;
+    updatedAt?: string;
+  }[];
   to: RouteLocationRaw;
   /** The tile's chosen art style (override, default, or Auto). */
   artStyle: CardArtStyle;
@@ -60,6 +67,7 @@ const hasArt = computed(() => props.count > 0 && props.books.length > 0);
           <DashboardTileArt
             :art-style="shownStyle"
             :books="books"
+            :pile-books="pileBooks"
             :seed="listKey"
           />
         </span>
@@ -229,9 +237,6 @@ const hasArt = computed(() => props.count > 0 && props.books.length > 0);
   }
   .dash-tile-link:hover :deep(.stack-item) {
     transform: translateX(calc(var(--dx) * 0.7)) rotate(calc(var(--r) * 1.8));
-  }
-  .dash-tile-link:hover :deep(.shelf-spine:not(.lean)) {
-    transform: translateY(-3cqh);
   }
   .dash-tile-link:hover :deep(.wall) {
     transform: translate(-50%, -50%) rotate(-12deg) scale(1.05);

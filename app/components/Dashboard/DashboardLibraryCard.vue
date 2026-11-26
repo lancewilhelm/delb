@@ -5,6 +5,7 @@ import { RouterLink } from 'vue-router';
 import DashboardArtMenu from '~/components/Dashboard/DashboardArtMenu.vue';
 import DashboardCover from '~/components/Dashboard/DashboardCover.vue';
 import DashboardPile from '~/components/Dashboard/DashboardPile.vue';
+import DashboardShelfArt from '~/components/Dashboard/DashboardShelfArt.vue';
 import { useWallDrift } from '~/composables/useWallDrift';
 import { useBooksIndexFiltersStore } from '~/stores/booksIndexFilters';
 import { useUiStore } from '~/stores/ui';
@@ -16,17 +17,37 @@ import {
   wallBookIndex,
   wallDriftPxPerSecond,
   DEFAULT_WALL_DRIFT_SPEED,
+  AUTO_LIBRARY_PILE,
+  AUTO_LIBRARY_PILE_NARROW,
+  pileCoverHeight,
   type LibraryArtStyle,
   type PileRegion,
+  type PileSize,
   type WallMotion,
 } from '~/utils/dashboardArt';
+import type { SpineBook } from '~/utils/dashboardShelf';
 import type { DashboardBook, DashboardCounts } from '#shared/types/dashboard';
 
 const props = defineProps<{
   counts: DashboardCounts | null;
   recent: DashboardBook[];
+  /** Books per pile from the reader's settings; Auto shows fewer when narrow. */
+  pileSize?: PileSize;
+  /** A random sample for Pile art; without it the pile uses `recent`. */
+  pileBooks?: {
+    id: string;
+    title: string;
+    coverImagePath?: string | null;
+    updatedAt?: string;
+  }[];
+  /** Books for Shelf art, in shelf order (all books, or only those with spine art). */
+  shelfBooks?: SpineBook[];
+  /** True once every book for the shelf has loaded. */
+  shelfComplete?: boolean;
+  /** Whether the shelf shows only books with spine art. */
+  shelfSpinesOnly?: boolean;
   showStatusBar: boolean;
-  /** Wall or Pile, from the reader's dashboard settings. */
+  /** Wall, Pile, or Shelf, from the reader's dashboard settings. */
   libraryArt: LibraryArtStyle;
   /** Whether the wall drifts (Appearance → Dashboard). */
   wallMotion: WallMotion;
@@ -36,23 +57,26 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'set-art', style: LibraryArtStyle): void;
-  /** A drifting wall is close to the end of the loaded covers. */
+  /** A drifting wall is close to the end of the loaded covers, or the shelf has room. */
   (e: 'need-more'): void;
 }>();
 
 const artOptions = [
   { value: 'wall', label: 'Wall' },
   { value: 'pile', label: 'Pile' },
+  { value: 'shelf', label: 'Shelf' },
 ] as const;
 
 const booksIndexFiltersStore = useBooksIndexFiltersStore();
 const uiStore = useUiStore();
 
 const total = computed(() => props.counts?.total ?? null);
-// A pile looks natural at any size; the wall switches layout for small libraries.
+// A pile or a shelf looks natural at any size; the wall switches layout for
+// small libraries.
 const mode = computed(() => {
   if (!props.counts) return props.libraryArt;
   if (props.libraryArt === 'pile' && props.recent.length) return 'pile';
+  if (props.libraryArt === 'shelf' && props.counts.total) return 'shelf';
   return heroArtMode(props.recent.length);
 });
 
@@ -60,13 +84,19 @@ const mode = computed(() => {
 const card = ref<HTMLElement | null>(null);
 const { width: cardWidth } = useElementSize(card);
 const narrow = computed(() => cardWidth.value > 0 && cardWidth.value <= 640);
-const pile = computed(() => ({
-  books: props.recent.slice(0, narrow.value ? 20 : 24),
-  coverHeight: narrow.value ? 0.24 : 0.4,
-  region: (narrow.value
-    ? { x0: 0, x1: 1, y0: 0.02, y1: 0.46 }
-    : { x0: 0.46, x1: 1, y0: 0.04, y1: 1 }) satisfies PileRegion,
-}));
+const pile = computed(() => {
+  const auto = narrow.value ? AUTO_LIBRARY_PILE_NARROW : AUTO_LIBRARY_PILE;
+  const source = props.pileBooks ?? props.recent;
+  const books =
+    (props.pileSize ?? 'auto') === 'auto' ? source.slice(0, auto) : source;
+  return {
+    books,
+    coverHeight: pileCoverHeight(narrow.value ? 0.24 : 0.4, books.length, auto),
+    region: (narrow.value
+      ? { x0: 0, x1: 1, y0: 0.02, y1: 0.46 }
+      : { x0: 0.46, x1: 1, y0: 0.04, y1: 1 }) satisfies PileRegion,
+  };
+});
 
 // Big libraries: many small covers in reading order. Small ones: fewer, larger
 // covers, repeated so a cover never touches a copy of itself.
@@ -148,6 +178,13 @@ const note = computed(() => {
     return 'Add a book or import a folder and your covers will fill this card.';
   if (mode.value === 'spotlight')
     return 'A good start. Add a few more to fill the wall.';
+  if (
+    mode.value === 'shelf' &&
+    props.shelfSpinesOnly &&
+    props.shelfComplete &&
+    !props.shelfBooks?.length
+  )
+    return 'No books here have spine art yet. Add it from a book’s Edit spine.';
   return '';
 });
 </script>
@@ -160,13 +197,23 @@ const note = computed(() => {
     aria-labelledby="lib-card-title"
   >
     <div class="lib-art" aria-hidden="true">
-      <DashboardPile
-        v-if="mode === 'pile'"
-        :books="pile.books"
-        seed="all-books"
-        :cover-height="pile.coverHeight"
-        :region="pile.region"
-      />
+      <template v-if="mode === 'pile'">
+        <!-- Wait for the card's width, so a narrow card's pile drops only once. -->
+        <DashboardPile
+          v-if="cardWidth > 0"
+          :books="pile.books"
+          seed="all-books"
+          :cover-height="pile.coverHeight"
+          :region="pile.region"
+        />
+      </template>
+      <div v-else-if="mode === 'shelf'" class="lib-shelf">
+        <DashboardShelfArt
+          :books="shelfBooks ?? []"
+          :align="narrow ? 'center' : 'end'"
+          @room="!shelfComplete && emit('need-more')"
+        />
+      </div>
       <div v-else-if="isWall" ref="wallEl" class="lib-wall">
         <div
           ref="trackEl"
@@ -255,7 +302,7 @@ const note = computed(() => {
       </nav>
       <div class="lib-actions">
         <RouterLink
-          v-if="mode === 'wall' || mode === 'wall-small' || mode === 'pile'"
+          v-if="['wall', 'wall-small', 'pile', 'shelf'].includes(mode)"
           to="/books"
           class="lib-btn"
           @click="booksIndexFiltersStore.clearAll()"
@@ -326,6 +373,17 @@ const note = computed(() => {
   --gap: 18px;
 }
 .lib-art:has(.lib-wall) {
+  -webkit-mask: linear-gradient(90deg, transparent 26%, #000 52%);
+  mask: linear-gradient(90deg, transparent 26%, #000 52%);
+}
+/* Shelf: a row of spines across the card, on a ground along its bottom
+   edge, fading out under the text like the wall. On narrow cards the row and
+   its ground sit above the text instead. */
+.lib-shelf {
+  position: absolute;
+  inset: 0;
+}
+.lib-art:has(.lib-shelf) {
   -webkit-mask: linear-gradient(90deg, transparent 26%, #000 52%);
   mask: linear-gradient(90deg, transparent 26%, #000 52%);
 }
@@ -569,8 +627,17 @@ const note = computed(() => {
     font-size: 52px;
     margin: 4px 0;
   }
-  .mode-pile .lib-label {
+  .mode-pile .lib-label,
+  .mode-shelf .lib-label {
     min-height: 480px;
+  }
+  .lib-shelf {
+    bottom: auto;
+    height: 200px;
+  }
+  .lib-art:has(.lib-shelf) {
+    -webkit-mask: none;
+    mask: none;
   }
   .lib-chips {
     margin-bottom: 0;

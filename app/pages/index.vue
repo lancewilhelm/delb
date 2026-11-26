@@ -26,8 +26,11 @@ import {
 import {
   STATUS_LABELS,
   STATUS_ORDER,
+  holdPile,
+  pileSampleSize,
   resolveCardArt,
   type CardArtStyle,
+  type HeldPile,
   type LibraryArtStyle,
 } from '~/utils/dashboardArt';
 import type {
@@ -78,7 +81,10 @@ async function loadOverview() {
     const response = await $fetch<{ success: true; data: DashboardOverview }>(
       '/api/dashboard/overview',
       {
-        query: { collectionId: scope.value },
+        query: {
+          collectionId: scope.value,
+          ...(pileSize.value === 'auto' ? {} : { pile: pileSize.value }),
+        },
         signal: controller.signal,
       },
     );
@@ -99,7 +105,9 @@ async function loadShelves() {
   try {
     const response = await $fetch<{
       data: { shelves: DashboardShelfSummary[] };
-    }>('/api/shelves', { query: { previews: 25 } });
+    }>('/api/shelves', {
+      query: { previews: 25, pile: pileSampleSize(pileSize.value, false) },
+    });
     if (disposed) return;
     shelves.value = response.data.shelves;
     writeShelvesCache(user.value?.id, response.data.shelves);
@@ -130,6 +138,82 @@ function setLibraryArt(style: LibraryArtStyle) {
   void userSettingsStore.updateSettingAtPath('dashboard.libraryArt', style);
 }
 
+// ---- Piles: a random sample per list, held for the page's lifetime ---------
+const pileSize = computed(() => dashboardSettings.value.pileSize);
+type PileBook = DashboardShelfSummary['previews'][number] | DashboardBook;
+/** Keyed like card art overrides (`all`, `reading`, `shelf:<id>`, …). */
+const piles = ref<Record<string, HeldPile<PileBook>>>({});
+// The collection the status piles were picked from.
+let pileScope: string | null = null;
+
+/**
+ * A pile from a response: its sample when that has the size the reader asked
+ * for, and otherwise no books yet, so the pile drops in once when a fitting
+ * sample arrives instead of twice.
+ */
+function pileFrom(
+  sample: PileBook[] | undefined,
+  count: number,
+  library: boolean,
+): HeldPile<PileBook> {
+  const fits =
+    !!sample &&
+    sample.length === Math.min(count, pileSampleSize(pileSize.value, library));
+  return { count, random: fits, books: fits ? sample : [] };
+}
+
+/** Adopts fresh samples, keeping the books each pile already shows. */
+function holdPiles(next: Record<string, HeldPile<PileBook>>) {
+  const held = { ...piles.value };
+  for (const [key, pile] of Object.entries(next))
+    held[key] = holdPile(held[key], pile);
+  piles.value = held;
+}
+
+watch(
+  overview,
+  (data) => {
+    if (pileScope !== scope.value) {
+      // Another collection's piles hold other books.
+      piles.value = Object.fromEntries(
+        Object.entries(piles.value).filter(([key]) => key.startsWith('shelf:')),
+      );
+      pileScope = scope.value;
+    }
+    if (!data) return;
+    const next: Record<string, HeldPile<PileBook>> = {
+      all: pileFrom(data.piles?.all, data.counts.total, true),
+    };
+    for (const key of STATUS_ORDER)
+      next[key] = pileFrom(data.piles?.[key], data.counts[key], false);
+    holdPiles(next);
+  },
+  { immediate: true },
+);
+
+watch(
+  shelves,
+  (list) => {
+    if (!list) return;
+    holdPiles(
+      Object.fromEntries(
+        list.map((shelf) => [
+          `shelf:${shelf.id}`,
+          pileFrom(shelf.pile ?? [], shelf.count, false),
+        ]),
+      ),
+    );
+  },
+  { immediate: true },
+);
+
+// A new pile size needs new samples.
+watch(pileSize, () => {
+  piles.value = {};
+  void loadOverview();
+  void loadShelves();
+});
+
 // ---- Drifting wall: older covers beyond the overview's first page ----------
 const moreRecent = ref<DashboardBook[]>([]);
 const wallBooks = computed(() => [
@@ -140,6 +224,7 @@ let moreRequest = 0;
 let loadingMore = false;
 
 async function loadMoreRecent() {
+  if (shelfUsesSpines.value) return loadMoreSpines();
   const total = overview.value?.counts.total ?? 0;
   const offset = wallBooks.value.length;
   if (loadingMore || disposed || offset >= total) return;
@@ -159,6 +244,64 @@ async function loadMoreRecent() {
     if (request === moreRequest) loadingMore = false;
   }
 }
+
+// ---- Shelf: every book, or only books with spine art ----------------------
+const shelfUsesSpines = computed(
+  () =>
+    dashboardSettings.value.libraryArt === 'shelf' &&
+    dashboardSettings.value.shelfSpinesOnly,
+);
+const spineBooks = ref<DashboardBook[]>([]);
+const spinesComplete = ref(false);
+let spineRequest = 0;
+let loadingSpines = false;
+
+async function loadMoreSpines() {
+  if (loadingSpines || disposed || spinesComplete.value) return;
+  loadingSpines = true;
+  const request = ++spineRequest;
+  try {
+    const response = await $fetch<{
+      data: { books: DashboardBook[]; nextOffset: number | null };
+    }>('/api/dashboard/recent', {
+      query: {
+        collectionId: scope.value,
+        offset: spineBooks.value.length,
+        spines: 1,
+      },
+    });
+    if (request !== spineRequest) return;
+    spineBooks.value = [...spineBooks.value, ...response.data.books];
+    spinesComplete.value = response.data.nextOffset === null;
+  } catch {
+    // The shelf keeps the spines it has; the next request tries again.
+  } finally {
+    if (request === spineRequest) loadingSpines = false;
+  }
+}
+
+function resetSpines() {
+  ++spineRequest;
+  loadingSpines = false;
+  spineBooks.value = [];
+  spinesComplete.value = false;
+}
+
+const shelfBooks = computed(() =>
+  shelfUsesSpines.value ? spineBooks.value : wallBooks.value,
+);
+const shelfComplete = computed(() =>
+  shelfUsesSpines.value
+    ? spinesComplete.value
+    : wallBooks.value.length >= (overview.value?.counts.total ?? 0),
+);
+watch(
+  shelfUsesSpines,
+  (on) => {
+    if (on && !spineBooks.value.length) void loadMoreSpines();
+  },
+  { immediate: true },
+);
 
 // ---- Lists -----------------------------------------------------------------
 function readDate(value: string) {
@@ -198,6 +341,7 @@ const statusTiles = computed(() =>
       count: overview.value?.counts[key] ?? 0,
       books,
       line: overview.value ? statusLine(key, books) : '',
+      pileBooks: piles.value[key]?.books,
       to: key === 'to_be_read' ? '/to-be-read' : `/books?status=${key}`,
       tone: `var(--dash-s-${key})`,
     };
@@ -210,11 +354,8 @@ const shelfTiles = computed(() =>
     title: shelf.name,
     count: shelf.count,
     // Shelf previews don't say whether a cover exists; the cover falls back on error.
-    books: shelf.previews.map((book) => ({
-      id: book.id,
-      title: book.title,
-      spineRevision: book.spineRevision,
-    })),
+    books: shelf.previews,
+    pileBooks: piles.value[`shelf:${shelf.id}`]?.books,
     line: 'Personal shelf',
     to: `/shelves/${encodeURIComponent(shelf.id)}`,
   })),
@@ -238,6 +379,8 @@ watch(scope, () => {
   ++moreRequest;
   loadingMore = false;
   moreRecent.value = [];
+  resetSpines();
+  if (shelfUsesSpines.value) void loadMoreSpines();
   void loadOverview();
 });
 onMounted(() => {
@@ -275,6 +418,11 @@ onBeforeUnmount(() => {
         <DashboardLibraryCard
           :counts="overview?.counts ?? null"
           :recent="wallBooks"
+          :pile-books="piles.all?.books ?? []"
+          :pile-size="dashboardSettings.pileSize"
+          :shelf-books="shelfBooks"
+          :shelf-complete="shelfComplete"
+          :shelf-spines-only="dashboardSettings.shelfSpinesOnly"
           :show-status-bar="dashboardSettings.showStatusBar"
           :library-art="dashboardSettings.libraryArt"
           :wall-motion="dashboardSettings.wallMotion"
@@ -321,6 +469,7 @@ onBeforeUnmount(() => {
                 :count="tile.count"
                 :line="tile.line"
                 :books="tile.books"
+                :pile-books="tile.pileBooks"
                 :to="tile.to"
                 :tone="tile.tone"
                 tag="Status"
@@ -355,6 +504,7 @@ onBeforeUnmount(() => {
               :count="tile.count"
               :line="tile.line"
               :books="tile.books"
+              :pile-books="tile.pileBooks"
               :to="tile.to"
               tone="var(--dash-s-shelf)"
               tag="Shelf"

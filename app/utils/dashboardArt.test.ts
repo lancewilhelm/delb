@@ -4,7 +4,11 @@ import {
   defaultDashboardSettings,
   displayedCardArt,
   heroArtMode,
+  holdPile,
   normalizeDashboardSettings,
+  pileCoverHeight,
+  pileSampleSize,
+  pourTimeScale,
   pileLayout,
   resolveCardArt,
   statusSegments,
@@ -100,6 +104,17 @@ test('dashboard settings drop invalid and reset overrides', () => {
     normalizeDashboardSettings({ libraryArt: 'pile' }).libraryArt,
     'pile',
   );
+  const shelf = normalizeDashboardSettings({
+    libraryArt: 'shelf',
+    shelfSpinesOnly: true,
+  });
+  assert.equal(shelf.libraryArt, 'shelf');
+  assert.equal(shelf.shelfSpinesOnly, true);
+  assert.equal(normalized.shelfSpinesOnly, false, 'spines-only is opt-in');
+  assert.equal(
+    normalizeDashboardSettings({ shelfSpinesOnly: 'yes' }).shelfSpinesOnly,
+    false,
+  );
   assert.equal(normalized.cardArt.default, 'auto');
   assert.deepEqual(normalized.cardArt.overrides, {
     reading: 'wall',
@@ -126,6 +141,53 @@ test('pile layout is random per list but stable for the same list', () => {
     assert.ok(placement.x >= 0.42 && placement.x <= 1.03 - (0.4 * (2 / 3)) / 3);
     assert.ok(placement.y >= 0.02 && placement.y <= 1 - 0.4 * 0.95);
   }
+});
+
+test('a pile keeps its books until its list changes size', () => {
+  const shown = { count: 30, random: true, books: ['a', 'b'] };
+  const fresh = { count: 30, random: true, books: ['c', 'd'] };
+  assert.equal(holdPile(undefined, fresh), fresh, 'the first sample is used');
+  assert.equal(holdPile(shown, fresh), shown, 'a refresh keeps the books');
+  const grown = { ...fresh, count: 31 };
+  assert.equal(holdPile(shown, grown), grown, 'a changed list re-samples');
+  const fallback = { count: 30, random: false, books: ['a', 'b'] };
+  assert.equal(
+    holdPile(fallback, fresh),
+    fresh,
+    'a sample replaces a fallback',
+  );
+  assert.equal(
+    holdPile(shown, fallback),
+    shown,
+    'a fallback never replaces a sample',
+  );
+});
+
+test('pile size is Auto or a whole number up to 250', () => {
+  assert.equal(normalizeDashboardSettings({}).pileSize, 'auto');
+  assert.equal(normalizeDashboardSettings({ pileSize: 37 }).pileSize, 37);
+  assert.equal(normalizeDashboardSettings({ pileSize: 12.6 }).pileSize, 13);
+  assert.equal(normalizeDashboardSettings({ pileSize: 900 }).pileSize, 250);
+  assert.equal(normalizeDashboardSettings({ pileSize: 0 }).pileSize, 1);
+  assert.equal(
+    normalizeDashboardSettings({ pileSize: 'lots' }).pileSize,
+    'auto',
+  );
+  assert.equal(pileSampleSize('auto', true), 24);
+  assert.equal(pileSampleSize('auto', false), 10);
+  assert.equal(pileSampleSize(100, false), 100);
+  assert.equal(pileCoverHeight(0.5, 10, 10), 0.5);
+  const big = pileCoverHeight(0.5, 100, 10);
+  assert.ok(big < 0.5 && big > 0.2, 'bigger piles use smaller covers');
+});
+
+test('pour speed is a 1–10 level; 5 keeps the default pour', () => {
+  assert.equal(normalizeDashboardSettings({}).pourSpeed, 5);
+  assert.equal(normalizeDashboardSettings({ pourSpeed: 14 }).pourSpeed, 10);
+  assert.equal(normalizeDashboardSettings({ pourSpeed: 'x' }).pourSpeed, 5);
+  assert.equal(pourTimeScale(5), 1);
+  assert.equal(pourTimeScale(10), 0.5, 'the fastest pours in half the time');
+  assert.equal(pourTimeScale(1), 5, 'the slowest takes five times as long');
 });
 
 test('status segments skip empty statuses', () => {

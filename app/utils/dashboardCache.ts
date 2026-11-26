@@ -5,7 +5,19 @@ export type DashboardShelfSummary = {
   id: string;
   name: string;
   count: number;
-  previews: { id: string; title: string; spineRevision?: string | null }[];
+  previews: DashboardShelfPreview[];
+  /** Random sample for Pile art (`?pile=`); absent for an empty shelf. */
+  pile?: DashboardShelfPreview[];
+};
+
+/** A book in a shelf preview, with what Shelf art needs to size its spine. */
+export type DashboardShelfPreview = {
+  id: string;
+  title: string;
+  spineRevision?: string | null;
+  pages?: number | null;
+  shelfWidth?: number | null;
+  shelfHeight?: number | null;
 };
 
 const STORAGE_PREFIX = 'delb.dashboardCache.v2:';

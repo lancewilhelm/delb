@@ -26,10 +26,26 @@ type Body = {
   vz: number;
   tx: number;
   ty: number;
+  /** Seconds left before the book starts to drop in; it is hidden until then. */
+  wait: number;
+  /** Whether the book moved on the last frame, so it needs drawing. */
+  awake: boolean;
   drag: { ox: number; oy: number; lx: number; ly: number; lt: number } | null;
 };
 
-const GRAVITY = 7.5;
+// Height units per second squared. At 32, a released book lands in about a
+// fifth of a second.
+const GRAVITY = 32;
+/** Height a book drops in from. */
+const DROP_HEIGHT = 1.2;
+/** Longest gap between two books pouring in, and the longest whole pour. */
+const POUR_GAP = 0.07;
+const POUR_TIME = 2.5;
+// Sliding and spinning slow down this fast (per second) on the table.
+const TABLE_FRICTION = 9;
+const TABLE_SPIN_FRICTION = 9;
+/** Speed a book keeps when it hits the edge of its region. */
+const EDGE_BOUNCE = 0.3;
 const DRAG_LIFT = 0.75;
 const MAX_SPEED = 1600;
 const CLICK_SLOP_PX = 4;
@@ -41,13 +57,27 @@ export function attachPilePhysics(
   tile: HTMLElement,
   items: HTMLElement[],
   placements: PilePlacement[],
-  options: { reducedMotion: boolean; region?: PileRegion },
-): { dispose: () => void; consumeDrag: () => boolean } {
+  options: {
+    reducedMotion: boolean;
+    region?: PileRegion;
+    /** Multiplies the pour's length: 2 pours twice as slowly. */
+    pourScale?: number;
+  },
+): {
+  dispose: () => void;
+  consumeDrag: () => boolean;
+  positions: () => PilePlacement[];
+} {
   const W = tile.clientWidth;
   const H = tile.clientHeight;
   const region = options.region ?? FULL_PILE_REGION;
-  // Big piles drop in faster so the last book doesn't lag behind.
-  const stagger = Math.min(0.45, 4 / Math.max(1, items.length));
+  // Books pour in one after another; big piles pour faster so the whole pour
+  // stays short.
+  const dropping = items.filter((_, i) => placements[i]?.drop !== false);
+  const pourScale = options.pourScale ?? 1;
+  const gap =
+    Math.min(POUR_GAP, POUR_TIME / Math.max(1, dropping.length)) * pourScale;
+  let dropIndex = 0;
   let zTop = 10;
   let raf = 0;
   let last = 0;
@@ -56,6 +86,7 @@ export function attachPilePhysics(
 
   const bodies: Body[] = items.map((el, i) => {
     const p = placements[i] ?? { x: 0.3, y: 0.3, r: 0 };
+    const drops = !options.reducedMotion && p.drop !== false;
     return {
       el,
       w: el.offsetWidth,
@@ -64,7 +95,9 @@ export function attachPilePhysics(
       y: p.y * H,
       a: p.r,
       // Books drop in one after another unless motion is reduced.
-      z: options.reducedMotion ? 0 : 1.2 + i * stagger,
+      z: drops ? DROP_HEIGHT : 0,
+      wait: drops ? dropIndex++ * gap : 0,
+      awake: true,
       vx: 0,
       vy: 0,
       va: 0,
@@ -89,10 +122,14 @@ export function attachPilePhysics(
     const lift = options.reducedMotion ? 0 : b.z;
     b.el.style.transform = `translate(${b.x}px, ${b.y}px) rotate(${b.a}deg) rotateX(${b.tx}deg) rotateY(${b.ty}deg) scale(${1 + lift * 0.16})`;
     b.el.style.boxShadow = `${3 + lift * 10}px ${5 + lift * 18}px ${10 + lift * 24}px rgb(0 0 0 / ${Math.max(0.12, 0.36 - lift * 0.07)})`;
-    b.el.style.opacity = String(clamp(3 - b.z, 0, 1));
+    b.el.style.opacity = b.wait > 0 ? '0' : String(clamp(3 - b.z, 0, 1));
   };
 
   const step = (b: Body, dt: number): boolean => {
+    if (b.wait > 0) {
+      b.wait = Math.max(0, b.wait - dt);
+      return true;
+    }
     if (b.drag) {
       b.z += (DRAG_LIFT - b.z) * Math.min(1, dt * 14);
       if (!options.reducedMotion) {
@@ -113,10 +150,10 @@ export function attachPilePhysics(
       } else b.vz = 0;
     }
     const onTable = b.z === 0;
-    const friction = Math.exp((onTable ? -5 : -0.5) * dt);
+    const friction = Math.exp((onTable ? -TABLE_FRICTION : -0.5) * dt);
     b.vx *= friction;
     b.vy *= friction;
-    b.va *= Math.exp((onTable ? -6 : -0.8) * dt);
+    b.va *= Math.exp((onTable ? -TABLE_SPIN_FRICTION : -0.8) * dt);
     b.x += b.vx * dt;
     b.y += b.vy * dt;
     b.a += b.va * dt;
@@ -125,10 +162,10 @@ export function attachPilePhysics(
     const maxX = region.x1 * W - b.w * 0.7;
     const minY = region.y0 * H - b.h * 0.2;
     const maxY = region.y1 * H - b.h * 0.65;
-    if (b.x < minX) [b.x, b.vx] = [minX, Math.abs(b.vx) * 0.45];
-    if (b.x > maxX) [b.x, b.vx] = [maxX, -Math.abs(b.vx) * 0.45];
-    if (b.y < minY) [b.y, b.vy] = [minY, Math.abs(b.vy) * 0.45];
-    if (b.y > maxY) [b.y, b.vy] = [maxY, -Math.abs(b.vy) * 0.45];
+    if (b.x < minX) [b.x, b.vx] = [minX, Math.abs(b.vx) * EDGE_BOUNCE];
+    if (b.x > maxX) [b.x, b.vx] = [maxX, -Math.abs(b.vx) * EDGE_BOUNCE];
+    if (b.y < minY) [b.y, b.vy] = [minY, Math.abs(b.vy) * EDGE_BOUNCE];
+    if (b.y > maxY) [b.y, b.vy] = [maxY, -Math.abs(b.vy) * EDGE_BOUNCE];
     const settle = Math.exp((onTable ? -10 : -3) * dt);
     b.tx *= settle;
     b.ty *= settle;
@@ -145,8 +182,13 @@ export function attachPilePhysics(
     last = time;
     let active = false;
     for (const b of bodies) {
-      active = step(b, dt) || active;
-      draw(b);
+      // Resting books are skipped, so a big pile costs little while one moves.
+      if (!b.awake) continue;
+      const waiting = b.wait > 0;
+      b.awake = step(b, dt);
+      active = b.awake || active;
+      // A waiting book stays hidden until its turn; draw once when it starts.
+      if (!waiting || b.wait === 0) draw(b);
     }
     raf = active ? requestAnimationFrame(tick) : 0;
   };
@@ -176,6 +218,7 @@ export function attachPilePhysics(
     moved = 0;
     b.el.style.zIndex = String(++zTop);
     b.el.classList.add('is-dragging');
+    b.awake = true;
     try {
       tile.setPointerCapture(event.pointerId);
     } catch {
@@ -203,6 +246,7 @@ export function attachPilePhysics(
     b.drag.lx = p.x;
     b.drag.ly = p.y;
     b.drag.lt = now;
+    b.awake = true;
     kick();
   };
   const onUp = () => {
@@ -214,6 +258,7 @@ export function attachPilePhysics(
     b.vx = clamp(b.vx, -MAX_SPEED, MAX_SPEED);
     b.vy = clamp(b.vy, -MAX_SPEED, MAX_SPEED);
     b.vz = options.reducedMotion ? 0 : 0.6;
+    b.awake = true;
     kick();
   };
 
@@ -232,6 +277,10 @@ export function attachPilePhysics(
       tile.removeEventListener('pointermove', onMove);
       tile.removeEventListener('pointerup', onUp);
       tile.removeEventListener('pointercancel', onUp);
+    },
+    /** Where each book lies now, in the order of `items`. */
+    positions() {
+      return bodies.map((b) => ({ x: b.x / W, y: b.y / H, r: b.a }));
     },
     /** True once after a real drag, so the tile can swallow the trailing click. */
     consumeDrag() {
