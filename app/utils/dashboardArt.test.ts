@@ -8,6 +8,7 @@ import {
   normalizeDashboardSettings,
   pileCoverHeight,
   pileSampleSize,
+  pourTimeScale,
   pileLayout,
   resolveCardArt,
   statusSegments,
@@ -151,16 +152,31 @@ test('a pile keeps its books until its list changes size', () => {
   );
 });
 
-test('pile size is Auto or a listed size and sets every sample', () => {
+test('pile size is Auto or a whole number up to 250', () => {
   assert.equal(normalizeDashboardSettings({}).pileSize, 'auto');
-  assert.equal(normalizeDashboardSettings({ pileSize: 50 }).pileSize, 50);
-  assert.equal(normalizeDashboardSettings({ pileSize: 37 }).pileSize, 'auto');
+  assert.equal(normalizeDashboardSettings({ pileSize: 37 }).pileSize, 37);
+  assert.equal(normalizeDashboardSettings({ pileSize: 12.6 }).pileSize, 13);
+  assert.equal(normalizeDashboardSettings({ pileSize: 900 }).pileSize, 250);
+  assert.equal(normalizeDashboardSettings({ pileSize: 0 }).pileSize, 1);
+  assert.equal(
+    normalizeDashboardSettings({ pileSize: 'lots' }).pileSize,
+    'auto',
+  );
   assert.equal(pileSampleSize('auto', true), 24);
   assert.equal(pileSampleSize('auto', false), 10);
   assert.equal(pileSampleSize(100, false), 100);
   assert.equal(pileCoverHeight(0.5, 10, 10), 0.5);
   const big = pileCoverHeight(0.5, 100, 10);
   assert.ok(big < 0.5 && big > 0.2, 'bigger piles use smaller covers');
+});
+
+test('pour speed is a 1–10 level; 5 keeps the default pour', () => {
+  assert.equal(normalizeDashboardSettings({}).pourSpeed, 5);
+  assert.equal(normalizeDashboardSettings({ pourSpeed: 14 }).pourSpeed, 10);
+  assert.equal(normalizeDashboardSettings({ pourSpeed: 'x' }).pourSpeed, 5);
+  assert.equal(pourTimeScale(5), 1);
+  assert.equal(pourTimeScale(10), 0.5, 'the fastest pours in half the time');
+  assert.equal(pourTimeScale(1), 5, 'the slowest takes five times as long');
 });
 
 test('status segments skip empty statuses', () => {

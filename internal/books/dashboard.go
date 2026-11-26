@@ -33,7 +33,7 @@ const (
 	dashboardPreviewLimit  = 25
 	dashboardLibraryPile   = 24
 	dashboardListPileLimit = 10
-	dashboardMaxPile       = 100
+	dashboardMaxPile       = 250
 )
 
 // dashboardRecentOrder is the newest-first order of the All books cover wall.

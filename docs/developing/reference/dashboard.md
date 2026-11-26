@@ -47,9 +47,9 @@ Status and shelf tiles draw their art in one of six styles: Collage, Fan, Stack,
 
 Every style works from a single cover up. Pile tiles hold books picked at random from the list, ten by default or the reader's **Pile size**; the other styles show the start of the list in its order. Wall fills 25 slots: lists with 25 or more books show no repeats, smaller lists repeat covers in a pattern where no copy touches another, and lists under four books draw as Fan. Shelf shows the first book face-out (with its finish date on Finished) and the rest as spines. A book with spine artwork shows that artwork in its own proportions; other books, or artwork that fails to load, get a generated colored spine. DNF art is desaturated.
 
-**Appearance → Dashboard → Pile size** sets how many books every pile holds: **Auto** (the defaults above), 10, 25, 50, or 100. Piles bigger than their default use smaller covers.
+**Appearance → Dashboard → Pile size** sets how many books every pile holds: **Auto** (the defaults above), or **Custom** with a number from 1 to 250. Piles bigger than their default use smaller covers. **Pour speed**, from 1 to 10 (default 5), sets how quickly the books pour in: 10 pours in half the default time, and 1 takes five times as long.
 
-Pile picks its books and lands in a new random scatter every time the page loads. The books pour in one after another, at most 0.07 seconds apart, and a whole pour takes at most 2.5 seconds. Each pile drops in once. A sample of the wrong size, from a cache made before the reader changed **Pile size**, is not shown; the pile waits for a fitting sample instead. When fresh data replaces the cached dashboard, each pile keeps its books unless its list changed size. If the books do change, the books that stay keep their places and only new books drop in. Readers can drag a book in a pile: it lifts, tilts with the motion, then drops, slides a short way, and settles. Books overlap rather than collide. A drag does not open the tile. With reduced motion, books are placed without the drop-in or tilt.
+Pile picks its books and lands in a new random scatter every time the page loads. At the default **Pour speed**, the books pour in one after another, at most 0.07 seconds apart, and a whole pour takes at most 2.5 seconds. Each pile drops in once. A sample of the wrong size, from a cache made before the reader changed **Pile size**, is not shown; the pile waits for a fitting sample instead. When fresh data replaces the cached dashboard, each pile keeps its books unless its list changed size. If the books do change, the books that stay keep their places and only new books drop in. Readers can drag a book in a pile: it lifts, tilts with the motion, then drops, slides a short way, and settles. Books overlap rather than collide. A drag does not open the tile. With reduced motion, books are placed without the drop-in or tilt.
 
 ## Dashboard API
 
@@ -58,7 +58,7 @@ Pile picks its books and lands in a new random scatter every time the page loads
 | Parameter      | Values                                     | Default |
 | -------------- | ------------------------------------------ | ------- |
 | `collectionId` | Accessible collection ID, or empty for All | All     |
-| `pile`         | Pile size, 1–100                           | Auto    |
+| `pile`         | Pile size, 1–250                           | Auto    |
 
 The response contains `data.counts`, `data.recent`, `data.lists`, and `data.piles`. `recent` holds up to 45 visible books, newest first. `lists` holds up to 25 books for each of `reading`, `to_be_read`, `finished`, `dnf`, and `none`. `piles` holds a new random sample on every request: up to 24 books from the whole scope under `all`, and up to 10 books from each status list under the same keys as `lists`. With `pile`, every sample holds up to that many books. Any other `pile` value returns 400. Each book includes its ID, title, cover pointer, update timestamp, progress, `finishedDate` calendar date, and `spineRevision` (set when the book has spine artwork). The shared response type is [DashboardOverview](../../../shared/types/dashboard.ts).
 
@@ -76,7 +76,7 @@ Unauthenticated requests return 401. An inaccessible collection returns zero cou
 
 `GET /api/dashboard/recent?collectionId=&offset=` pages through the same newest-first books after the overview's first 45, for a drifting wall. Each page holds up to 45 books, and a null `nextOffset` ends the list. An invalid offset returns 400.
 
-The shelf tiles use `GET /api/shelves?previews=25&pile=10`, with the reader's **Pile size** in place of 10. `previews=25` fills a Wall tile's 25 slots. `previews` accepts 1–25 and defaults to 4 (the Shelves page). Each preview includes the book's `spineRevision`. `pile` accepts 1–100; when it is present, each non-empty shelf includes a `pile` array of that many books picked at random. Without it the response has no `pile` field.
+The shelf tiles use `GET /api/shelves?previews=25&pile=10`, with the reader's **Pile size** in place of 10. `previews=25` fills a Wall tile's 25 slots. `previews` accepts 1–25 and defaults to 4 (the Shelves page). Each preview includes the book's `spineRevision`. `pile` accepts 1–250; when it is present, each non-empty shelf includes a `pile` array of that many books picked at random. Without it the response has no `pile` field.
 
 `GET /api/dashboard?shelf=&collectionId=&offset=` still returns counts and one paged shelf (`reading`, `finished` with a date, or `tbr`), twelve books per page. The dashboard page no longer uses it.
 

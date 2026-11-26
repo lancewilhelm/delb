@@ -686,7 +686,7 @@ func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
 	if got := len(sizedPiles["to_be_read"].([]any)); got != 2 {
 		t.Fatalf("overview pile=2 to_be_read len = %d, want 2", got)
 	}
-	for _, bad := range []string{"0", "101", "x"} {
+	for _, bad := range []string{"0", "251", "x"} {
 		if r, _ := doJSON(http.MethodGet, "/api/dashboard/overview?pile="+bad, nil); r.StatusCode != http.StatusBadRequest {
 			t.Fatalf("overview pile=%s status = %d, want 400", bad, r.StatusCode)
 		}

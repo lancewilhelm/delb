@@ -2,8 +2,10 @@
 import { usePreferredReducedMotion } from '@vueuse/core';
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import DashboardCover from '~/components/Dashboard/DashboardCover.vue';
+import { useUserSettingsStore } from '~/stores/userSettings';
 import {
   pileLayout,
+  pourTimeScale,
   type PilePlacement,
   type PileRegion,
 } from '~/utils/dashboardArt';
@@ -32,6 +34,7 @@ const props = withDefaults(
 );
 
 const reducedMotion = usePreferredReducedMotion();
+const userSettingsStore = useUserSettingsStore();
 // New each time the pile mounts (every page load), so the books land somewhere
 // new; kept across re-renders so a data refresh doesn't re-throw the pile.
 const throwId = Math.random().toString(36).slice(2);
@@ -94,7 +97,13 @@ async function setup() {
     el,
     Array.from(el.querySelectorAll<HTMLElement>(':scope > .pile-item')),
     placements,
-    { reducedMotion: reducedMotion.value === 'reduce', region: props.region },
+    {
+      reducedMotion: reducedMotion.value === 'reduce',
+      region: props.region,
+      pourScale: pourTimeScale(
+        userSettingsStore.activeSettings.dashboard.pourSpeed,
+      ),
+    },
   );
   thrown ||= ids.length > 0;
   placedIds = ids;
