@@ -94,6 +94,10 @@ See [book view design record](../../archive/book-view-settings.md), [system arch
 
 `dashboard.cardArt.default` is `auto` or one of `collage`, `fan`, `stack`, `shelf`, `pile`, or `wall`, and defaults to `auto`. **Card art** in **Appearance → Dashboard** sets it. `dashboard.cardArt.overrides` maps a tile key (`reading`, `to_be_read`, `finished`, `dnf`, `none`, or `shelf:<id>`) to that tile's style; each tile's **⋯** menu writes it. Choosing **Use default** writes `null`, which normalization removes, and **Reset … to the default** clears every override. Unknown styles are dropped. Both settings use the active desktop or mobile profile. See the [dashboard reference](dashboard.md) for what each style draws.
 
+## Share cards
+
+`shareCard.promptOnFinish` defaults to `true`. While it is on, choosing **Finished** for one book shows a toast that offers a share card. **Don't ask again** in the toast sets it to `false`, and **Offer a share card when I finish a book** in **Settings → General → Share cards** turns it back on. Any value other than `false` normalizes to `true`. It uses the active desktop or mobile profile. The **Share card** button on finished books does not depend on it. See the [share cards reference](share-cards.md).
+
 ## Cover reading-status badges
 
 `coverStyle.showReadingStatus` defaults to `false`. **Reading status badges** in **Appearance → Cover Style** updates this setting through the existing settings sync and active desktop or mobile profile.

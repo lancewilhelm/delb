@@ -13,6 +13,7 @@ These pages describe feature contracts and implementation behavior. Start with t
 | Reader persistence and endpoints                    | [EPUB reader](epub-reader.md)                             |
 | PDF rendering, file selection, and page persistence | [PDF reader](pdf-reader.md)                               |
 | Reading status, dates, and progress rules           | [Reading status and progress](reading-status-progress.md) |
+| Finished-book share cards and the finish summary    | [Share cards](share-cards.md)                             |
 | External providers and metadata imports             | [Metadata](metadata.md)                                   |
 | Calibre's import-source database                    | [Calibre schema](calibre-schema.md)                       |
 

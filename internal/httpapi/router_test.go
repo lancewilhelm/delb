@@ -169,6 +169,7 @@ func TestRouterPhase2AOwnedAndUnportedProxied(t *testing.T) {
 		{http.MethodGet, "/api/books/book-1/progress-logs", http.StatusUnauthorized},
 		{http.MethodPost, "/api/books/book-1/progress-logs", http.StatusUnauthorized},
 		{http.MethodPut, "/api/books/book-1/progress-sync", http.StatusUnauthorized},
+		{http.MethodGet, "/api/books/book-1/finish-summary", http.StatusUnauthorized},
 		{http.MethodGet, "/api/tbr", http.StatusUnauthorized},
 		{http.MethodGet, "/api/dashboard", http.StatusUnauthorized},
 		{http.MethodGet, "/api/dashboard/overview", http.StatusUnauthorized},

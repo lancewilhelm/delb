@@ -136,6 +136,7 @@ func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/books/{id}/progress-logs", reqSess(s.handleGetProgressLogs))
 	mux.HandleFunc("POST /api/books/{id}/progress-logs", reqSess(s.handlePostProgressLog))
 	mux.HandleFunc("PUT /api/books/{id}/progress-sync", reqSess(s.handlePutProgressSync))
+	mux.HandleFunc("GET /api/books/{id}/finish-summary", reqSess(s.handleGetFinishSummary))
 	mux.HandleFunc("GET /api/tbr", reqSess(s.handleGetTbr))
 	mux.HandleFunc("GET /api/dashboard", s.handleGetDashboard)
 	mux.HandleFunc("GET /api/dashboard/overview", s.handleGetDashboardOverview)

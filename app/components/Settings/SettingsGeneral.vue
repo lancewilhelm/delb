@@ -4,7 +4,15 @@ import { computed, ref, watch } from 'vue';
 import DelbLogo from '~/components/DelbLogo.vue';
 import ModalWindow from '~/components/ModalWindow.vue';
 import SettingsUIGroup from '~/components/Settings/UI/SettingsUIGroup.vue';
+import SettingsUIToggle from '~/components/Settings/UI/SettingsUIToggle.vue';
+import { useUserSettingsStore } from '~/stores/userSettings';
 import { appVersion } from '~/utils/appVersion';
+
+const userSettingsStore = useUserSettingsStore();
+const shareCardPrompt = userSettingsStore.settingRef<boolean>(
+  'shareCard.promptOnFinish',
+  { immediate: true },
+);
 
 const changePasswordModalVisible = ref(false);
 const changePasswordSuccess = ref(false);
@@ -195,6 +203,13 @@ async function handleUpdateProfile() {
           </div>
         </div>
       </div>
+    </SettingsUIGroup>
+    <SettingsUIGroup title="Share cards" icon="lucide:share-2">
+      <SettingsUIToggle
+        v-model="shareCardPrompt"
+        title="Offer a share card when I finish a book"
+        description="Shows a short notice with a Share card button after you mark a book as Finished."
+      />
     </SettingsUIGroup>
     <SettingsUIGroup
       title="About"
