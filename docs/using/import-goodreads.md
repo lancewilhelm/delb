@@ -1,6 +1,6 @@
 # Import from Goodreads
 
-Delb can import your Goodreads library: reading statuses, finish dates, the To be read order, ratings, reviews, private notes, and shelves. The import affects only your account. It shows what will change before it writes anything.
+Delb can import your Goodreads library: reading statuses, finish dates, the To be read order, ratings, reviews, private notes, and shelves. Your reading data belongs to your account. Other members can see any catalog entries that you add to a shared collection. It shows what will change before it writes anything.
 
 ## Export your Goodreads library
 
@@ -37,7 +37,9 @@ Choose one of three options:
 - **Create catalog entries from the Goodreads data.** Delb creates entries without ebook files. They include the title, authors, series, ISBNs, page count, publisher, and publication year. This option is fast, and the entries have no covers.
 - **Create entries and look up metadata.** Delb also asks the configured metadata provider for each book and adds its description, cover, and other details when the result matches the title and author. This option is slower, and the provider can limit the request rate. A book without an acceptable result gets the Goodreads data.
 
-New entries go into one collection. You can choose an existing collection that you can edit, or create a new private collection. Other members of the chosen collection can see the new entries. Your statuses, ratings, reviews, and notes stay private either way.
+New entries go into one collection. Delb selects **A new private collection** by default. If you already own a private collection with the same name, Delb can reuse it. If the name belongs to a shared collection, enter a different name.
+
+To add books to a shared collection, choose **An existing collection**, select the collection, and check the confirmation box. This includes the Default collection. Other members can see the new catalog entries. Your statuses, ratings, reviews, and notes stay private.
 
 A Goodreads book that you mark as owned is also marked as a physical copy.
 

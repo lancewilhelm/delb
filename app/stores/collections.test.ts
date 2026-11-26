@@ -15,6 +15,7 @@ function fixture() {
       role: 'editor',
       ownerUserId: 'owner',
       isDefault: true,
+      isPrivate: false,
     },
     {
       id: 'other',
@@ -22,6 +23,7 @@ function fixture() {
       role: 'owner',
       ownerUserId: 'me',
       isDefault: false,
+      isPrivate: true,
     },
   ];
   let failDefault = false;

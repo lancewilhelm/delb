@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"mime/multipart"
@@ -394,6 +395,75 @@ func TestGoodreadsImportEndToEnd(t *testing.T) {
 	}
 }
 
+func TestGoodreadsImportRequiresSharedConfirmation(t *testing.T) {
+	e := newEnv(t)
+	owner := e.signUp("owner@example.invalid")
+	var defaultID string
+	if err := e.db.QueryRow("SELECT id FROM collections WHERE is_default = 1").Scan(&defaultID); err != nil {
+		t.Fatal(err)
+	}
+
+	expectConflict := func(collectionID string) {
+		t.Helper()
+		body, err := json.Marshal(map[string]any{
+			"collectionId": collectionID,
+			"rows":         []goodreads.Row{{Title: "A Synthetic Book"}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		status, raw := e.do(owner, http.MethodPost, "/api/import/goodreads/books", "application/json", bytes.NewReader(body))
+		if status != http.StatusConflict {
+			t.Fatalf("unconfirmed destination: got %d %s", status, raw)
+		}
+	}
+	expectConflict(defaultID)
+
+	var createdCollection struct {
+		Data struct {
+			Collection struct {
+				ID string `json:"id"`
+			} `json:"collection"`
+		} `json:"data"`
+	}
+	e.json(owner, http.MethodPost, "/api/collections", map[string]any{"name": "Goodreads"}, &createdCollection)
+	collectionID := createdCollection.Data.Collection.ID
+	e.signUp("viewer@example.invalid")
+	e.json(owner, http.MethodPut, "/api/collections/"+collectionID+"/members", map[string]any{
+		"email": "viewer@example.invalid", "role": "viewer",
+	}, nil)
+	e.json(owner, http.MethodPost, "/api/collections", map[string]any{"name": "Goodreads"}, &createdCollection)
+	if createdCollection.Data.Collection.ID != collectionID {
+		t.Fatal("expected the existing collection for the same name")
+	}
+	expectConflict(createdCollection.Data.Collection.ID)
+
+	// Check the write boundary independently of the request preflight.
+	bookService := books.NewService(books.ServiceOptions{DB: e.db, LibraryDir: t.TempDir()})
+	_, err := bookService.CreateImportedBook(context.Background(), owner.ID, collectionID,
+		books.ImportedBook{Title: "A Synthetic Book"}, books.ImportedBookOptions{})
+	var httpErr *httpapi.HTTPError
+	if !errors.As(err, &httpErr) || httpErr.Status != http.StatusConflict {
+		t.Fatalf("private catalog write: got %v", err)
+	}
+
+	var count int
+	if err := e.db.QueryRow("SELECT count(*) FROM books WHERE collection_id IN (?, ?)", collectionID, defaultID).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("rejected writes left %d books, query error: %v", count, err)
+	}
+	var response struct {
+		Data struct {
+			Results []goodreads.CreatedBook `json:"results"`
+		} `json:"data"`
+	}
+	e.json(owner, http.MethodPost, "/api/import/goodreads/books", map[string]any{
+		"collectionId": collectionID, "allowShared": true, "rows": []goodreads.Row{{Title: "A Synthetic Book"}},
+	}, &response)
+	if len(response.Data.Results) != 1 || response.Data.Results[0].BookID == "" {
+		t.Fatalf("confirmed import: %+v", response.Data.Results)
+	}
+}
+
 func TestGoodreadsImportIsolation(t *testing.T) {
 	e := newEnv(t)
 	owner := e.signUp("owner@example.com")
@@ -416,7 +486,7 @@ func TestGoodreadsImportIsolation(t *testing.T) {
 	}
 
 	status, raw := e.do(other, http.MethodPost, "/api/import/goodreads/books", "application/json",
-		strings.NewReader(`{"collectionId":"`+col.Data.Collection.ID+`","rows":[{"index":0,"title":"X","authors":["Y"]}]}`))
+		strings.NewReader(`{"collectionId":"`+col.Data.Collection.ID+`","allowShared":true,"rows":[{"index":0,"title":"X","authors":["Y"]}]}`))
 	if status == 200 {
 		t.Fatalf("creating in another reader's collection should fail: %s", raw)
 	}

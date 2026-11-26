@@ -285,22 +285,52 @@ test('the Goodreads import previews, resolves a difference, and imports into a n
       'Use Goodreads choice',
     )
     .props.onChange();
+  const chooseDestination = (mode) =>
+    view
+      .find(
+        (el) =>
+          el.type === 'input' &&
+          el.props.type === 'radio' &&
+          el.props.value === mode,
+        'destination choice',
+      )
+      .props['onUpdate:modelValue'](mode);
+
+  assert.equal(view.button('Import').props.disabled, false);
+  chooseDestination('existing');
+  await settle();
+  assert.match(
+    view.text(),
+    /I want to add these books to the shared collection/,
+  );
+  assert.equal(view.button('Import').props.disabled, true);
   view
     .find(
       (el) =>
         el.type === 'input' &&
-        el.props.type === 'radio' &&
-        el.props.value === 'new',
-      'new collection choice',
+        el.props.type === 'checkbox' &&
+        el.parent?.children.some((child) =>
+          child.text.includes('I want to add these books'),
+        ),
+      'shared destination confirmation',
     )
-    .props['onUpdate:modelValue']('new');
+    .props['onUpdate:modelValue'](true);
+  await settle();
+  assert.equal(view.button('Import').props.disabled, false);
+
+  chooseDestination('new');
+  await settle();
+  chooseDestination('existing');
+  await settle();
+  assert.equal(view.button('Import').props.disabled, true);
+  chooseDestination('new');
   await settle();
 
   await view.button('Import').props.onClick();
   await settle();
 
   assert.match(view.text(), /Import finished\./);
-  assert.equal(refreshed, 1);
+  assert.equal(refreshed, 2);
   const urls = calls.map((c) => c.url);
   assert.deepEqual(urls, [
     '/api/import/goodreads/preview',
@@ -312,6 +342,7 @@ test('the Goodreads import previews, resolves a difference, and imports into a n
   const create = calls[2].body;
   assert.equal(create.collectionId, 'c-new');
   assert.equal(create.enrich, false);
+  assert.equal(create.allowShared, false);
   assert.deepEqual(
     create.rows.map((r) => [r.index, 'match' in r]),
     [[2, false]],

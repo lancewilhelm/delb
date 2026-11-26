@@ -32,6 +32,8 @@ type catalogEntryInput struct {
 	Identifiers     []IdentifierInput
 	CoverURL        string
 	HasPhysicalCopy bool
+
+	RequirePrivateCollection bool
 }
 
 // createCatalogEntry inserts a book without ebook files into collectionID, then
@@ -65,6 +67,12 @@ func (s *Service) createCatalogEntry(ctx context.Context, userID, collectionID s
 	}
 	if _, err := collections.ResolveBookTarget(ctx, tx, userID, true, collectionIDs); err != nil {
 		return "", err
+	}
+
+	if in.RequirePrivateCollection {
+		if err := collections.AssertCollectionPrivate(ctx, tx, userID, collectionID); err != nil {
+			return "", err
+		}
 	}
 
 	var publisherID, seriesID *string
@@ -192,11 +200,16 @@ func optionalString(s string) *string {
 	return &t
 }
 
+type ImportedBookOptions struct {
+	Enrich      bool
+	AllowShared bool
+}
+
 // CreateImportedBook creates a catalog entry (without ebook files) from imported
 // data. When enrich is true, it first looks the book up with the default
 // metadata provider and fills in description, cover, and other fields from an
 // accepted result.
-func (s *Service) CreateImportedBook(ctx context.Context, userID, collectionID string, in ImportedBook, enrich bool) (ImportedBookResult, error) {
+func (s *Service) CreateImportedBook(ctx context.Context, userID, collectionID string, in ImportedBook, options ImportedBookOptions) (ImportedBookResult, error) {
 	entry := catalogEntryInput{
 		Title:           in.Title,
 		Authors:         in.Authors,
@@ -206,6 +219,8 @@ func (s *Service) CreateImportedBook(ctx context.Context, userID, collectionID s
 		Pages:           in.Pages,
 		Identifiers:     append([]IdentifierInput(nil), in.Identifiers...),
 		HasPhysicalCopy: in.HasPhysicalCopy,
+
+		RequirePrivateCollection: !options.AllowShared,
 	}
 	if p := optionalString(in.Published); p != nil {
 		entry.Published = p
@@ -213,7 +228,7 @@ func (s *Service) CreateImportedBook(ctx context.Context, userID, collectionID s
 	}
 
 	result := ImportedBookResult{}
-	if enrich {
+	if options.Enrich {
 		item, err := s.lookupImportedBook(ctx, in)
 		if err != nil {
 			result.EnrichmentError = err.Error()

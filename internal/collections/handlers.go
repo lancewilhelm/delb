@@ -81,11 +81,12 @@ func (s *Service) handleListCollections(w http.ResponseWriter, r *http.Request) 
 		Name        string `json:"name"`
 		OwnerUserID string `json:"ownerUserId"`
 		IsDefault   bool   `json:"isDefault"`
+		IsPrivate   bool   `json:"isPrivate"`
 		Role        string `json:"role"`
 	}
 
 	rows, err := s.db.QueryContext(r.Context(), `
-		SELECT c.id, c.name, c.owner_user_id, c.is_default, cm.role
+		SELECT c.id, c.name, c.owner_user_id, c.is_default, cm.role, `+collectionIsPrivate+`
 		FROM collection_members cm
 		INNER JOIN collections c ON c.id = cm.collection_id
 		WHERE cm.user_id = ?
@@ -102,7 +103,7 @@ func (s *Service) handleListCollections(w http.ResponseWriter, r *http.Request) 
 			it        item
 			isDefault int64
 		)
-		if err := rows.Scan(&it.ID, &it.Name, &it.OwnerUserID, &isDefault, &it.Role); err != nil {
+		if err := rows.Scan(&it.ID, &it.Name, &it.OwnerUserID, &isDefault, &it.Role, &it.IsPrivate); err != nil {
 			s.writeErr(w, "GET /api/collections scan failed", err)
 			return
 		}
