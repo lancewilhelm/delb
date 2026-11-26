@@ -29,6 +29,7 @@ type personalShelfRow struct {
 	ID        string
 	OwnerID   string
 	Name      string
+	HasLayout bool
 	Revision  int
 	Geometry  string
 	CreatedAt int64
@@ -68,18 +69,36 @@ type personalShelfSnapshot struct {
 }
 
 func ownedPersonalShelf(ctx context.Context, q collections.Queryable, userID, shelfID string) (*personalShelfRow, error) {
-	var row personalShelfRow
+	var (
+		row      personalShelfRow
+		revNull  sql.NullInt64
+		geomNull sql.NullString
+	)
 	err := q.QueryRowContext(ctx, `
-		SELECT id, owner_id, name, revision, geometry, created_at
-		FROM personal_shelves
-		WHERE id = ? AND owner_id = ?
+		SELECT ps.id, ps.owner_id, ps.name, bl.revision, bl.layout, ps.created_at
+		FROM personal_shelves ps
+		LEFT JOIN bookshelf_layouts bl ON bl.scope_kind = 'personal' AND bl.scope_id = ps.id
+		WHERE ps.id = ? AND ps.owner_id = ?
 		LIMIT 1
-	`, shelfID, userID).Scan(&row.ID, &row.OwnerID, &row.Name, &row.Revision, &row.Geometry, &row.CreatedAt)
+	`, shelfID, userID).Scan(&row.ID, &row.OwnerID, &row.Name, &revNull, &geomNull, &row.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, httpapi.NewError(http.StatusNotFound, "Shelf not found")
 	}
 	if err != nil {
 		return nil, err
+	}
+	if revNull.Valid && geomNull.Valid {
+		row.HasLayout = true
+		row.Revision = int(revNull.Int64)
+		row.Geometry = geomNull.String
+	} else {
+		geomBytes, merr := json.Marshal(BookshelfGeometry(EmptyBookshelf()))
+		if merr != nil {
+			return nil, merr
+		}
+		row.HasLayout = false
+		row.Revision = 0
+		row.Geometry = string(geomBytes)
 	}
 	return &row, nil
 }
@@ -616,16 +635,11 @@ func (s *Service) handleCreateShelf(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := uuid.NewString()
-	geomBytes, err := json.Marshal(BookshelfGeometry(EmptyBookshelf()))
-	if err != nil {
-		s.writeErr(w, "POST /api/shelves marshal geometry failed", err)
-		return
-	}
 	nowMs := time.Now().UTC().UnixMilli()
 	if _, err := s.db.ExecContext(r.Context(), `
-		INSERT INTO personal_shelves (id, owner_id, name, revision, geometry, created_at)
-		VALUES (?, ?, ?, 0, ?, ?)
-	`, id, userID, clean, string(geomBytes), nowMs); err != nil {
+		INSERT INTO personal_shelves (id, owner_id, name, created_at)
+		VALUES (?, ?, ?, ?)
+	`, id, userID, clean, nowMs); err != nil {
 		s.writeErr(w, "POST /api/shelves insert failed", err)
 		return
 	}
@@ -709,10 +723,18 @@ func (s *Service) handlePatchShelf(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := tx.ExecContext(r.Context(), `
-		UPDATE personal_shelves SET name = ?, revision = ? WHERE id = ?
-	`, clean, shelf.Revision+1, shelfID); err != nil {
+		UPDATE personal_shelves SET name = ? WHERE id = ?
+	`, clean, shelfID); err != nil {
 		s.writeErr(w, "PATCH /api/shelves/{id} update failed", err)
 		return
+	}
+	if shelf.HasLayout {
+		if _, err := tx.ExecContext(r.Context(), `
+			UPDATE bookshelf_layouts SET revision = ?, updated_at = ? WHERE scope_kind = 'personal' AND scope_id = ?
+		`, shelf.Revision+1, time.Now().UTC().UnixMilli(), shelfID); err != nil {
+			s.writeErr(w, "PATCH /api/shelves/{id} update layout rev failed", err)
+			return
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		s.writeErr(w, "PATCH /api/shelves/{id} commit failed", err)
@@ -748,6 +770,14 @@ func (s *Service) handleDeleteShelf(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := tx.ExecContext(r.Context(), `DELETE FROM personal_shelf_books WHERE shelf_id = ?`, shelfID); err != nil {
 		s.writeErr(w, "DELETE /api/shelves/{id} delete books failed", err)
+		return
+	}
+	if _, err := tx.ExecContext(r.Context(), `DELETE FROM bookshelf_layouts WHERE scope_kind = 'personal' AND scope_id = ?`, shelfID); err != nil {
+		s.writeErr(w, "DELETE /api/shelves/{id} delete layout failed", err)
+		return
+	}
+	if _, err := tx.ExecContext(r.Context(), `DELETE FROM shelf_picture_assets WHERE scope_kind = 'personal' AND scope_id = ?`, shelfID); err != nil {
+		s.writeErr(w, "DELETE /api/shelves/{id} delete pictures failed", err)
 		return
 	}
 	if _, err := tx.ExecContext(r.Context(), `DELETE FROM personal_shelves WHERE id = ?`, shelfID); err != nil {
@@ -891,8 +921,13 @@ func (s *Service) handlePutShelf(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := tx.ExecContext(r.Context(), `
-		UPDATE personal_shelves SET geometry = ?, revision = ? WHERE id = ?
-	`, string(geomBytes), shelf.Revision+1, shelfID); err != nil {
+		INSERT INTO bookshelf_layouts (scope_kind, scope_id, revision, layout, updated_at)
+		VALUES ('personal', ?, ?, ?, ?)
+		ON CONFLICT(scope_kind, scope_id) DO UPDATE SET
+			revision = excluded.revision,
+			layout = excluded.layout,
+			updated_at = excluded.updated_at
+	`, shelfID, shelf.Revision+1, string(geomBytes), time.Now().UTC().UnixMilli()); err != nil {
 		s.writeErr(w, "PUT /api/shelves/{id} update shelf failed", err)
 		return
 	}
@@ -1081,26 +1116,29 @@ func (s *Service) ChangeShelfBooks(
 		}
 	}
 
-	composed, err := s.personalShelfSnapshot(ctx, tx, userID, shelfID)
-	if err != nil {
-		return nil, err
-	}
-	visRows, err := visiblePersonalShelfBooks(ctx, tx, userID, shelfID)
-	if err != nil {
-		return nil, err
-	}
-	if err := persistVisiblePlacements(ctx, tx, shelfID, composed.Arrangement, visRows); err != nil {
-		return nil, err
-	}
+	if shelf.HasLayout {
+		composed, err := s.personalShelfSnapshot(ctx, tx, userID, shelfID)
+		if err != nil {
+			return nil, err
+		}
+		visRows, err := visiblePersonalShelfBooks(ctx, tx, userID, shelfID)
+		if err != nil {
+			return nil, err
+		}
+		if err := persistVisiblePlacements(ctx, tx, shelfID, composed.Arrangement, visRows); err != nil {
+			return nil, err
+		}
 
-	geomBytes, err := json.Marshal(BookshelfGeometry(composed.Arrangement))
-	if err != nil {
-		return nil, err
-	}
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE personal_shelves SET geometry = ?, revision = ? WHERE id = ?
-	`, string(geomBytes), shelf.Revision+1, shelfID); err != nil {
-		return nil, err
+		geomBytes, err := json.Marshal(BookshelfGeometry(composed.Arrangement))
+		if err != nil {
+			return nil, err
+		}
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE bookshelf_layouts SET layout = ?, revision = ?, updated_at = ?
+			WHERE scope_kind = 'personal' AND scope_id = ?
+		`, string(geomBytes), shelf.Revision+1, time.Now().UTC().UnixMilli(), shelfID); err != nil {
+			return nil, err
+		}
 	}
 
 	finalSnap, err := s.personalShelfSnapshot(ctx, tx, userID, shelfID)
@@ -1256,15 +1294,11 @@ func (s *Service) EnsureNamedShelf(ctx context.Context, userID, name string) (st
 	if !errors.Is(err, sql.ErrNoRows) {
 		return "", false, err
 	}
-	geomBytes, err := json.Marshal(BookshelfGeometry(EmptyBookshelf()))
-	if err != nil {
-		return "", false, err
-	}
 	id = uuid.NewString()
 	if _, err := s.db.ExecContext(ctx, `
-		INSERT INTO personal_shelves (id, owner_id, name, revision, geometry, created_at)
-		VALUES (?, ?, ?, 0, ?, ?)
-	`, id, userID, clean, string(geomBytes), time.Now().UTC().UnixMilli()); err != nil {
+		INSERT INTO personal_shelves (id, owner_id, name, created_at)
+		VALUES (?, ?, ?, ?)
+	`, id, userID, clean, time.Now().UTC().UnixMilli()); err != nil {
 		return "", false, err
 	}
 	return id, true, nil

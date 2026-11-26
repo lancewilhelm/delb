@@ -44,16 +44,14 @@ func NewService(opts ServiceOptions) *Service {
 	}
 }
 
-// RegisterRoutes mounts all Phase 2C bookshelf, personal shelf, book-shelf
+const maxBookshelfBodyBytes int64 = 16 * 1024 * 1024
+
+// RegisterRoutes mounts bookshelf, personal shelf, book-shelf
 // membership, and bookshelf picture routes onto mux.
 func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	reqSess := func(h http.HandlerFunc) http.HandlerFunc {
 		return httpapi.RequireSessionFunc(s.auth, s.logger, h)
 	}
-
-	// All-Books personal bookshelf
-	mux.HandleFunc("GET /api/bookshelf", reqSess(s.handleGetUserBookshelf))
-	mux.HandleFunc("PUT /api/bookshelf", reqSess(s.handlePutUserBookshelf))
 
 	// Collection bookshelves
 	mux.HandleFunc("GET /api/collections/{id}/bookshelf", reqSess(s.handleGetCollectionBookshelf))

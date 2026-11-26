@@ -84,12 +84,6 @@ try {
   const initial = await request(path, owner);
   assert.equal(initial.status, 200, await initial.clone().text());
   const snapshot = await initial.json();
-  const legacySave = await request('/api/bookshelf', owner, 'PUT', {
-    revision: 0,
-    arrangement: snapshot.arrangement,
-  });
-  assert.equal(legacySave.status, 200);
-  const legacy = await (await request('/api/bookshelf', owner)).json();
   assert.equal(snapshot.books.length, 1);
   assert.equal(snapshot.canEdit, true);
   const matchesResponse = await request(
@@ -120,7 +114,7 @@ try {
   assert.equal(readViewer.status, 200);
   assert.equal((await readViewer.json()).canEdit, false);
   const beforeSave = await db.execute({
-    sql: 'SELECT revision FROM collection_bookshelves WHERE collection_id=?',
+    sql: "SELECT revision FROM bookshelf_layouts WHERE scope_kind='collection' AND scope_id=?",
     args: [id],
   });
   assert.equal(
@@ -243,10 +237,6 @@ try {
       })
     ).status,
     404,
-  );
-  assert.deepEqual(
-    await (await request('/api/bookshelf', owner)).json(),
-    legacy,
   );
   console.log(
     'PASS collection shelf sharing, permissions, revision conflict, and shared dimensions',

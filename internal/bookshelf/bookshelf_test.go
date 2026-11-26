@@ -253,56 +253,92 @@ func TestGeometryParseReconcileAndCompose(t *testing.T) {
 	}
 }
 
-func TestUserBookshelfAndConcurrency(t *testing.T) {
+func TestUnifiedBookshelfLayoutsOnDemandAndConcurrency(t *testing.T) {
 	env := newTestEnv(t)
 	a := env.signUp("Alice", "alice@example.invalid")
-	b := env.signUp("Bob", "bob@example.invalid")
 
-	resp, raw := env.reqJSON(&a, http.MethodGet, "/api/bookshelf", nil)
-	if resp.StatusCode != 200 || !strings.Contains(string(raw), `"revision":0`) {
-		t.Fatalf("initial GET /api/bookshelf = %d %s", resp.StatusCode, string(raw))
+	// Creating a personal shelf must NOT eagerly create a bookshelf_layouts row.
+	resp, raw := env.reqJSON(&a, http.MethodPost, "/api/shelves", map[string]any{"name": "2026 Reads"})
+	if resp.StatusCode != 200 {
+		t.Fatalf("POST /api/shelves = %d %s", resp.StatusCode, string(raw))
+	}
+	var createRes struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal(raw, &createRes)
+	shelfID := createRes.Data.ID
+
+	var layoutCount int
+	if err := env.db.DB.QueryRow(`SELECT COUNT(*) FROM bookshelf_layouts WHERE scope_kind = 'personal' AND scope_id = ?`, shelfID).Scan(&layoutCount); err != nil {
+		t.Fatalf("count layouts: %v", err)
+	}
+	if layoutCount != 0 {
+		t.Fatalf("expected 0 layout rows on fresh personal shelf, got %d", layoutCount)
 	}
 
-	arr := map[string]any{
-		"bookcases": []any{
-			map[string]any{
-				"id":    "case",
-				"width": 480,
-				"shelves": []any{
-					map[string]any{"id": "shelf", "height": 245, "items": []any{}},
-				},
-			},
-		},
+	// Reading the shelf returns revision 0 and default arrangement without inserting a row.
+	resp, raw = env.reqJSON(&a, http.MethodGet, "/api/shelves/"+shelfID, nil)
+	if resp.StatusCode != 200 {
+		t.Fatalf("GET /api/shelves/{id} = %d %s", resp.StatusCode, string(raw))
 	}
-	resp, raw = env.reqJSON(&a, http.MethodPut, "/api/bookshelf", map[string]any{"revision": 0, "arrangement": arr})
+	var snap struct {
+		Revision    int            `json:"revision"`
+		Token       string         `json:"token"`
+		Arrangement map[string]any `json:"arrangement"`
+	}
+	_ = json.Unmarshal(raw, &snap)
+	if snap.Revision != 0 {
+		t.Fatalf("initial revision = %d, want 0", snap.Revision)
+	}
+	_ = env.db.DB.QueryRow(`SELECT COUNT(*) FROM bookshelf_layouts WHERE scope_kind = 'personal' AND scope_id = ?`, shelfID).Scan(&layoutCount)
+	if layoutCount != 0 {
+		t.Fatalf("expected 0 layout rows after GET, got %d", layoutCount)
+	}
+
+	// Saving an arrangement creates the unified bookshelf_layouts row at revision 1.
+	resp, raw = env.reqJSON(&a, http.MethodPut, "/api/shelves/"+shelfID, map[string]any{
+		"revision":    snap.Revision,
+		"token":       snap.Token,
+		"arrangement": snap.Arrangement,
+	})
 	if resp.StatusCode != 200 || !strings.Contains(string(raw), `"revision":1`) {
 		t.Fatalf("PUT rev 0 = %d %s", resp.StatusCode, string(raw))
 	}
-	// Stale revision -> 409
-	resp, _ = env.reqJSON(&a, http.MethodPut, "/api/bookshelf", map[string]any{"revision": 0, "arrangement": arr})
-	if resp.StatusCode != 409 {
-		t.Fatalf("stale PUT = %d, want 409", resp.StatusCode)
-	}
-	// Bob sees empty shelf
-	resp, raw = env.reqJSON(&b, http.MethodGet, "/api/bookshelf", nil)
-	if resp.StatusCode != 200 || !strings.Contains(string(raw), `"arrangement":null`) {
-		t.Fatalf("bob GET = %d %s", resp.StatusCode, string(raw))
+	_ = env.db.DB.QueryRow(`SELECT COUNT(*) FROM bookshelf_layouts WHERE scope_kind = 'personal' AND scope_id = ?`, shelfID).Scan(&layoutCount)
+	if layoutCount != 1 {
+		t.Fatalf("expected 1 layout row after PUT, got %d", layoutCount)
 	}
 
-	// Concurrent writes at rev 1 -> exactly one 200 and one 409
+	// Concurrent writes at rev 1 -> exactly one 200 and one 409.
 	var wg sync.WaitGroup
 	codes := make([]int, 2)
 	for i := 0; i < 2; i++ {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			r, _ := env.reqJSON(&a, http.MethodPut, "/api/bookshelf", map[string]any{"revision": 1, "arrangement": arr})
+			r, _ := env.reqJSON(&a, http.MethodPut, "/api/shelves/"+shelfID, map[string]any{
+				"revision":    1,
+				"token":       snap.Token,
+				"arrangement": snap.Arrangement,
+			})
 			codes[idx] = r.StatusCode
 		}(i)
 	}
 	wg.Wait()
 	if !((codes[0] == 200 && codes[1] == 409) || (codes[0] == 409 && codes[1] == 200)) {
 		t.Fatalf("concurrent codes = %v, want [200,409]", codes)
+	}
+
+	// Deleting the shelf removes its bookshelf_layouts row too.
+	resp, _ = env.reqJSON(&a, http.MethodDelete, "/api/shelves/"+shelfID, nil)
+	if resp.StatusCode != 200 {
+		t.Fatalf("DELETE /api/shelves/{id} = %d", resp.StatusCode)
+	}
+	_ = env.db.DB.QueryRow(`SELECT COUNT(*) FROM bookshelf_layouts WHERE scope_kind = 'personal' AND scope_id = ?`, shelfID).Scan(&layoutCount)
+	if layoutCount != 0 {
+		t.Fatalf("expected 0 layout rows after shelf deletion, got %d", layoutCount)
 	}
 }
 
