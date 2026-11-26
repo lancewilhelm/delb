@@ -507,6 +507,8 @@ func TestCollectionBookshelfPicturesAndPersonalShelves(t *testing.T) {
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("GET /api/shelves?previews=%s = %d, want 400", bad, resp.StatusCode)
 		}
+	}
+	for _, bad := range []string{"0", "101", "x"} {
 		resp, _ = env.reqJSON(&viewer, http.MethodGet, "/api/shelves?pile="+bad, nil)
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("GET /api/shelves?pile=%s = %d, want 400", bad, resp.StatusCode)
@@ -516,7 +518,7 @@ func TestCollectionBookshelfPicturesAndPersonalShelves(t *testing.T) {
 	if strings.Contains(string(raw), `"pile"`) {
 		t.Fatalf("GET /api/shelves?previews=25 includes a pile: %s", string(raw))
 	}
-	resp, raw = env.reqJSON(&viewer, http.MethodGet, "/api/shelves?previews=25&pile=10", nil)
+	resp, raw = env.reqJSON(&viewer, http.MethodGet, "/api/shelves?previews=25&pile=100", nil)
 	var withPile struct {
 		Data struct {
 			Shelves []struct {

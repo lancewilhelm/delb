@@ -16,8 +16,12 @@ import {
   wallBookIndex,
   wallDriftPxPerSecond,
   DEFAULT_WALL_DRIFT_SPEED,
+  AUTO_LIBRARY_PILE,
+  AUTO_LIBRARY_PILE_NARROW,
+  pileCoverHeight,
   type LibraryArtStyle,
   type PileRegion,
+  type PileSize,
   type WallMotion,
 } from '~/utils/dashboardArt';
 import type { DashboardBook, DashboardCounts } from '#shared/types/dashboard';
@@ -25,6 +29,8 @@ import type { DashboardBook, DashboardCounts } from '#shared/types/dashboard';
 const props = defineProps<{
   counts: DashboardCounts | null;
   recent: DashboardBook[];
+  /** Books per pile from the reader's settings; Auto shows fewer when narrow. */
+  pileSize?: PileSize;
   /** A random sample for Pile art; without it the pile uses `recent`. */
   pileBooks?: {
     id: string;
@@ -67,16 +73,19 @@ const mode = computed(() => {
 const card = ref<HTMLElement | null>(null);
 const { width: cardWidth } = useElementSize(card);
 const narrow = computed(() => cardWidth.value > 0 && cardWidth.value <= 640);
-const pile = computed(() => ({
-  books: (props.pileBooks?.length ? props.pileBooks : props.recent).slice(
-    0,
-    narrow.value ? 20 : 24,
-  ),
-  coverHeight: narrow.value ? 0.24 : 0.4,
-  region: (narrow.value
-    ? { x0: 0, x1: 1, y0: 0.02, y1: 0.46 }
-    : { x0: 0.46, x1: 1, y0: 0.04, y1: 1 }) satisfies PileRegion,
-}));
+const pile = computed(() => {
+  const auto = narrow.value ? AUTO_LIBRARY_PILE_NARROW : AUTO_LIBRARY_PILE;
+  const source = props.pileBooks ?? props.recent;
+  const books =
+    (props.pileSize ?? 'auto') === 'auto' ? source.slice(0, auto) : source;
+  return {
+    books,
+    coverHeight: pileCoverHeight(narrow.value ? 0.24 : 0.4, books.length, auto),
+    region: (narrow.value
+      ? { x0: 0, x1: 1, y0: 0.02, y1: 0.46 }
+      : { x0: 0.46, x1: 1, y0: 0.04, y1: 1 }) satisfies PileRegion,
+  };
+});
 
 // Big libraries: many small covers in reading order. Small ones: fewer, larger
 // covers, repeated so a cover never touches a copy of itself.

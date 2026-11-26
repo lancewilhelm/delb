@@ -80,6 +80,8 @@ See [book view design record](../../archive/book-view-settings.md), [system arch
 
 `dashboard.libraryArt` is `wall` or `pile` and defaults to `wall`. **All books art** in **Appearance → Dashboard**, or the All books card's **⋯** menu, sets it. Unknown values fall back to `wall`.
 
+`dashboard.pileSize` is `auto` or one of 10, 25, 50, or 100, and defaults to `auto`. **Pile size** in **Appearance → Dashboard** sets it. It sets how many books every pile holds, on the All books card and on Pile tiles; `auto` keeps 24 on All books (20 on narrow cards) and 10 on a tile. Other values fall back to `auto`.
+
 `dashboard.wallMotion` is `off` or `up` and defaults to `off`. **Wall motion** in **Appearance → Dashboard** and the command palette's **dashboard › wall drift up** toggle set it; the card's **⋯** menu does not. With `up`, the All books wall drifts slowly upward unless the system asks for reduced motion. Unknown values fall back to `off`, which leaves room for more directions later.
 
 `dashboard.wallDriftSpeed` is a whole number from 1 to 10 and defaults to 3. Each level adds 3 CSS pixels per second, so the default drifts at 9. **Drift speed** in **Appearance → Dashboard** (shown while Wall motion is Drift up) and the command palette's **dashboard › wall drift speed** slider set it. Other values are rounded and clamped; non-numbers fall back to 3.

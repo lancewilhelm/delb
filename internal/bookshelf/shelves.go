@@ -457,11 +457,12 @@ type ShelfSummaryDTO struct {
 }
 
 // Shelf preview counts: the Shelves page shows 4; the dashboard's card art can
-// ask for up to 25 (the Wall tile's 5×5 grid). The same cap applies to the
-// random pile sample.
+// ask for up to 25 (the Wall tile's 5×5 grid). The random pile sample follows
+// the reader's pile size, up to 100.
 const (
 	defaultShelfPreviews = 4
 	maxShelfPreviews     = 25
+	maxShelfPile         = 100
 )
 
 // ListShelves returns all personal shelves owned by userID with visible counts and previews.
@@ -556,7 +557,7 @@ func (s *Service) handleListShelves(w http.ResponseWriter, r *http.Request) {
 	pile := 0
 	if raw := r.URL.Query().Get("pile"); raw != "" {
 		n, err := strconv.Atoi(raw)
-		if err != nil || n < 1 || n > maxShelfPreviews {
+		if err != nil || n < 1 || n > maxShelfPile {
 			httpapi.WriteError(w, http.StatusBadRequest, "Invalid pile count")
 			return
 		}

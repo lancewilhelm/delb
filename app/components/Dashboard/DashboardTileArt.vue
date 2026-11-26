@@ -3,7 +3,13 @@ import { computed, ref } from 'vue';
 import { useUserSettingsStore } from '~/stores/userSettings';
 import DashboardCover from '~/components/Dashboard/DashboardCover.vue';
 import DashboardPile from '~/components/Dashboard/DashboardPile.vue';
-import { hashString, wallSlots, type CardArtStyle } from '~/utils/dashboardArt';
+import {
+  AUTO_TILE_PILE,
+  hashString,
+  pileCoverHeight,
+  wallSlots,
+  type CardArtStyle,
+} from '~/utils/dashboardArt';
 
 type ArtBook = {
   id: string;
@@ -18,7 +24,7 @@ type ArtBook = {
 const props = defineProps<{
   artStyle: CardArtStyle;
   books: ArtBook[];
-  /** A random sample for Pile art; without it the pile uses `books`. */
+  /** A random sample for Pile art, already sized; without it the pile uses the start of `books`. */
   pileBooks?: ArtBook[];
   /** Stable per-list key: seeds the pile so each list gets its own scatter. */
   seed: string;
@@ -115,7 +121,9 @@ const shelf = computed(() => {
 
 const wall = computed(() => wallSlots(props.books, 5, 25));
 
-const pile = computed(() => (props.pileBooks ?? props.books).slice(0, 10));
+const pile = computed(
+  () => props.pileBooks ?? props.books.slice(0, AUTO_TILE_PILE),
+);
 
 function shortDate(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -183,7 +191,12 @@ function shortDate(value: string) {
       >
     </div>
 
-    <DashboardPile v-else-if="artStyle === 'pile'" :books="pile" :seed="seed" />
+    <DashboardPile
+      v-else-if="artStyle === 'pile'"
+      :books="pile"
+      :cover-height="pileCoverHeight(0.5, pile.length, AUTO_TILE_PILE)"
+      :seed="seed"
+    />
 
     <div v-else-if="artStyle === 'wall'" class="wall">
       <DashboardCover

@@ -677,6 +677,21 @@ func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
 	})
 	assertOverview("/api/dashboard/overview?collectionId=nonexistent-collection", 0, 0, map[string][]string{})
 
+	// The reader's pile size sets every sample's size.
+	_, sized := doJSON(http.MethodGet, "/api/dashboard/overview?pile=2", nil)
+	sizedPiles := sized["data"].(map[string]any)["piles"].(map[string]any)
+	if got := len(sizedPiles["all"].([]any)); got != 2 {
+		t.Fatalf("overview pile=2 all len = %d, want 2", got)
+	}
+	if got := len(sizedPiles["to_be_read"].([]any)); got != 2 {
+		t.Fatalf("overview pile=2 to_be_read len = %d, want 2", got)
+	}
+	for _, bad := range []string{"0", "101", "x"} {
+		if r, _ := doJSON(http.MethodGet, "/api/dashboard/overview?pile="+bad, nil); r.StatusCode != http.StatusBadRequest {
+			t.Fatalf("overview pile=%s status = %d, want 400", bad, r.StatusCode)
+		}
+	}
+
 	// The cover wall pages past the overview, newest first, in the same scope.
 	recentPage := func(path string) ([]string, any) {
 		t.Helper()

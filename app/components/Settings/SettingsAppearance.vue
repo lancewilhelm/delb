@@ -25,7 +25,9 @@ import {
   DEFAULT_WALL_DRIFT_SPEED,
   MAX_WALL_DRIFT_SPEED,
   MIN_WALL_DRIFT_SPEED,
+  PILE_SIZES,
   type LibraryArtStyle,
+  type PileSize,
   type WallMotion,
 } from '~/utils/dashboardArt';
 import type { BaseUserSettings } from '~/stores/userSettings';
@@ -63,6 +65,8 @@ const dashboardStatusBar = userSettingsStore.settingRef<boolean>(
 const dashboardLibraryArt = userSettingsStore.settingRef<LibraryArtStyle>(
   'dashboard.libraryArt',
 );
+const dashboardPileSize =
+  userSettingsStore.settingRef<PileSize>('dashboard.pileSize');
 const dashboardWallMotion = userSettingsStore.settingRef<WallMotion>(
   'dashboard.wallMotion',
 );
@@ -384,6 +388,30 @@ function handleSortChange(target: string) {
               @click="dashboardLibraryArt = 'pile'"
             >
               Pile
+            </button>
+          </div>
+        </div>
+        <div class="bookshelf-texture-choice">
+          <span
+            ><strong>Pile size</strong
+            ><small
+              >How many books drop into each pile, on the All books card and on
+              Pile cards. Auto drops 24 on All books and 10 on a card.</small
+            ></span
+          >
+          <div
+            class="bookshelf-texture-options flex-wrap"
+            role="group"
+            aria-label="Pile size"
+          >
+            <button
+              v-for="size in PILE_SIZES"
+              :key="size"
+              type="button"
+              :aria-pressed="dashboardPileSize === size"
+              @click="dashboardPileSize = size"
+            >
+              {{ size === 'auto' ? 'Auto' : size }}
             </button>
           </div>
         </div>

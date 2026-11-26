@@ -6,6 +6,8 @@ import {
   heroArtMode,
   holdPile,
   normalizeDashboardSettings,
+  pileCoverHeight,
+  pileSampleSize,
   pileLayout,
   resolveCardArt,
   statusSegments,
@@ -147,6 +149,18 @@ test('a pile keeps its books until its list changes size', () => {
     shown,
     'a fallback never replaces a sample',
   );
+});
+
+test('pile size is Auto or a listed size and sets every sample', () => {
+  assert.equal(normalizeDashboardSettings({}).pileSize, 'auto');
+  assert.equal(normalizeDashboardSettings({ pileSize: 50 }).pileSize, 50);
+  assert.equal(normalizeDashboardSettings({ pileSize: 37 }).pileSize, 'auto');
+  assert.equal(pileSampleSize('auto', true), 24);
+  assert.equal(pileSampleSize('auto', false), 10);
+  assert.equal(pileSampleSize(100, false), 100);
+  assert.equal(pileCoverHeight(0.5, 10, 10), 0.5);
+  const big = pileCoverHeight(0.5, 100, 10);
+  assert.ok(big < 0.5 && big > 0.2, 'bigger piles use smaller covers');
 });
 
 test('status segments skip empty statuses', () => {

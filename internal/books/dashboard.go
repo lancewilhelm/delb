@@ -25,13 +25,15 @@ type dashboardBook struct {
 
 // Dashboard overview limits. The All books wall needs enough distinct covers
 // to fill its 9×5 grid; list previews feed the card-art styles, and the Wall
-// tile's 5×5 grid uses the most. Piles get their own random samples: up to
-// 24 books on the All books card and 10 on a tile.
+// tile's 5×5 grid uses the most. Piles get their own random samples: by
+// default up to 24 books on the All books card and 10 on a tile, or the
+// reader's pile size (up to dashboardMaxPile) for both.
 const (
 	dashboardRecentLimit   = 45
 	dashboardPreviewLimit  = 25
 	dashboardLibraryPile   = 24
 	dashboardListPileLimit = 10
+	dashboardMaxPile       = 100
 )
 
 // dashboardRecentOrder is the newest-first order of the All books cover wall.
@@ -215,11 +217,11 @@ func (s *Service) queryDashboardBooks(
 	return found, nil
 }
 
-// GET /api/dashboard/overview?collectionId=
+// GET /api/dashboard/overview?collectionId=&pile=
 //
 // One request for the whole dashboard: counts, the most recently added books
 // for the All books cover wall, a short preview of every status list, and a
-// random sample of each for Pile art.
+// random sample of each for Pile art. `pile` sets the size of every sample.
 func (s *Service) handleGetDashboardOverview(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
 
@@ -231,6 +233,15 @@ func (s *Service) handleGetDashboardOverview(w http.ResponseWriter, r *http.Requ
 	if swu == nil {
 		httpapi.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
+	}
+	libraryPile, listPile := dashboardLibraryPile, dashboardListPileLimit
+	if raw := r.URL.Query().Get("pile"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > dashboardMaxPile {
+			httpapi.WriteError(w, http.StatusBadRequest, "Invalid pile size")
+			return
+		}
+		libraryPile, listPile = n, n
 	}
 	userID := swu.User.ID
 	visClause, visArgs := dashboardVisibility(userID, r.URL.Query().Get("collectionId"))
@@ -255,7 +266,7 @@ func (s *Service) handleGetDashboardOverview(w http.ResponseWriter, r *http.Requ
 	piles := make(map[string][]dashboardBook, len(dashboardStatusLists)+1)
 	piles["all"] = []dashboardBook{}
 	if counts["total"] > 0 {
-		if piles["all"], err = sample(`1 = 1`, dashboardLibraryPile); err != nil {
+		if piles["all"], err = sample(`1 = 1`, libraryPile); err != nil {
 			s.writeErrWithFallback(w, "GET /api/dashboard/overview pile failed", failMsg, err)
 			return
 		}
@@ -266,7 +277,7 @@ func (s *Service) handleGetDashboardOverview(w http.ResponseWriter, r *http.Requ
 		if counts[list.key] > 0 {
 			books, err = s.queryDashboardBooks(ctx, userID, visClause, visArgs, list.filter, nil, list.orderBy, dashboardPreviewLimit, 0)
 			if err == nil {
-				pile, err = sample(list.filter, dashboardListPileLimit)
+				pile, err = sample(list.filter, listPile)
 			}
 			if err != nil {
 				s.writeErrWithFallback(w, "GET /api/dashboard/overview "+list.key+" failed", failMsg, err)

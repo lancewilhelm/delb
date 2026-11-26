@@ -27,6 +27,7 @@ import {
   STATUS_LABELS,
   STATUS_ORDER,
   holdPile,
+  pileSampleSize,
   resolveCardArt,
   type CardArtStyle,
   type HeldPile,
@@ -80,7 +81,10 @@ async function loadOverview() {
     const response = await $fetch<{ success: true; data: DashboardOverview }>(
       '/api/dashboard/overview',
       {
-        query: { collectionId: scope.value },
+        query: {
+          collectionId: scope.value,
+          ...(pileSize.value === 'auto' ? {} : { pile: pileSize.value }),
+        },
         signal: controller.signal,
       },
     );
@@ -101,7 +105,9 @@ async function loadShelves() {
   try {
     const response = await $fetch<{
       data: { shelves: DashboardShelfSummary[] };
-    }>('/api/shelves', { query: { previews: 25, pile: TILE_PILE_SIZE } });
+    }>('/api/shelves', {
+      query: { previews: 25, pile: pileSampleSize(pileSize.value, false) },
+    });
     if (disposed) return;
     shelves.value = response.data.shelves;
     writeShelvesCache(user.value?.id, response.data.shelves);
@@ -133,13 +139,28 @@ function setLibraryArt(style: LibraryArtStyle) {
 }
 
 // ---- Piles: a random sample per list, held for the page's lifetime ---------
-const LIBRARY_PILE_SIZE = 24;
-const TILE_PILE_SIZE = 10;
+const pileSize = computed(() => dashboardSettings.value.pileSize);
 type PileBook = DashboardShelfSummary['previews'][number] | DashboardBook;
 /** Keyed like card art overrides (`all`, `reading`, `shelf:<id>`, …). */
 const piles = ref<Record<string, HeldPile<PileBook>>>({});
 // The collection the status piles were picked from.
 let pileScope: string | null = null;
+
+/**
+ * A pile from a response: its sample when that has the size the reader asked
+ * for, and otherwise no books yet, so the pile drops in once when a fitting
+ * sample arrives instead of twice.
+ */
+function pileFrom(
+  sample: PileBook[] | undefined,
+  count: number,
+  library: boolean,
+): HeldPile<PileBook> {
+  const fits =
+    !!sample &&
+    sample.length === Math.min(count, pileSampleSize(pileSize.value, library));
+  return { count, random: fits, books: fits ? sample : [] };
+}
 
 /** Adopts fresh samples, keeping the books each pile already shows. */
 function holdPiles(next: Record<string, HeldPile<PileBook>>) {
@@ -161,18 +182,10 @@ watch(
     }
     if (!data) return;
     const next: Record<string, HeldPile<PileBook>> = {
-      all: {
-        count: data.counts.total,
-        random: !!data.piles,
-        books: data.piles?.all ?? data.recent.slice(0, LIBRARY_PILE_SIZE),
-      },
+      all: pileFrom(data.piles?.all, data.counts.total, true),
     };
     for (const key of STATUS_ORDER)
-      next[key] = {
-        count: data.counts[key],
-        random: !!data.piles,
-        books: data.piles?.[key] ?? data.lists[key].slice(0, TILE_PILE_SIZE),
-      };
+      next[key] = pileFrom(data.piles?.[key], data.counts[key], false);
     holdPiles(next);
   },
   { immediate: true },
@@ -186,17 +199,20 @@ watch(
       Object.fromEntries(
         list.map((shelf) => [
           `shelf:${shelf.id}`,
-          {
-            count: shelf.count,
-            random: !!shelf.pile,
-            books: shelf.pile ?? shelf.previews.slice(0, TILE_PILE_SIZE),
-          },
+          pileFrom(shelf.pile ?? [], shelf.count, false),
         ]),
       ),
     );
   },
   { immediate: true },
 );
+
+// A new pile size needs new samples.
+watch(pileSize, () => {
+  piles.value = {};
+  void loadOverview();
+  void loadShelves();
+});
 
 // ---- Drifting wall: older covers beyond the overview's first page ----------
 const moreRecent = ref<DashboardBook[]>([]);
@@ -342,6 +358,7 @@ onBeforeUnmount(() => {
           :counts="overview?.counts ?? null"
           :recent="wallBooks"
           :pile-books="piles.all?.books ?? []"
+          :pile-size="dashboardSettings.pileSize"
           :show-status-bar="dashboardSettings.showStatusBar"
           :library-art="dashboardSettings.libraryArt"
           :wall-motion="dashboardSettings.wallMotion"
