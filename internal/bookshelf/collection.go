@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/httpapi"
@@ -70,15 +71,15 @@ func readCollectionCatalog(ctx context.Context, q collections.Queryable, collect
 	out := make([]collectionCatalogRow, 0)
 	for rows.Next() {
 		var (
-			r            collectionCatalogRow
-			pages        sql.NullInt64
-			spineRev     sql.NullString
-			dimW         sql.NullInt64
-			dimH         sql.NullInt64
-			dimManualW   sql.NullInt64
-			dimManualH   sql.NullInt64
-			dimSrcPages  sql.NullInt64
-			authorJSON   string
+			r           collectionCatalogRow
+			pages       sql.NullInt64
+			spineRev    sql.NullString
+			dimW        sql.NullInt64
+			dimH        sql.NullInt64
+			dimManualW  sql.NullInt64
+			dimManualH  sql.NullInt64
+			dimSrcPages sql.NullInt64
+			authorJSON  string
 		)
 		if err := rows.Scan(
 			&r.ID, &r.Title, &pages, &r.CollectionID, &spineRev,
@@ -233,7 +234,7 @@ func (s *Service) handleGetCollectionBookshelf(w http.ResponseWriter, r *http.Re
 		hasStored bool
 	)
 	err = tx.QueryRowContext(r.Context(), `
-		SELECT revision, arrangement FROM collection_bookshelves WHERE collection_id = ? LIMIT 1
+		SELECT revision, layout FROM bookshelf_layouts WHERE scope_kind = 'collection' AND scope_id = ? LIMIT 1
 	`, collectionID).Scan(&storedRev, &storedRaw)
 	if err == nil {
 		hasStored = true
@@ -444,7 +445,7 @@ func (s *Service) handlePutCollectionBookshelf(w http.ResponseWriter, r *http.Re
 		hasStored bool
 	)
 	err = tx.QueryRowContext(r.Context(), `
-		SELECT revision, arrangement FROM collection_bookshelves WHERE collection_id = ? LIMIT 1
+		SELECT revision, layout FROM bookshelf_layouts WHERE scope_kind = 'collection' AND scope_id = ? LIMIT 1
 	`, collectionID).Scan(&storedRev, &storedRaw)
 	if err == nil {
 		hasStored = true
@@ -516,12 +517,13 @@ func (s *Service) handlePutCollectionBookshelf(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if _, err := tx.ExecContext(r.Context(), `
-		INSERT INTO collection_bookshelves (collection_id, revision, arrangement)
-		VALUES (?, ?, ?)
-		ON CONFLICT(collection_id) DO UPDATE SET
+		INSERT INTO bookshelf_layouts (scope_kind, scope_id, revision, layout, updated_at)
+		VALUES ('collection', ?, ?, ?, ?)
+		ON CONFLICT(scope_kind, scope_id) DO UPDATE SET
 			revision = excluded.revision,
-			arrangement = excluded.arrangement
-	`, collectionID, nextRev, string(encoded)); err != nil {
+			layout = excluded.layout,
+			updated_at = excluded.updated_at
+	`, collectionID, nextRev, string(encoded), time.Now().UTC().UnixMilli()); err != nil {
 		s.writeErr(w, "PUT /api/collections/{id}/bookshelf upsert failed", err)
 		return
 	}

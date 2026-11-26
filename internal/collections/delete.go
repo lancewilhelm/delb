@@ -392,6 +392,12 @@ func DeleteCollection(ctx context.Context, opts DeleteCollectionOptions) (Delete
 				if _, err := tx.ExecContext(ctx, `DELETE FROM books WHERE collection_id = ?`, opts.CollectionID); err != nil {
 					return err
 				}
+				if _, err := tx.ExecContext(ctx, `DELETE FROM bookshelf_layouts WHERE scope_kind = 'collection' AND scope_id = ?`, opts.CollectionID); err != nil {
+					return err
+				}
+				if _, err := tx.ExecContext(ctx, `DELETE FROM shelf_picture_assets WHERE scope_kind = 'collection' AND scope_id = ?`, opts.CollectionID); err != nil {
+					return err
+				}
 				if _, err := tx.ExecContext(ctx, `DELETE FROM collections WHERE id = ?`, opts.CollectionID); err != nil {
 					return err
 				}

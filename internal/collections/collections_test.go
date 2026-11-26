@@ -291,7 +291,7 @@ func TestCollectionsCRUDMembersTransferDefaultAndBulkMove(t *testing.T) {
 	// Both source and destination should have recorded bookshelf revision = 1.
 	for _, cid := range []string{defaultID, sciFiID} {
 		var rev int
-		if err := env.opened.DB.QueryRowContext(ctx, `SELECT revision FROM collection_bookshelves WHERE collection_id = ?`, cid).Scan(&rev); err != nil {
+		if err := env.opened.DB.QueryRowContext(ctx, `SELECT revision FROM bookshelf_layouts WHERE scope_kind = 'collection' AND scope_id = ?`, cid).Scan(&rev); err != nil {
 			t.Fatalf("read bookshelf revision for %s: %v", cid, err)
 		}
 		if rev != 1 {

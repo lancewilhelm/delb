@@ -44,6 +44,9 @@ Legacy `is_personal` values and `legacy_collection_books` provide the source for
 | `user_book_rationale`        | One private plain-text TBR rationale per reader/book, retained independently of status |
 | `user_book_reviews`          | One private review per reader/book, with a spoiler flag                                |
 | `book_notes`                 | Private notes per reader/book; a book can have several                                 |
+| `personal_shelves`           | Lightweight private named book lists owned by a reader (`personal_shelf_books`)        |
+
+Visual bookshelf arrangements for both collections and personal shelves are stored on demand in one unified `bookshelf_layouts` table (`scope_kind`, `scope_id`, `revision`, `layout`), and decorative images live in `shelf_picture_assets` keyed by the same scope. Physical spine dimensions (`book_shelf_dimensions`) stay shared on the book entry.
 
 The same shared book can have different statuses, positions, ratings, rationale, and history for different users. Current endpoints select the authenticated user's records.
 

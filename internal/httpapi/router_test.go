@@ -195,8 +195,6 @@ func TestRouterPhase2AOwnedAndUnportedProxied(t *testing.T) {
 		{http.MethodPost, "/api/genres/g1/merge", http.StatusUnauthorized},
 		{http.MethodGet, "/api/search", http.StatusUnauthorized},
 		// Phase 2C Go-owned routes
-		{http.MethodGet, "/api/bookshelf", http.StatusUnauthorized},
-		{http.MethodPut, "/api/bookshelf", http.StatusUnauthorized},
 		{http.MethodGet, "/api/collections/abc-123/bookshelf", http.StatusUnauthorized},
 		{http.MethodPut, "/api/collections/abc-123/bookshelf", http.StatusUnauthorized},
 		{http.MethodGet, "/api/shelves", http.StatusUnauthorized},

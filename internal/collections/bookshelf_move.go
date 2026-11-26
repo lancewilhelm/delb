@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math"
 	"sort"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -432,7 +433,7 @@ func recordShelfBookMove(ctx context.Context, q queryable, collectionID string, 
 		hasStored    bool
 	)
 	err := q.QueryRowContext(ctx, `
-		SELECT revision, arrangement FROM collection_bookshelves WHERE collection_id = ? LIMIT 1
+		SELECT revision, layout FROM bookshelf_layouts WHERE scope_kind = 'collection' AND scope_id = ? LIMIT 1
 	`, collectionID).Scan(&prevRevision, &rawArr)
 	if err == nil {
 		hasStored = true
@@ -476,11 +477,12 @@ func recordShelfBookMove(ctx context.Context, q queryable, collectionID string, 
 		return err
 	}
 	_, err = q.ExecContext(ctx, `
-		INSERT INTO collection_bookshelves (collection_id, revision, arrangement)
-		VALUES (?, ?, ?)
-		ON CONFLICT(collection_id) DO UPDATE SET
+		INSERT INTO bookshelf_layouts (scope_kind, scope_id, revision, layout, updated_at)
+		VALUES ('collection', ?, ?, ?, ?)
+		ON CONFLICT(scope_kind, scope_id) DO UPDATE SET
 			revision = excluded.revision,
-			arrangement = excluded.arrangement
-	`, collectionID, nextRevision, string(encoded))
+			layout = excluded.layout,
+			updated_at = excluded.updated_at
+	`, collectionID, nextRevision, string(encoded), time.Now().UTC().UnixMilli())
 	return err
 }

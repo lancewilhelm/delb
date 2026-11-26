@@ -33,13 +33,6 @@ type PictureScope struct {
 	ID   string
 }
 
-func (sc PictureScope) whereColumn() string {
-	if sc.Kind == "collection" {
-		return "collection_id"
-	}
-	return "personal_shelf_id"
-}
-
 func pictureAccess(ctx context.Context, q collections.Queryable, userID string, scope PictureScope, edit bool) error {
 	if scope.Kind == "personal" {
 		var id string
@@ -69,8 +62,6 @@ func pictureAccess(ctx context.Context, q collections.Queryable, userID string, 
 }
 
 func validatePictureAssets(ctx context.Context, q collections.Queryable, scope PictureScope, layout *Bookshelf) error {
-	col := scope.whereColumn()
-
 	used := make(map[string]struct{}, len(layout.Pictures))
 	for _, pic := range layout.Pictures {
 		used[pic.AssetID] = struct{}{}
@@ -81,8 +72,8 @@ func validatePictureAssets(ctx context.Context, q collections.Queryable, scope P
 		unusedSince sql.NullInt64
 	}
 	rows, err := q.QueryContext(ctx, `
-		SELECT id, unused_since FROM shelf_picture_assets WHERE `+col+` = ?
-	`, scope.ID)
+		SELECT id, unused_since FROM shelf_picture_assets WHERE scope_kind = ? AND scope_id = ?
+	`, scope.Kind, scope.ID)
 	if err != nil {
 		return err
 	}
@@ -116,16 +107,16 @@ func validatePictureAssets(ctx context.Context, q collections.Queryable, scope P
 		if isUsed {
 			if asset.unusedSince.Valid {
 				if _, err := q.ExecContext(ctx, `
-					UPDATE shelf_picture_assets SET unused_since = NULL WHERE `+col+` = ? AND id = ?
-				`, scope.ID, asset.id); err != nil {
+					UPDATE shelf_picture_assets SET unused_since = NULL WHERE scope_kind = ? AND scope_id = ? AND id = ?
+				`, scope.Kind, scope.ID, asset.id); err != nil {
 					return err
 				}
 			}
 		} else {
 			if !asset.unusedSince.Valid {
 				if _, err := q.ExecContext(ctx, `
-					UPDATE shelf_picture_assets SET unused_since = ? WHERE `+col+` = ? AND id = ?
-				`, nowMs, scope.ID, asset.id); err != nil {
+					UPDATE shelf_picture_assets SET unused_since = ? WHERE scope_kind = ? AND scope_id = ? AND id = ?
+				`, nowMs, scope.Kind, scope.ID, asset.id); err != nil {
 					return err
 				}
 			}
@@ -192,19 +183,18 @@ func (s *Service) uploadPicture(ctx context.Context, userID string, scope Pictur
 		return nil, err
 	}
 
-	col := scope.whereColumn()
 	nowMs := time.Now().UTC().UnixMilli()
 	cutoff := nowMs - unusedPictureTTLMillis
 	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM shelf_picture_assets
-		WHERE `+col+` = ? AND unused_since IS NOT NULL AND unused_since < ?
-	`, scope.ID, cutoff); err != nil {
+		WHERE scope_kind = ? AND scope_id = ? AND unused_since IS NOT NULL AND unused_since < ?
+	`, scope.Kind, scope.ID, cutoff); err != nil {
 		return nil, err
 	}
 
 	rows, err := tx.QueryContext(ctx, `
-		SELECT bytes FROM shelf_picture_assets WHERE `+col+` = ?
-	`, scope.ID)
+		SELECT bytes FROM shelf_picture_assets WHERE scope_kind = ? AND scope_id = ?
+	`, scope.Kind, scope.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -231,16 +221,10 @@ func (s *Service) uploadPicture(ctx context.Context, userID string, scope Pictur
 	}
 
 	id := uuid.NewString()
-	var colID, personalID any
-	if scope.Kind == "collection" {
-		colID = scope.ID
-	} else {
-		personalID = scope.ID
-	}
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO shelf_picture_assets (id, collection_id, personal_shelf_id, image_base64, bytes, created_at, unused_since)
+		INSERT INTO shelf_picture_assets (id, scope_kind, scope_id, image_base64, bytes, created_at, unused_since)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, id, colID, personalID, base64.StdEncoding.EncodeToString(webpBytes), len(webpBytes), nowMs, nowMs); err != nil {
+	`, id, scope.Kind, scope.ID, base64.StdEncoding.EncodeToString(webpBytes), len(webpBytes), nowMs, nowMs); err != nil {
 		return nil, err
 	}
 
@@ -261,11 +245,10 @@ func (s *Service) readPicture(ctx context.Context, userID string, scope PictureS
 		return nil, "", false, err
 	}
 
-	col := scope.whereColumn()
 	var exists int
 	err = tx.QueryRowContext(ctx, `
-		SELECT 1 FROM shelf_picture_assets WHERE `+col+` = ? AND id = ? LIMIT 1
-	`, scope.ID, assetID).Scan(&exists)
+		SELECT 1 FROM shelf_picture_assets WHERE scope_kind = ? AND scope_id = ? AND id = ? LIMIT 1
+	`, scope.Kind, scope.ID, assetID).Scan(&exists)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, "", false, httpapi.NewError(http.StatusNotFound, "Picture not found")
 	}
@@ -284,7 +267,7 @@ func (s *Service) readPicture(ctx context.Context, userID string, scope PictureS
 		if role == "viewer" {
 			var rawArr string
 			err := tx.QueryRowContext(ctx, `
-				SELECT arrangement FROM collection_bookshelves WHERE collection_id = ? LIMIT 1
+				SELECT layout FROM bookshelf_layouts WHERE scope_kind = 'collection' AND scope_id = ? LIMIT 1
 			`, scope.ID).Scan(&rawArr)
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil, "", false, httpapi.NewError(http.StatusNotFound, "Picture not found")
@@ -324,8 +307,8 @@ func (s *Service) readPicture(ctx context.Context, userID string, scope PictureS
 
 	var b64 string
 	err = tx.QueryRowContext(ctx, `
-		SELECT image_base64 FROM shelf_picture_assets WHERE `+col+` = ? AND id = ? LIMIT 1
-	`, scope.ID, assetID).Scan(&b64)
+		SELECT image_base64 FROM shelf_picture_assets WHERE scope_kind = ? AND scope_id = ? AND id = ? LIMIT 1
+	`, scope.Kind, scope.ID, assetID).Scan(&b64)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, "", false, httpapi.NewError(http.StatusNotFound, "Picture not found")
 	}

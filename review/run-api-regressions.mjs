@@ -72,7 +72,6 @@ const suites = [
   'review/tbr-api.mjs',
   'review/pdf-reader-api.mjs',
   'review/collections-api.mjs',
-  'review/bookshelf-api.mjs',
   'review/collection-bookshelf-api.mjs',
   'review/bookshelf-pictures-api.mjs',
   'review/spine-artwork-api.mjs',
@@ -278,7 +277,8 @@ for (const suite of requested.length ? requested : suites) {
     }
     if (!ready)
       throw Error(
-        'Disposable standalone Go server did not become ready.\n' + serverOutput,
+        'Disposable standalone Go server did not become ready.\n' +
+          serverOutput,
       );
     try {
       await run([suite], directory);
