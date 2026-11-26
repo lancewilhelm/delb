@@ -261,6 +261,7 @@ func (s *Service) processOneBookUpload(
 		authorName := "Unknown Author"
 		var description, language, published string
 		var identifiers []IdentifierInput
+		var subjects []string
 
 		if ext == "epub" {
 			meta, err := epub.ParseMetadataFromBytes(part.Data, fallbackTitle)
@@ -276,6 +277,7 @@ func (s *Service) processOneBookUpload(
 			description = meta.Description
 			language = meta.Language
 			published = meta.Published
+			subjects = uniqByLower(meta.Subjects)
 			if meta.ISBN != "" {
 				identifiers = append(identifiers, IdentifierInput{Type: "isbn", Value: meta.ISBN})
 			}
@@ -505,6 +507,26 @@ func (s *Service) processOneBookUpload(
 						VALUES (?, ?, ?)
 						ON CONFLICT(book_id, type) DO UPDATE SET value = excluded.value
 					`, bookID, t, v); err != nil {
+						return err
+					}
+				}
+			}
+			if len(subjects) > 0 {
+				if replaceBookID != "" {
+					if _, err := tx.ExecContext(ctx, `DELETE FROM book_genres WHERE book_id = ?`, bookID); err != nil {
+						return err
+					}
+				}
+				for _, subj := range subjects {
+					gid, err := findOrCreateGenreByName(ctx, tx, subj)
+					if err != nil {
+						return err
+					}
+					if _, err := tx.ExecContext(ctx, `
+						INSERT INTO book_genres (book_id, genre_id)
+						VALUES (?, ?)
+						ON CONFLICT(book_id, genre_id) DO NOTHING
+					`, bookID, gid); err != nil {
 						return err
 					}
 				}

@@ -161,6 +161,12 @@ func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/tags/{id}", reqSess(s.handleDeleteTag))
 	mux.HandleFunc("POST /api/tags/{id}/merge", reqSess(s.handleMergeTag))
 
+	mux.HandleFunc("GET /api/genres", reqSess(s.handleListGenres))
+	mux.HandleFunc("GET /api/genres/search", s.handleSearchGenres)
+	mux.HandleFunc("GET /api/genres/{id}/books", reqSess(s.handleListGenreBooks))
+	mux.HandleFunc("DELETE /api/genres/{id}", reqSess(s.handleDeleteGenre))
+	mux.HandleFunc("POST /api/genres/{id}/merge", reqSess(s.handleMergeGenre))
+
 	mux.HandleFunc("GET /api/search", reqSess(s.handleGlobalSearch))
 }
 
@@ -354,6 +360,26 @@ func findOrCreateTagByName(ctx context.Context, q collections.Queryable, name st
 	return id, nil
 }
 
+func findOrCreateGenreByName(ctx context.Context, q collections.Queryable, name string) (string, error) {
+	var id string
+	err := q.QueryRowContext(ctx, `SELECT id FROM genres WHERE name = ? LIMIT 1`, name).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	id = uuid.NewString()
+	now := time.Now().UTC().Unix()
+	if _, err := q.ExecContext(ctx, `
+		INSERT INTO genres (id, name, created_at, updated_at)
+		VALUES (?, ?, ?, ?)
+	`, id, name, now, now); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
 func findOrCreatePublisherByName(ctx context.Context, q collections.Queryable, name string) (string, error) {
 	var id string
 	err := q.QueryRowContext(ctx, `SELECT id FROM publishers WHERE name = ? LIMIT 1`, name).Scan(&id)
@@ -417,6 +443,19 @@ func deleteTagIfUnreferenced(ctx context.Context, q collections.Queryable, tagID
 		return err
 	}
 	_, err = q.ExecContext(ctx, `DELETE FROM tags WHERE id = ?`, tagID)
+	return err
+}
+
+func deleteGenreIfUnreferenced(ctx context.Context, q collections.Queryable, genreID string) error {
+	var used string
+	err := q.QueryRowContext(ctx, `SELECT genre_id FROM book_genres WHERE genre_id = ? LIMIT 1`, genreID).Scan(&used)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	_, err = q.ExecContext(ctx, `DELETE FROM genres WHERE id = ?`, genreID)
 	return err
 }
 

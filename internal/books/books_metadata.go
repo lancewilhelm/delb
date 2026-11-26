@@ -1026,15 +1026,15 @@ func (s *Service) handleMetadataImportCreate(w http.ResponseWriter, r *http.Requ
 					return err
 				}
 			}
-			if _, err := tx.ExecContext(r.Context(), `DELETE FROM book_tags WHERE book_id = ?`, replaceBookID); err != nil {
+			if _, err := tx.ExecContext(r.Context(), `DELETE FROM book_genres WHERE book_id = ?`, replaceBookID); err != nil {
 				return err
 			}
 			for _, name := range categories {
-				tid, err := findOrCreateTagByName(r.Context(), tx, name)
+				gid, err := findOrCreateGenreByName(r.Context(), tx, name)
 				if err != nil {
 					return err
 				}
-				if _, err := tx.ExecContext(r.Context(), `INSERT INTO book_tags (book_id, tag_id) VALUES (?, ?)`, replaceBookID, tid); err != nil {
+				if _, err := tx.ExecContext(r.Context(), `INSERT INTO book_genres (book_id, genre_id) VALUES (?, ?) ON CONFLICT(book_id, genre_id) DO NOTHING`, replaceBookID, gid); err != nil {
 					return err
 				}
 			}

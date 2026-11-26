@@ -155,6 +155,7 @@ type enrichedBookListItemJSON struct {
 	bookListItemJSON
 	SpineRevision *string           `json:"spineRevision"`
 	Tags          []namedRef        `json:"tags"`
+	Genres        []namedRef        `json:"genres"`
 	Identifiers   []IdentifierInput `json:"identifiers"`
 	Formats       []string          `json:"formats"`
 	Rating        *int              `json:"rating"`
@@ -372,6 +373,31 @@ func enrichBookViewPage(ctx context.Context, db *sql.DB, items []bookListItemJSO
 		return nil, err
 	}
 
+	// Genres
+	genresByBook := make(map[string][]namedRef)
+	gRows, err := db.QueryContext(ctx, `
+		SELECT bg.book_id, g.id, g.name
+		FROM book_genres bg
+		INNER JOIN genres g ON g.id = bg.genre_id
+		WHERE bg.book_id IN (`+ph+`)
+		ORDER BY g.name ASC, g.id ASC
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	for gRows.Next() {
+		var bid string
+		var ref namedRef
+		if err := gRows.Scan(&bid, &ref.ID, &ref.Name); err != nil {
+			_ = gRows.Close()
+			return nil, err
+		}
+		genresByBook[bid] = append(genresByBook[bid], ref)
+	}
+	if err := gRows.Close(); err != nil {
+		return nil, err
+	}
+
 	// Identifiers
 	identsByBook := make(map[string][]IdentifierInput)
 	iRows, err := db.QueryContext(ctx, `
@@ -487,6 +513,10 @@ func enrichBookViewPage(ctx context.Context, db *sql.DB, items []bookListItemJSO
 		if tags == nil {
 			tags = make([]namedRef, 0)
 		}
+		genres := genresByBook[item.ID]
+		if genres == nil {
+			genres = make([]namedRef, 0)
+		}
 		idents := identsByBook[item.ID]
 		if idents == nil {
 			idents = make([]IdentifierInput, 0)
@@ -511,6 +541,7 @@ func enrichBookViewPage(ctx context.Context, db *sql.DB, items []bookListItemJSO
 			bookListItemJSON: item,
 			SpineRevision:    spinePtr,
 			Tags:             tags,
+			Genres:           genres,
 			Identifiers:      idents,
 			Formats:          formats,
 			Rating:           ratingPtr,
@@ -1123,6 +1154,11 @@ func (s *Service) handleCreateBook(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteHTTPError(w, err)
 		return
 	}
+	genresOpt, err := parseOptStringArrayField(body, "genres", false)
+	if err != nil {
+		httpapi.WriteHTTPError(w, err)
+		return
+	}
 	identsRawOpt, err := parseOptStringField(body, "identifiers")
 	if err != nil {
 		httpapi.WriteHTTPError(w, err)
@@ -1211,6 +1247,22 @@ func (s *Service) handleCreateBook(w http.ResponseWriter, r *http.Request) {
 			ON CONFLICT(book_id, tag_id) DO NOTHING
 		`, bookID, tid); err != nil {
 			s.writeErr(w, "POST /api/books link tag failed", err)
+			return
+		}
+	}
+
+	for _, name := range genresOpt.values {
+		gid, err := findOrCreateGenreByName(r.Context(), tx, name)
+		if err != nil {
+			s.writeErr(w, "POST /api/books genre failed", err)
+			return
+		}
+		if _, err := tx.ExecContext(r.Context(), `
+			INSERT INTO book_genres (book_id, genre_id)
+			VALUES (?, ?)
+			ON CONFLICT(book_id, genre_id) DO NOTHING
+		`, bookID, gid); err != nil {
+			s.writeErr(w, "POST /api/books link genre failed", err)
 			return
 		}
 	}
@@ -1337,6 +1389,29 @@ func (s *Service) handleGetBook(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = tRows.Close()
 
+	gRows, err := s.db.QueryContext(r.Context(), `
+		SELECT bg.genre_id, g.name
+		FROM book_genres bg
+		INNER JOIN genres g ON g.id = bg.genre_id
+		WHERE bg.book_id = ?
+		ORDER BY g.name ASC
+	`, bookID)
+	if err != nil {
+		s.writeErrWithFallback(w, "GET /api/books/{id} genres failed", "Failed to fetch book", err)
+		return
+	}
+	genresOut := make([]namedRef, 0)
+	for gRows.Next() {
+		var ref namedRef
+		if err := gRows.Scan(&ref.ID, &ref.Name); err != nil {
+			_ = gRows.Close()
+			s.writeErrWithFallback(w, "GET /api/books/{id} genre scan failed", "Failed to fetch book", err)
+			return
+		}
+		genresOut = append(genresOut, ref)
+	}
+	_ = gRows.Close()
+
 	iRows, err := s.db.QueryContext(r.Context(), `
 		SELECT type, value FROM book_identifiers WHERE book_id = ? ORDER BY type ASC, value ASC
 	`, bookID)
@@ -1422,6 +1497,7 @@ func (s *Service) handleGetBook(w http.ResponseWriter, r *http.Request) {
 		Publisher               *namedRef         `json:"publisher"`
 		Series                  *seriesDetailRef  `json:"series"`
 		Tags                    []namedRef        `json:"tags"`
+		Genres                  []namedRef        `json:"genres"`
 		Identifiers             []IdentifierInput `json:"identifiers"`
 		UserRating              *int              `json:"userRating"`
 		UserStatus              *string           `json:"userStatus"`
@@ -1442,6 +1518,7 @@ func (s *Service) handleGetBook(w http.ResponseWriter, r *http.Request) {
 				Publisher:               publisher,
 				Series:                  seriesOut,
 				Tags:                    tagsOut,
+				Genres:                  genresOut,
 				Identifiers:             identsOut,
 				UserRating:              userRating,
 				UserStatus:              userStatus,
@@ -1454,6 +1531,7 @@ func (s *Service) handleGetBook(w http.ResponseWriter, r *http.Request) {
 			"authors": authorsOut,
 			"files":   filesOut,
 			"tags":    tagsOut,
+			"genres":  genresOut,
 		},
 	})
 }
@@ -1504,18 +1582,19 @@ func ComputeMetadataVersion(ctx context.Context, q collections.Queryable, bookID
 		Book        bookMetaSnap `json:"book"`
 		Authors     []nameRow    `json:"authors"`
 		Tags        []nameRow    `json:"tags"`
+		Genres      []nameRow    `json:"genres"`
 		Identifiers []identRow   `json:"identifiers"`
 	}
 
 	var (
-		title     string
-		desc      sql.NullString
-		pub       sql.NullString
-		lang      sql.NullString
-		pages     sql.NullInt64
-		pubName   sql.NullString
-		serName   sql.NullString
-		serIdx    sql.NullFloat64
+		title   string
+		desc    sql.NullString
+		pub     sql.NullString
+		lang    sql.NullString
+		pages   sql.NullInt64
+		pubName sql.NullString
+		serName sql.NullString
+		serIdx  sql.NullFloat64
 	)
 	err := q.QueryRowContext(ctx, `
 		SELECT b.title, b.description, b.published, b.language, b.pages, p.name, s.name, b.series_index
@@ -1578,6 +1657,29 @@ func ComputeMetadataVersion(ctx context.Context, q collections.Queryable, bookID
 		return "", err
 	}
 
+	genreRows, err := q.QueryContext(ctx, `
+		SELECT g.name
+		FROM book_genres bg
+		INNER JOIN genres g ON g.id = bg.genre_id
+		WHERE bg.book_id = ?
+		ORDER BY g.name ASC
+	`, bookID)
+	if err != nil {
+		return "", err
+	}
+	genresOut := make([]nameRow, 0)
+	for genreRows.Next() {
+		var n string
+		if err := genreRows.Scan(&n); err != nil {
+			_ = genreRows.Close()
+			return "", err
+		}
+		genresOut = append(genresOut, nameRow{Name: n})
+	}
+	if err := genreRows.Close(); err != nil {
+		return "", err
+	}
+
 	identRows, err := q.QueryContext(ctx, `
 		SELECT type, value
 		FROM book_identifiers
@@ -1613,6 +1715,7 @@ func ComputeMetadataVersion(ctx context.Context, q collections.Queryable, bookID
 		},
 		Authors:     authorsOut,
 		Tags:        tagsOut,
+		Genres:      genresOut,
 		Identifiers: identsOut,
 	}
 	var buf bytes.Buffer
@@ -1703,6 +1806,10 @@ func (s *Service) UpdateBookMetadata(
 		if err != nil {
 			return err
 		}
+		genresOpt, err := parseOptStringArrayField(body, "genres", true)
+		if err != nil {
+			return err
+		}
 		identsRawOpt, err := parseOptStringField(body, "identifiers")
 		if err != nil {
 			return err
@@ -1768,6 +1875,10 @@ func (s *Service) UpdateBookMetadata(
 			return err
 		}
 		prevTagIDs, err := queryStringColumn(ctx, tx, `SELECT tag_id FROM book_tags WHERE book_id = ?`, bookID)
+		if err != nil {
+			return err
+		}
+		prevGenreIDs, err := queryStringColumn(ctx, tx, `SELECT genre_id FROM book_genres WHERE book_id = ?`, bookID)
 		if err != nil {
 			return err
 		}
@@ -1854,7 +1965,7 @@ func (s *Service) UpdateBookMetadata(
 			setArgs = append(setArgs, pagesOpt.value)
 		}
 
-		if len(setClauses) == 0 && !hasAuthorMutation && !tagsOpt.set && !hasIdentMutation {
+		if len(setClauses) == 0 && !hasAuthorMutation && !tagsOpt.set && !genresOpt.set && !hasIdentMutation {
 			return httpapi.NewError(http.StatusBadRequest, "No updatable fields provided")
 		}
 
@@ -1915,6 +2026,32 @@ func (s *Service) UpdateBookMetadata(
 			for _, oldID := range dedupeStrings(prevTagIDs) {
 				if _, kept := currentTagIDs[oldID]; !kept {
 					if err := deleteTagIfUnreferenced(ctx, tx, oldID); err != nil {
+						return err
+					}
+				}
+			}
+		}
+
+		if genresOpt.set {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM book_genres WHERE book_id = ?`, bookID); err != nil {
+				return err
+			}
+			currentGenreIDs := make(map[string]struct{}, len(genresOpt.values))
+			for _, name := range genresOpt.values {
+				gid, err := findOrCreateGenreByName(ctx, tx, name)
+				if err != nil {
+					return err
+				}
+				if _, err := tx.ExecContext(ctx, `
+					INSERT INTO book_genres (book_id, genre_id) VALUES (?, ?)
+				`, bookID, gid); err != nil {
+					return err
+				}
+				currentGenreIDs[gid] = struct{}{}
+			}
+			for _, oldID := range dedupeStrings(prevGenreIDs) {
+				if _, kept := currentGenreIDs[oldID]; !kept {
+					if err := deleteGenreIfUnreferenced(ctx, tx, oldID); err != nil {
 						return err
 					}
 				}
@@ -2109,6 +2246,7 @@ func (s *Service) handleDeleteBook(w http.ResponseWriter, r *http.Request) {
 				`DELETE FROM book_files WHERE book_id = ?`,
 				`DELETE FROM book_authors WHERE book_id = ?`,
 				`DELETE FROM book_tags WHERE book_id = ?`,
+				`DELETE FROM book_genres WHERE book_id = ?`,
 				`DELETE FROM book_identifiers WHERE book_id = ?`,
 				`DELETE FROM user_book_status WHERE book_id = ?`,
 				`DELETE FROM book_ratings WHERE book_id = ?`,

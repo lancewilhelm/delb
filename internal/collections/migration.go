@@ -128,6 +128,13 @@ var catalogSpecs = []tableSpec{
 		},
 	},
 	{
+		Name: "book_genres",
+		Columns: []colSpec{
+			{Name: "book_id", Kind: colText},
+			{Name: "genre_id", Kind: colText},
+		},
+	},
+	{
 		Name: "book_identifiers",
 		Columns: []colSpec{
 			{Name: "book_id", Kind: colText},
@@ -1266,7 +1273,7 @@ func ApplyCollectionMigration(ctx context.Context, db *sql.DB, libraryRoot strin
 				return err
 			}
 
-			for _, tbl := range []string{"book_authors", "book_tags", "book_identifiers"} {
+			for _, tbl := range []string{"book_authors", "book_tags", "book_genres", "book_identifiers"} {
 				for _, r := range data.Tables[tbl] {
 					if rowStr(r, "book_id") != origID {
 						continue

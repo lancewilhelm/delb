@@ -117,11 +117,11 @@ func (s *Service) createCatalogEntry(ctx context.Context, userID, collectionID s
 		}
 	}
 	for _, name := range uniqByLower(in.Categories) {
-		tid, err := findOrCreateTagByName(ctx, tx, name)
+		gid, err := findOrCreateGenreByName(ctx, tx, name)
 		if err != nil {
 			return "", err
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO book_tags (book_id, tag_id) VALUES (?, ?)`, bookID, tid); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO book_genres (book_id, genre_id) VALUES (?, ?) ON CONFLICT(book_id, genre_id) DO NOTHING`, bookID, gid); err != nil {
 			return "", err
 		}
 	}

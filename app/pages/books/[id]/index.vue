@@ -72,6 +72,9 @@ type Book = {
   // New schema: tags are related entities (many-to-many)
   tags?: { id: string; name: string }[];
 
+  // Shared bibliographic genres (many-to-many)
+  genres?: { id: string; name: string }[];
+
   // New schema: publisher is a related entity; API returns denormalized for now
   publisher?: { id: string; name: string } | null;
 
@@ -1820,11 +1823,28 @@ const { copy } = useClipboard();
               </div>
             </div>
 
+            <!-- Genres -->
+            <div
+              v-if="(book.genres ?? []).length"
+              class="flex flex-wrap items-center gap-2 mt-3"
+            >
+              <span class="text-xs opacity-60">Genres</span>
+              <div
+                v-for="g in book.genres ?? []"
+                :key="g.id"
+                class="inline-flex items-center px-2 py-1 rounded-md border border-(--contrast-border-color) hover:bg-(--sub-color)/10 text-xs cursor-pointer"
+                @click="navigateTo(`/genres/${encodeURIComponent(g.id)}`)"
+              >
+                {{ g.name }}
+              </div>
+            </div>
+
             <!-- Tags -->
             <div
               v-if="(book.tags ?? []).length"
-              class="flex flex-wrap gap-2 mt-3"
+              class="flex flex-wrap items-center gap-2 mt-2"
             >
+              <span class="text-xs opacity-60">Tags</span>
               <div
                 v-for="t in book.tags ?? []"
                 :key="t.id"

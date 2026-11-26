@@ -74,6 +74,8 @@ func makeMinimalEPUB(t *testing.T, version string, includeCover bool, includeSig
     <dc:date>2024-05-01</dc:date>
     <dc:language>en</dc:language>
     <dc:subject>Computing</dc:subject>
+    <dc:subject>History of Science</dc:subject>
+    <dc:subject>computing</dc:subject>
     ` + coverMeta + `
   </metadata>
   <manifest>
@@ -125,6 +127,9 @@ func TestParseMetadataAndCoverRoundTrip(t *testing.T) {
 			}
 			if meta.Publisher != "Analytical Press" || meta.Language != "en" {
 				t.Fatalf("unexpected pub/lang: %+v", meta)
+			}
+			if len(meta.Subjects) != 2 || meta.Subjects[0] != "Computing" || meta.Subjects[1] != "History of Science" {
+				t.Fatalf("unexpected subjects: %+v", meta.Subjects)
 			}
 
 			coverData, mediaType, ok, err := ExtractCoverFromBytes(raw)

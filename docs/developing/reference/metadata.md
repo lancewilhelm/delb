@@ -17,7 +17,7 @@ The search modal can enable multiple providers and remembers choices in account 
 
 The optional `hasPhysicalCopy` boolean marks a newly created entry as physical. When resolving a duplicate, `true` also marks the authorized existing entry; `false` or an omitted value leaves its current mark unchanged.
 
-The current backend maps title, authors, description, identifiers, language, publication data, page count, categories/tags, publisher, and available series information. It resolves related entity rows, writes author/tag/identifier links, and can fetch a cover. These paths are implemented; older phase notes incorrectly marked backend mapping as pending.
+The current backend maps title, authors, description, identifiers, language, publication data, page count, categories/genres, publisher, and available series information. It resolves related entity rows, writes author/genre/identifier links, and can fetch a cover without overwriting manual book tags. These paths are implemented; older phase notes incorrectly marked backend mapping as pending.
 
 The editor's metadata modal returns the selected fields to [BookEditor](../../../app/components/Books/BookEditor.vue). Applying fields to the form is distinct from persisting the edited book through Save. Review the form before saving changes to shared metadata.
 
@@ -40,7 +40,7 @@ A replacement preserves the book ID and associated personal reading identity. Up
 | ------------------------------------------------------------ | ---------------------------------------------------- |
 | Title, description, language, publication fields, page count | `books`                                              |
 | Authors                                                      | `authors` and ordered `book_authors` links           |
-| Categories                                                   | `tags` and `book_tags` links                         |
+| Categories                                                   | `genres` and `book_genres` links                     |
 | Publisher and available series                               | Related shared entities and book foreign keys        |
 | ISBN and other identifiers                                   | `book_identifiers`                                   |
 | Remote image                                                 | Managed cover/thumbnail files and book cover pointer |

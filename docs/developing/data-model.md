@@ -12,6 +12,8 @@ erDiagram
     books ||--o{ book_files : stores
     books ||--o{ book_authors : credits
     authors ||--o{ book_authors : names
+    books ||--o{ book_genres : categorizes
+    genres ||--o{ book_genres : names
     books ||--o{ book_tags : classifies
     tags ||--o{ book_tags : names
     users ||--o{ user_book_status : records
@@ -20,7 +22,7 @@ erDiagram
     books ||--o{ user_book_reading_position : has
 ```
 
-`books` holds shared metadata, including title, description, publication fields, page count, publisher, series, cover pointer, and optional creator/import provenance. Its author, tag, identifier, and file records are separate tables.
+`books` holds shared metadata, including title, description, publication fields, page count, publisher, series, cover pointer, and optional creator/import provenance. Its author, genre, tag, identifier, and file records are separate tables.
 
 `collections` defines named scopes, with one `is_default` designation. Every collection has an owner, synchronized with its required owner membership. `collection_members` grants owner, editor, or viewer access.
 
