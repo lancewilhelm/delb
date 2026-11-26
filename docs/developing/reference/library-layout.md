@@ -40,6 +40,13 @@ The Sidebar component contains disabled shelf, tag multi-select, and rating plac
 
 Books selection supports explicit IDs and all-in-scope with exclusions. Bulk actions on shared catalog data, such as copy marks, require the Editor or Admin role. Bulk status changes affect only the reader's own data.
 
+## Browse card art
+
+Shelves, Authors, Series, Publishers, Genres, and Tags share the dashboard's
+tile renderer. Each page applies its own saved **Card style** to the whole
+grid. [Browse cards](../ui/browse-cards.md) describes the settings and preview
+data.
+
 ## Add and edit books
 
 The header Add book dialog offers Upload files, By metadata, and Manual entry. The dialog is available to Editors and Admins, and every new book goes into the library. Uploads and metadata imports create records through different backend paths. Manual entry opens a blank editor and creates the record when the user selects Create.

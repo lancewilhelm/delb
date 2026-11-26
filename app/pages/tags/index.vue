@@ -4,10 +4,15 @@ import { useEntityPagination } from '~/composables/useEntityPagination';
 import { useHead } from '~/composables/useHead';
 import { useUserSettingsStore } from '~/stores/userSettings';
 import { $fetch } from '~/utils/apiFetch';
+import {
+  browseCardPreviewLimit,
+  type BrowseCardRow,
+} from '~/utils/browseCards';
+import type { CardArtStyle } from '~/utils/dashboardArt';
 import { ref } from 'vue';
-import { RouterLink } from 'vue-router';
 import AppHeader from '~/components/AppHeader.vue';
-import BookCover from '~/components/BookCover.vue';
+import BrowseCardArtSelect from '~/components/BrowseCardArtSelect.vue';
+import BrowseCardGrid from '~/components/BrowseCardGrid.vue';
 import EntityPaginationControl from '~/components/EntityPaginationControl.vue';
 import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 import TagsActions from '~/components/Tags/Actions.vue';
@@ -21,7 +26,7 @@ const { isAdmin } = useAuth();
 
 const actions = ref<InstanceType<typeof TagsActions> | null>(null);
 const filterInput = ref<HTMLInputElement | null>(null);
-function onTagContextMenu(event: MouseEvent, tag: TagRow) {
+function onTagContextMenu(event: MouseEvent, tag: BrowseCardRow) {
   if (!isAdmin.value) return;
   event.preventDefault();
   const card = event.currentTarget;
@@ -33,7 +38,7 @@ function onTagContextMenu(event: MouseEvent, tag: TagRow) {
     returnFocus: link,
   });
 }
-function onTagKey(event: KeyboardEvent, tag: TagRow) {
+function onTagKey(event: KeyboardEvent, tag: BrowseCardRow) {
   if (
     !isAdmin.value ||
     !(event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))
@@ -48,19 +53,10 @@ function focusFilter() {
   filterInput.value?.focus();
 }
 
-type TagRow = {
-  id: string;
-  name: string;
-  bookCount: number;
-  books?: Array<{
-    id: string;
-    title: string;
-    coverThumbnailUrl: string | null;
-  }>;
-};
-
 const tagQuery = ref('');
 const userSettingsStore = useUserSettingsStore();
+const cardArt =
+  userSettingsStore.settingRef<CardArtStyle>('browseCardArt.tags');
 const maxTagsCovers = userSettingsStore.settingRef<number>(
   'coverStyle.tagsMaxCovers',
 );
@@ -73,16 +69,16 @@ const {
   reset: refreshTags,
   loadMore,
   retry,
-} = useEntityPagination<TagRow>({
+} = useEntityPagination<BrowseCardRow>({
   inputs: () => ({
     search: tagQuery.value,
-    previewLimit: maxTagsCovers.value ?? 8,
+    previewLimit: browseCardPreviewLimit(maxTagsCovers.value),
   }),
   initialize: async () => {},
   fetchPage: async (query) => {
     const response = await $fetch<{
-      data?: { tags?: TagRow[]; hasMore?: boolean };
-    }>('/api/tags', { query });
+      data?: { tags?: BrowseCardRow[]; hasMore?: boolean };
+    }>('/api/tags', { query: { ...query, artPreviews: '1' } });
     return {
       rows: response.data?.tags ?? [],
       hasMore: response.data?.hasMore ?? false,
@@ -90,7 +86,6 @@ const {
   },
   failureMessage: 'Failed to load tags',
 });
-const filteredTags = tags;
 </script>
 
 <template>
@@ -121,7 +116,7 @@ const filteredTags = tags;
             class="flex-1 min-h-0 overflow-auto p-4 space-y-6"
           >
             <!-- Tags -->
-            <div class="flex items-center justify-between gap-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
               <input
                 ref="filterInput"
                 v-model="tagQuery"
@@ -129,6 +124,7 @@ const filteredTags = tags;
                 placeholder="Filter tags..."
                 type="text"
               />
+              <BrowseCardArtSelect v-model="cardArt" />
             </div>
 
             <div v-if="loadingTags && !tags.length" class="text-sm opacity-80">
@@ -136,66 +132,20 @@ const filteredTags = tags;
             </div>
 
             <div
-              v-else-if="filteredTags.length === 0 && !errorMessage"
+              v-else-if="tags.length === 0 && !errorMessage"
               class="text-sm opacity-80"
             >
               No tags found in the library.
             </div>
 
-            <div v-else class="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-              <div
-                v-for="t in filteredTags"
-                :key="t.id"
-                class="relative flex items-center justify-between gap-3 border border-(--contrast-border-color) hover:border-(--main-color) hover:bg-(--sub-color)/10 rounded-md px-3 py-2 overflow-hidden min-h-32 cursor-pointer shadow-sm hover:shadow-md"
-                @contextmenu="onTagContextMenu($event, t)"
-                @keydown="onTagKey($event, t)"
-              >
-                <RouterLink
-                  :to="`/tags/${encodeURIComponent(t.id)}`"
-                  class="absolute inset-0 z-100"
-                  :aria-label="`View ${t.name}`"
-                />
-                <div class="min-w-0 flex-1 z-101 pointer-events-none">
-                  <div class="break-words">
-                    {{ t.name }}
-                  </div>
-                  <div class="text-xs opacity-70">
-                    {{ t.bookCount }} book{{ t.bookCount === 1 ? '' : 's' }}
-                  </div>
-                </div>
-
-                <div
-                  v-if="
-                    (t.books ?? []).some(
-                      (b) =>
-                        typeof b.coverThumbnailUrl === 'string' &&
-                        b.coverThumbnailUrl,
-                    )
-                  "
-                  class="ml-auto flex h-28 max-w-[45%] shrink-0 items-center justify-end overflow-hidden"
-                >
-                  <BookCover
-                    v-for="(b, i) in (t.books ?? [])
-                      .filter(
-                        (x) =>
-                          typeof x.coverThumbnailUrl === 'string' &&
-                          x.coverThumbnailUrl,
-                      )
-                      .slice(
-                        0,
-                        maxTagsCovers === -1 ? t.books?.length : maxTagsCovers,
-                      )"
-                    :key="b.id"
-                    :src="b.coverThumbnailUrl"
-                    :alt="`Cover for ${b.title}`"
-                    :title="b.title"
-                    class="h-full w-auto! aspect-2/3! shrink-0 relative"
-                    :class="i === 0 ? '' : '-ml-13'"
-                    :style="{ zIndex: 100 - i }"
-                  />
-                </div>
-              </div>
-            </div>
+            <BrowseCardGrid
+              v-else
+              page="tags"
+              :rows="tags"
+              :art-style="cardArt"
+              @card-contextmenu="onTagContextMenu"
+              @card-keydown="onTagKey"
+            />
             <EntityPaginationControl
               :root="scrollRoot"
               :row-count="tags.length"

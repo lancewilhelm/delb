@@ -20,6 +20,10 @@ import {
   type DashboardSettings,
 } from '~/utils/dashboardArt';
 import {
+  normalizeBrowseCardArt,
+  type BrowseCardArtSettings,
+} from '~/utils/browseCards';
+import {
   defaultThemePreference,
   normalizeThemePreference,
   type ThemePreference,
@@ -120,6 +124,7 @@ export interface BaseUserSettings {
    * Dashboard: the library status bar and each tile's card art.
    */
   dashboard: DashboardSettings;
+  browseCardArt: BrowseCardArtSettings;
 
   /**
    * Share cards: whether finishing a book offers a share card.
@@ -195,6 +200,7 @@ function getBaseDefaults(): BaseUserSettings {
       defaultMode: 'everything',
     },
     dashboard: defaultDashboardSettings(),
+    browseCardArt: normalizeBrowseCardArt(),
     shareCard: {
       promptOnFinish: true,
     },
@@ -317,6 +323,7 @@ function normalizeProfileSettings(
       ? { customTheme: normalizeCustomTheme(settings.customTheme) }
       : {}),
     dashboard: normalizeDashboardSettings(settings.dashboard),
+    browseCardArt: normalizeBrowseCardArt(settings.browseCardArt),
     shareCard: {
       promptOnFinish: settings.shareCard?.promptOnFinish !== false,
     },

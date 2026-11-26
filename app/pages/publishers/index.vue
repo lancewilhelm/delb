@@ -3,10 +3,15 @@ import { useEntityPagination } from '~/composables/useEntityPagination';
 import { useHead } from '~/composables/useHead';
 import { useUserSettingsStore } from '~/stores/userSettings';
 import { $fetch } from '~/utils/apiFetch';
+import {
+  browseCardPreviewLimit,
+  type BrowseCardRow,
+} from '~/utils/browseCards';
+import type { CardArtStyle } from '~/utils/dashboardArt';
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
 import AppHeader from '~/components/AppHeader.vue';
-import BookCover from '~/components/BookCover.vue';
+import BrowseCardArtSelect from '~/components/BrowseCardArtSelect.vue';
+import BrowseCardGrid from '~/components/BrowseCardGrid.vue';
 import EntityPaginationControl from '~/components/EntityPaginationControl.vue';
 import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 // Page metadata
@@ -14,21 +19,11 @@ useHead({
   title: 'Home',
 });
 
-const router = useRouter();
-
-type PublisherRow = {
-  id: string;
-  name: string;
-  bookCount: number;
-  books?: Array<{
-    id: string;
-    title: string;
-    coverThumbnailUrl: string | null;
-  }>;
-};
-
 const publisherQuery = ref('');
 const userSettingsStore = useUserSettingsStore();
+const cardArt = userSettingsStore.settingRef<CardArtStyle>(
+  'browseCardArt.publishers',
+);
 const maxPublishersCovers = userSettingsStore.settingRef<number>(
   'coverStyle.publishersMaxCovers',
 );
@@ -40,16 +35,16 @@ const {
   scrollRoot,
   loadMore,
   retry,
-} = useEntityPagination<PublisherRow>({
+} = useEntityPagination<BrowseCardRow>({
   inputs: () => ({
     search: publisherQuery.value,
-    previewLimit: maxPublishersCovers.value ?? 8,
+    previewLimit: browseCardPreviewLimit(maxPublishersCovers.value),
   }),
   initialize: async () => {},
   fetchPage: async (query) => {
     const response = await $fetch<{
-      data?: { publishers?: PublisherRow[]; hasMore?: boolean };
-    }>('/api/publishers', { query });
+      data?: { publishers?: BrowseCardRow[]; hasMore?: boolean };
+    }>('/api/publishers', { query: { ...query, artPreviews: '1' } });
     return {
       rows: response.data?.publishers ?? [],
       hasMore: response.data?.hasMore ?? false,
@@ -57,7 +52,6 @@ const {
   },
   failureMessage: 'Failed to load publishers',
 });
-const filteredPublishers = publishers;
 </script>
 
 <template>
@@ -84,13 +78,14 @@ const filteredPublishers = publishers;
             class="flex-1 min-h-0 overflow-auto p-4 space-y-6"
           >
             <!-- Publishers -->
-            <div class="flex items-center justify-between gap-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
               <input
                 v-model="publisherQuery"
                 class="px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm w-56"
                 placeholder="Filter publishers..."
                 type="text"
               />
+              <BrowseCardArtSelect v-model="cardArt" />
             </div>
 
             <div
@@ -101,62 +96,18 @@ const filteredPublishers = publishers;
             </div>
 
             <div
-              v-else-if="filteredPublishers.length === 0 && !errorMessage"
+              v-else-if="publishers.length === 0 && !errorMessage"
               class="text-sm opacity-80"
             >
               No publishers found in the library.
             </div>
 
-            <div v-else class="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-              <div
-                v-for="p in filteredPublishers"
-                :key="p.id"
-                class="flex items-center justify-between gap-3 border border-(--contrast-border-color) hover:border-(--main-color) hover:bg-(--sub-color)/10 rounded-md px-3 py-2 overflow-hidden min-h-32 cursor-pointer shadow-sm hover:shadow-md"
-                @click="router.push(`/publishers/${p.id}`)"
-              >
-                <div class="min-w-0 flex-1 z-101">
-                  <div class="break-words">
-                    {{ p.name }}
-                  </div>
-                  <div class="text-xs opacity-70">
-                    {{ p.bookCount }} book{{ p.bookCount === 1 ? '' : 's' }}
-                  </div>
-                </div>
-
-                <div
-                  v-if="
-                    (p.books ?? []).some(
-                      (b) =>
-                        typeof b.coverThumbnailUrl === 'string' &&
-                        b.coverThumbnailUrl,
-                    )
-                  "
-                  class="ml-auto flex h-28 max-w-[45%] shrink-0 items-center justify-end overflow-hidden"
-                >
-                  <BookCover
-                    v-for="(b, i) in (p.books ?? [])
-                      .filter(
-                        (x) =>
-                          typeof x.coverThumbnailUrl === 'string' &&
-                          x.coverThumbnailUrl,
-                      )
-                      .slice(
-                        0,
-                        maxPublishersCovers === -1
-                          ? p.books?.length
-                          : maxPublishersCovers,
-                      )"
-                    :key="b.id"
-                    :src="b.coverThumbnailUrl"
-                    :alt="`Cover for ${b.title}`"
-                    :title="b.title"
-                    class="h-full w-auto! aspect-2/3! shrink-0 relative"
-                    :class="i === 0 ? '' : '-ml-13'"
-                    :style="{ zIndex: 100 - i }"
-                  />
-                </div>
-              </div>
-            </div>
+            <BrowseCardGrid
+              v-else
+              page="publishers"
+              :rows="publishers"
+              :art-style="cardArt"
+            />
             <EntityPaginationControl
               :root="scrollRoot"
               :row-count="publishers.length"

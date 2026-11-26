@@ -429,6 +429,7 @@ onBeforeUnmount(() => {
                 :dimmed="tile.key === 'dnf'"
                 :art-style="artFor(tile.key, tile.key)"
                 :overridden="isOverridden(tile.key)"
+                show-art-menu
                 @set-art="setArt(tile.key, $event)"
               />
             </div>
@@ -463,6 +464,7 @@ onBeforeUnmount(() => {
               tag="Shelf"
               :art-style="artFor(tile.key, 'shelf')"
               :overridden="isOverridden(tile.key)"
+              show-art-menu
               @set-art="setArt(tile.key, $event)"
             />
             <RouterLink to="/shelves" class="dashboard-new-shelf">

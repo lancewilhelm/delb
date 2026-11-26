@@ -1,21 +1,30 @@
 <script setup lang="ts">
 import { useHead } from '~/composables/useHead';
+import { useUserSettingsStore } from '~/stores/userSettings';
 import { $fetch } from '~/utils/apiFetch';
+import { BROWSE_CARD_PREVIEWS } from '~/utils/browseCards';
+import type { CardArtStyle } from '~/utils/dashboardArt';
+import type { DashboardShelfSummary } from '~/utils/dashboardCache';
 import { navigateTo } from '~/utils/navigation';
-import { onMounted, ref } from 'vue';
-import { RouterLink } from 'vue-router';
+import { computed, onMounted, ref } from 'vue';
 import AppHeader from '~/components/AppHeader.vue';
-import BookCover from '~/components/BookCover.vue';
+import BrowseCardArtSelect from '~/components/BrowseCardArtSelect.vue';
+import BrowseCardGrid from '~/components/BrowseCardGrid.vue';
 import ModalWindow from '~/components/ModalWindow.vue';
 import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 useHead({ title: 'Shelves' });
-type Shelf = {
-  id: string;
-  name: string;
-  count: number;
-  previews: { id: string; title: string }[];
-};
-const shelves = ref<Shelf[]>([]);
+const cardArt = useUserSettingsStore().settingRef<CardArtStyle>(
+  'browseCardArt.shelves',
+);
+const shelves = ref<DashboardShelfSummary[]>([]);
+const cards = computed(() =>
+  shelves.value.map(({ id, name, count, previews }) => ({
+    id,
+    name,
+    bookCount: count,
+    books: previews,
+  })),
+);
 const loading = ref(true);
 const error = ref('');
 const creating = ref(false);
@@ -25,9 +34,9 @@ async function load() {
   loading.value = true;
   error.value = '';
   try {
-    const response = await $fetch<{ data: { shelves: Shelf[] } }>(
-      '/api/shelves',
-    );
+    const response = await $fetch<{
+      data: { shelves: DashboardShelfSummary[] };
+    }>('/api/shelves', { query: { previews: BROWSE_CARD_PREVIEWS } });
     shelves.value = response.data.shelves;
   } catch {
     error.value = 'Could not load your Shelves.';
@@ -77,14 +86,17 @@ onMounted(load);
             {{ shelves.length === 1 ? 'shelf' : 'shelves' }}
           </p>
         </div>
-        <button
-          type="button"
-          class="p-1 flex items-center gap-2 opacity-80 hover:opacity-100"
-          @click="creating = true"
-        >
-          <Icon name="lucide:plus" class="text-lg" />
-          <span class="text-sm">Create Shelf</span>
-        </button>
+        <div class="flex flex-wrap items-center gap-4">
+          <BrowseCardArtSelect v-model="cardArt" />
+          <button
+            type="button"
+            class="p-1 flex items-center gap-2 opacity-80 hover:opacity-100"
+            @click="creating = true"
+          >
+            <Icon name="lucide:plus" class="text-lg" />
+            <span class="text-sm">Create Shelf</span>
+          </button>
+        </div>
       </div>
       <p v-if="loading" role="status">Loading your Shelves…</p>
       <p v-if="error" role="alert" class="mb-3">{{ error }}</p>
@@ -94,36 +106,12 @@ onMounted(load);
           Create one to collect books from across your library.
         </p>
       </div>
-      <div
+      <BrowseCardGrid
         v-else
-        class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4"
-      >
-        <RouterLink
-          v-for="shelf in shelves"
-          :key="shelf.id"
-          :to="`/shelves/${encodeURIComponent(shelf.id)}`"
-          class="block border border-(--contrast-border-color) rounded-lg p-4 hover:bg-(--sub-color)/10"
-        >
-          <div class="flex gap-1 h-28 items-end mb-3">
-            <BookCover
-              v-for="book in shelf.previews"
-              :key="book.id"
-              :src="`/api/books/${encodeURIComponent(book.id)}/cover?variant=thumb`"
-              :title="book.title"
-              :alt="`Cover for ${book.title}`"
-              class="w-12 h-20"
-            /><Icon
-              v-if="!shelf.previews.length"
-              name="lucide:book-open"
-              class="text-4xl opacity-40"
-            />
-          </div>
-          <h2 class="font-semibold truncate">{{ shelf.name }}</h2>
-          <p class="text-sm opacity-70">
-            {{ shelf.count }} {{ shelf.count === 1 ? 'book' : 'books' }}
-          </p>
-        </RouterLink>
-      </div>
+        page="shelves"
+        :rows="cards"
+        :art-style="cardArt"
+      />
     </main>
     <ModalWindow :open="creating" @close="creating = false"
       ><form

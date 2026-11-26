@@ -624,22 +624,22 @@ function handleSortChange(target: string) {
       <SettingsUIInput
         v-model="authorsMaxCovers"
         title="Authors Max Cover Count"
-        description="Maximum number of covers to display on author cards. (-1 for no limit)"
+        description="Maximum preview books per author. Use -1 for up to 25 books."
       />
       <SettingsUIInput
         v-model="seriesMaxCovers"
         title="Series Max Cover Count"
-        description="Maximum number of covers to display on series cards. (-1 for no limit)"
+        description="Maximum preview books per series. Use -1 for up to 25 books."
       />
       <SettingsUIInput
         v-model="publishersMaxCovers"
         title="Publisher Max Cover Count"
-        description="Maximum number of covers to display on publisher cards. (-1 for no limit)"
+        description="Maximum preview books per publisher. Use -1 for up to 25 books."
       />
       <SettingsUIInput
         v-model="tagsMaxCovers"
-        title="Publisher Max Cover Count"
-        description="Maximum number of covers to display on tag cards. (-1 for no limit)"
+        title="Tags and Genres Max Cover Count"
+        description="Maximum preview books per tag or genre. Use -1 for up to 25 books."
       />
     </SettingsUIGroup>
 

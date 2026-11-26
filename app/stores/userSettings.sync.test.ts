@@ -19,6 +19,7 @@ import {
   defaultDashboardSettings,
   normalizeDashboardSettings,
 } from '../utils/dashboardArt';
+import { normalizeBrowseCardArt } from '../utils/browseCards';
 
 const pref = (fixed: string) => ({
   ...defaultThemePreference(),
@@ -41,7 +42,8 @@ function createStore(
     .replace(/import [\s\S]*?from '~\/utils\/customTheme';/, '')
     .replace(/import [\s\S]*?from '~\/utils\/appearanceContrast';/, '')
     .replace(/import [\s\S]*?from '~\/utils\/themePreference';/, '')
-    .replace(/import [\s\S]*?from '~\/utils\/dashboardArt';/, '');
+    .replace(/import [\s\S]*?from '~\/utils\/dashboardArt';/, '')
+    .replace(/import [\s\S]*?from '~\/utils\/browseCards';/, '');
   const code = transformSync(source, { loader: 'ts', format: 'cjs' }).code;
   const module = { exports: {} as typeof import('./userSettings') };
   const session = ref<{ id: string } | null>({ id: 'first' });
@@ -60,6 +62,7 @@ function createStore(
     normalizeThemePreference,
     defaultDashboardSettings,
     normalizeDashboardSettings,
+    normalizeBrowseCardArt,
     Date: class extends Date {
       static override now() {
         return now();
@@ -87,6 +90,19 @@ test('bookshelf appearance has a brown default and preserves personal choices', 
     new Date('2040-01-01'),
   );
   assert.equal(store.activeSettings.bookshelfStyle.color, '#895b3b');
+});
+
+test('browse card art defaults to Fan and saves each page independently', async () => {
+  const { store } = createStore(async () => ({}));
+  await store.updateSettingAtPath('browseCardArt.authors', 'stack');
+  await store.updateSettingAtPath('browseCardArt.tags', 'wall');
+
+  const restored = createStore(async () => ({})).store;
+  restored.applyRemoteSettings(store.settings, new Date('2040-01-01'));
+  assert.equal(restored.activeSettings.browseCardArt.authors, 'stack');
+  assert.equal(restored.activeSettings.browseCardArt.tags, 'wall');
+  assert.equal(restored.activeSettings.browseCardArt.genres, 'fan');
+  assert.equal(restored.activeSettings.dashboard.cardArt.default, 'auto');
 });
 
 test('persisted timestamp strings survive edits and concurrent pulls', async () => {

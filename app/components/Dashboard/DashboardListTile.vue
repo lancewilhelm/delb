@@ -15,7 +15,7 @@ const props = defineProps<{
   listKey: string;
   title: string;
   count: number;
-  line: string;
+  line?: string;
   books: {
     id: string;
     title: string;
@@ -31,13 +31,15 @@ const props = defineProps<{
     updatedAt?: string;
   }[];
   to: RouteLocationRaw;
+  linkLabel?: string;
   /** The tile's chosen art style (override, default, or Auto). */
   artStyle: CardArtStyle;
   /** Whether the tile has its own override (enables "Use default"). */
-  overridden: boolean;
+  overridden?: boolean;
+  showArtMenu?: boolean;
   /** CSS color for the tag dot and the window tint. */
-  tone: string;
-  tag: string;
+  tone?: string;
+  tag?: string;
   dimmed?: boolean;
 }>();
 
@@ -59,9 +61,9 @@ const hasArt = computed(() => props.count > 0 && props.books.length > 0);
   <div
     class="dash-tile"
     :class="{ 'is-empty': !hasArt, 'is-dimmed': dimmed }"
-    :style="{ '--tone': tone }"
+    :style="{ '--tone': tone ?? 'var(--main-color)' }"
   >
-    <RouterLink :to="to" class="dash-tile-link">
+    <RouterLink :to="to" :aria-label="linkLabel" class="dash-tile-link">
       <span class="dash-tile-window" :class="`shows-${shownStyle}`">
         <span v-if="hasArt" class="dash-tile-art" aria-hidden="true">
           <DashboardTileArt
@@ -80,7 +82,7 @@ const hasArt = computed(() => props.count > 0 && props.books.length > 0);
           <rect x="12" y="7" width="24" height="34" rx="2" />
           <path d="M16 7v34M21 16h10M21 21h7" />
         </svg>
-        <span v-if="hasArt" class="dash-tile-tag" aria-hidden="true"
+        <span v-if="hasArt && tag" class="dash-tile-tag" aria-hidden="true"
           ><i></i>{{ tag }}</span
         >
       </span>
@@ -88,11 +90,11 @@ const hasArt = computed(() => props.count > 0 && props.books.length > 0);
         <span class="dash-tile-title">{{ title }}</span>
         <span class="dash-tile-count">{{ count.toLocaleString() }}</span>
       </span>
-      <span class="dash-tile-line">{{ line }}</span>
+      <span v-if="line" class="dash-tile-line">{{ line }}</span>
     </RouterLink>
 
     <DashboardArtMenu
-      v-if="hasArt"
+      v-if="hasArt && showArtMenu"
       :label="`Card art for ${title}`"
       :options="artOptions"
       :value="artStyle"
@@ -105,6 +107,10 @@ const hasArt = computed(() => props.count > 0 && props.books.length > 0);
 
 <style scoped>
 .dash-tile {
+  --tile-background: var(
+    --dash-tile-bg,
+    color-mix(in srgb, var(--sub-alt-color) 70%, var(--bg-color))
+  );
   position: relative;
   min-width: 0;
 }
@@ -127,8 +133,8 @@ const hasArt = computed(() => props.count > 0 && props.books.length > 0);
   border: 1px solid color-mix(in srgb, var(--sub-color) 32%, transparent);
   background: radial-gradient(
     120% 90% at 50% 0%,
-    color-mix(in srgb, var(--tone) 20%, var(--dash-tile-bg)),
-    var(--dash-tile-bg)
+    color-mix(in srgb, var(--tone) 20%, var(--tile-background)),
+    var(--tile-background)
   );
   transition:
     transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),

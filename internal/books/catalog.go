@@ -116,13 +116,18 @@ func (s *Service) handleListEntities(w http.ResponseWriter, r *http.Request, kin
 	limit := boundedIntStrict(q.Get("limit"), 50, 1, 100)
 	offset := boundedIntStrict(q.Get("offset"), 0, 0, 1000000000)
 	previewLimit := boundedIntStrict(q.Get("previewLimit"), 8, -1, math.MaxInt32)
+	artPreviews := q.Get("artPreviews") == "1"
+	if artPreviews {
+		// One tile uses at most the Wall's 5×5 grid of previews.
+		previewLimit = boundedIntStrict(q.Get("previewLimit"), 25, 0, 25)
+	}
 	search := strings.TrimSpace(q.Get("search"))
 	cfg := entityConfigs[kind]
 
 	sqlQuery := `
 		WITH visible AS (
 			SELECT DISTINCT e.id, e.name, b.id AS book_id, b.title,
-				b.cover_image_path, b.updated_at, b.series_index
+				b.cover_image_path, b.updated_at, b.series_index, b.pages
 			FROM ` + cfg.table + ` e
 			` + cfg.relation + `
 			JOIN books b ON ` + cfg.key + ` = ` + cfg.rhs + `
@@ -135,17 +140,22 @@ func (s *Service) handleListEntities(w http.ResponseWriter, r *http.Request, kin
 		), ranked AS (
 			SELECT v.*, row_number() OVER (PARTITION BY v.id ORDER BY ` + cfg.order + `) AS position
 			FROM visible v JOIN (SELECT id FROM summaries ORDER BY name, id LIMIT ?) s ON s.id = v.id
-			WHERE v.cover_image_path IS NOT NULL AND trim(v.cover_image_path) != ''
+			WHERE ? OR (v.cover_image_path IS NOT NULL AND trim(v.cover_image_path) != '')
 		)
 		SELECT s.id, s.name, s.book_count, r.book_id,
-			r.title, r.cover_image_path, r.updated_at, r.series_index
+			r.title, r.cover_image_path, r.updated_at, r.series_index,
+			CASE WHEN ? THEN r.pages END, sp.revision,
+			CASE WHEN dim.manual_width = 1 THEN dim.width END, dim.height
 		FROM summaries s LEFT JOIN ranked r ON r.id = s.id AND (? = -1 OR r.position <= ?)
+		LEFT JOIN book_spines sp ON sp.book_id = r.book_id AND ?
+		LEFT JOIN book_shelf_dimensions dim ON dim.book_id = r.book_id AND ?
 		ORDER BY s.name, s.id, r.position
 	`
 
 	rows, err := s.db.QueryContext(r.Context(), sqlQuery,
 		userID, TitleFilterGlob(search),
-		limit+1, offset, limit, previewLimit, previewLimit,
+		limit+1, offset, limit, artPreviews,
+		artPreviews, previewLimit, previewLimit, artPreviews, artPreviews,
 	)
 	if err != nil {
 		s.writeErrWithFallback(w, "GET /api/"+string(kind)+" failed", "Failed to load "+string(kind), err)
@@ -156,9 +166,14 @@ func (s *Service) handleListEntities(w http.ResponseWriter, r *http.Request, kin
 	type previewBook struct {
 		ID                string   `json:"id"`
 		Title             string   `json:"title"`
-		CoverImagePath    string   `json:"coverImagePath"`
+		CoverImagePath    *string  `json:"coverImagePath"`
 		CoverThumbnailURL string   `json:"coverThumbnailUrl"`
 		SeriesIndex       *float64 `json:"seriesIndex"`
+		UpdatedAt         string   `json:"updatedAt,omitempty"`
+		Pages             *int64   `json:"pages,omitempty"`
+		SpineRevision     *string  `json:"spineRevision,omitempty"`
+		ShelfWidth        *int64   `json:"shelfWidth,omitempty"`
+		ShelfHeight       *int64   `json:"shelfHeight,omitempty"`
 	}
 	type entityOut struct {
 		ID        string        `json:"id"`
@@ -178,8 +193,12 @@ func (s *Service) handleListEntities(w http.ResponseWriter, r *http.Request, kin
 			cover       sql.NullString
 			updatedAt   sql.NullInt64
 			seriesIndex sql.NullFloat64
+			pages       sql.NullInt64
+			spine       sql.NullString
+			shelfWidth  sql.NullInt64
+			shelfHeight sql.NullInt64
 		)
-		if err := rows.Scan(&id, &name, &bookCount, &bookID, &title, &cover, &updatedAt, &seriesIndex); err != nil {
+		if err := rows.Scan(&id, &name, &bookCount, &bookID, &title, &cover, &updatedAt, &seriesIndex, &pages, &spine, &shelfWidth, &shelfHeight); err != nil {
 			s.writeErrWithFallback(w, "GET /api/"+string(kind)+" scan failed", "Failed to load "+string(kind), err)
 			return
 		}
@@ -194,20 +213,31 @@ func (s *Service) handleListEntities(w http.ResponseWriter, r *http.Request, kin
 			byID[id] = ent
 			order = append(order, id)
 		}
-		if bookID.Valid && bookID.String != "" && cover.Valid && cover.String != "" {
-			var msPtr *int64
-			if updatedAt.Valid {
-				ms := updatedAt.Int64 * 1000
-				msPtr = &ms
-			}
-			ent.Books = append(ent.Books, previewBook{
-				ID:                bookID.String,
-				Title:             title.String,
-				CoverImagePath:    cover.String,
-				CoverThumbnailURL: storage.BuildBookCoverURL(bookID.String, msPtr, "thumb"),
-				SeriesIndex:       nullFloat64Ptr(seriesIndex),
-			})
+		if !bookID.Valid || bookID.String == "" {
+			continue
 		}
+		preview := previewBook{
+			ID:            bookID.String,
+			Title:         title.String,
+			SeriesIndex:   nullFloat64Ptr(seriesIndex),
+			Pages:         nullInt64Ptr(pages),
+			SpineRevision: nullStringPtr(spine),
+			ShelfWidth:    nullInt64Ptr(shelfWidth),
+			ShelfHeight:   nullInt64Ptr(shelfHeight),
+		}
+		var msPtr *int64
+		if updatedAt.Valid {
+			ms := updatedAt.Int64 * 1000
+			msPtr = &ms
+			if artPreviews {
+				preview.UpdatedAt = formatUnixSecISO(updatedAt.Int64)
+			}
+		}
+		if cover.Valid && strings.TrimSpace(cover.String) != "" {
+			preview.CoverImagePath = &cover.String
+			preview.CoverThumbnailURL = storage.BuildBookCoverURL(bookID.String, msPtr, "thumb")
+		}
+		ent.Books = append(ent.Books, preview)
 	}
 	if err := rows.Err(); err != nil {
 		s.writeErrWithFallback(w, "GET /api/"+string(kind)+" rows err", "Failed to load "+string(kind), err)
