@@ -142,6 +142,9 @@ function mountBookDetail(opts: {
         fetchCollections: async () => {},
       }),
     },
+    '~/stores/shareCard': {
+      useShareCardStore: () => ({ open: () => {}, notifyFinished: () => {} }),
+    },
     '~/stores/userSettings': {
       useUserSettingsStore: () => ({
         activeSettings,

@@ -181,6 +181,7 @@ const fileCacheLoaded = ref(false);
 
 const { getReadingStatusMenuItem } = useBookReadingStatusMenu({
   bookId: () => props.book.id,
+  bookTitle: () => props.book.title,
   onChanged: (change) => emit('status-change', change),
 });
 

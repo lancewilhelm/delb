@@ -15,6 +15,7 @@ const emit = defineEmits<{
 // The cover keeps the same Reading status menu as grid and list covers.
 const { getReadingStatusMenuItem } = useBookReadingStatusMenu({
   bookId: () => props.book.id,
+  bookTitle: () => props.book.title,
   onChanged: (change) => emit('status-change', change),
 });
 const menuItems = async () => [await getReadingStatusMenuItem()];

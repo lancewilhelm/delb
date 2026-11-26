@@ -1,3 +1,4 @@
+import { useShareCardStore } from '~/stores/shareCard';
 import { $fetch } from '~/utils/apiFetch';
 import type { BookStatusChange } from '~/utils/bookReadingStatus';
 import type { CoverMenuItem } from '~/utils/coverMenu';
@@ -17,11 +18,16 @@ type StatusResponse =
 
 export function useBookReadingStatusMenu({
   bookId,
+  bookTitle,
   onChanged,
 }: {
   bookId: () => string;
+  /** Used by the "Finished" toast that offers a share card. */
+  bookTitle?: () => string;
   onChanged: (change: BookStatusChange) => void;
 }) {
+  const shareCard = useShareCardStore();
+
   async function getReadingStatusMenuItem(): Promise<CoverMenuItem> {
     // Resolve on every open so a change from another view/device is reflected.
     const id = bookId();
@@ -45,6 +51,15 @@ export function useBookReadingStatusMenu({
               });
               if (!saved.success) throw new Error(saved.message);
               onChanged({ bookId: id, status: saved.data.status });
+              if (
+                saved.data.status === 'finished' &&
+                response.data.status !== 'finished'
+              ) {
+                shareCard.notifyFinished({
+                  id,
+                  title: bookTitle?.() || 'this book',
+                });
+              }
             } catch {
               throw new Error(
                 'Failed to save reading status. Please try again.',

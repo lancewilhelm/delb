@@ -3,6 +3,8 @@ import { watch } from 'vue';
 import { RouterView } from 'vue-router';
 import CommandPalette from '~/components/CommandPalette/CommandPalette.vue';
 import GlobalSearchModal from '~/components/GlobalSearch/GlobalSearchModal.vue';
+import ShareCardModal from '~/components/ShareCard/ShareCardModal.vue';
+import ShareCardToast from '~/components/ShareCard/ShareCardToast.vue';
 import { useDynamicFavicon } from '~/composables/useDynamicFavicon';
 import { useHead } from '~/composables/useHead';
 
@@ -43,5 +45,7 @@ watch(
     </RouterView>
     <CommandPalette />
     <GlobalSearchModal />
+    <ShareCardModal />
+    <ShareCardToast />
   </div>
 </template>

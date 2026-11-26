@@ -122,6 +122,13 @@ export interface BaseUserSettings {
   dashboard: DashboardSettings;
 
   /**
+   * Share cards: whether finishing a book offers a share card.
+   */
+  shareCard: {
+    promptOnFinish: boolean;
+  };
+
+  /**
    * Reader settings
    */
   reader: {
@@ -188,6 +195,9 @@ function getBaseDefaults(): BaseUserSettings {
       defaultMode: 'everything',
     },
     dashboard: defaultDashboardSettings(),
+    shareCard: {
+      promptOnFinish: true,
+    },
     reader: {
       fontSize: 100,
       lineHeight: 120,
@@ -307,6 +317,9 @@ function normalizeProfileSettings(
       ? { customTheme: normalizeCustomTheme(settings.customTheme) }
       : {}),
     dashboard: normalizeDashboardSettings(settings.dashboard),
+    shareCard: {
+      promptOnFinish: settings.shareCard?.promptOnFinish !== false,
+    },
     reader: {
       ...settings.reader,
       theme: normalizeReaderTheme(settings.reader?.theme),
