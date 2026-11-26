@@ -10,6 +10,10 @@ Sign in and select **Books** in the navigation. The Books view shows every book 
 2. Open a book or an entity to see its available books.
 3. In book grids and lists, use the sort control to choose an order.
 
+If the navigation has less room, open **More** to find Authors, Series,
+Publishers, Genres, and Tags. On the narrowest screens, select the current
+view's name to choose any destination.
+
 Book grids and lists support title, page count, publication date, date-added, and date-finished sorting in either direction. Date finished uses your own finish dates; books without one come last. The separate series presentation has its own layout.
 
 ## Search across the library

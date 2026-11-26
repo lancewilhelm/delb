@@ -18,6 +18,13 @@ Grid cards keep selected values on one line and omit missing metadata. List cell
 
 Grid/list components virtualize rendered items while the server paginates records with stable sort keys and cursors. Those are different limits. Virtualization does not mean the client downloads the entire library.
 
+### Responsive navigation
+
+The navigation shows every destination when the toolbar has room. At smaller
+widths, Dashboard, Books, Shelves, and To be read stay visible. **More** holds
+Authors, Series, Publishers, Genres, and Tags. When that row cannot fit, a
+single dropdown shows the current view and links to every destination.
+
 ### Library bookshelf
 
 Bookshelf view shows the library's one shared arrangement. `GET /api/library/bookshelf` supplies the visible catalog and the arrangement in one compact response. Applied book filters fetch matching IDs through the authorized Books endpoint without changing the arrangement. Each book's precomputed spine dimensions belong to the book entry and appear wherever the book is shown.
