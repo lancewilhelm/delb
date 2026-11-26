@@ -358,7 +358,7 @@ onBeforeUnmount(() => {
     <AppHeader class="w-full" />
     <div class="px-4 shrink-0 border-b border-(--contrast-border-color)">
       <div class="flex items-center justify-center">
-        <ViewSelectorDropdown />
+        <ViewSelectorDropdown class="justify-center" />
       </div>
     </div>
     <div class="flex-1 min-h-0 overflow-auto">

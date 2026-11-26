@@ -615,12 +615,14 @@ onMounted(() => {
       <div class="flex-1 overflow-hidden flex flex-col min-h-0">
         <!-- Header (non-scrolling): view selector stays fixed -->
         <div class="px-2 shrink-0 border-b border-(--contrast-border-color)">
-          <div class="flex items-center justify-between gap-4">
+          <div class="flex flex-wrap items-center gap-x-4">
             <!-- View selector (mode) lives here (top-left) -->
-            <ViewSelectorDropdown />
+            <ViewSelectorDropdown class="basis-28" />
 
             <!-- Books sort + filters -->
-            <div class="flex items-center gap-1 self-center">
+            <div
+              class="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-1 whitespace-nowrap"
+            >
               <BooksViewToggle
                 :show-bookshelf="!!shelfId || hydrated"
                 :bookshelf="bookshelfActive"
