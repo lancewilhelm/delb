@@ -61,10 +61,8 @@ RUN mkdir -p /rootfs/etc /rootfs/app/data /rootfs/app/library /rootfs/app/dropbo
 FROM scratch
 
 COPY --from=go-build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=go-build /rootfs/etc/passwd /etc/passwd
-COPY --from=go-build /rootfs/etc/group /etc/group
-COPY --from=go-build /rootfs/app /app
-COPY --from=go-build /rootfs/tmp /tmp
+# Copy /tmp as a directory entry so it keeps its sticky, writable mode.
+COPY --from=go-build /rootfs/ /
 COPY --from=go-build /out/delb /app/delb
 
 WORKDIR /app
