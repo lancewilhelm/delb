@@ -57,7 +57,12 @@ export function attachPilePhysics(
   tile: HTMLElement,
   items: HTMLElement[],
   placements: PilePlacement[],
-  options: { reducedMotion: boolean; region?: PileRegion },
+  options: {
+    reducedMotion: boolean;
+    region?: PileRegion;
+    /** Multiplies the pour's length: 2 pours twice as slowly. */
+    pourScale?: number;
+  },
 ): {
   dispose: () => void;
   consumeDrag: () => boolean;
@@ -69,7 +74,9 @@ export function attachPilePhysics(
   // Books pour in one after another; big piles pour faster so the whole pour
   // stays short.
   const dropping = items.filter((_, i) => placements[i]?.drop !== false);
-  const gap = Math.min(POUR_GAP, POUR_TIME / Math.max(1, dropping.length));
+  const pourScale = options.pourScale ?? 1;
+  const gap =
+    Math.min(POUR_GAP, POUR_TIME / Math.max(1, dropping.length)) * pourScale;
   let dropIndex = 0;
   let zTop = 10;
   let raf = 0;

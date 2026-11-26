@@ -468,11 +468,11 @@ type ShelfSummaryDTO struct {
 
 // Shelf preview counts: the Shelves page shows 4; the dashboard's card art can
 // ask for up to 25 (the Wall tile's 5×5 grid). The random pile sample follows
-// the reader's pile size, up to 100.
+// the reader's pile size, up to 250.
 const (
 	defaultShelfPreviews = 4
 	maxShelfPreviews     = 25
-	maxShelfPile         = 100
+	maxShelfPile         = 250
 )
 
 // ListShelves returns all personal shelves owned by userID with visible counts and previews.

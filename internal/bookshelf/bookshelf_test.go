@@ -509,7 +509,7 @@ func TestCollectionBookshelfPicturesAndPersonalShelves(t *testing.T) {
 			t.Fatalf("GET /api/shelves?previews=%s = %d, want 400", bad, resp.StatusCode)
 		}
 	}
-	for _, bad := range []string{"0", "101", "x"} {
+	for _, bad := range []string{"0", "251", "x"} {
 		resp, _ = env.reqJSON(&viewer, http.MethodGet, "/api/shelves?pile="+bad, nil)
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("GET /api/shelves?pile=%s = %d, want 400", bad, resp.StatusCode)

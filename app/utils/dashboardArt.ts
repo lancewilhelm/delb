@@ -39,11 +39,14 @@ export const LIBRARY_ART_STYLES = ['wall', 'pile', 'shelf'] as const;
 export type LibraryArtStyle = (typeof LIBRARY_ART_STYLES)[number];
 
 /**
- * How many books each pile holds. Auto keeps the defaults: 24 on the All
- * books card (20 when narrow) and 10 on a tile.
+ * How many books each pile holds: Auto, or a whole number from 1 to
+ * MAX_PILE_SIZE. Auto keeps the defaults: 24 on the All books card (20 when
+ * narrow) and 10 on a tile.
  */
-export const PILE_SIZES = ['auto', 10, 25, 50, 100] as const;
-export type PileSize = (typeof PILE_SIZES)[number];
+export type PileSize = 'auto' | number;
+export const MAX_PILE_SIZE = 250;
+/** The size Custom starts at. */
+export const DEFAULT_CUSTOM_PILE_SIZE = 50;
 export const AUTO_LIBRARY_PILE = 24;
 export const AUTO_LIBRARY_PILE_NARROW = 20;
 export const AUTO_TILE_PILE = 10;
@@ -52,6 +55,17 @@ export const AUTO_TILE_PILE = 10;
 export function pileSampleSize(size: PileSize, library: boolean): number {
   if (size !== 'auto') return size;
   return library ? AUTO_LIBRARY_PILE : AUTO_TILE_PILE;
+}
+
+/** Pour speed levels: how quickly a pile's books pour in. */
+export const MIN_POUR_SPEED = 1;
+export const MAX_POUR_SPEED = 10;
+export const DEFAULT_POUR_SPEED = 5;
+
+/** How much longer (above 1) or shorter (below 1) a pour takes than the default. */
+export function pourTimeScale(level: number): number {
+  const clamped = Math.min(MAX_POUR_SPEED, Math.max(MIN_POUR_SPEED, level));
+  return DEFAULT_POUR_SPEED / clamped;
 }
 
 /**
@@ -94,6 +108,8 @@ export type DashboardSettings = {
   pileSize: PileSize;
   /** Whether the All books shelf shows only books with spine artwork. */
   shelfSpinesOnly: boolean;
+  /** How quickly a pile's books pour in, from 1 (slowest) to 10. */
+  pourSpeed: number;
   cardArt: {
     default: CardArtDefault;
     /** Per-tile choices keyed by list key (`reading`, `shelf:<id>`, …). */
@@ -111,6 +127,7 @@ export function defaultDashboardSettings(): DashboardSettings {
     wallDriftSpeed: DEFAULT_WALL_DRIFT_SPEED,
     pileSize: 'auto',
     shelfSpinesOnly: false,
+    pourSpeed: DEFAULT_POUR_SPEED,
     cardArt: { default: 'auto', overrides: {} },
   };
 }
@@ -166,9 +183,17 @@ export function normalizeDashboardSettings(value: unknown): DashboardSettings {
             Math.max(MIN_WALL_DRIFT_SPEED, Math.round(source.wallDriftSpeed)),
           )
         : defaults.wallDriftSpeed,
-    pileSize: (PILE_SIZES as readonly unknown[]).includes(source.pileSize)
-      ? (source.pileSize as PileSize)
-      : defaults.pileSize,
+    pileSize:
+      typeof source.pileSize === 'number' && Number.isFinite(source.pileSize)
+        ? Math.min(MAX_PILE_SIZE, Math.max(1, Math.round(source.pileSize)))
+        : defaults.pileSize,
+    pourSpeed:
+      typeof source.pourSpeed === 'number' && Number.isFinite(source.pourSpeed)
+        ? Math.min(
+            MAX_POUR_SPEED,
+            Math.max(MIN_POUR_SPEED, Math.round(source.pourSpeed)),
+          )
+        : defaults.pourSpeed,
     shelfSpinesOnly:
       typeof source.shelfSpinesOnly === 'boolean'
         ? source.shelfSpinesOnly
