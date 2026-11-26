@@ -1,63 +1,71 @@
 # Host Delb
 
-Delb needs a persistent database and a writable managed library. A container restart must preserve both. Start with [Docker deployment](docker.md) for the image build, runtime mounts, permissions, and startup migrations.
+Delb needs a persistent SQLite database and a writable managed library directory. Container restarts must preserve both. Start with [Docker deployment](docker.md) for image tags, runtime mounts, permissions, Unraid setup, and startup migrations.
 
 ## Deployment configuration
 
-| Setting or path               | Purpose                                                                           |
-| ----------------------------- | --------------------------------------------------------------------------------- |
-| `BETTER_AUTH_SECRET`          | Stable authentication secret, required by the production entrypoint               |
-| `BETTER_AUTH_URL`             | Public origin used for authentication, including scheme and port where applicable |
-| `BETTER_AUTH_TRUSTED_ORIGINS` | Comma-separated trusted origins for authentication requests                       |
-| `DATABASE_URL`                | Defaults to `file:./data/delb.db`; the container sets a default under `/app/data` |
-| `/app/data`                   | Persistent default SQLite database                                                |
-| `/app/library`                | Writable managed ebooks, covers, storage locks, and journals                      |
-| `/app/dropbox`                | Optional writable local ingestion directory                                       |
-| `/app/calibre`                | Optional read-only Calibre import source                                          |
+| Setting or path               | Purpose                                                                                                                |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`          | Stable authentication secret, required when `NODE_ENV=production` (the Docker default). `AUTH_SECRET` is also accepted |
+| `BETTER_AUTH_URL`             | Public origin used in the browser, including scheme and non-standard port; controls secure cookies and CSRF checks     |
+| `BETTER_AUTH_TRUSTED_ORIGINS` | Comma-separated additional trusted origins for auth requests (supports simple `*` wildcards)                           |
+| `DATABASE_URL`                | Local SQLite file path or `file:` URL; defaults to `file:./data/delb.db` (`/app/data/delb.db` in Docker)               |
+| `DELB_LIBRARY_DIR`            | Managed library directory; defaults to `library` (`/app/library` in Docker)                                            |
+| `HOST` and `PORT`             | Server bind address and port; the container sets `HOST=0.0.0.0` and `PORT=3000`                                        |
+| `LOG_LEVEL` and `LOG_FORMAT`  | Log verbosity (`debug`, `info`, `warn`, `error`) and format (`text` or `json`)                                         |
+| `DELB_LOG_DIR`                | Rotating log directory; defaults to `logs/` next to the database file (`/app/data/logs` in Docker)                     |
+| `DELB_AUTO_MIGRATE`           | Set to `false` or `0` to skip automatic startup migrations (defaults to `true`)                                        |
+| `/app/data`                   | Persistent SQLite database (`delb.db`) and default rotating log directory                                              |
+| `/app/library`                | Writable managed ebooks, covers, storage locks, and operation journals                                                 |
+| `/app/dropbox`                | Optional writable local ingestion directory                                                                            |
+| `/app/calibre`                | Optional read-only Calibre import source                                                                               |
 
-Store the authentication secret through your deployment's secret configuration. Keep it stable across restarts. Configure the public origin to match the address used in the browser.
+Store `BETTER_AUTH_SECRET` through your deployment's secret configuration and keep it stable across restarts. Configure `BETTER_AUTH_URL` to match the address that users open in the browser.
 
-Experimental ChatGPT spine generation uses one shared connection configured under **Settings → Admin → Spine generation**. All book editors can use the connection for books they can edit. Delb encrypts the provider tokens in the database with a key derived from `BETTER_AUTH_SECRET`. Use a persistent secret of at least 32 characters. Keep the secret separate from database backups. Anyone with both the database and the secret can decrypt the tokens. Changing or losing the secret requires an administrator to reconnect ChatGPT. An interrupted token refresh also requires reconnecting; restoring an older database backup can invalidate a connection. Disconnect removes the shared credentials but does not promise remote revocation. Sign-in attempts are kept in server memory and must be restarted if the server restarts. Earlier per-user credentials remain stored separately and are not used by the shared connection.
+Experimental ChatGPT spine generation uses one shared connection configured under **Settings → Admin → Spine generation**. Every book editor can use that connection for books that they can edit. Delb encrypts the provider tokens in the database with a key derived from `BETTER_AUTH_SECRET`. Use a persistent secret of at least 32 characters and keep it separate from database backups, because anyone with both the database and the secret can decrypt those tokens. Changing or losing the secret requires an administrator to reconnect ChatGPT. An interrupted token refresh also requires reconnecting, and restoring an older database backup can invalidate an active connection. Disconnecting removes the shared credentials locally without revoking them remotely. Active sign-in attempts live in server memory and must restart if the server restarts. In a multi-instance deployment, route the sign-in attempt and its polling requests to the same server process.
 
-In a multi-instance deployment, route the sign-in attempt and its polling requests to the same server process. Other requests use the shared database connection state.
-
-The image runs as UID/GID 1001 by default. Ensure the mounted writable directories permit that user to write, or choose a matching runtime user. Library storage also needs working SQLite locking semantics. See [filesystem requirements](storage-recovery.md#ownership-and-filesystem-requirements).
+The Docker image runs as non-root user `delb` (UID `1001`, GID `1001`) by default and includes a writable `/tmp` directory (`1777`). Make sure that the mounted writable directories allow UID/GID `1001` to write, or run the container with a matching `--user` value. Library storage also requires working SQLite locking semantics. See [filesystem requirements](storage-recovery.md#ownership-and-filesystem-requirements) and [Unraid setup](docker.md#unraid-setup).
 
 ## Initialize an installation
 
-1. Prepare the database and library volumes.
-2. Configure authentication and origins.
-3. Start the container. Its entrypoint applies committed migrations before starting the Nuxt server.
-4. Open Delb and register the first account.
-5. Review global registration and ingestion settings as the system owner.
+1. Prepare persistent storage for `/app/data` and `/app/library`.
+2. Set `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL`.
+3. Start the container. The `/app/delb` binary applies pending embedded SQLite migrations and reconciles storage recovery before serving HTTP requests.
+4. Open Delb and register the first account, which becomes the system owner.
+5. Sign in as the owner and review global registration, metadata provider, and ingestion settings.
 
 Expected result: the owner can sign in, open **Books**, and add a book. Keep the service stopped if startup reports an unresolved storage recovery error.
 
-For development or a disposable local demonstration, use the [contributor guide](../developing/README.md). Demo fixture commands are not production initialization commands.
+For development or a disposable local demonstration, use the [contributor guide](../developing/README.md). Demo fixture commands are not for production installations.
 
 ## Upgrade and preserve recoverability
 
-1. Stop Delb writers, including background ingestion, before taking a consistent backup.
-2. Back up the database and managed library together. Preserve operation journals and related files.
-3. Retain the current configuration and application version with the backup.
-4. Start the new version and allow committed migrations and storage recovery to complete.
-5. Check sign-in, book visibility, a download, and personal reading data before resuming normal use.
+1. Stop Delb and any background writers before taking a backup.
+2. Back up the SQLite database directory and the managed library together. Keep operation journals and lock files intact inside the backup.
+3. Record the current configuration and application version alongside the backup.
+4. Start the new version and let embedded migrations and storage recovery complete.
+5. Check sign-in, book visibility, a file download, and personal reading data before resuming normal use.
 
-To restore, stop all writers and restore the matching database and library backup with the matching application version and configuration. Do not combine an older database with newer library contents or assume an older binary understands newer migrations.
+To restore, stop Delb and restore the matching database and library backups together with the matching application version and configuration. Do not combine an older database with newer library contents, and do not assume that an older binary understands a newer schema.
 
-See [storage recovery](storage-recovery.md) for interrupted operations and timestamp migration caveats. A restore procedure must be rehearsed on your own deployment before it counts as verified recovery for that environment.
-
-Installations upgrading from the earlier collections model should read [Upgrade to a single library](single-library-upgrade.md). The upgrade merges every collection into one library and makes every book visible to every account until an administrator adds tag visibility rules.
+See [storage recovery](storage-recovery.md) for interrupted operations and filesystem limits. Rehearse your restore procedure on your own deployment before relying on it.
 
 ## Ingestion and administration
 
-- Use [Calibre import](calibre-import.md) to migrate an existing Calibre library. Keep the source read-only and retain a source backup.
-- Configure **Settings → Admin → Dropbox** for a local ingestion directory, allowed extensions, and the importing user. This is a filesystem inbox, not the Dropbox cloud service. Books go into the library, and the importing user must be an Editor or Admin.
-- Configure Hardcover through the admin metadata settings. The server stores the token and clients receive an availability flag. See [metadata providers](../developing/reference/metadata.md).
-- Run [health checks](health-checks.md) from the admin library controls. Quick checks inspect database conditions; deep checks also inspect bounded filesystem/duplicate conditions.
+- Use [Calibre import](calibre-import.md) for a one-way migration from an existing Calibre library. Keep the Calibre directory mounted read-only and keep a backup of the source.
+- Configure **Settings → Admin → Dropbox** for a local ingestion directory, allowed file extensions, and the importing user. This watches a local filesystem folder, not the Dropbox cloud service. Imported books go into the shared library, and the importing user must be an Editor or Admin.
+- Configure Google Books and Hardcover under **Settings → Admin → Metadata**. Secrets stay on the server; clients receive only an availability flag. See [metadata providers](../developing/reference/metadata.md).
+- Run [health checks](health-checks.md) from **Settings → Admin → Library**. Quick checks inspect database conditions; deep checks also run bounded file, cover, thumbnail, and fuzzy duplicate checks.
+- Inspect recent server logs under **Settings → Admin → Logs** or in the rotating log files under `/app/data/logs`.
 
-Use server logs when investigating failures. Older investigations are retained in the [historical archive](../archive/README.md). Do not delete `.delb-*` journals or lock databases to suppress an error. Follow the [storage recovery instructions](storage-recovery.md).
+Do not delete `.delb-*` journals or `.delb-locks` databases to clear an error. Follow the [storage recovery instructions](storage-recovery.md) instead.
+
+## Upgrading from pre-1.0 preview versions
+
+`v1.0.0` is the first public release and starts from a squashed baseline migration (`0000_initial.sql`). New installations do not need any upgrade steps.
+
+If you are upgrading an existing pre-1.0 preview server that still uses the earlier collections model, read [Upgrade to a single library](single-library-upgrade.md) before starting `v1.0.0`. Those databases must first run `v0.2.1` to apply migration `0022_single_library`, which merges collections into the single shared library and makes every book visible until an administrator adds tag visibility rules.
 
 ## Deployment evidence
 
-The initial documentation verification uses an isolated loopback demo with synthetic data. It does not establish Docker execution, a real Unraid share, arbitrary network filesystems, public reverse-proxy configuration, or live metadata-provider availability. See the [verification record](../developing/documentation-status.md).
+The documentation verification suite exercises an isolated loopback demo with synthetic data. It does not certify Docker execution on every host, a real Unraid user share, arbitrary network filesystems, reverse-proxy setups, or live metadata-provider availability. See the [verification record](../developing/documentation-status.md).

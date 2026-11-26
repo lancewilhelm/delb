@@ -1,4 +1,4 @@
-# Reading Status & Progress Rules
+# Reading status and progress rules
 
 This document describes how per-user status dates and progress logs work.
 
@@ -24,9 +24,9 @@ Every date is optional. A reader can record no dates, some dates, or all dates.
 - Switching to `to_be_read` clears `startedAt`, `finishedAt`, and `dnfAt`.
 - `startedAt` is kept as historical data when status changes away from reading.
 - Setting a date sets the matching status:
-  - `finishedAt` → status `finished`
-  - `dnfAt` → status `dnf`
-  - `startedAt` → status `reading` (if current status is `to_be_read`/unset)
+  - Setting `finishedAt` sets status to `finished`.
+  - Setting `dnfAt` sets status to `dnf`.
+  - Setting `startedAt` sets status to `reading` when the current status is `to_be_read` or unset.
 - When both are set, `finishedAt` and `dnfAt` must be on or after `startedAt`.
 - DNF does not create a progress log.
 - Finished with a finish date creates or updates a 100% progress log on that date. Clearing the finish date removes that log entry.
@@ -93,12 +93,12 @@ The Started, Finished, and DNF fields on the book details page use `UiDateInput`
 
 ## Implementation references
 
-- Schema: `.drizzle/migrations`
-- Status API: `internal/books/[id]/status.post.ts`
-- Progress logs API: `internal/books/[id]/progress-logs.get.ts`, `internal/books/[id]/progress-logs.post.ts`
-- Progress sync toggle: `internal/books/reading_state.go`
-- Book detail UI: `app/pages/books/[id]/index.vue`
-- Reader sync: `app/pages/books/[id]/read.vue`
+- Schema: [`.drizzle/migrations`](../../../.drizzle/migrations)
+- Status, reading position, progress logs, and progress sync APIs: [`internal/books/reading_state.go`](../../../internal/books/reading_state.go)
+- Reviews and notes APIs: [`internal/books/reviews.go`](../../../internal/books/reviews.go)
+- Finish summary API: [`internal/books/finish_summary.go`](../../../internal/books/finish_summary.go)
+- Book detail UI: [`app/pages/books/[id]/index.vue`](../../../app/pages/books/[id]/index.vue)
+- Reader sync: [`app/pages/books/[id]/read.vue`](../../../app/pages/books/[id]/read.vue)
 
 ## Finish summary
 

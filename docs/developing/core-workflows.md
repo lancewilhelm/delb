@@ -4,11 +4,11 @@ These flows connect the [user guides](../README.md#use-delb) to the implementati
 
 ## Account initialization
 
-The [registration page](../../app/pages/register.vue) validates fields and calls Better Auth email signup. The [auth configuration](../../internal/auth/handlers.go) permits the first registration, applies the later registration toggle, and restricts self-registration to the normal user role.
+The [registration page](../../app/pages/register.vue) validates fields and calls `POST /api/auth/sign-up/email`. The [auth handlers](../../internal/auth/handlers.go) allow the first account, check global `allowRegistration` for later sign-ups, and create new self-registered accounts with the `reader` role.
 
-After user creation, [owner bootstrap](../../internal/auth/handlers.go) claims its durable marker, initializes the shared Default when needed, and enrolls the new user in one transaction. Later users join the current default as editors. Session creation does not enroll users again.
+Inside the same SQLite transaction in [auth/store.go](../../internal/auth/store.go), owner bootstrap inserts the durable `owner-bootstrap` marker in `system_state` and promotes the first account to `owner`. Later accounts stay `reader` until an Admin changes their role.
 
-The page fetches the new session and pulls user/global settings before navigation. Route middleware controls navigation; API authorization remains server-side.
+The client then fetches the new session and pulls account and global settings before navigation. Vue Router guards control navigation; API authorization remains enforced in every Go handler.
 
 ## Add a book
 
@@ -49,13 +49,13 @@ The [manual handler](../../internal/books/books_crud.go), [metadata handler](../
 
 The [Books page](../../app/pages/books/index.vue) combines filters, sort settings, and view preferences. Grid/list components request pages and render the visible portion of the list.
 
-The dashboard's **Browse all books** link calls the [Books filter store](../../app/stores/booksIndexFilters.ts) to clear its persisted status, date-added, and file-presence filters before navigation. Sort settings and view preferences remain unchanged. Dashboard status links open the Books view with their status query parameters. The **To be read** tile opens the dedicated personal queue.
+The dashboard's **Browse all books** link calls the [Books filter store](../../app/stores/booksIndexFilters.ts) to clear its persisted status, date-added, finish-date, file-presence, and copy filters before navigation. Sort settings and view preferences remain unchanged. Dashboard status links open the Books view with their status query parameters. The **To be read** tile opens the dedicated personal queue.
 
 The [dashboard overview query](../../internal/books/dashboard.go) counts the books that the reader can see (including **To be read**), lists the most recently added books, previews each status list, and picks random samples for Pile art. Continue reading uses the reader's saved progress. Finished uses the reader's finish dates. Tag visibility rules apply to counts and every list. [The dashboard reference](reference/dashboard.md) describes the request, order, and card art rules.
 
 [Book listing](../../internal/books/books_crud.go) joins the `visible_books` view for the authenticated reader. Status filters join the reader's personal status records. Stable sort keys and cursors keep pagination consistent for a chosen ordering. The response enriches the page with the metadata selected by book views.
 
-[Entity list queries](../../internal/books/catalog.go) serve book lists under authors, publishers, and tags. [Global search](../../internal/books/catalog.go) searches across visible records, including stored identifiers. Its visibility scope is not an automatic copy of every Books-page filter.
+[Entity list queries](../../internal/books/catalog.go) serve book lists under authors, series, publishers, genres, and tags. [Global search](../../internal/books/catalog.go) searches across visible records, including stored identifiers. Its visibility scope is not an automatic copy of every Books-page filter.
 
 Tag deletion and merging require system admin/owner authorization. They mutate shared catalog links in a transaction and preserve book records. Deletion is refused while a tag visibility rule uses the tag, and merging moves the rules to the destination tag.
 
@@ -77,11 +77,11 @@ Progress-history sync is opt-in per user/book. Position updates can append reade
 
 Grid cards, list covers, and dashboard Continue reading covers expose **Reading status** in their context menu. The [shared status menu](../../app/composables/useBookReadingStatusMenu.ts) reads `GET /api/books/:id/status` whenever the menu opens and saves a choice with `POST` to the same endpoint. Successful saves emit the saved book ID and status. The containing view updates that loaded record in place, or removes it if it no longer matches the status filter. Loaded pages, pagination cursors, and scroll position are retained. The dashboard reloads its overview when a Continue reading book changes status. Failed saves keep the menu open for retry. Existing View and Download actions remain available, and bulk selection mode disables the cover menu.
 
-[Status transitions](../../internal/books/reading_state.go) apply date and To be read ordering rules. The [bulk status endpoint](../../internal/books/reading_state.go) accepts explicit book IDs and applies the current user's status only to visible records. It does not accept all-in-scope selection semantics. Personal ratings use a user/book record with a half-star integer value. Sharing the book leaves each user's records separate.
+[Status transitions](../../internal/books/reading_state.go) apply date and To be read ordering rules. The [bulk status endpoint](../../internal/books/books_bulk.go) accepts explicit book IDs and applies the current user's status only to visible records. It does not accept all-in-scope selection semantics. Personal ratings use a user/book record with a half-star integer value. Sharing the book leaves each user's records separate.
 
 ## Settings and background work
 
-[Settings persistence](reference/settings.md) explains acknowledgement revisions, stale responses, retries, and server-rendered theme selection. UI persistence does not grant access to global settings.
+[Settings persistence](reference/settings.md) explains acknowledgement revisions, stale responses, retries, and client boot theme selection. UI persistence does not grant access to global settings.
 
 The Dropbox watcher waits for [storage recovery](../hosting/storage-recovery.md), polls local input, claims supported files, and ingests them into configured targets. Failed files and error sidecars remain available for investigation. [Calibre import](../hosting/calibre-import.md) is an administrator-triggered request flow rather than the Dropbox watcher.
 

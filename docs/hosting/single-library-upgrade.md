@@ -1,10 +1,12 @@
 # Upgrade to a single library
 
-Delb now has one shared library instead of collections. Upgrading an existing server collapses every collection into that library and gives each account a server role. Migration `0022_single_library` does this automatically at startup; there is no separate migration page.
+This guide is only for servers upgrading from pre-1.0 preview versions that used collections. New `v1.0.0` installations start directly on the single-library schema and do not need these steps.
+
+Delb uses one shared library instead of collections. Upgrading a pre-1.0 server collapses every collection into that shared library and assigns each account a server role. Migration `0022_single_library` runs automatically at startup; there is no separate migration page.
 
 ## Choose the release to upgrade with
 
-Delb `v1.0` starts its database history from a single baseline migration, `0000_initial.sql`, and no longer includes the earlier migrations one by one. It can start on:
+Delb `v1.0` starts its database history from a single baseline migration, `0000_initial.sql`, and no longer includes the earlier pre-1.0 migrations one by one. It can start on:
 
 - a new, empty database, or
 - a database that has already applied `0022_single_library`.
@@ -36,7 +38,7 @@ If your database still needs `0022_single_library`, upgrade to [Delb v0.2.1](htt
 
 The migration removes the `collections`, `collection_members`, and `legacy_collection_books` tables, the `collection_books` view, and `books.collection_id`, along with the triggers that maintained them. Personal Shelves, reading data, and TBR queues are unchanged.
 
-Separate book entries for the same title, which earlier versions created when a book was split between collections, stay separate. Use the health checks to find them and delete any duplicates you do not want.
+Separate book entries for the same title, which earlier versions created when a book was split between collections, stay separate. Use the health checks to find them and delete any duplicates that you do not want.
 
 ## After you upgrade
 
@@ -44,7 +46,7 @@ Separate book entries for the same title, which earlier versions created when a 
 2. Open **Settings → Admin → Users** and check each account's role. Make accounts that should only read the library **reader**, and accounts that should add and edit books **editor**.
 3. Tag the books that should be hidden from some accounts. For example, add a `private` tag to every book from a former private collection.
 4. For each account that should not see those books, select its edit button and set the tag to **hide** under **tag visibility rules**. To restrict a guest to a small set of books, tag those books and set that tag to **allow** instead.
-5. If you use Dropbox, open **Settings → Admin → Dropbox** and make sure the importing user is an Editor or Admin.
+5. If you use Dropbox, open **Settings → Admin → Dropbox** and make sure that the importing user is an Editor or Admin.
 6. Sign in as a restricted account and confirm that the hidden books do not appear in Books, search, or the dashboard.
 
 See [Share the library and control access](../using/library-access.md) for how roles and rules work.

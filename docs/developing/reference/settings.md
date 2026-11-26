@@ -56,7 +56,7 @@ Labels over accent and error fills use the fill's background and contrast target
 
 `appearanceContrast` belongs to each user settings profile, including independent mobile settings. Changes apply immediately and use the existing debounced account sync. Missing or invalid values use 100%; finite values are rounded and clamped to the supported range.
 
-The [contrast utility](../../../app/utils/appearanceContrast.ts) owns the coefficients and chooses the target from the palette background. The [universal plugin](../../../app/plugins/init-contrast.ts) applies saved coefficients during SSR and client updates. Target rules follow fixed/system themes, custom palettes, and temporary previews without modifying the saved colors. [Shared CSS](../../../app/assets/css/main.css) derives separate text and border roles; browsers without OKLab color mixing retain the original theme.
+The [contrast utility](../../../app/utils/appearanceContrast.ts) owns the coefficients and chooses the target from the palette background. The [contrast initializer](../../../app/plugins/init-contrast.ts) applies saved coefficients and updates target rules in the browser. Target rules follow fixed and system themes, custom palettes, and temporary previews without modifying the saved colors. [Shared CSS](../../../app/assets/css/main.css) derives separate text and border roles; browsers without OKLab color mixing retain the original theme.
 
 ## Write acknowledgements and concurrent changes
 
