@@ -122,13 +122,9 @@ onBeforeUnmount(() => {
       v-for="item in visibleItems"
       :key="item.to"
       :to="item.to"
-      class="view-tab transition"
+      class="view-tab"
       :aria-current="isActive(item) ? 'page' : undefined"
-      :class="
-        isActive(item)
-          ? 'bg-(--sub-color)/20 text-(--contrast-main-color)'
-          : 'hover:bg-(--sub-color)/15 text-(--contrast-main-color) opacity-80 hover:opacity-100'
-      "
+      :class="{ 'view-tab-current': isActive(item) }"
     >
       <Icon :name="item.icon" class="shrink-0 opacity-80" />
       <span>{{ item.label }}</span>
@@ -141,7 +137,7 @@ onBeforeUnmount(() => {
         class="max-w-full"
         :class="
           layout === 'compact'
-            ? ['view-tab', catalogIsActive && 'bg-(--sub-color)/20']
+            ? ['view-tab', { 'view-tab-current': open || catalogIsActive }]
             : 'p-1 gap-2 hover:bg-transparent! rounded-none! active:bg-transparent! focus:bg-transparent!'
         "
         :aria-expanded="open"
@@ -234,5 +230,25 @@ onBeforeUnmount(() => {
   gap: 0.5rem;
   padding: 0.25rem 0.5rem;
   white-space: nowrap;
+  border-radius: 0;
+  background-color: transparent;
+  color: var(--contrast-main-color);
+  opacity: 0.8;
+  transition: var(--transition);
+}
+
+.view-tab:hover {
+  background-color: color-mix(in oklab, var(--sub-color) 15%, transparent);
+  opacity: 1;
+}
+
+.view-tab.view-tab-current {
+  background-color: color-mix(in oklab, var(--sub-color) 20%, transparent);
+  opacity: 1;
+}
+
+.view-tab:focus-visible {
+  outline: 2px solid var(--contrast-main-color);
+  outline-offset: -2px;
 }
 </style>
