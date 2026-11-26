@@ -11,7 +11,7 @@ import AppHeader from '~/components/AppHeader.vue';
 import BookCover from '~/components/BookCover.vue';
 import EntityPaginationControl from '~/components/EntityPaginationControl.vue';
 import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
-import type TagsActions from '~/components/Tags/Actions.vue';
+import TagsActions from '~/components/Tags/Actions.vue';
 
 // Page metadata
 useHead({
