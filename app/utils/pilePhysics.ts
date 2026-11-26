@@ -29,7 +29,9 @@ type Body = {
   drag: { ox: number; oy: number; lx: number; ly: number; lt: number } | null;
 };
 
-const GRAVITY = 7.5;
+// Height units per second squared. At 32, a released book lands in about a
+// fifth of a second, and a full pile finishes dropping in about half a second.
+const GRAVITY = 32;
 const DRAG_LIFT = 0.75;
 const MAX_SPEED = 1600;
 const CLICK_SLOP_PX = 4;
@@ -42,12 +44,18 @@ export function attachPilePhysics(
   items: HTMLElement[],
   placements: PilePlacement[],
   options: { reducedMotion: boolean; region?: PileRegion },
-): { dispose: () => void; consumeDrag: () => boolean } {
+): {
+  dispose: () => void;
+  consumeDrag: () => boolean;
+  positions: () => PilePlacement[];
+} {
   const W = tile.clientWidth;
   const H = tile.clientHeight;
   const region = options.region ?? FULL_PILE_REGION;
   // Big piles drop in faster so the last book doesn't lag behind.
-  const stagger = Math.min(0.45, 4 / Math.max(1, items.length));
+  const dropping = items.filter((_, i) => placements[i]?.drop !== false);
+  const stagger = Math.min(0.45, 4 / Math.max(1, dropping.length));
+  let dropIndex = 0;
   let zTop = 10;
   let raf = 0;
   let last = 0;
@@ -56,6 +64,7 @@ export function attachPilePhysics(
 
   const bodies: Body[] = items.map((el, i) => {
     const p = placements[i] ?? { x: 0.3, y: 0.3, r: 0 };
+    const drops = !options.reducedMotion && p.drop !== false;
     return {
       el,
       w: el.offsetWidth,
@@ -64,7 +73,7 @@ export function attachPilePhysics(
       y: p.y * H,
       a: p.r,
       // Books drop in one after another unless motion is reduced.
-      z: options.reducedMotion ? 0 : 1.2 + i * stagger,
+      z: drops ? 1.2 + dropIndex++ * stagger : 0,
       vx: 0,
       vy: 0,
       va: 0,
@@ -232,6 +241,10 @@ export function attachPilePhysics(
       tile.removeEventListener('pointermove', onMove);
       tile.removeEventListener('pointerup', onUp);
       tile.removeEventListener('pointercancel', onUp);
+    },
+    /** Where each book lies now, in the order of `items`. */
+    positions() {
+      return bodies.map((b) => ({ x: b.x / W, y: b.y / H, r: b.a }));
     },
     /** True once after a real drag, so the tile can swallow the trailing click. */
     consumeDrag() {

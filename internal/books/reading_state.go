@@ -1984,7 +1984,7 @@ func (s *Service) handleGetDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	const pageSize = 12
-	found, err := s.queryDashboardBooks(r.Context(), userID, visClause, visArgs, filterSQL, orderSQL, pageSize+1, offset)
+	found, err := s.queryDashboardBooks(r.Context(), userID, visClause, visArgs, filterSQL, nil, orderSQL, pageSize+1, offset)
 	if err != nil {
 		s.writeErrWithFallback(w, "GET /api/dashboard shelf query failed", "Failed to load dashboard", err)
 		return

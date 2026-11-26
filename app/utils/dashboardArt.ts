@@ -231,6 +231,8 @@ export type PilePlacement = {
   y: number;
   /** Rotation in degrees. */
   r: number;
+  /** Whether the book drops in from above (default) or starts at rest. */
+  drop?: boolean;
 };
 
 /** Part of a pile's box the books may occupy, as fractions of its size. */
@@ -263,6 +265,29 @@ export function pileLayout(
     y: yMin + random() * (yMax - yMin),
     r: (random() - 0.5) * 44,
   }));
+}
+
+/** Books a pile shows, and the size of the list they were picked from. */
+export type HeldPile<T> = {
+  /** How many books the list held when these were picked. */
+  count: number;
+  /** False when the books are a fallback (the start of the list), not a sample. */
+  random: boolean;
+  books: T[];
+};
+
+/**
+ * Keeps the books a pile already shows when fresh data arrives, so a refresh
+ * does not swap them out (each response carries a new random sample). A new
+ * sample replaces them when the list changed size, or when the held books
+ * were only a fallback.
+ */
+export function holdPile<T>(
+  held: HeldPile<T> | undefined,
+  next: HeldPile<T>,
+): HeldPile<T> {
+  if (!held || held.count !== next.count) return next;
+  return !held.random && next.random ? next : held;
 }
 
 export const STATUS_ORDER: DashboardListKey[] = [

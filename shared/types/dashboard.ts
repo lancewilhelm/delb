@@ -42,4 +42,12 @@ export type DashboardOverview = {
   recent: DashboardBook[];
   /** Up to 25 books per status list, in that list's order. */
   lists: Record<DashboardListKey, DashboardBook[]>;
+  /**
+   * Random samples for Pile art: up to 24 books from the whole scope (`all`)
+   * and up to 10 per status list. Overviews cached before piles existed lack it.
+   */
+  piles?: Record<DashboardPileKey, DashboardBook[]>;
 };
+
+/** Piles the overview samples: the All books card and each status list. */
+export type DashboardPileKey = 'all' | DashboardListKey;

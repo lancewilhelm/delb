@@ -23,6 +23,13 @@ const props = defineProps<{
     updatedAt?: string;
     finishedDate?: string | null;
   }[];
+  /** A random sample for Pile art; without it the pile uses `books`. */
+  pileBooks?: {
+    id: string;
+    title: string;
+    coverImagePath?: string | null;
+    updatedAt?: string;
+  }[];
   to: RouteLocationRaw;
   /** The tile's chosen art style (override, default, or Auto). */
   artStyle: CardArtStyle;
@@ -60,6 +67,7 @@ const hasArt = computed(() => props.count > 0 && props.books.length > 0);
           <DashboardTileArt
             :art-style="shownStyle"
             :books="books"
+            :pile-books="pileBooks"
             :seed="listKey"
           />
         </span>

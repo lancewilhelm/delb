@@ -18,6 +18,8 @@ type ArtBook = {
 const props = defineProps<{
   artStyle: CardArtStyle;
   books: ArtBook[];
+  /** A random sample for Pile art; without it the pile uses `books`. */
+  pileBooks?: ArtBook[];
   /** Stable per-list key: seeds the pile so each list gets its own scatter. */
   seed: string;
 }>();
@@ -113,7 +115,7 @@ const shelf = computed(() => {
 
 const wall = computed(() => wallSlots(props.books, 5, 25));
 
-const pileBooks = computed(() => props.books.slice(0, 10));
+const pile = computed(() => (props.pileBooks ?? props.books).slice(0, 10));
 
 function shortDate(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -181,11 +183,7 @@ function shortDate(value: string) {
       >
     </div>
 
-    <DashboardPile
-      v-else-if="artStyle === 'pile'"
-      :books="pileBooks"
-      :seed="seed"
-    />
+    <DashboardPile v-else-if="artStyle === 'pile'" :books="pile" :seed="seed" />
 
     <div v-else-if="artStyle === 'wall'" class="wall">
       <DashboardCover

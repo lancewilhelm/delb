@@ -2,7 +2,11 @@
 import { usePreferredReducedMotion } from '@vueuse/core';
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import DashboardCover from '~/components/Dashboard/DashboardCover.vue';
-import { pileLayout, type PileRegion } from '~/utils/dashboardArt';
+import {
+  pileLayout,
+  type PilePlacement,
+  type PileRegion,
+} from '~/utils/dashboardArt';
 import { attachPilePhysics } from '~/utils/pilePhysics';
 
 /**
@@ -33,28 +37,68 @@ const reducedMotion = usePreferredReducedMotion();
 const throwId = Math.random().toString(36).slice(2);
 const box = ref<HTMLElement | null>(null);
 let physics: ReturnType<typeof attachPilePhysics> | null = null;
+/** Whether the books have dropped in yet; only the first layout drops them. */
+let thrown = false;
+/** Book IDs in the order their elements were handed to the physics. */
+let placedIds: string[] = [];
+/** Where each book lay when the last physics was released, by book ID. */
+let resting = new Map<string, PilePlacement>();
+/** The seed, size, and region of the current layout. */
+let layoutKey = '';
+/** Increases with each setup, so a slower earlier setup gives way. */
+let setupRun = 0;
 
-async function setup() {
-  physics?.dispose();
+const bookKey = () => props.books.map((book) => book.id).join();
+const currentLayoutKey = () =>
+  [props.seed, props.coverHeight, JSON.stringify(props.region ?? null)].join(
+    '|',
+  );
+
+function release() {
+  if (!physics) return;
+  resting = new Map();
+  physics.positions().forEach((place, i) => {
+    const id = placedIds[i];
+    if (id) resting.set(id, place);
+  });
+  physics.dispose();
   physics = null;
+}
+
+/**
+ * Lays the pile out. Only the first layout drops the books in. After that, a
+ * change in which books show keeps the remaining books where they lie and
+ * drops in only the new ones; a new seed, size, or region places every book
+ * again without the drop.
+ */
+async function setup() {
+  const run = ++setupRun;
+  release();
   await nextTick();
+  if (run !== setupRun) return;
   const el = box.value;
   if (!el || !el.clientWidth || !el.clientHeight) return;
-  const placements = pileLayout(
-    props.books.map((book) => book.id),
-    `${props.seed}:${throwId}`,
-    {
-      aspect: el.clientWidth / el.clientHeight,
-      coverHeight: props.coverHeight,
-      region: props.region,
-    },
-  );
+  const ids = props.books.map((book) => book.id);
+  const key = currentLayoutKey();
+  const keepResting = thrown && key === layoutKey;
+  const placements = pileLayout(ids, `${props.seed}:${throwId}`, {
+    aspect: el.clientWidth / el.clientHeight,
+    coverHeight: props.coverHeight,
+    region: props.region,
+  }).map((place, i): PilePlacement => {
+    const rest = keepResting ? resting.get(ids[i]!) : undefined;
+    if (rest) return { ...rest, drop: false };
+    return { ...place, drop: !thrown || keepResting };
+  });
   physics = attachPilePhysics(
     el,
     Array.from(el.querySelectorAll<HTMLElement>(':scope > .pile-item')),
     placements,
     { reducedMotion: reducedMotion.value === 'reduce', region: props.region },
   );
+  thrown ||= ids.length > 0;
+  placedIds = ids;
+  layoutKey = key;
 }
 
 /** A drag inside a linked card must not also open it. */
@@ -66,16 +110,14 @@ function onClickCapture(event: MouseEvent) {
 }
 
 onMounted(setup);
-watch(
-  () => [
-    props.seed,
-    props.coverHeight,
-    JSON.stringify(props.region ?? null),
-    props.books.map((book) => book.id).join(),
-  ],
-  setup,
-);
-onBeforeUnmount(() => physics?.dispose());
+// A string key, so a refresh that hands over equal books (new arrays and
+// objects with the same IDs) does not count as a change.
+watch(() => `${currentLayoutKey()}#${bookKey()}`, setup);
+onBeforeUnmount(() => {
+  ++setupRun;
+  physics?.dispose();
+  physics = null;
+});
 </script>
 
 <template>

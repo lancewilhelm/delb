@@ -25,6 +25,13 @@ import type { DashboardBook, DashboardCounts } from '#shared/types/dashboard';
 const props = defineProps<{
   counts: DashboardCounts | null;
   recent: DashboardBook[];
+  /** A random sample for Pile art; without it the pile uses `recent`. */
+  pileBooks?: {
+    id: string;
+    title: string;
+    coverImagePath?: string | null;
+    updatedAt?: string;
+  }[];
   showStatusBar: boolean;
   /** Wall or Pile, from the reader's dashboard settings. */
   libraryArt: LibraryArtStyle;
@@ -61,7 +68,10 @@ const card = ref<HTMLElement | null>(null);
 const { width: cardWidth } = useElementSize(card);
 const narrow = computed(() => cardWidth.value > 0 && cardWidth.value <= 640);
 const pile = computed(() => ({
-  books: props.recent.slice(0, narrow.value ? 20 : 24),
+  books: (props.pileBooks?.length ? props.pileBooks : props.recent).slice(
+    0,
+    narrow.value ? 20 : 24,
+  ),
   coverHeight: narrow.value ? 0.24 : 0.4,
   region: (narrow.value
     ? { x0: 0, x1: 1, y0: 0.02, y1: 0.46 }
@@ -160,13 +170,16 @@ const note = computed(() => {
     aria-labelledby="lib-card-title"
   >
     <div class="lib-art" aria-hidden="true">
-      <DashboardPile
-        v-if="mode === 'pile'"
-        :books="pile.books"
-        seed="all-books"
-        :cover-height="pile.coverHeight"
-        :region="pile.region"
-      />
+      <template v-if="mode === 'pile'">
+        <!-- Wait for the card's width, so a narrow card's pile drops only once. -->
+        <DashboardPile
+          v-if="cardWidth > 0"
+          :books="pile.books"
+          seed="all-books"
+          :cover-height="pile.coverHeight"
+          :region="pile.region"
+        />
+      </template>
       <div v-else-if="isWall" ref="wallEl" class="lib-wall">
         <div
           ref="trackEl"

@@ -26,8 +26,10 @@ import {
 import {
   STATUS_LABELS,
   STATUS_ORDER,
+  holdPile,
   resolveCardArt,
   type CardArtStyle,
+  type HeldPile,
   type LibraryArtStyle,
 } from '~/utils/dashboardArt';
 import type {
@@ -99,7 +101,7 @@ async function loadShelves() {
   try {
     const response = await $fetch<{
       data: { shelves: DashboardShelfSummary[] };
-    }>('/api/shelves', { query: { previews: 25 } });
+    }>('/api/shelves', { query: { previews: 25, pile: TILE_PILE_SIZE } });
     if (disposed) return;
     shelves.value = response.data.shelves;
     writeShelvesCache(user.value?.id, response.data.shelves);
@@ -129,6 +131,72 @@ function setArt(listKey: string, style: CardArtStyle | null) {
 function setLibraryArt(style: LibraryArtStyle) {
   void userSettingsStore.updateSettingAtPath('dashboard.libraryArt', style);
 }
+
+// ---- Piles: a random sample per list, held for the page's lifetime ---------
+const LIBRARY_PILE_SIZE = 24;
+const TILE_PILE_SIZE = 10;
+type PileBook = DashboardShelfSummary['previews'][number] | DashboardBook;
+/** Keyed like card art overrides (`all`, `reading`, `shelf:<id>`, …). */
+const piles = ref<Record<string, HeldPile<PileBook>>>({});
+// The collection the status piles were picked from.
+let pileScope: string | null = null;
+
+/** Adopts fresh samples, keeping the books each pile already shows. */
+function holdPiles(next: Record<string, HeldPile<PileBook>>) {
+  const held = { ...piles.value };
+  for (const [key, pile] of Object.entries(next))
+    held[key] = holdPile(held[key], pile);
+  piles.value = held;
+}
+
+watch(
+  overview,
+  (data) => {
+    if (pileScope !== scope.value) {
+      // Another collection's piles hold other books.
+      piles.value = Object.fromEntries(
+        Object.entries(piles.value).filter(([key]) => key.startsWith('shelf:')),
+      );
+      pileScope = scope.value;
+    }
+    if (!data) return;
+    const next: Record<string, HeldPile<PileBook>> = {
+      all: {
+        count: data.counts.total,
+        random: !!data.piles,
+        books: data.piles?.all ?? data.recent.slice(0, LIBRARY_PILE_SIZE),
+      },
+    };
+    for (const key of STATUS_ORDER)
+      next[key] = {
+        count: data.counts[key],
+        random: !!data.piles,
+        books: data.piles?.[key] ?? data.lists[key].slice(0, TILE_PILE_SIZE),
+      };
+    holdPiles(next);
+  },
+  { immediate: true },
+);
+
+watch(
+  shelves,
+  (list) => {
+    if (!list) return;
+    holdPiles(
+      Object.fromEntries(
+        list.map((shelf) => [
+          `shelf:${shelf.id}`,
+          {
+            count: shelf.count,
+            random: !!shelf.pile,
+            books: shelf.pile ?? shelf.previews.slice(0, TILE_PILE_SIZE),
+          },
+        ]),
+      ),
+    );
+  },
+  { immediate: true },
+);
 
 // ---- Drifting wall: older covers beyond the overview's first page ----------
 const moreRecent = ref<DashboardBook[]>([]);
@@ -198,6 +266,7 @@ const statusTiles = computed(() =>
       count: overview.value?.counts[key] ?? 0,
       books,
       line: overview.value ? statusLine(key, books) : '',
+      pileBooks: piles.value[key]?.books,
       to: key === 'to_be_read' ? '/to-be-read' : `/books?status=${key}`,
       tone: `var(--dash-s-${key})`,
     };
@@ -210,11 +279,8 @@ const shelfTiles = computed(() =>
     title: shelf.name,
     count: shelf.count,
     // Shelf previews don't say whether a cover exists; the cover falls back on error.
-    books: shelf.previews.map((book) => ({
-      id: book.id,
-      title: book.title,
-      spineRevision: book.spineRevision,
-    })),
+    books: shelf.previews,
+    pileBooks: piles.value[`shelf:${shelf.id}`]?.books,
     line: 'Personal shelf',
     to: `/shelves/${encodeURIComponent(shelf.id)}`,
   })),
@@ -275,6 +341,7 @@ onBeforeUnmount(() => {
         <DashboardLibraryCard
           :counts="overview?.counts ?? null"
           :recent="wallBooks"
+          :pile-books="piles.all?.books ?? []"
           :show-status-bar="dashboardSettings.showStatusBar"
           :library-art="dashboardSettings.libraryArt"
           :wall-motion="dashboardSettings.wallMotion"
@@ -321,6 +388,7 @@ onBeforeUnmount(() => {
                 :count="tile.count"
                 :line="tile.line"
                 :books="tile.books"
+                :pile-books="tile.pileBooks"
                 :to="tile.to"
                 :tone="tile.tone"
                 tag="Status"
@@ -355,6 +423,7 @@ onBeforeUnmount(() => {
               :count="tile.count"
               :line="tile.line"
               :books="tile.books"
+              :pile-books="tile.pileBooks"
               :to="tile.to"
               tone="var(--dash-s-shelf)"
               tag="Shelf"

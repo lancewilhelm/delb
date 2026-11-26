@@ -11,7 +11,7 @@ import * as vue from 'vue';
 const StubNull = { render: () => null };
 const libraryCards = [];
 const LibraryStub = {
-  props: ['libraryArt', 'showStatusBar', 'wallMotion', 'recent'],
+  props: ['libraryArt', 'showStatusBar', 'wallMotion', 'recent', 'pileBooks'],
   emits: ['set-art', 'need-more'],
   setup(props, { emit }) {
     libraryCards.push({
@@ -355,7 +355,15 @@ function harness(
   const requests = [];
   const tiles = [];
   const TileStub = {
-    props: ['listKey', 'artStyle', 'books', 'to', 'count', 'overridden'],
+    props: [
+      'listKey',
+      'artStyle',
+      'books',
+      'pileBooks',
+      'to',
+      'count',
+      'overridden',
+    ],
     emits: ['set-art'],
     setup(props, { emit }) {
       tiles.push({ props, setArt: (style) => emit('set-art', style) });
@@ -404,6 +412,7 @@ test('collection changes ignore stale overview responses and errors can retry', 
     requests.filter((r) => r.url === '/api/dashboard/overview');
   const shelves = requests.find((r) => r.url === '/api/shelves');
   assert.equal(shelves.query.previews, 25, 'shelves ask for card-art previews');
+  assert.equal(shelves.query.pile, 10, 'shelves ask for a pile sample');
   assert.equal(overviews().length, 1);
   assert.ok(view.text().includes('Loading…'));
 
@@ -553,4 +562,69 @@ test('a drifting wall loads older covers in pages and drops them on collection c
     'older covers reset per collection',
   );
   assert.ok(!card().props.recent.some((b) => b.id === 'stale'));
+});
+
+test('piles show random samples and keep them through a refresh', async (t) => {
+  const { requests, tiles } = harness(t);
+  const overviews = () =>
+    requests.filter((r) => r.url === '/api/dashboard/overview');
+  const withPiles = (pick, extraCounts = {}) => ({
+    success: true,
+    data: {
+      ...overview('Book').data,
+      counts: { ...counts, ...extraCounts },
+      piles: {
+        all: [book(`${pick}-all`)],
+        reading: [book(`${pick}-reading`)],
+        to_be_read: [],
+        finished: [],
+        dnf: [],
+        none: [],
+      },
+    },
+  });
+  const tile = (key) => tiles.findLast((entry) => entry.props.listKey === key);
+  const ids = (books) => books?.map((b) => b.id);
+  const card = () => libraryCards.at(-1);
+
+  overviews()[0].resolve(withPiles('first'));
+  requests
+    .find((r) => r.url === '/api/shelves')
+    .resolve({
+      data: {
+        shelves: [
+          {
+            id: 's1',
+            name: 'Favs',
+            count: 2,
+            previews: [{ id: 'a', title: 'A' }],
+            pile: [{ id: 'b', title: 'B' }],
+          },
+        ],
+      },
+    });
+  await flush();
+  assert.deepEqual(ids(tile('reading').props.pileBooks), ['first-reading']);
+  assert.deepEqual(ids(tile('shelf:s1').props.pileBooks), ['b']);
+  assert.deepEqual(ids(card().props.pileBooks), ['first-all']);
+
+  // A reload with the same counts brings a new sample; the piles keep theirs.
+  const moveOutOfReading = () =>
+    continueCards
+      .findLast((c) => c.props.book.id === 'Book')
+      .change('finished');
+  moveOutOfReading();
+  await flush();
+  overviews()[1].resolve(withPiles('second'));
+  await flush();
+  assert.deepEqual(ids(tile('reading').props.pileBooks), ['first-reading']);
+  assert.deepEqual(ids(card().props.pileBooks), ['first-all']);
+
+  // Once a list changes size, its pile takes the new sample.
+  moveOutOfReading();
+  await flush();
+  overviews()[2].resolve(withPiles('third', { reading: 1, finished: 11 }));
+  await flush();
+  assert.deepEqual(ids(tile('reading').props.pileBooks), ['third-reading']);
+  assert.deepEqual(ids(card().props.pileBooks), ['first-all']);
 });

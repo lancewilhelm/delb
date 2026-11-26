@@ -4,6 +4,7 @@ import {
   defaultDashboardSettings,
   displayedCardArt,
   heroArtMode,
+  holdPile,
   normalizeDashboardSettings,
   pileLayout,
   resolveCardArt,
@@ -126,6 +127,26 @@ test('pile layout is random per list but stable for the same list', () => {
     assert.ok(placement.x >= 0.42 && placement.x <= 1.03 - (0.4 * (2 / 3)) / 3);
     assert.ok(placement.y >= 0.02 && placement.y <= 1 - 0.4 * 0.95);
   }
+});
+
+test('a pile keeps its books until its list changes size', () => {
+  const shown = { count: 30, random: true, books: ['a', 'b'] };
+  const fresh = { count: 30, random: true, books: ['c', 'd'] };
+  assert.equal(holdPile(undefined, fresh), fresh, 'the first sample is used');
+  assert.equal(holdPile(shown, fresh), shown, 'a refresh keeps the books');
+  const grown = { ...fresh, count: 31 };
+  assert.equal(holdPile(shown, grown), grown, 'a changed list re-samples');
+  const fallback = { count: 30, random: false, books: ['a', 'b'] };
+  assert.equal(
+    holdPile(fallback, fresh),
+    fresh,
+    'a sample replaces a fallback',
+  );
+  assert.equal(
+    holdPile(shown, fallback),
+    shown,
+    'a fallback never replaces a sample',
+  );
 });
 
 test('status segments skip empty statuses', () => {

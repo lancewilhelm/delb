@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"math/rand/v2"
 	"net/http"
 	"strconv"
 	"strings"
@@ -440,16 +441,24 @@ type ShelfPreviewDTO struct {
 	SpineRevision *string `json:"spineRevision"`
 }
 
+func shelfPreview(row personalShelfVisibleRow) ShelfPreviewDTO {
+	return ShelfPreviewDTO{ID: row.ID, Title: row.Title, SpineRevision: row.SpineRevision}
+}
+
 // ShelfSummaryDTO mirrors server/utils/shelves/model.ts listShelves items.
 type ShelfSummaryDTO struct {
 	ID       string            `json:"id"`
 	Name     string            `json:"name"`
 	Count    int               `json:"count"`
 	Previews []ShelfPreviewDTO `json:"previews"`
+	// Pile is a random sample of the shelf's books for the dashboard's Pile
+	// card art. It is present only when the request asks for one.
+	Pile []ShelfPreviewDTO `json:"pile,omitempty"`
 }
 
 // Shelf preview counts: the Shelves page shows 4; the dashboard's card art can
-// ask for up to 25 (the Wall tile's 5×5 grid).
+// ask for up to 25 (the Wall tile's 5×5 grid). The same cap applies to the
+// random pile sample.
 const (
 	defaultShelfPreviews = 4
 	maxShelfPreviews     = 25
@@ -457,11 +466,13 @@ const (
 
 // ListShelves returns all personal shelves owned by userID with visible counts and previews.
 func (s *Service) ListShelves(ctx context.Context, userID string) ([]ShelfSummaryDTO, error) {
-	return s.ListShelvesWithPreviews(ctx, userID, defaultShelfPreviews)
+	return s.ListShelvesWithPreviews(ctx, userID, defaultShelfPreviews, 0)
 }
 
-// ListShelvesWithPreviews is ListShelves with up to previewLimit preview books per shelf.
-func (s *Service) ListShelvesWithPreviews(ctx context.Context, userID string, previewLimit int) ([]ShelfSummaryDTO, error) {
+// ListShelvesWithPreviews is ListShelves with up to previewLimit preview books
+// per shelf and, when pileLimit is positive, a random sample of up to
+// pileLimit books per shelf.
+func (s *Service) ListShelvesWithPreviews(ctx context.Context, userID string, previewLimit, pileLimit int) ([]ShelfSummaryDTO, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -506,13 +517,21 @@ func (s *Service) ListShelvesWithPreviews(ctx context.Context, userID string, pr
 		}
 		previews := make([]ShelfPreviewDTO, limit)
 		for i := 0; i < limit; i++ {
-			previews[i] = ShelfPreviewDTO{ID: vis[i].ID, Title: vis[i].Title, SpineRevision: vis[i].SpineRevision}
+			previews[i] = shelfPreview(vis[i])
+		}
+		var pile []ShelfPreviewDTO
+		if pileLimit > 0 {
+			pile = make([]ShelfPreviewDTO, 0, min(pileLimit, len(vis)))
+			for _, i := range rand.Perm(len(vis))[:min(pileLimit, len(vis))] {
+				pile = append(pile, shelfPreview(vis[i]))
+			}
 		}
 		out = append(out, ShelfSummaryDTO{
 			ID:       b.id,
 			Name:     b.name,
 			Count:    len(vis),
 			Previews: previews,
+			Pile:     pile,
 		})
 	}
 	if err := tx.Commit(); err != nil {
@@ -534,7 +553,16 @@ func (s *Service) handleListShelves(w http.ResponseWriter, r *http.Request) {
 		}
 		previews = n
 	}
-	out, err := s.ListShelvesWithPreviews(r.Context(), userID, previews)
+	pile := 0
+	if raw := r.URL.Query().Get("pile"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > maxShelfPreviews {
+			httpapi.WriteError(w, http.StatusBadRequest, "Invalid pile count")
+			return
+		}
+		pile = n
+	}
+	out, err := s.ListShelvesWithPreviews(r.Context(), userID, previews, pile)
 	if err != nil {
 		s.writeErr(w, "GET /api/shelves failed", err)
 		return

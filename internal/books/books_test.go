@@ -17,6 +17,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -640,6 +641,27 @@ func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
 			for _, title := range want {
 				if !got[title] {
 					t.Fatalf("GET %s lists.%s missing %q (got %v)", path, key, title, got)
+				}
+			}
+		}
+		// Each pile is a random sample of its list (every book, while lists are this small).
+		piles := data["piles"].(map[string]any)
+		for _, key := range []string{"all", "reading", "to_be_read", "finished", "dnf", "none"} {
+			raw, ok := piles[key].([]any)
+			if !ok {
+				t.Fatalf("GET %s piles.%s missing or not an array: %v", path, key, piles[key])
+			}
+			want := len(wantLists[key])
+			if key == "all" {
+				want = wantTotal
+			}
+			if len(raw) != want {
+				t.Fatalf("GET %s piles.%s len = %d, want %d", path, key, len(raw), want)
+			}
+			for _, entry := range raw {
+				title := entry.(map[string]any)["title"].(string)
+				if key != "all" && !slices.Contains(wantLists[key], title) {
+					t.Fatalf("GET %s piles.%s has %q, not in its list", path, key, title)
 				}
 			}
 		}
