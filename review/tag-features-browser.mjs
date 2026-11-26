@@ -47,7 +47,10 @@ await fixtureDb.execute(
   "UPDATE books SET publisher_id='sort-publisher' WHERE id LIKE 'tag-book-%' OR id='tag-hidden-book'",
 );
 fixtureDb.close();
-const targets = await (await fetch('http://127.0.0.1:9232/json/list')).json();
+const port = Number(process.env.DELB_CHROME_DEBUG_PORT || '9232');
+const targets = await (
+  await fetch(`http://127.0.0.1:${port}/json/list`)
+).json();
 const ws = new WebSocket(
   targets.find((t) => t.type === 'page').webSocketDebuggerUrl,
 );
@@ -226,17 +229,26 @@ async function expectOrder(order) {
 async function contextMenu(selector, nearEdge = false) {
   await waitFor(`!!document.querySelector(${JSON.stringify(selector)})`);
   const point = await evaluate(
-    `(()=>{const e=document.querySelector(${JSON.stringify(selector)});let r=e.getBoundingClientRect();if(r.top<80||r.bottom>innerHeight){e.scrollIntoView({block:'center'});r=e.getBoundingClientRect();}return ${nearEdge ? '{x:r.right-3,y:r.bottom-3}' : '{x:r.x+25,y:r.y+35}'};})()`,
+    `(async () => {
+      const link = document.querySelector(${JSON.stringify(selector)});
+      link.scrollIntoView({ block: 'center', behavior: 'instant' });
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const r = link.getBoundingClientRect();
+      return ${nearEdge ? '{x:r.right-3,y:r.bottom-3}' : '{x:r.x+25,y:r.y+35}'};
+    })()`,
   );
+  await call('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
   await call('Input.dispatchMouseEvent', {
     type: 'mousePressed',
     button: 'right',
+    buttons: 2,
     clickCount: 1,
     ...point,
   });
   await call('Input.dispatchMouseEvent', {
     type: 'mouseReleased',
     button: 'right',
+    buttons: 0,
     clickCount: 1,
     ...point,
   });
@@ -312,7 +324,7 @@ await button('Delete tag');
 await waitFor(`!!document.querySelector('dialog[open]')`);
 assert.ok(
   await evaluate(
-    `document.querySelector('dialog[open]').innerText.includes('across all collections')`,
+    `document.querySelector('dialog[open]').innerText.includes('the library')`,
   ),
 );
 assert.equal(
@@ -509,12 +521,12 @@ await call('Fetch.enable', {
   ],
 });
 await evaluate(
-  `document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$router.push('/tags/tag-sort')`,
+  `document.querySelector('#app').__vue_app__.config.globalProperties.$router.push('/tags/tag-sort')`,
 );
 for (let i = 0; i < 100 && !pausedResponses.length; i++) await sleep(100);
 assert.ok(pausedResponses.length >= 1);
 await evaluate(
-  `document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$router.push('/tags/tag-target')`,
+  `document.querySelector('#app').__vue_app__.config.globalProperties.$router.push('/tags/tag-target')`,
 );
 await waitFor(
   `!!document.querySelector('button[aria-label="Actions for Clean tag"]')`,

@@ -136,12 +136,6 @@ function mountBookDetail(opts: {
       useRouter: () => ({ back: () => {} }),
     },
     '~/composables/useHead': { useHead: () => {} },
-    '~/stores/collections': {
-      useCollectionsStore: () => ({
-        collections: [{ id: 'col-1', name: 'Main' }],
-        fetchCollections: async () => {},
-      }),
-    },
     '~/stores/shareCard': {
       useShareCardStore: () => ({ open: () => {}, notifyFinished: () => {} }),
     },
@@ -172,7 +166,6 @@ function mountBookDetail(opts: {
     '~/utils/descriptionHtml': { sanitizeDescriptionHtml: (s: string) => s },
     '~/components/AppHeader.vue': stubModule('app-header'),
     '~/components/BookCover.vue': stubModule('book-cover'),
-    '~/components/Books/BookMoveModal.vue': stubModule('book-move-modal'),
     '~/components/Books/BookNotes.vue': stubModule('book-notes'),
     '~/components/Books/BookReviewEditor.vue': stubModule('book-review-editor'),
     '~/components/Books/BookPersonalShelves.vue': stubModule(
@@ -234,7 +227,7 @@ test('book detail page gates spine artwork and image request on coverStyle.showD
   } as unknown as Document;
   globalThis.fetch = (async () => ({
     ok: true,
-    json: async () => ({ success: true, data: { collections: [] } }),
+    json: async () => ({ success: true, data: {} }),
   })) as unknown as typeof fetch;
 
   const view = mountBookDetail({
@@ -297,7 +290,7 @@ test('book detail page falls back to standalone cover when book has no spineRevi
   } as unknown as Document;
   globalThis.fetch = (async () => ({
     ok: true,
-    json: async () => ({ success: true, data: { collections: [] } }),
+    json: async () => ({ success: true, data: {} }),
   })) as unknown as typeof fetch;
 
   const view = mountBookDetail({

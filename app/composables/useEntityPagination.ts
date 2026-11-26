@@ -1,7 +1,7 @@
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 
 export function useEntityPagination<T>(options: {
-  inputs: () => { search: string; previewLimit: number; collectionId?: string };
+  inputs: () => { search: string; previewLimit: number };
   initialize: () => Promise<void>;
   fetchPage: (
     query: Record<string, string>,
@@ -33,7 +33,6 @@ export function useEntityPagination<T>(options: {
       search: snapshot.search.trim(),
       previewLimit: String(snapshot.previewLimit),
     };
-    if (snapshot.collectionId) query.collectionId = snapshot.collectionId;
     try {
       const result = await options.fetchPage(query);
       if (disposed || request !== generation) return;

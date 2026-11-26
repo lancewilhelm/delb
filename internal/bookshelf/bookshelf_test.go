@@ -21,7 +21,6 @@ import (
 	"github.com/lancewilhelm/delb/internal/auth"
 	"github.com/lancewilhelm/delb/internal/books"
 	"github.com/lancewilhelm/delb/internal/bookshelf"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/db"
 	"github.com/lancewilhelm/delb/internal/httpapi"
 )
@@ -53,12 +52,6 @@ func newTestEnv(t *testing.T) *testEnv {
 		Secret: secret,
 		Logger: discard,
 	})
-	colSvc := collections.NewService(collections.ServiceOptions{
-		DB:          opened.DB,
-		AuthService: authSvc,
-		LibraryDir:  libDir,
-		Logger:      discard,
-	})
 	booksSvc := books.NewService(books.ServiceOptions{
 		DB:          opened.DB,
 		AuthService: authSvc,
@@ -76,7 +69,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		DB:          opened.DB,
 		Logger:      discard,
 		AuthService: authSvc,
-		Services:    []httpapi.RouteRegistrar{colSvc, booksSvc, shelfSvc},
+		Services:    []httpapi.RouteRegistrar{booksSvc, shelfSvc},
 	})
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
@@ -342,41 +335,24 @@ func TestUnifiedBookshelfLayoutsOnDemandAndConcurrency(t *testing.T) {
 	}
 }
 
-func TestCollectionBookshelfPicturesAndPersonalShelves(t *testing.T) {
+func TestLibraryBookshelfPicturesAndPersonalShelves(t *testing.T) {
 	env := newTestEnv(t)
 	owner := env.signUp("Owner", "owner@example.invalid")
 	viewer := env.signUp("Viewer", "viewer@example.invalid")
 	outsider := env.signUp("Outsider", "outsider@example.invalid")
 
-	// Create collection & add viewer
-	resp, raw := env.reqJSON(&owner, http.MethodPost, "/api/collections", map[string]any{"name": "Shared"})
-	if resp.StatusCode != 200 {
-		t.Fatalf("create collection: %d %s", resp.StatusCode, string(raw))
-	}
-	var colRes struct {
-		Data struct {
-			Collection struct {
-				ID string `json:"id"`
-			} `json:"collection"`
-		} `json:"data"`
-	}
-	_ = json.Unmarshal(raw, &colRes)
-	colID := colRes.Data.Collection.ID
-
-	resp, _ = env.reqJSON(&owner, http.MethodPut, "/api/collections/"+colID+"/members", map[string]any{
-		"email": viewer.email,
-		"role":  "viewer",
-	})
-	if resp.StatusCode != 200 {
-		t.Fatalf("add viewer: %d", resp.StatusCode)
+	// New accounts are readers. Make the outsider an editor whose tag rules
+	// hide the book, so the shared layout is read-only for that account.
+	if _, err := env.db.DB.Exec(`UPDATE users SET role = 'editor' WHERE email = ?`, outsider.email); err != nil {
+		t.Fatalf("promote outsider: %v", err)
 	}
 
 	// Create book
-	resp, raw = env.reqJSON(&owner, http.MethodPost, "/api/books", map[string]any{
-		"title":         "Dune",
-		"authors":       []string{"Frank Herbert"},
-		"pages":         500,
-		"collectionIds": []string{colID},
+	resp, raw := env.reqJSON(&owner, http.MethodPost, "/api/books", map[string]any{
+		"title":   "Dune",
+		"authors": []string{"Frank Herbert"},
+		"pages":   500,
+		"tags":    []string{"Desert"},
 	})
 	if resp.StatusCode != 200 {
 		t.Fatalf("create book: %d %s", resp.StatusCode, string(raw))
@@ -391,21 +367,51 @@ func TestCollectionBookshelfPicturesAndPersonalShelves(t *testing.T) {
 	_ = json.Unmarshal(raw, &bookRes)
 	bookID := bookRes.Data.Book.ID
 
-	// Collection bookshelf: owner can edit, viewer read-only, outsider 404
-	resp, raw = env.reqJSON(&owner, http.MethodGet, "/api/collections/"+colID+"/bookshelf", nil)
+	if _, err := env.db.DB.Exec(`
+		INSERT INTO user_tag_rules (user_id, tag_id, mode, created_at)
+		SELECT u.id, t.id, 'block', 0 FROM users u, tags t WHERE u.email = ? AND t.name = 'Desert'
+	`, outsider.email); err != nil {
+		t.Fatalf("add block rule: %v", err)
+	}
+
+	// Library bookshelf: owner can edit, reader read-only, restricted editor
+	// sees no hidden books and cannot rearrange the shared layout.
+	resp, raw = env.reqJSON(&owner, http.MethodGet, "/api/library/bookshelf", nil)
 	if resp.StatusCode != 200 {
-		t.Fatalf("GET collection bookshelf: %d %s", resp.StatusCode, string(raw))
+		t.Fatalf("GET library bookshelf: %d %s", resp.StatusCode, string(raw))
 	}
 	var snap map[string]any
 	_ = json.Unmarshal(raw, &snap)
 	if snap["canEdit"] != true {
 		t.Fatalf("owner canEdit = %v", snap["canEdit"])
 	}
-	resp, _ = env.reqJSON(&outsider, http.MethodGet, "/api/collections/"+colID+"/bookshelf", nil)
-	if resp.StatusCode != 404 {
-		t.Fatalf("outsider GET = %d, want 404", resp.StatusCode)
+	if books, _ := snap["books"].([]any); len(books) != 1 {
+		t.Fatalf("owner library bookshelf books = %v", snap["books"])
 	}
-	resp, _ = env.reqJSON(&viewer, http.MethodPut, "/api/collections/"+colID+"/bookshelf", map[string]any{
+	resp, raw = env.reqJSON(&outsider, http.MethodGet, "/api/library/bookshelf", nil)
+	var restrictedSnap map[string]any
+	_ = json.Unmarshal(raw, &restrictedSnap)
+	if resp.StatusCode != 200 || restrictedSnap["canEdit"] != false {
+		t.Fatalf("restricted editor GET = %d canEdit=%v", resp.StatusCode, restrictedSnap["canEdit"])
+	}
+	if books, _ := restrictedSnap["books"].([]any); len(books) != 0 || strings.Contains(string(raw), bookID) {
+		t.Fatalf("restricted editor sees hidden book: %s", string(raw))
+	}
+	resp, _ = env.reqJSON(&outsider, http.MethodPut, "/api/library/bookshelf", map[string]any{
+		"revision":    restrictedSnap["revision"],
+		"token":       restrictedSnap["token"],
+		"arrangement": restrictedSnap["arrangement"],
+	})
+	if resp.StatusCode != 403 {
+		t.Fatalf("restricted editor PUT = %d, want 403", resp.StatusCode)
+	}
+	resp, raw = env.reqJSON(&viewer, http.MethodGet, "/api/library/bookshelf", nil)
+	var viewerSnap map[string]any
+	_ = json.Unmarshal(raw, &viewerSnap)
+	if resp.StatusCode != 200 || viewerSnap["canEdit"] != false {
+		t.Fatalf("reader GET = %d canEdit=%v", resp.StatusCode, viewerSnap["canEdit"])
+	}
+	resp, _ = env.reqJSON(&viewer, http.MethodPut, "/api/library/bookshelf", map[string]any{
 		"revision":    snap["revision"],
 		"token":       snap["token"],
 		"arrangement": snap["arrangement"],
@@ -414,7 +420,7 @@ func TestCollectionBookshelfPicturesAndPersonalShelves(t *testing.T) {
 		t.Fatalf("viewer PUT = %d, want 403", resp.StatusCode)
 	}
 
-	// Upload picture to collection bookshelf
+	// Upload picture to library bookshelf
 	uploadPic := func(u *testUser, path string, img []byte) (*http.Response, []byte) {
 		var buf bytes.Buffer
 		mw := multipart.NewWriter(&buf)
@@ -435,7 +441,7 @@ func TestCollectionBookshelfPicturesAndPersonalShelves(t *testing.T) {
 	}
 
 	pngBytes := makePNG(t, 40, 20, color.RGBA{R: 180, G: 100, B: 50, A: 255})
-	picPath := "/api/bookshelf-pictures/collection/" + colID
+	picPath := "/api/bookshelf-pictures/library/main"
 	resp, _ = uploadPic(&viewer, picPath, pngBytes)
 	if resp.StatusCode != 403 {
 		t.Fatalf("viewer upload picture = %d, want 403", resp.StatusCode)
@@ -459,20 +465,20 @@ func TestCollectionBookshelfPicturesAndPersonalShelves(t *testing.T) {
 		t.Fatalf("viewer unreferenced picture = %d, want 404", resp.StatusCode)
 	}
 
-	// Attach picture & save collection bookshelf
+	// Attach picture & save library bookshelf
 	arrMap := snap["arrangement"].(map[string]any)
 	arrMap["pictures"] = []any{
 		map[string]any{
 			"id": "p1", "assetId": picRes.ID, "x": 10, "y": 20, "width": 80, "height": 40, "rotation": 15,
 		},
 	}
-	resp, raw = env.reqJSON(&owner, http.MethodPut, "/api/collections/"+colID+"/bookshelf", map[string]any{
+	resp, raw = env.reqJSON(&owner, http.MethodPut, "/api/library/bookshelf", map[string]any{
 		"revision":    snap["revision"],
 		"token":       snap["token"],
 		"arrangement": arrMap,
 	})
 	if resp.StatusCode != 200 {
-		t.Fatalf("save collection bookshelf with picture = %d %s", resp.StatusCode, string(raw))
+		t.Fatalf("save library bookshelf with picture = %d %s", resp.StatusCode, string(raw))
 	}
 	// Now viewer CAN read picture as image/webp with private caching + ETag + 304 support
 	resp, _ = env.reqJSON(&viewer, http.MethodGet, picPath+"?asset="+picRes.ID, nil)

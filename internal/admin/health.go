@@ -172,58 +172,6 @@ func (s *Service) handleAdminHealth(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	results := make([]healthCheckResult, 0, 11)
 
-	// 1) Orphaned books (no collection link)
-	{
-		var orphanCount int
-		if err := s.db.QueryRowContext(ctx, `
-			SELECT COUNT(*)
-			FROM books b
-			LEFT JOIN collection_books cb ON cb.book_id = b.id
-			WHERE cb.book_id IS NULL
-		`).Scan(&orphanCount); err != nil {
-			s.writeErr(w, "POST /api/settings/admin/health orphaned count failed", err)
-			return
-		}
-		sample := make([]map[string]any, 0)
-		if sampleLimit > 0 && orphanCount > 0 {
-			rows, err := s.db.QueryContext(ctx, `
-				SELECT b.id, b.title
-				FROM books b
-				LEFT JOIN collection_books cb ON cb.book_id = b.id
-				WHERE cb.book_id IS NULL
-				LIMIT ?
-			`, sampleLimit)
-			if err != nil {
-				s.writeErr(w, "POST /api/settings/admin/health orphaned sample failed", err)
-				return
-			}
-			for rows.Next() {
-				var id, title string
-				if err := rows.Scan(&id, &title); err != nil {
-					_ = rows.Close()
-					s.writeErr(w, "POST /api/settings/admin/health orphaned scan failed", err)
-					return
-				}
-				sample = append(sample, map[string]any{"id": id, "title": title})
-			}
-			_ = rows.Close()
-		}
-		check := healthCheckResult{
-			ID:      "books.orphaned",
-			Name:    "Orphaned books (no collection)",
-			Status:  healthOK,
-			Message: "All books are linked to exactly one collection",
-			Meta:    map[string]any{"orphanCount": orphanCount},
-			Sample:  sample,
-		}
-		if orphanCount > 0 {
-			check.Status = healthWarn
-			check.Message = fmt.Sprintf("%d book(s) are not in any collection", orphanCount)
-			check.HowToFix = "Restore a valid collection assignment from a matching backup and inspect the collection migration report."
-		}
-		results = append(results, check)
-	}
-
 	// 2) Empty titles
 	{
 		var emptyCount int
@@ -328,14 +276,6 @@ func (s *Service) handleAdminHealth(w http.ResponseWriter, r *http.Request) {
 		results = append(results, check)
 	}
 
-	// 4) Collection health checks (mirrors server/utils/collections/health.ts)
-	colChecks, err := s.runCollectionHealth(ctx, sampleLimit)
-	if err != nil {
-		s.writeErr(w, "POST /api/settings/admin/health collectionHealth failed", err)
-		return
-	}
-	results = append(results, colChecks...)
-
 	if mode == "deep" {
 		deepChecks, err := s.runDeepHealthChecks(ctx, sampleLimit, maxFilesToStat, maxDirsToStat, maxBooksForFuzzy, maxFuzzyComparisons)
 		if err != nil {
@@ -368,198 +308,6 @@ func (s *Service) handleAdminHealth(w http.ResponseWriter, r *http.Request) {
 			"results":    results,
 		},
 	})
-}
-
-func (s *Service) runCollectionHealth(ctx context.Context, sampleLimit int) ([]healthCheckResult, error) {
-	var defaultCount int
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM collections WHERE is_default = 1`).Scan(&defaultCount); err != nil {
-		return nil, err
-	}
-
-	ownerRows, err := s.db.QueryContext(ctx, `
-		SELECT c.id, c.name
-		FROM collections c
-		WHERE (SELECT count(*) FROM collection_members cm WHERE cm.collection_id = c.id AND cm.role = 'owner') != 1
-		   OR NOT EXISTS(SELECT 1 FROM collection_members cm WHERE cm.collection_id = c.id AND cm.user_id = c.owner_user_id AND cm.role = 'owner')
-	`)
-	if err != nil {
-		return nil, err
-	}
-	owners := make([]map[string]any, 0)
-	for ownerRows.Next() {
-		var id, name string
-		if err := ownerRows.Scan(&id, &name); err != nil {
-			_ = ownerRows.Close()
-			return nil, err
-		}
-		owners = append(owners, map[string]any{"id": id, "name": name})
-	}
-	_ = ownerRows.Close()
-
-	invalidRows, err := s.db.QueryContext(ctx, `
-		SELECT b.id, b.title, b.collection_id
-		FROM books b
-		LEFT JOIN collections c ON c.id = b.collection_id
-		WHERE b.collection_id IS NULL OR c.id IS NULL
-		ORDER BY b.id
-	`)
-	if err != nil {
-		return nil, err
-	}
-	invalidBooks := make([]map[string]any, 0)
-	for invalidRows.Next() {
-		var (
-			id    string
-			title string
-			cid   sql.NullString
-		)
-		if err := invalidRows.Scan(&id, &title, &cid); err != nil {
-			_ = invalidRows.Close()
-			return nil, err
-		}
-		var cidVal any
-		if cid.Valid {
-			cidVal = cid.String
-		}
-		invalidBooks = append(invalidBooks, map[string]any{
-			"id":           id,
-			"title":        title,
-			"collectionId": cidVal,
-		})
-	}
-	_ = invalidRows.Close()
-
-	groupRows, err := s.db.QueryContext(ctx, `
-		SELECT lower(trim(title)) AS title, count(*) AS n
-		FROM books
-		GROUP BY lower(trim(title))
-		HAVING count(DISTINCT collection_id) > 1
-		ORDER BY lower(trim(title))
-	`)
-	if err != nil {
-		return nil, err
-	}
-	type titleGroup struct {
-		title string
-		n     int
-	}
-	var groups []titleGroup
-	for groupRows.Next() {
-		var g titleGroup
-		if err := groupRows.Scan(&g.title, &g.n); err != nil {
-			_ = groupRows.Close()
-			return nil, err
-		}
-		groups = append(groups, g)
-	}
-	_ = groupRows.Close()
-
-	samples := make([]map[string]any, 0)
-	groupSampleCount := len(groups)
-	if groupSampleCount > sampleLimit {
-		groupSampleCount = sampleLimit
-	}
-	for i := 0; i < groupSampleCount; i++ {
-		g := groups[i]
-		mRows, err := s.db.QueryContext(ctx, `
-			SELECT b.id, b.title, b.collection_id, c.name
-			FROM books b
-			JOIN collections c ON c.id = b.collection_id
-			WHERE lower(trim(b.title)) = ?
-			ORDER BY b.id
-			LIMIT ?
-		`, g.title, sampleLimit)
-		if err != nil {
-			return nil, err
-		}
-		matches := make([]map[string]any, 0)
-		for mRows.Next() {
-			var id, title, cid, cname string
-			if err := mRows.Scan(&id, &title, &cid, &cname); err != nil {
-				_ = mRows.Close()
-				return nil, err
-			}
-			matches = append(matches, map[string]any{
-				"id":             id,
-				"title":          title,
-				"collectionId":   cid,
-				"collectionName": cname,
-			})
-		}
-		_ = mRows.Close()
-		samples = append(samples, map[string]any{
-			"title":     g.title,
-			"bookCount": g.n,
-			"matches":   matches,
-			"sampled":   len(matches) < g.n,
-		})
-	}
-
-	defaultCheck := healthCheckResult{
-		ID:      "collections.default",
-		Name:    "Shared default collection",
-		Status:  healthError,
-		Message: "Exactly one default collection is required",
-		Meta:    map[string]any{"defaultCount": defaultCount},
-	}
-	if defaultCount == 1 {
-		defaultCheck.Status = healthOK
-		defaultCheck.Message = "One default collection is configured"
-	}
-
-	ownerSample := owners
-	if len(ownerSample) > sampleLimit {
-		ownerSample = ownerSample[:sampleLimit]
-	}
-	ownersCheck := healthCheckResult{
-		ID:      "collections.owners",
-		Name:    "Required collection owners",
-		Status:  healthOK,
-		Message: "Every collection has one matching owner",
-		Sample:  ownerSample,
-	}
-	if len(owners) > 0 {
-		ownersCheck.Status = healthError
-		ownersCheck.Message = fmt.Sprintf("%d collection(s) have inconsistent ownership", len(owners))
-	}
-
-	invalidSample := invalidBooks
-	if len(invalidSample) > sampleLimit {
-		invalidSample = invalidSample[:sampleLimit]
-	}
-	membershipCheck := healthCheckResult{
-		ID:      "collections.membership",
-		Name:    "Exclusive book collections",
-		Status:  healthOK,
-		Message: "Every book belongs to one existing collection",
-		Meta:    map[string]any{"invalidBookCount": len(invalidBooks)},
-		Sample:  invalidSample,
-	}
-	if len(invalidBooks) > 0 {
-		membershipCheck.Status = healthError
-		membershipCheck.Message = fmt.Sprintf("%d book(s) have no valid collection", len(invalidBooks))
-		membershipCheck.HowToFix = "Review the affected entries and restore the matching migration backup or repair their destination before resuming imports."
-	}
-
-	crossCheck := healthCheckResult{
-		ID:      "duplicates.cross-collection-titles",
-		Name:    "Matching titles across collections",
-		Status:  healthOK,
-		Message: "No identical titles found across collections",
-		Meta: map[string]any{
-			"duplicateGroupCount": len(groups),
-			"sampled":             len(groups) > sampleLimit,
-			"complete":            true,
-		},
-		Sample: samples,
-	}
-	if len(groups) > 0 {
-		crossCheck.Status = healthWarn
-		crossCheck.Message = fmt.Sprintf("%d matching title group(s) across collections. Independent entries are allowed.", len(groups))
-		crossCheck.HowToFix = "Review the matching entries. Different editions and independent copies are valid. No automatic merge or deletion is performed."
-	}
-
-	return []healthCheckResult{defaultCheck, ownersCheck, membershipCheck, crossCheck}, nil
 }
 
 func (s *Service) runDeepHealthChecks(
@@ -782,31 +530,6 @@ func (s *Service) runDeepHealthChecks(
 			}
 			_ = oRows.Close()
 
-			colsByBookID := make(map[string][]map[string]any)
-			cRows, err := s.db.QueryContext(ctx, `
-				SELECT cb.book_id, c.id, c.name, c.is_personal
-				FROM collection_books cb
-				INNER JOIN collections c ON c.id = cb.collection_id
-				WHERE cb.book_id IN (`+ph+`)
-			`, args...)
-			if err != nil {
-				return nil, err
-			}
-			for cRows.Next() {
-				var bid, cid, cname string
-				var isPersonal int
-				if err := cRows.Scan(&bid, &cid, &cname, &isPersonal); err != nil {
-					_ = cRows.Close()
-					return nil, err
-				}
-				colsByBookID[bid] = append(colsByBookID[bid], map[string]any{
-					"id":         cid,
-					"name":       cname,
-					"isPersonal": isPersonal != 0,
-				})
-			}
-			_ = cRows.Close()
-
 			for _, p := range samplePairs {
 				for _, side := range []string{"a", "b"} {
 					m := p[side].(map[string]any)
@@ -815,11 +538,6 @@ func (s *Service) runDeepHealthChecks(
 						m["owner"] = owner
 					} else {
 						m["owner"] = nil
-					}
-					if cols, ok := colsByBookID[id]; ok {
-						m["collections"] = cols
-					} else {
-						m["collections"] = []map[string]any{}
 					}
 				}
 			}

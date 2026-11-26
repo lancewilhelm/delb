@@ -29,6 +29,8 @@ const browser = spawn(
     '--remote-debugging-port=0',
     `--user-data-dir=${profile}`,
     '--no-first-run',
+    '--disable-background-networking',
+    '--proxy-server=http://127.0.0.1:1',
     '--no-default-browser-check',
     'about:blank',
   ],
@@ -255,7 +257,19 @@ try {
     mobile: true,
   });
   await click('Reset zoom');
-  await pageReady(1);
+  try {
+    await pageReady(1);
+  } catch (error) {
+    const state = await evaluate(`({
+      page: ${control('Page number')}?.value,
+      zoom: ${control('Reset zoom')}?.textContent.trim(),
+      busy: document.querySelector('[aria-busy]')?.getAttribute('aria-busy'),
+      width: document.querySelector('[data-pdf-page="1"] canvas')?.width,
+    })`);
+    throw new Error(`Phone viewport state: ${JSON.stringify(state)}`, {
+      cause: error,
+    });
+  }
   await until(
     "document.querySelector('canvas').getBoundingClientRect().width <= innerWidth",
   );

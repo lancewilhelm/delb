@@ -29,6 +29,8 @@ const browser = spawn(
     '--remote-debugging-port=0',
     `--user-data-dir=${profile}`,
     '--no-first-run',
+    '--disable-background-networking',
+    '--proxy-server=http://127.0.0.1:1',
     '--no-default-browser-check',
     'about:blank',
   ],
@@ -254,13 +256,7 @@ try {
       'finished',
     );
     pass('changing status removes the book from a mismatched filtered list');
-    await navigate('/');
-    await until(
-      "[...document.querySelectorAll('a')].some(el=>el.textContent.includes('All books'))",
-    );
-    await click(
-      "[...document.querySelectorAll('a')].find(el=>el.textContent.includes('All books'))",
-    );
+    await navigate('/books?status=all');
     await openStatus(title);
     await call('Fetch.enable', {
       patterns: [
@@ -418,14 +414,7 @@ try {
     ['Grid', 'none'],
     ['List', 'none'],
   ]) {
-    await navigate('/');
-    await until(
-      "[...document.querySelectorAll('a')].some(el=>el.textContent.includes('All books'))",
-    );
-    await click(
-      "[...document.querySelectorAll('a')].find(el=>el.textContent.includes('All books'))",
-    );
-    if (filter) await navigate('/books?status=' + filter);
+    await navigate('/books?status=' + (filter ?? 'all'));
     await until(`!!(${scroller})`);
     await click(`document.querySelector('[aria-label="${mode} View"]')`);
     await delay(250);
@@ -489,13 +478,7 @@ try {
         .coverStyle.showReadingStatus === true,
     'badge preference saved',
   );
-  await navigate('/');
-  await until(
-    "[...document.querySelectorAll('a')].some(el=>el.textContent.includes('All books'))",
-  );
-  await click(
-    "[...document.querySelectorAll('a')].find(el=>el.textContent.includes('All books'))",
-  );
+  await navigate('/books?status=all');
   await until(`!!(${scroller})?.querySelector('.cover')`);
   const badgeTitle = await evaluate(
     `(${scroller}).querySelector('.cover').textContent.trim()`,
@@ -549,7 +532,7 @@ try {
         .coverStyle.showReadingStatus === false,
     'badge preference disabled',
   );
-  await navigate('/books');
+  await navigate('/books?status=all');
   await until(`!!(${scroller})?.querySelector('.cover')`);
   assert.equal(
     await evaluate(

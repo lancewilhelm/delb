@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { $fetch } from '~/utils/apiFetch';
-import { computed, onMounted, ref } from 'vue';
+import { ref } from 'vue';
 import SettingsUIGroup from '~/components/Settings/UI/SettingsUIGroup.vue';
-import { chooseBookTarget } from '~/utils/collectionActions';
 // Admin Library Management (Calibre migration)
 //
 // Assumptions:
@@ -77,9 +76,6 @@ type ImportSummary = {
     bookPublisherLinksUpserted: number;
     bookSeriesLinksUpserted: number;
 
-    // collections
-    collectionLinksAdded: number;
-
     coverCandidatesFound: number;
     coverPathsSet: number;
     bookPathsMissingInCalibre: number;
@@ -90,17 +86,6 @@ type ImportSummary = {
 
 type ApiResponse =
   { success: true; data: ImportSummary } | { success: false; message?: string };
-
-type CollectionOption = {
-  id: string;
-  name: string;
-  isDefault?: boolean;
-  role: string | null;
-};
-
-const collectionsLoading = ref(false);
-const collections = ref<CollectionOption[]>([]);
-const selectedCollectionIds = ref<string[]>([]);
 
 const runBusy = ref(false);
 const lastResult = ref<ImportSummary | null>(null);
@@ -115,37 +100,8 @@ const healthBusy = ref(false);
 const healthReport = ref<HealthReport | null>(null);
 const healthErrorMessage = ref<string | null>(null);
 
-const targetCollectionId = computed({
-  get: () => selectedCollectionIds.value[0] ?? '',
-  set: (id: string) => {
-    selectedCollectionIds.value = id ? [id] : [];
-  },
-});
-async function fetchCollections() {
-  collectionsLoading.value = true;
-  try {
-    const response = await $fetch<{
-      data: { collections: CollectionOption[] };
-    }>('/api/collections');
-    collections.value = response.data.collections.filter(
-      (collection) =>
-        collection.role === 'owner' || collection.role === 'editor',
-    );
-    targetCollectionId.value =
-      chooseBookTarget(response.data.collections, null) ?? '';
-  } finally {
-    collectionsLoading.value = false;
-  }
-}
-
-onMounted(fetchCollections);
-
 function formatNumber(n: unknown): string {
   return typeof n === 'number' ? n.toLocaleString() : '—';
-}
-
-function isValidSelectionForImport(): boolean {
-  return selectedCollectionIds.value.length > 0;
 }
 
 function statusClass(status: HealthStatus): string {
@@ -200,7 +156,6 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
   try {
     const body: Record<string, unknown> = {
       action: 'import',
-      collectionIds: selectedCollectionIds.value,
       dryRun: !!opts?.dryRun,
     };
 
@@ -258,39 +213,9 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
           </div>
         </div>
 
-        <div class="space-y-2">
-          <div class="text-sm font-semibold">target collections</div>
-
-          <div v-if="collectionsLoading" class="text-sm opacity-80">
-            Loading collections…
-          </div>
-
-          <div v-else-if="!collections.length" class="text-sm opacity-80">
-            No collections yet.
-          </div>
-
-          <label v-else class="flex flex-col gap-1 text-sm"
-            >Destination collection
-            <select
-              v-model="targetCollectionId"
-              :disabled="runBusy"
-              class="border border-(--contrast-border-color) rounded p-2 bg-(--bg-color)"
-            >
-              <option value="" disabled>Choose one collection</option>
-              <option
-                v-for="collection in collections"
-                :key="collection.id"
-                :value="collection.id"
-              >
-                {{ collection.name
-                }}{{ collection.isDefault ? ' (default)' : '' }}
-              </option>
-            </select>
-            <span class="text-xs opacity-70"
-              >New entries go to this collection. Existing Calibre entries keep
-              their collection.</span
-            >
-          </label>
+        <div class="text-xs opacity-70">
+          New entries go into the shared library. Existing Calibre entries are
+          updated in place.
         </div>
       </div>
     </SettingsUIGroup>
@@ -318,26 +243,11 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
         <div class="flex gap-2">
           <button
             class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
-            :disabled="runBusy || !isValidSelectionForImport()"
+            :disabled="runBusy"
             @click="runCalibreImport({ dryRun: importDryRun })"
           >
             {{ runBusy ? 'Running...' : 'Import from Calibre' }}
           </button>
-
-          <button
-            class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
-            :disabled="runBusy"
-            @click="fetchCollections"
-          >
-            Refresh collections
-          </button>
-        </div>
-
-        <div
-          v-if="!isValidSelectionForImport()"
-          class="text-xs text-(--contrast-error-color)"
-        >
-          Select at least one collection before importing.
         </div>
       </div>
     </SettingsUIGroup>
@@ -556,10 +466,6 @@ async function runCalibreImport(opts?: { dryRun?: boolean }) {
             <div>
               identifiers upserted:
               {{ formatNumber(lastResult.results.identifiersUpserted) }}
-            </div>
-            <div>
-              collection links added:
-              {{ formatNumber(lastResult.results.collectionLinksAdded) }}
             </div>
           </div>
         </div>

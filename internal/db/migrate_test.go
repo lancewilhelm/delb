@@ -78,20 +78,20 @@ func TestMigrateFreshAndIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Migrate fresh: %v", err)
 	}
-	if res.Applied != 22 {
-		t.Fatalf("Applied = %d, want 22", res.Applied)
+	if res.Applied != 23 {
+		t.Fatalf("Applied = %d, want 23", res.Applied)
 	}
 	if res.BackupPath != "" {
 		t.Fatalf("expected no backup on fresh DB, got %q", res.BackupPath)
 	}
 
-	// Verify __drizzle_migrations has 22 rows with Drizzle-compatible hash and timestamp.
+	// Verify __drizzle_migrations has 23 rows with Drizzle-compatible hash and timestamp.
 	var count int
 	if err := opened.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM "__drizzle_migrations"`).Scan(&count); err != nil {
 		t.Fatalf("count __drizzle_migrations: %v", err)
 	}
-	if count != 22 {
-		t.Fatalf("__drizzle_migrations count = %d, want 22", count)
+	if count != 23 {
+		t.Fatalf("__drizzle_migrations count = %d, want 23", count)
 	}
 
 	// Verify hash of first migration matches sha256(0000_medical_naoko.sql).
@@ -110,13 +110,17 @@ func TestMigrateFreshAndIdempotent(t *testing.T) {
 		t.Fatalf("first migration = (%q, %d), want (%q, 1769400740951)", gotHash0, gotWhen0, wantHash0)
 	}
 
-	// Verify collections-model was initialized to exclusive by 0007.
-	var modelState string
-	if err := opened.DB.QueryRowContext(ctx, `SELECT value FROM system_state WHERE key = 'collections-model'`).Scan(&modelState); err != nil {
-		t.Fatalf("read collections-model: %v", err)
+	// Verify 0022 removed the collection model and created the visibility view.
+	var leftover int
+	if err := opened.DB.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE name IN ('collections', 'collection_members', 'collection_books', 'legacy_collection_books')`).Scan(&leftover); err != nil {
+		t.Fatalf("check collection tables: %v", err)
 	}
-	if modelState != "exclusive" {
-		t.Fatalf("collections-model = %q, want exclusive", modelState)
+	if leftover != 0 {
+		t.Fatalf("collection objects remaining = %d, want 0", leftover)
+	}
+	var viewCount int
+	if err := opened.DB.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE type = 'view' AND name = 'visible_books'`).Scan(&viewCount); err != nil || viewCount != 1 {
+		t.Fatalf("visible_books view = (%d, %v), want 1", viewCount, err)
 	}
 
 	// Second run must be a complete no-op with no backup created.

@@ -14,8 +14,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lancewilhelm/delb/internal/books"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/library"
 	"github.com/lancewilhelm/delb/internal/storage"
 )
 
@@ -34,24 +34,23 @@ type calibreImportScanned struct {
 }
 
 type calibreImportResults struct {
-	BooksCreated              int      `json:"booksCreated"`
-	BooksUpdated              int      `json:"booksUpdated"`
-	FilesUpserted             int      `json:"filesUpserted"`
-	AuthorsCreated            int      `json:"authorsCreated"`
-	TagsCreated               int      `json:"tagsCreated"`
-	PublishersCreated         int      `json:"publishersCreated"`
-	SeriesCreated             int      `json:"seriesCreated"`
-	IdentifiersUpserted       int      `json:"identifiersUpserted"`
-	BookAuthorLinksUpserted   int      `json:"bookAuthorLinksUpserted"`
-	BookTagLinksUpserted      int      `json:"bookTagLinksUpserted"`
-	BookPublisherLinksUpserted int     `json:"bookPublisherLinksUpserted"`
-	BookSeriesLinksUpserted   int      `json:"bookSeriesLinksUpserted"`
-	CollectionLinksAdded      int      `json:"collectionLinksAdded"`
-	CoverCandidatesFound      int      `json:"coverCandidatesFound"`
-	CoverPathsSet             int      `json:"coverPathsSet"`
-	BookPathsMissingInCalibre int      `json:"bookPathsMissingInCalibre"`
-	FilesDiscoveredByDirScan  int      `json:"filesDiscoveredByDirScan"`
-	Warnings                  []string `json:"warnings"`
+	BooksCreated               int      `json:"booksCreated"`
+	BooksUpdated               int      `json:"booksUpdated"`
+	FilesUpserted              int      `json:"filesUpserted"`
+	AuthorsCreated             int      `json:"authorsCreated"`
+	TagsCreated                int      `json:"tagsCreated"`
+	PublishersCreated          int      `json:"publishersCreated"`
+	SeriesCreated              int      `json:"seriesCreated"`
+	IdentifiersUpserted        int      `json:"identifiersUpserted"`
+	BookAuthorLinksUpserted    int      `json:"bookAuthorLinksUpserted"`
+	BookTagLinksUpserted       int      `json:"bookTagLinksUpserted"`
+	BookPublisherLinksUpserted int      `json:"bookPublisherLinksUpserted"`
+	BookSeriesLinksUpserted    int      `json:"bookSeriesLinksUpserted"`
+	CoverCandidatesFound       int      `json:"coverCandidatesFound"`
+	CoverPathsSet              int      `json:"coverPathsSet"`
+	BookPathsMissingInCalibre  int      `json:"bookPathsMissingInCalibre"`
+	FilesDiscoveredByDirScan   int      `json:"filesDiscoveredByDirScan"`
+	Warnings                   []string `json:"warnings"`
 }
 
 type calibreImportSummary struct {
@@ -164,10 +163,9 @@ func (s *Service) handleAdminCalibre(w http.ResponseWriter, r *http.Request) {
 	userID := swu.User.ID
 
 	var body struct {
-		Action        string   `json:"action"`
-		CollectionIDs []string `json:"collectionIds"`
-		ImportNew     bool     `json:"importNew"`
-		DryRun        bool     `json:"dryRun"`
+		Action    string `json:"action"`
+		ImportNew bool   `json:"importNew"`
+		DryRun    bool   `json:"dryRun"`
 	}
 	if err := httpapi.DecodeJSON(r, &body, httpapi.DefaultMaxBodyBytes, true); err != nil {
 		httpapi.WriteHTTPError(w, err)
@@ -186,9 +184,8 @@ func (s *Service) handleAdminCalibre(w http.ResponseWriter, r *http.Request) {
 		"dryRun", body.DryRun,
 		"actorUserId", userID,
 	)
-	targetCollectionID, err := collections.ResolveBookTarget(ctx, s.db, userID, body.CollectionIDs != nil, body.CollectionIDs)
-	if err != nil {
-		s.writeErr(w, "POST /api/settings/admin/calibre resolve target failed", err)
+	if err := library.RequireCatalogEditor(ctx, s.db, userID); err != nil {
+		s.writeErr(w, "POST /api/settings/admin/calibre auth failed", err)
 		return
 	}
 
@@ -307,7 +304,7 @@ func (s *Service) handleAdminCalibre(w http.ResponseWriter, r *http.Request) {
 	publisherIDByName := make(map[string]string)
 	seriesIDByName := make(map[string]string)
 
-	upsertAuthor := func(q collections.Queryable, name string, sortName *string) (string, error) {
+	upsertAuthor := func(q library.Queryable, name string, sortName *string) (string, error) {
 		trimmed := strings.TrimSpace(name)
 		if trimmed == "" {
 			return "00000000-0000-0000-0000-000000000000", nil
@@ -342,7 +339,7 @@ func (s *Service) handleAdminCalibre(w http.ResponseWriter, r *http.Request) {
 		return id, nil
 	}
 
-	upsertTag := func(q collections.Queryable, name string) (string, error) {
+	upsertTag := func(q library.Queryable, name string) (string, error) {
 		trimmed := strings.TrimSpace(name)
 		if trimmed == "" {
 			return "00000000-0000-0000-0000-000000000000", nil
@@ -373,7 +370,7 @@ func (s *Service) handleAdminCalibre(w http.ResponseWriter, r *http.Request) {
 		return id, nil
 	}
 
-	upsertPublisher := func(q collections.Queryable, name string) (string, error) {
+	upsertPublisher := func(q library.Queryable, name string) (string, error) {
 		trimmed := strings.TrimSpace(name)
 		if trimmed == "" {
 			return "00000000-0000-0000-0000-000000000000", nil
@@ -404,7 +401,7 @@ func (s *Service) handleAdminCalibre(w http.ResponseWriter, r *http.Request) {
 		return id, nil
 	}
 
-	upsertSeries := func(q collections.Queryable, name string) (string, error) {
+	upsertSeries := func(q library.Queryable, name string) (string, error) {
 		trimmed := strings.TrimSpace(name)
 		if trimmed == "" {
 			return "00000000-0000-0000-0000-000000000000", nil
@@ -479,16 +476,11 @@ func (s *Service) handleAdminCalibre(w http.ResponseWriter, r *http.Request) {
 			}
 			defer func() { _ = tx.Rollback() }()
 
-			if !body.DryRun {
-				if err := collections.LockCollectionChanges(ctx, tx); err != nil {
-					return err
-				}
-			}
-			if err := collections.AssertCollectionEditor(ctx, tx, userID, targetCollectionID); err != nil {
+			if err := library.RequireCatalogEditor(ctx, tx, userID); err != nil {
 				return err
 			}
 			if knownDelbBookID != "" {
-				if _, err := collections.AssertBookEditor(ctx, tx, userID, knownDelbBookID); err != nil {
+				if err := library.AssertBookEditor(ctx, tx, userID, knownDelbBookID); err != nil {
 					return err
 				}
 			}
@@ -614,12 +606,12 @@ func (s *Service) handleAdminCalibre(w http.ResponseWriter, r *http.Request) {
 				if !body.DryRun {
 					if _, err := tx.ExecContext(ctx, `
 						INSERT INTO books (
-							id, collection_id, added_by_user_id, added_at,
+							id, added_by_user_id, added_at,
 							title, sort_title, description, language, published, published_at,
 							publisher_id, series_id, series_index, cover_image_path,
 							created_by_user_id, created_at, updated_at, calibre_book_id
-						) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-					`, delbBookID, targetCollectionID, userID, nowSec,
+						) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+					`, delbBookID, userID, nowSec,
 						bookTitle, sortTitle, description, language, published, publishedAt,
 						publisherID, seriesID, calibreBook.SeriesIndex, coverImagePath,
 						userID, nowSec, nowSec, calibreBook.CalibreBookID); err != nil {
@@ -768,10 +760,6 @@ func (s *Service) handleAdminCalibre(w http.ResponseWriter, r *http.Request) {
 				} else {
 					summary.Results.FilesUpserted++
 				}
-			}
-
-			if knownDelbBookID == "" {
-				summary.Results.CollectionLinksAdded++
 			}
 
 			return tx.Commit()

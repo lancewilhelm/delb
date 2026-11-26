@@ -12,10 +12,10 @@ const FuzzyDuplicateThreshold = 0.82
 const fuzzyDuplicateThreshold = FuzzyDuplicateThreshold
 
 var (
-	nonISBNRe     = regexp.MustCompile(`[^0-9xX]`)
-	apostropheRe  = regexp.MustCompile(`['’]`)
-	nonAlnumSpRe  = regexp.MustCompile(`[^a-z0-9\s]`)
-	dupStopWords  = map[string]struct{}{"the": {}, "a": {}, "an": {}, "and": {}, "of": {}, "to": {}}
+	nonISBNRe    = regexp.MustCompile(`[^0-9xX]`)
+	apostropheRe = regexp.MustCompile(`['’]`)
+	nonAlnumSpRe = regexp.MustCompile(`[^a-z0-9\s]`)
+	dupStopWords = map[string]struct{}{"the": {}, "a": {}, "an": {}, "and": {}, "of": {}, "to": {}}
 )
 
 type IdentifierInput struct {
@@ -25,7 +25,6 @@ type IdentifierInput struct {
 
 type DuplicateCandidateBook struct {
 	ID             string            `json:"id"`
-	CollectionID   string            `json:"collectionId"`
 	Title          string            `json:"title"`
 	CoverImagePath *string           `json:"coverImagePath"`
 	UpdatedAt      *string           `json:"updatedAt"`
@@ -137,7 +136,7 @@ func loadBooksForCandidates(ctx context.Context, db *sql.DB, bookIDs []string) (
 	}
 
 	bRows, err := db.QueryContext(ctx, `
-		SELECT id, collection_id, title, cover_image_path, updated_at
+		SELECT id, title, cover_image_path, updated_at
 		FROM books
 		WHERE id IN (`+ph+`)
 	`, args...)
@@ -146,17 +145,16 @@ func loadBooksForCandidates(ctx context.Context, db *sql.DB, bookIDs []string) (
 	}
 	for bRows.Next() {
 		var (
-			id, cid, title string
-			cover          sql.NullString
-			updatedAt      sql.NullInt64
+			id, title string
+			cover     sql.NullString
+			updatedAt sql.NullInt64
 		)
-		if err := bRows.Scan(&id, &cid, &title, &cover, &updatedAt); err != nil {
+		if err := bRows.Scan(&id, &title, &cover, &updatedAt); err != nil {
 			_ = bRows.Close()
 			return nil, err
 		}
 		out[id] = DuplicateCandidateBook{
 			ID:             id,
-			CollectionID:   cid,
 			Title:          title,
 			CoverImagePath: nullStringPtr(cover),
 			UpdatedAt:      formatNullUnixSecISO(updatedAt),
@@ -251,7 +249,7 @@ func FindPossibleDuplicates(ctx context.Context, db *sql.DB, userID, title, auth
 			SELECT bi.book_id, bi.value
 			FROM book_identifiers bi
 			INNER JOIN books b ON b.id = bi.book_id
-			INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+			INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 			WHERE bi.type = ?
 			LIMIT 2000
 		`, userID, t)
@@ -311,7 +309,7 @@ func FindPossibleDuplicates(ctx context.Context, db *sql.DB, userID, title, auth
 	tRows, err := db.QueryContext(ctx, `
 		SELECT b.id
 		FROM books b
-		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 		WHERE LOWER(b.title) LIKE ?
 		LIMIT 50
 	`, userID, likeArg)

@@ -18,14 +18,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/library"
 	"github.com/lancewilhelm/delb/internal/storage"
 )
 
 type bookRow struct {
 	ID               string
-	CollectionID     string
 	AddedByUserID    sql.NullString
 	AddedAt          int64
 	Title            string
@@ -48,7 +47,7 @@ type bookRow struct {
 }
 
 const bookSelectColumns = `
-	b.id, b.collection_id, b.added_by_user_id, b.added_at,
+	b.id, b.added_by_user_id, b.added_at,
 	b.title, b.sort_title, b.calibre_book_id, b.description,
 	b.published, b.published_at, b.language, b.has_physical_copy,
 	b.has_audiobook_copy, b.pages, b.cover_image_path, b.publisher_id,
@@ -58,7 +57,7 @@ const bookSelectColumns = `
 func scanBookRow(scanner interface{ Scan(dest ...any) error }) (bookRow, error) {
 	var b bookRow
 	err := scanner.Scan(
-		&b.ID, &b.CollectionID, &b.AddedByUserID, &b.AddedAt,
+		&b.ID, &b.AddedByUserID, &b.AddedAt,
 		&b.Title, &b.SortTitle, &b.CalibreBookID, &b.Description,
 		&b.Published, &b.PublishedAt, &b.Language, &b.HasPhysicalCopy,
 		&b.HasAudiobookCopy, &b.Pages, &b.CoverImagePath, &b.PublisherID,
@@ -94,7 +93,6 @@ type bookFileDTO struct {
 
 type bookBaseJSON struct {
 	ID               string   `json:"id"`
-	CollectionID     string   `json:"collectionId"`
 	AddedByUserID    *string  `json:"addedByUserId"`
 	AddedAt          string   `json:"addedAt"`
 	Title            string   `json:"title"`
@@ -119,7 +117,6 @@ type bookBaseJSON struct {
 func (b bookRow) toBaseJSON() bookBaseJSON {
 	return bookBaseJSON{
 		ID:               b.ID,
-		CollectionID:     b.CollectionID,
 		AddedByUserID:    nullStringPtr(b.AddedByUserID),
 		AddedAt:          formatUnixSecISO(b.AddedAt),
 		Title:            b.Title,
@@ -627,7 +624,6 @@ func (s *Service) handleListBooks(w http.ResponseWriter, r *http.Request) {
 	userID := httpapi.SessionFromContext(r.Context()).User.ID
 	q := r.URL.Query()
 
-	collectionID := q.Get("collectionId")
 	idsOnly := q.Get("idsOnly") == "1"
 	maxLimit := 200
 	if idsOnly {
@@ -686,44 +682,13 @@ func (s *Service) handleListBooks(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	memberCollectionIDs, err := getUserMemberCollectionIDs(r.Context(), s.db, userID)
-	if err != nil {
-		s.writeErrWithFallback(w, "GET /api/books memberships failed", "Failed to fetch books", err)
-		return
-	}
-	if len(memberCollectionIDs) == 0 {
-		httpapi.WriteJSON(w, http.StatusOK, map[string]any{
-			"success": true,
-			"data":    map[string]any{"books": []any{}, "nextCursor": nil},
-		})
-		return
-	}
-
-	var targetCollectionIDs []string
-	if collectionID != "" {
-		for _, cid := range memberCollectionIDs {
-			if cid == collectionID {
-				targetCollectionIDs = []string{collectionID}
-				break
-			}
-		}
-	} else {
-		targetCollectionIDs = memberCollectionIDs
-	}
-	if len(targetCollectionIDs) == 0 {
-		httpapi.WriteJSON(w, http.StatusOK, map[string]any{
-			"success": true,
-			"data":    map[string]any{"books": []any{}, "nextCursor": nil},
-		})
-		return
-	}
-
 	ordering := BuildBookSort(sortKey, sortDir, cursor)
 
 	hasStatusFilter := includeNone || len(statuses) > 0
 	var joins strings.Builder
-	joins.WriteString(" INNER JOIN collection_books cb ON cb.book_id = b.id ")
-	args := make([]any, 0, len(targetCollectionIDs)+8)
+	joins.WriteString(" INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ? ")
+	args := make([]any, 0, 12)
+	args = append(args, userID)
 
 	if hasStatusFilter {
 		joins.WriteString(" LEFT JOIN user_book_status ubs ON ubs.book_id = b.id AND ubs.user_id = ? ")
@@ -736,10 +701,6 @@ func (s *Service) handleListBooks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	where := make([]string, 0, 12)
-	where = append(where, "cb.collection_id IN ("+makePlaceholders(len(targetCollectionIDs))+")")
-	for _, cid := range targetCollectionIDs {
-		args = append(args, cid)
-	}
 	if ordering.WhereSQL != "" {
 		where = append(where, ordering.WhereSQL)
 		args = append(args, ordering.WhereArgs...)
@@ -812,8 +773,12 @@ func (s *Service) handleListBooks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	args = append(args, limit+1)
+	whereSQL := ""
+	if len(where) > 0 {
+		whereSQL = ` WHERE ` + strings.Join(where, " AND ")
+	}
 	sqlQuery := `SELECT ` + bookSelectColumns + ` FROM books b ` + joins.String() +
-		` WHERE ` + strings.Join(where, " AND ") +
+		whereSQL +
 		` GROUP BY b.id ORDER BY ` + ordering.OrderSQL + ` LIMIT ?`
 
 	rows, err := s.db.QueryContext(r.Context(), sqlQuery, args...)
@@ -1044,30 +1009,6 @@ func decodeBodyObject(r *http.Request) (map[string]json.RawMessage, error) {
 	return m, nil
 }
 
-// parseCollectionIDsField parses optional `collectionIds` strictly matching resolveBookTarget.
-func parseCollectionIDsField(m map[string]json.RawMessage) (provided bool, ids []string, err error) {
-	raw, exists := m["collectionIds"]
-	if !exists {
-		return false, nil, nil
-	}
-	if strings.TrimSpace(string(raw)) == "null" {
-		return true, nil, httpapi.NewError(http.StatusBadRequest, "Choose exactly one collection")
-	}
-	var arr []json.RawMessage
-	if err := json.Unmarshal(raw, &arr); err != nil {
-		return true, nil, httpapi.NewError(http.StatusBadRequest, "Choose exactly one collection")
-	}
-	out := make([]string, 0, len(arr))
-	for _, item := range arr {
-		var s string
-		if err := json.Unmarshal(item, &s); err != nil || strings.TrimSpace(s) == "" {
-			return true, nil, httpapi.NewError(http.StatusBadRequest, "Choose exactly one collection")
-		}
-		out = append(out, strings.TrimSpace(s))
-	}
-	return true, out, nil
-}
-
 // POST /api/books
 func (s *Service) handleCreateBook(w http.ResponseWriter, r *http.Request) {
 	userID := httpapi.SessionFromContext(r.Context()).User.ID
@@ -1099,14 +1040,8 @@ func (s *Service) handleCreateBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	colProvided, colIDs, err := parseCollectionIDsField(body)
-	if err != nil {
-		httpapi.WriteHTTPError(w, err)
-		return
-	}
-	collectionID, err := collections.ResolveBookTarget(r.Context(), s.db, userID, colProvided, colIDs)
-	if err != nil {
-		s.writeErr(w, "POST /api/books target failed", err)
+	if err := library.RequireCatalogEditor(r.Context(), s.db, userID); err != nil {
+		s.writeErr(w, "POST /api/books auth failed", err)
 		return
 	}
 
@@ -1176,11 +1111,7 @@ func (s *Service) handleCreateBook(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := collections.LockCollectionChanges(r.Context(), tx); err != nil {
-		s.writeErr(w, "POST /api/books lock failed", err)
-		return
-	}
-	if err := collections.AssertCollectionEditor(r.Context(), tx, userID, collectionID); err != nil {
+	if err := library.RequireCatalogEditor(r.Context(), tx, userID); err != nil {
 		s.writeErr(w, "POST /api/books auth failed", err)
 		return
 	}
@@ -1206,12 +1137,12 @@ func (s *Service) handleCreateBook(w http.ResponseWriter, r *http.Request) {
 
 	if _, err := tx.ExecContext(r.Context(), `
 		INSERT INTO books (
-			id, collection_id, added_by_user_id, added_at,
+			id, added_by_user_id, added_at,
 			title, sort_title, description, published, published_at,
 			language, pages, publisher_id, series_id, series_index,
 			created_by_user_id, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, bookID, collectionID, userID, now,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, bookID, userID, now,
 		title, MakeTitleSortKey(title), descOpt.value, pubOpt.value, publishedAt,
 		langOpt.value, pagesOpt.value, publisherID, seriesID, serIdxOpt.value,
 		userID, now, now); err != nil {
@@ -1286,7 +1217,6 @@ func (s *Service) handleCreateBook(w http.ResponseWriter, r *http.Request) {
 	s.logger.InfoContext(r.Context(), "book created",
 		"bookId", bookID,
 		"userId", userID,
-		"collectionId", collectionID,
 	)
 
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
@@ -1312,7 +1242,7 @@ func (s *Service) handleGetBook(w http.ResponseWriter, r *http.Request) {
 	row := s.db.QueryRowContext(r.Context(), `
 		SELECT `+bookSelectColumns+`
 		FROM books b
-		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 		WHERE b.id = ?
 		LIMIT 1
 	`, userID, bookID)
@@ -1482,12 +1412,10 @@ func (s *Service) handleGetBook(w http.ResponseWriter, r *http.Request) {
 		spineRevision = &rev
 	}
 
-	canEdit := false
-	var role string
-	if err := s.db.QueryRowContext(r.Context(), `
-		SELECT role FROM collection_members WHERE collection_id = ? AND user_id = ? LIMIT 1
-	`, book.CollectionID, userID).Scan(&role); err == nil {
-		canEdit = role == "owner" || role == "editor"
+	canEdit, err := library.CanEditCatalog(r.Context(), s.db, userID)
+	if err != nil {
+		s.writeErr(w, "GET /api/books/{id} role failed", err)
+		return
 	}
 
 	type bookDetailJSON struct {
@@ -1560,7 +1488,7 @@ func listBookFilesDTO(ctx context.Context, db *sql.DB, bookID string) ([]bookFil
 }
 
 // ComputeMetadataVersion mirrors server/utils/books/metadata-snapshot.ts metadataVersion.
-func ComputeMetadataVersion(ctx context.Context, q collections.Queryable, bookID string) (string, error) {
+func ComputeMetadataVersion(ctx context.Context, q library.Queryable, bookID string) (string, error) {
 	type bookMetaSnap struct {
 		Title       string   `json:"title"`
 		Description *string  `json:"description"`
@@ -1744,7 +1672,7 @@ func (s *Service) UpdateBookMetadata(
 		err := s.db.QueryRowContext(ctx, `
 			SELECT b.publisher_id, b.series_id
 			FROM books b
-			INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+			INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 			WHERE b.id = ?
 			LIMIT 1
 		`, userID, bookID).Scan(&prevPublisherID, &prevSeriesID)
@@ -1754,7 +1682,7 @@ func (s *Service) UpdateBookMetadata(
 		if err != nil {
 			return err
 		}
-		if _, err := collections.AssertBookEditor(ctx, s.db, userID, bookID); err != nil {
+		if err := library.AssertBookEditor(ctx, s.db, userID, bookID); err != nil {
 			return err
 		}
 
@@ -1848,10 +1776,7 @@ func (s *Service) UpdateBookMetadata(
 		}
 		defer func() { _ = tx.Rollback() }()
 
-		if err := collections.LockCollectionChanges(ctx, tx); err != nil {
-			return err
-		}
-		if _, err := collections.AssertBookEditor(ctx, tx, userID, bookID); err != nil {
+		if err := library.AssertBookEditor(ctx, tx, userID, bookID); err != nil {
 			return err
 		}
 		if authorize != nil {
@@ -2090,10 +2015,7 @@ func (s *Service) UpdateBookMetadata(
 
 		if shouldMoveStorage {
 			if _, moveErr := storage.MoveBookStorageToCanonical(ctx, s.db, s.libraryDir, bookID, func(tx *sql.Tx) error {
-				if err := collections.LockCollectionChanges(ctx, tx); err != nil {
-					return err
-				}
-				if _, err := collections.AssertBookEditor(ctx, tx, userID, bookID); err != nil {
+				if err := library.AssertBookEditor(ctx, tx, userID, bookID); err != nil {
 					return err
 				}
 				if authorize != nil {
@@ -2138,7 +2060,7 @@ func (s *Service) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
-func queryStringColumn(ctx context.Context, q collections.Queryable, query string, args ...any) ([]string, error) {
+func queryStringColumn(ctx context.Context, q library.Queryable, query string, args ...any) ([]string, error) {
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -2180,7 +2102,7 @@ func (s *Service) handleDeleteBook(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		if _, err := collections.AssertBookEditor(r.Context(), s.db, userID, bookID); err != nil {
+		if err := library.AssertBookEditor(r.Context(), s.db, userID, bookID); err != nil {
 			return err
 		}
 
@@ -2226,10 +2148,7 @@ func (s *Service) handleDeleteBook(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			defer func() { _ = tx.Rollback() }()
-			if err := collections.LockCollectionChanges(r.Context(), tx); err != nil {
-				return err
-			}
-			if _, err := collections.AssertBookEditor(r.Context(), tx, userID, bookID); err != nil {
+			if err := library.AssertBookEditor(r.Context(), tx, userID, bookID); err != nil {
 				return err
 			}
 			if operationID != "" {

@@ -420,9 +420,6 @@ func (s *Service) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, csrfErr)
 		return
 	}
-	if !s.requireCollectionModel(w, r) {
-		return
-	}
 	swu, ok := s.requireSession(w, r)
 	if !ok {
 		return
@@ -516,9 +513,6 @@ func (s *Service) handleChangeEmail(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, csrfErr)
 		return
 	}
-	if !s.requireCollectionModel(w, r) {
-		return
-	}
 	swu, ok := s.requireSession(w, r)
 	if !ok {
 		return
@@ -557,9 +551,6 @@ func (s *Service) handleChangeEmail(w http.ResponseWriter, r *http.Request) {
 func (s *Service) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	if csrfErr := ValidateCSRF(r, s.baseURL, s.trustedOrigins); csrfErr != nil {
 		writeAPIError(w, csrfErr)
-		return
-	}
-	if !s.requireCollectionModel(w, r) {
 		return
 	}
 	swu, ok := s.requireSession(w, r)
@@ -647,9 +638,6 @@ func (s *Service) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) 
 		writeAPIError(w, csrfErr)
 		return
 	}
-	if !s.requireCollectionModel(w, r) {
-		return
-	}
 	actor, ok := s.requireAdminSession(w, r)
 	if !ok {
 		return
@@ -689,7 +677,7 @@ func (s *Service) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) 
 	if requestedRole == nil && body.Data != nil {
 		requestedRole = body.Data["role"]
 	}
-	finalRole := "user"
+	finalRole := "reader"
 	if requestedRole != nil {
 		parsed, roleErr := parseAllowedAdminAssignableRole(requestedRole)
 		if roleErr != nil {
@@ -739,9 +727,6 @@ func (s *Service) handleAdminRemoveUser(w http.ResponseWriter, r *http.Request) 
 		writeAPIError(w, csrfErr)
 		return
 	}
-	if !s.requireCollectionModel(w, r) {
-		return
-	}
 	swu, ok := s.requireAdminSession(w, r)
 	if !ok {
 		return
@@ -774,9 +759,6 @@ func (s *Service) handleAdminRemoveUser(w http.ResponseWriter, r *http.Request) 
 func (s *Service) handleAdminSetRole(w http.ResponseWriter, r *http.Request) {
 	if csrfErr := ValidateCSRF(r, s.baseURL, s.trustedOrigins); csrfErr != nil {
 		writeAPIError(w, csrfErr)
-		return
-	}
-	if !s.requireCollectionModel(w, r) {
 		return
 	}
 	actor, ok := s.requireAdminSession(w, r)
@@ -822,9 +804,6 @@ func (s *Service) handleAdminBanUser(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, csrfErr)
 		return
 	}
-	if !s.requireCollectionModel(w, r) {
-		return
-	}
 	swu, ok := s.requireAdminSession(w, r)
 	if !ok {
 		return
@@ -862,9 +841,6 @@ func (s *Service) handleAdminUnbanUser(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, csrfErr)
 		return
 	}
-	if !s.requireCollectionModel(w, r) {
-		return
-	}
 	actor, ok := s.requireAdminSession(w, r)
 	if !ok {
 		return
@@ -898,9 +874,6 @@ func (s *Service) handleAdminUnbanUser(w http.ResponseWriter, r *http.Request) {
 func (s *Service) handleAdminUpdateUser(w http.ResponseWriter, r *http.Request) {
 	if csrfErr := ValidateCSRF(r, s.baseURL, s.trustedOrigins); csrfErr != nil {
 		writeAPIError(w, csrfErr)
-		return
-	}
-	if !s.requireCollectionModel(w, r) {
 		return
 	}
 	swu, ok := s.requireAdminSession(w, r)
@@ -1038,9 +1011,6 @@ func (s *Service) handleAdminSetUserPassword(w http.ResponseWriter, r *http.Requ
 		writeAPIError(w, csrfErr)
 		return
 	}
-	if !s.requireCollectionModel(w, r) {
-		return
-	}
 	actor, ok := s.requireAdminSession(w, r)
 	if !ok {
 		return
@@ -1080,23 +1050,6 @@ func (s *Service) handleAdminSetUserPassword(w http.ResponseWriter, r *http.Requ
 	)
 
 	writeJSON(w, http.StatusOK, map[string]bool{"status": true})
-}
-
-func (s *Service) requireCollectionModel(w http.ResponseWriter, r *http.Request) bool {
-	state, err := s.store.CollectionModelState(r.Context())
-	if err != nil {
-		s.logger.Error("failed to check collections-model state", "error", err)
-		writeInternalError(w)
-		return false
-	}
-	if state != "exclusive" {
-		writeAPIError(w, &APIError{
-			Status:  http.StatusServiceUnavailable,
-			Message: collectionMigrationMessage,
-		})
-		return false
-	}
-	return true
 }
 
 func (s *Service) requireSession(w http.ResponseWriter, r *http.Request) (*SessionWithUser, bool) {
@@ -1181,7 +1134,7 @@ func parseRoleInput(raw any) (string, *APIError) {
 		return "", &APIError{Status: http.StatusBadRequest, Code: "INVALID_ROLE_TYPE", Message: "Role is required"}
 	}
 	for _, r := range roles {
-		if r != "user" && r != "admin" && r != "owner" {
+		if r != "reader" && r != "editor" && r != "admin" && r != "owner" {
 			return "", &APIError{
 				Status:  http.StatusBadRequest,
 				Code:    "YOU_ARE_NOT_ALLOWED_TO_SET_NON_EXISTENT_VALUE",
@@ -1198,12 +1151,12 @@ func parseAllowedAdminAssignableRole(raw any) (string, *APIError) {
 		return "", err
 	}
 	if roleIncludesOwner(roleStr) {
-		return "user", nil
+		return "reader", nil
 	}
-	if roleStr == "admin" || roleStr == "user" {
+	if roleStr == "admin" || roleStr == "editor" || roleStr == "reader" {
 		return roleStr, nil
 	}
-	return "user", nil
+	return "reader", nil
 }
 
 func validatePasswordLength(password string) *APIError {

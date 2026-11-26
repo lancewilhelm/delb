@@ -122,7 +122,7 @@ onMounted(() => {
         >
         <label class="flex gap-2 items-start"
           ><input v-model="canEditMetadata" type="checkbox" class="mt-1" />
-          Allow editing shared book metadata in collections I can edit</label
+          Allow editing shared book metadata when my role permits it</label
         >
         <button
           :disabled="busy || !name.trim()"

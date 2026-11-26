@@ -19,7 +19,7 @@ import (
 	"github.com/lancewilhelm/delb/internal/storage"
 )
 
-func setupDropboxDB(t *testing.T) (*sql.DB, string, string, string, string) {
+func setupDropboxDB(t *testing.T) (*sql.DB, string, string, string) {
 	t.Helper()
 	ctx := context.Background()
 	tmp := t.TempDir()
@@ -39,7 +39,6 @@ func setupDropboxDB(t *testing.T) (*sql.DB, string, string, string, string) {
 	now := time.Now().UTC().Unix()
 	ownerID := uuid.NewString()
 	outsiderID := uuid.NewString()
-	colID := uuid.NewString()
 
 	for _, stmt := range []struct {
 		q    string
@@ -50,16 +49,8 @@ func setupDropboxDB(t *testing.T) (*sql.DB, string, string, string, string) {
 			[]any{ownerID, now, now},
 		},
 		{
-			`INSERT INTO users (id, name, email, email_verified, created_at, updated_at, role) VALUES (?, 'Outsider', 'outsider@example.invalid', 1, ?, ?, 'user')`,
+			`INSERT INTO users (id, name, email, email_verified, created_at, updated_at, role) VALUES (?, 'Outsider', 'outsider@example.invalid', 1, ?, ?, 'reader')`,
 			[]any{outsiderID, now, now},
-		},
-		{
-			`INSERT INTO collections (id, name, owner_user_id, is_default, is_personal, created_at, updated_at) VALUES (?, 'Default', ?, 1, 0, ?, ?)`,
-			[]any{colID, ownerID, now, now},
-		},
-		{
-			`INSERT OR IGNORE INTO collection_members (collection_id, user_id, role, created_at) VALUES (?, ?, 'owner', ?)`,
-			[]any{colID, ownerID, now},
 		},
 	} {
 		if _, err := opened.DB.Exec(stmt.q, stmt.args...); err != nil {
@@ -67,27 +58,13 @@ func setupDropboxDB(t *testing.T) (*sql.DB, string, string, string, string) {
 		}
 	}
 
-	return opened.DB, tmp, libDir, ownerID, colID
+	return opened.DB, tmp, libDir, ownerID
 }
 
 func TestDropboxFreshIngestAndClaimRecovery(t *testing.T) {
-	sqlDB, baseDir, libDir, ownerID, defaultColID := setupDropboxDB(t)
+	sqlDB, baseDir, libDir, ownerID := setupDropboxDB(t)
 	ctx := context.Background()
-
-	// Create a second retained collection
 	now := time.Now().UTC().Unix()
-	retainedColID := uuid.NewString()
-	if _, err := sqlDB.Exec(`
-		INSERT INTO collections (id, name, owner_user_id, is_default, is_personal, created_at, updated_at)
-		VALUES (?, 'Retained', ?, 0, 0, ?, ?)
-	`, retainedColID, ownerID, now, now); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := sqlDB.Exec(`
-		INSERT OR IGNORE INTO collection_members (collection_id, user_id, role, created_at) VALUES (?, ?, 'owner', ?)
-	`, retainedColID, ownerID, now); err != nil {
-		t.Fatal(err)
-	}
 
 	var outsiderID string
 	_ = sqlDB.QueryRow(`SELECT id FROM users WHERE email = 'outsider@example.invalid'`).Scan(&outsiderID)
@@ -98,7 +75,6 @@ func TestDropboxFreshIngestAndClaimRecovery(t *testing.T) {
 			"enabled":              true,
 			"pollIntervalMs":       50,
 			"stablePassesRequired": 2,
-			"targetCollectionId":   defaultColID,
 			"targetUserId":         ownerID,
 		},
 	})
@@ -113,12 +89,13 @@ func TestDropboxFreshIngestAndClaimRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 1. Retained claim (must go to retainedColID, NOT defaultColID)
+	// 1. Retained claims keep their importing user. A legacy claim that still
+	// carries collectionIds is accepted; a reader cannot import books.
 	claimID := uuid.NewString()
 	deniedID := uuid.NewString()
 	unknownID := uuid.NewString()
-	claimTargetJSON, _ := json.Marshal(map[string]any{"ownerUserId": ownerID, "collectionIds": []string{retainedColID}})
-	deniedTargetJSON, _ := json.Marshal(map[string]any{"ownerUserId": outsiderID, "collectionIds": []string{retainedColID}})
+	claimTargetJSON, _ := json.Marshal(map[string]any{"ownerUserId": ownerID, "collectionIds": []string{"legacy-collection"}})
+	deniedTargetJSON, _ := json.Marshal(map[string]any{"ownerUserId": outsiderID})
 	if _, err := sqlDB.Exec(`
 		INSERT INTO system_state (key, value) VALUES (?, ?), (?, ?)
 	`, "dropbox-claim:"+claimID, string(claimTargetJSON), "dropbox-claim:"+deniedID, string(deniedTargetJSON)); err != nil {
@@ -156,13 +133,13 @@ func TestDropboxFreshIngestAndClaimRecovery(t *testing.T) {
 		t.Fatalf("Fresh.pdf should wait for 2 stable passes, got %d", freshCount)
 	}
 
-	// Verify retained claim landed in retainedColID with verified bytes
-	var retainedBookID, gotColID string
-	if err := sqlDB.QueryRow(`SELECT id, collection_id FROM books WHERE title = 'Retained'`).Scan(&retainedBookID, &gotColID); err != nil {
+	// Verify the retained claim landed in the library with verified bytes
+	var retainedBookID, addedBy string
+	if err := sqlDB.QueryRow(`SELECT id, added_by_user_id FROM books WHERE title = 'Retained'`).Scan(&retainedBookID, &addedBy); err != nil {
 		t.Fatalf("retained book missing: %v", err)
 	}
-	if gotColID != retainedColID {
-		t.Fatalf("retained claim went to %s, want %s", gotColID, retainedColID)
+	if addedBy != ownerID {
+		t.Fatalf("retained claim added by %s, want %s", addedBy, ownerID)
 	}
 	var relPath string
 	_ = sqlDB.QueryRow(`SELECT relative_path FROM book_files WHERE book_id = ?`, retainedBookID).Scan(&relPath)
@@ -188,25 +165,25 @@ func TestDropboxFreshIngestAndClaimRecovery(t *testing.T) {
 		t.Fatalf("expected 2 failed error logs, got %d: %v", len(reasons), reasons)
 	}
 	joined := strings.Join(reasons, "\n")
-	if !strings.Contains(joined, "retained destination") || !strings.Contains(joined, "editor access") {
+	if !strings.Contains(joined, "retained importing user") || !strings.Contains(joined, "Editor or administrator access") {
 		t.Fatalf("unexpected failed reasons: %s", joined)
 	}
 
-	// Pass 2: Fresh.pdf now reaches 2 stable passes and is ingested into defaultColID
+	// Pass 2: Fresh.pdf now reaches 2 stable passes and is ingested for the target user
 	if err := watcher.ScanOnce(ctx); err != nil {
 		t.Fatalf("ScanOnce pass 2: %v", err)
 	}
-	var freshColID string
-	if err := sqlDB.QueryRow(`SELECT collection_id FROM books WHERE title = 'Fresh'`).Scan(&freshColID); err != nil {
+	var freshAddedBy string
+	if err := sqlDB.QueryRow(`SELECT added_by_user_id FROM books WHERE title = 'Fresh'`).Scan(&freshAddedBy); err != nil {
 		t.Fatalf("fresh book missing after pass 2: %v", err)
 	}
-	if freshColID != defaultColID {
-		t.Fatalf("fresh book went to %s, want %s", freshColID, defaultColID)
+	if freshAddedBy != ownerID {
+		t.Fatalf("fresh book added by %s, want %s", freshAddedBy, ownerID)
 	}
 }
 
 func TestDropboxWatcherCleanShutdown(t *testing.T) {
-	sqlDB, baseDir, libDir, _, _ := setupDropboxDB(t)
+	sqlDB, baseDir, libDir, _ := setupDropboxDB(t)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	gate := storage.StartRecovery(ctx, sqlDB, libDir, slog.New(slog.NewTextHandler(io.Discard, nil)))

@@ -72,32 +72,29 @@ function write<T>(key: string, data: T) {
   writeStored(key, entry);
 }
 
-const overviewKey = (userId: string, scope: string) =>
-  `${userId}::${scope || 'all'}::overview`;
+const overviewKey = (userId: string) => `${userId}::overview`;
 const shelvesKey = (userId: string) => `${userId}::shelves`;
 
 /**
- * Last dashboard overview for this user and collection scope, so returning to
- * the dashboard paints immediately while fresh data loads.
+ * Last dashboard overview for this user, so returning to the dashboard paints
+ * immediately while fresh data loads.
  */
 export function readDashboardCache(
   userId: string | undefined | null,
-  scope: string,
 ): DashboardOverview | null {
   const uid = userId?.trim();
-  return uid ? read<DashboardOverview>(overviewKey(uid, scope)) : null;
+  return uid ? read<DashboardOverview>(overviewKey(uid)) : null;
 }
 
 export function writeDashboardCache(
   userId: string | undefined | null,
-  scope: string,
   data: DashboardOverview,
 ) {
   const uid = userId?.trim();
-  if (uid) write(overviewKey(uid, scope), data);
+  if (uid) write(overviewKey(uid), data);
 }
 
-/** Personal shelves are not collection-scoped: one entry per user. */
+/** Personal shelves: one entry per user. */
 export function readShelvesCache(
   userId: string | undefined | null,
 ): DashboardShelfSummary[] | null {

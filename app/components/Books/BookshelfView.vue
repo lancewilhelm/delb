@@ -3,7 +3,16 @@ import { useAuth } from '~/composables/useAuth';
 import { useUserSettingsStore } from '~/stores/userSettings';
 import { $fetch } from '~/utils/apiFetch';
 import { navigateTo } from '~/utils/navigation';
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, toRaw, watch } from 'vue';
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  toRaw,
+  watch,
+} from 'vue';
 import { onBeforeRouteLeave } from 'vue-router';
 import BookshelfSpine from './BookshelfSpine.vue';
 import BookshelfBookcase from './BookshelfBookcase.vue';
@@ -46,13 +55,12 @@ defineOptions({ name: 'BookshelfView' });
 const userSettingsStore = useUserSettingsStore();
 const props = defineProps<{
   endpoint: string;
-  collectionId?: string;
   personalShelfId?: string;
 }>();
 const shelfPath = computed(() =>
   props.personalShelfId
     ? `/api/shelves/${encodeURIComponent(props.personalShelfId)}`
-    : `/api/collections/${encodeURIComponent(props.collectionId!)}/bookshelf`,
+    : '/api/library/bookshelf',
 );
 type BooksResponse = {
   success?: boolean;
@@ -183,9 +191,10 @@ const pictureDrag = ref<{
   previewX: number;
   previewY: number;
 } | null>(null);
-const picturePath = computed(
-  () =>
-    `/api/bookshelf-pictures/${props.personalShelfId ? 'personal' : 'collection'}/${encodeURIComponent(props.personalShelfId ?? props.collectionId ?? '')}`,
+const picturePath = computed(() =>
+  props.personalShelfId
+    ? `/api/bookshelf-pictures/personal/${encodeURIComponent(props.personalShelfId)}`
+    : '/api/bookshelf-pictures/library/main',
 );
 const zoom = ref(1);
 const MIN_ZOOM = 0.5;
@@ -389,10 +398,7 @@ function errorText(error: unknown) {
   return error instanceof Error ? error.message : 'Please try again.';
 }
 
-async function fetchAll(
-  endpoint: string,
-  collectionId?: string,
-): Promise<Pick<BookViewBook, 'id'>[]> {
+async function fetchAll(endpoint: string): Promise<Pick<BookViewBook, 'id'>[]> {
   const books: Pick<BookViewBook, 'id'>[] = [];
   let cursor: string | null = null;
   const seen = new Set<string>();
@@ -404,7 +410,6 @@ async function fetchAll(
         idsOnly: '1',
         sort: 'dateAdded',
         sortDir: 'asc',
-        ...(collectionId ? { collectionId } : {}),
         ...(cursor ? { cursor } : {}),
       },
     });
@@ -430,18 +435,11 @@ async function loadMatches() {
       props.endpoint ===
         `/api/books?shelfId=${encodeURIComponent(props.personalShelfId)}`)
   ) {
-    matches.value = new Set(
-      catalog.value
-        .filter(
-          (book) =>
-            !props.collectionId || book.collectionId === props.collectionId,
-        )
-        .map((book) => book.id),
-    );
+    matches.value = new Set(catalog.value.map((book) => book.id));
     return;
   }
   try {
-    const books = await fetchAll(props.endpoint, props.collectionId);
+    const books = await fetchAll(props.endpoint);
     if (current === generation)
       matches.value = new Set(books.map((book) => book.id));
   } catch (error) {
@@ -605,7 +603,7 @@ function unloadWarning(event: BeforeUnloadEvent) {
   }
 }
 watch(
-  () => [props.endpoint, props.collectionId, props.personalShelfId],
+  () => [props.endpoint, props.personalShelfId],
   () => {
     if (arrangement.value) void loadMatches();
   },
@@ -2089,7 +2087,7 @@ const lastOtherBookcaseId = computed(
         </button>
       </div>
       <p v-if="personalShelfId && !bookFor(selected).canResize">
-        Only an editor of this book's collection can change its size.
+        Only an editor or admin can change its size.
       </p>
       <div
         v-if="

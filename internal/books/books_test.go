@@ -24,7 +24,6 @@ import (
 	"github.com/lancewilhelm/delb"
 	"github.com/lancewilhelm/delb/internal/auth"
 	"github.com/lancewilhelm/delb/internal/books"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/db"
 	"github.com/lancewilhelm/delb/internal/httpapi"
 )
@@ -182,12 +181,6 @@ func TestBooksEndToEndHTTP(t *testing.T) {
 		Secret: "books-test-secret-0123456789abcdef0123456789",
 		Logger: discard,
 	})
-	collectionsSvc := collections.NewService(collections.ServiceOptions{
-		DB:          opened.DB,
-		AuthService: authSvc,
-		LibraryDir:  libDir,
-		Logger:      discard,
-	})
 	booksSvc := books.NewService(books.ServiceOptions{
 		DB:          opened.DB,
 		AuthService: authSvc,
@@ -199,7 +192,7 @@ func TestBooksEndToEndHTTP(t *testing.T) {
 		DB:          opened.DB,
 		Logger:      discard,
 		AuthService: authSvc,
-		Services:    []httpapi.RouteRegistrar{collectionsSvc, booksSvc},
+		Services:    []httpapi.RouteRegistrar{booksSvc},
 	})
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
@@ -448,7 +441,7 @@ func TestBooksEndToEndHTTP(t *testing.T) {
 	}
 }
 
-func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
+func TestDashboardCountsFollowTagVisibility(t *testing.T) {
 	ctx := context.Background()
 	tmp := t.TempDir()
 	dbPath := filepath.Join(tmp, "dashboard-tbr.db")
@@ -468,12 +461,6 @@ func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
 		Secret: "dashboard-tbr-secret-0123456789abcdef0123456789",
 		Logger: discard,
 	})
-	collectionsSvc := collections.NewService(collections.ServiceOptions{
-		DB:          opened.DB,
-		AuthService: authSvc,
-		LibraryDir:  libDir,
-		Logger:      discard,
-	})
 	booksSvc := books.NewService(books.ServiceOptions{
 		DB:          opened.DB,
 		AuthService: authSvc,
@@ -485,7 +472,7 @@ func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
 		DB:          opened.DB,
 		Logger:      discard,
 		AuthService: authSvc,
-		Services:    []httpapi.RouteRegistrar{collectionsSvc, booksSvc},
+		Services:    []httpapi.RouteRegistrar{booksSvc},
 	})
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
@@ -526,23 +513,38 @@ func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
 		t.Fatalf("sign-up status = %d", resp.StatusCode)
 	}
 
-	createCollection := func(name string) string {
+	// Tag visibility rules scope the dashboard. Rules never apply to
+	// administrators, so the test demotes the account while a rule is active.
+	allowOnly := func(tag string) {
 		t.Helper()
-		r, body := doJSON(http.MethodPost, "/api/collections", map[string]any{"name": name})
-		if r.StatusCode != http.StatusOK {
-			t.Fatalf("create collection %q status = %d body = %v", name, r.StatusCode, body)
+		for _, stmt := range []string{
+			`UPDATE users SET role = 'editor' WHERE email = 'reader@example.test'`,
+			`DELETE FROM user_tag_rules`,
+			`INSERT OR IGNORE INTO tags (id, name, created_at, updated_at) VALUES ('rule-` + tag + `', '` + tag + `', 0, 0)`,
+			`INSERT INTO user_tag_rules (user_id, tag_id, mode, created_at)
+			 SELECT u.id, t.id, 'allow', 0 FROM users u, tags t WHERE u.email = 'reader@example.test' AND t.name = '` + tag + `'`,
+		} {
+			if _, err := opened.DB.ExecContext(ctx, stmt); err != nil {
+				t.Fatalf("allowOnly %q: %v", tag, err)
+			}
 		}
-		data := body["data"].(map[string]any)
-		col := data["collection"].(map[string]any)
-		return col["id"].(string)
+	}
+	clearRules := func() {
+		t.Helper()
+		if _, err := opened.DB.ExecContext(ctx, `DELETE FROM user_tag_rules`); err != nil {
+			t.Fatalf("clear rules: %v", err)
+		}
+		if _, err := opened.DB.ExecContext(ctx, `UPDATE users SET role = 'owner' WHERE email = 'reader@example.test'`); err != nil {
+			t.Fatalf("restore owner: %v", err)
+		}
 	}
 
-	createBook := func(title, collectionID, status string) string {
+	createBook := func(title, tag, status string) string {
 		t.Helper()
 		r, body := doJSON(http.MethodPost, "/api/books", map[string]any{
-			"title":         title,
-			"authors":       []string{"Test Author"},
-			"collectionIds": []string{collectionID},
+			"title":   title,
+			"authors": []string{"Test Author"},
+			"tags":    []string{tag},
 		})
 		if r.StatusCode != http.StatusOK {
 			t.Fatalf("create book %q status = %d body = %v", title, r.StatusCode, body)
@@ -559,8 +561,8 @@ func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
 		return id
 	}
 
-	colA := createCollection("Collection A")
-	colB := createCollection("Collection B")
+	colA := "shelf-a"
+	colB := "shelf-b"
 
 	createBook("A TBR 1", colA, "to_be_read")
 	createBook("A TBR 2", colA, "to_be_read")
@@ -595,17 +597,23 @@ func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
 		}
 	}
 
-	// All accessible collections (no collectionId): TBR count spans all accessible collections.
+	// No rules: TBR count spans the whole library.
 	assertDashboard("/api/dashboard?shelf=tbr", 5, 3, 1, 1, 3)
 
-	// Collection A: TBR count matches Collection A only (2), not global (3).
-	assertDashboard("/api/dashboard?shelf=tbr&collectionId="+colA, 3, 2, 1, 0, 2)
+	// Allowed to see shelf-a only: TBR count matches shelf-a (2), not global (3).
+	allowOnly(colA)
+	assertDashboard("/api/dashboard?shelf=tbr", 3, 2, 1, 0, 2)
 
-	// Collection B: TBR count matches Collection B only (1), not global (3).
-	assertDashboard("/api/dashboard?shelf=tbr&collectionId="+colB, 2, 1, 0, 1, 1)
+	// Allowed to see shelf-b only: TBR count matches shelf-b (1), not global (3).
+	allowOnly(colB)
+	assertDashboard("/api/dashboard?shelf=tbr", 2, 1, 0, 1, 1)
 
-	// Unknown / inaccessible collection returns 0 for all counts including to_be_read.
-	assertDashboard("/api/dashboard?shelf=tbr&collectionId=nonexistent-collection", 0, 0, 0, 0, 0)
+	// An allow rule on a tag that no book has hides everything.
+	allowOnly("nothing-tagged")
+	assertDashboard("/api/dashboard?shelf=tbr", 0, 0, 0, 0, 0)
+	// The legacy collectionId parameter no longer changes the scope.
+	clearRules()
+	assertDashboard("/api/dashboard?shelf=tbr&collectionId=legacy", 5, 3, 1, 1, 3)
 
 	// Overview: counts, the recent-cover wall and every status preview share one scope.
 	assertOverview := func(path string, wantTotal, wantRecent int, wantLists map[string][]string) {
@@ -671,11 +679,14 @@ func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
 		"to_be_read": {"A TBR 1", "A TBR 2", "B TBR 1"},
 		"finished":   {"B Finished"},
 	})
-	assertOverview("/api/dashboard/overview?collectionId="+colA, 3, 3, map[string][]string{
+	allowOnly(colA)
+	assertOverview("/api/dashboard/overview", 3, 3, map[string][]string{
 		"reading":    {"A Reading"},
 		"to_be_read": {"A TBR 1", "A TBR 2"},
 	})
-	assertOverview("/api/dashboard/overview?collectionId=nonexistent-collection", 0, 0, map[string][]string{})
+	allowOnly("nothing-tagged")
+	assertOverview("/api/dashboard/overview", 0, 0, map[string][]string{})
+	clearRules()
 
 	// The reader's pile size sets every sample's size.
 	_, sized := doJSON(http.MethodGet, "/api/dashboard/overview?pile=2", nil)
@@ -709,9 +720,11 @@ func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
 	if titles, next := recentPage("/api/dashboard/recent?offset=3"); len(titles) != 2 || next != nil {
 		t.Fatalf("recent offset=3 = %v next=%v, want 2 books and no next page", titles, next)
 	}
-	if titles, _ := recentPage("/api/dashboard/recent?offset=0&collectionId=" + colB); len(titles) != 2 {
-		t.Fatalf("recent in collection B = %v, want 2 books", titles)
+	allowOnly(colB)
+	if titles, _ := recentPage("/api/dashboard/recent?offset=0"); len(titles) != 2 {
+		t.Fatalf("recent with shelf-b rule = %v, want 2 books", titles)
 	}
+	clearRules()
 	for _, bad := range []string{"-1", "x", "01"} {
 		if r, _ := doJSON(http.MethodGet, "/api/dashboard/recent?offset="+bad, nil); r.StatusCode != http.StatusBadRequest {
 			t.Fatalf("recent offset=%s status = %d, want 400", bad, r.StatusCode)

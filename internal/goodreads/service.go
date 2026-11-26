@@ -16,8 +16,8 @@ import (
 	"github.com/lancewilhelm/delb/internal/auth"
 	"github.com/lancewilhelm/delb/internal/books"
 	"github.com/lancewilhelm/delb/internal/bookshelf"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/library"
 )
 
 const (
@@ -221,10 +221,8 @@ func (s *Service) buildPreview(ctx context.Context, userID string, rows []Row) (
 }
 
 type createBooksRequest struct {
-	CollectionID string `json:"collectionId"`
-	Enrich       bool   `json:"enrich"`
-	AllowShared  bool   `json:"allowShared"`
-	Rows         []Row  `json:"rows"`
+	Enrich bool  `json:"enrich"`
+	Rows   []Row `json:"rows"`
 }
 
 // CreatedBook reports the catalog entry for one row.
@@ -249,19 +247,11 @@ func (s *Service) handleCreateBooks(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Send 1 to %d books per request.", maxCreateBatch))
 		return
 	}
-	collectionID, err := collections.ResolveBookTarget(r.Context(), s.db, userID, true, []string{strings.TrimSpace(req.CollectionID)})
-	if err != nil {
-		s.writeErr(w, "POST /api/import/goodreads/books target failed", err)
+	if err := library.RequireCatalogEditor(r.Context(), s.db, userID); err != nil {
+		s.writeErr(w, "POST /api/import/goodreads/books auth failed", err)
 		return
 	}
-
-	if !req.AllowShared {
-		if err := collections.AssertCollectionPrivate(r.Context(), s.db, userID, collectionID); err != nil {
-			s.writeErr(w, "POST /api/import/goodreads/books privacy check failed", err)
-			return
-		}
-	}
-	options := books.ImportedBookOptions{Enrich: req.Enrich, AllowShared: req.AllowShared}
+	options := books.ImportedBookOptions{Enrich: req.Enrich}
 
 	results := make([]CreatedBook, 0, len(req.Rows))
 	for _, row := range req.Rows {
@@ -280,7 +270,7 @@ func (s *Service) handleCreateBooks(w http.ResponseWriter, r *http.Request) {
 			results = append(results, res)
 			continue
 		}
-		created, err := s.books.CreateImportedBook(r.Context(), userID, collectionID, importedBookFromRow(row), options)
+		created, err := s.books.CreateImportedBook(r.Context(), userID, importedBookFromRow(row), options)
 		if err != nil {
 			var httpErr *httpapi.HTTPError
 			if errors.As(err, &httpErr) {
@@ -309,7 +299,7 @@ func (s *Service) findByGoodreadsID(ctx context.Context, userID, goodreadsID str
 	err := s.db.QueryRowContext(ctx, `
 		SELECT b.id FROM book_identifiers bi
 		INNER JOIN books b ON b.id = bi.book_id
-		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 		WHERE bi.type = 'goodreads' AND bi.value = ?
 		ORDER BY b.created_at ASC LIMIT 1
 	`, userID, goodreadsID).Scan(&id)
@@ -493,17 +483,22 @@ func (s *Service) handleApply(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{"success": true, "data": result})
 }
 
-// linkGoodreadsIDs records the Goodreads ID on matched books in collections the
-// reader can edit, so a later import matches them directly. Books that already
-// have a Goodreads ID keep it.
+// linkGoodreadsIDs records the Goodreads ID on matched visible books when the
+// importing account can edit the catalog, so a later import matches them
+// directly. Books that already have a Goodreads ID keep it. Readers cannot
+// change shared catalog identifiers, so nothing is linked for them.
 func (s *Service) linkGoodreadsIDs(ctx context.Context, userID string, items []applyItem, unavailable map[string]struct{}) (int, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := collections.LockCollectionChanges(ctx, tx); err != nil {
+	canEdit, err := library.CanEditCatalog(ctx, tx, userID)
+	if err != nil {
 		return 0, err
+	}
+	if !canEdit {
+		return 0, nil
 	}
 	linked := 0
 	for _, it := range items {
@@ -519,9 +514,7 @@ func (s *Service) linkGoodreadsIDs(ctx context.Context, userID string, items []a
 			INSERT INTO book_identifiers (book_id, type, value)
 			SELECT ?, 'goodreads', ?
 			WHERE EXISTS (
-				SELECT 1 FROM books b
-				INNER JOIN collection_members cm ON cm.collection_id = b.collection_id
-				WHERE b.id = ? AND cm.user_id = ? AND cm.role IN ('owner', 'editor')
+				SELECT 1 FROM visible_books vb WHERE vb.book_id = ? AND vb.user_id = ?
 			)
 			AND NOT EXISTS (
 				SELECT 1 FROM book_identifiers WHERE book_id = ? AND type = 'goodreads'

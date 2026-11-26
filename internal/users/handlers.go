@@ -38,6 +38,8 @@ func NewService(opts ServiceOptions) *Service {
 
 func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/users/delete", httpapi.RequireSessionFunc(s.auth, s.logger, s.handleDeleteUser))
+	mux.HandleFunc("GET /api/settings/admin/users/{id}/tag-rules", httpapi.RequireSessionFunc(s.auth, s.logger, s.handleGetTagRules))
+	mux.HandleFunc("PUT /api/settings/admin/users/{id}/tag-rules", httpapi.RequireSessionFunc(s.auth, s.logger, s.handlePutTagRules))
 }
 
 func (s *Service) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
@@ -65,12 +67,6 @@ func (s *Service) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(r.Context(), `UPDATE system_state SET value = value WHERE key = 'collections-model'`); err != nil {
-		s.logger.Error("DELETE /api/users/delete: lock failed", "error", err)
-		httpapi.WriteError(w, http.StatusInternalServerError, "Internal Server Error")
-		return
-	}
-
 	var actorRole string
 	err = tx.QueryRowContext(r.Context(), `SELECT role FROM users WHERE id = ? LIMIT 1`, actor.ID).Scan(&actorRole)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && actorRole != "admin" && actorRole != "owner") {
@@ -92,18 +88,6 @@ func (s *Service) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if err == nil && targetRole == "owner" {
 		httpapi.WriteError(w, http.StatusForbidden, "The system owner cannot be removed")
-		return
-	}
-
-	var ownedID string
-	err = tx.QueryRowContext(r.Context(), `SELECT id FROM collections WHERE owner_user_id = ? LIMIT 1`, targetID).Scan(&ownedID)
-	if err == nil {
-		httpapi.WriteError(w, http.StatusConflict, "Transfer or delete owned collections before deleting this account")
-		return
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		s.logger.Error("DELETE /api/users/delete: owned collection lookup failed", "error", err)
-		httpapi.WriteError(w, http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
 

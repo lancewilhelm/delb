@@ -24,14 +24,6 @@ export interface GlobalSettings {
     stablePassesRequired?: number;
     stableMaxAgeMs?: number;
 
-    /**
-     * Legacy single collection (deprecated). Prefer `additionalCollectionIds`.
-     */
-    targetCollectionId?: string;
-    /**
-     * Collections (besides the owner's Personal collection) to also add the book to.
-     */
-    additionalCollectionIds?: string[];
     targetUserId?: string;
     targetUserEmail?: string;
   };
@@ -50,8 +42,6 @@ function getDefaultSettings(): GlobalSettings {
       pollIntervalMs: 2500,
       stablePassesRequired: 2,
       stableMaxAgeMs: 5 * 60 * 1000,
-      targetCollectionId: '',
-      additionalCollectionIds: [],
       targetUserId: '',
       targetUserEmail: '',
     },

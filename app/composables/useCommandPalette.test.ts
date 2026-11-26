@@ -141,6 +141,7 @@ function createPalette() {
     MIN_WALL_DRIFT_SPEED: 1,
     MAX_WALL_DRIFT_SPEED: 10,
     useUiStore: () => ui,
+    useAuth: () => ({ canEditCatalog: ref(true), signOut: () => {} }),
     useUserSettingsStore: () => store,
     useThemeAppearance: () => appearance,
     useBookViewFields: () => ({

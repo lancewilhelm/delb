@@ -27,12 +27,11 @@ const (
 
 // Candidate is a Delb book that may be the same as a Goodreads row.
 type Candidate struct {
-	BookID         string   `json:"bookId"`
-	Title          string   `json:"title"`
-	Authors        []string `json:"authors"`
-	CollectionName string   `json:"collectionName"`
-	HasFiles       bool     `json:"hasFiles"`
-	Score          float64  `json:"score"`
+	BookID   string   `json:"bookId"`
+	Title    string   `json:"title"`
+	Authors  []string `json:"authors"`
+	HasFiles bool     `json:"hasFiles"`
+	Score    float64  `json:"score"`
 }
 
 // Match is the importer's best guess for one row.
@@ -43,15 +42,13 @@ type Match struct {
 }
 
 type libraryBook struct {
-	id             string
-	title          string
-	collectionName string
-	canEdit        bool
-	hasFiles       bool
-	authors        []string
-	titleTokens    []string
-	authorTokens   []string
-	goodreadsID    string
+	id           string
+	title        string
+	hasFiles     bool
+	authors      []string
+	titleTokens  []string
+	authorTokens []string
+	goodreadsID  string
 }
 
 type libraryIndex struct {
@@ -70,11 +67,10 @@ func loadLibrary(ctx context.Context, db *sql.DB, userID string) (*libraryIndex,
 		byToken:     make(map[string][]*libraryBook),
 	}
 	rows, err := db.QueryContext(ctx, `
-		SELECT b.id, b.title, c.name, cm.role,
+		SELECT b.id, b.title,
 		       EXISTS (SELECT 1 FROM book_files bf WHERE bf.book_id = b.id)
 		FROM books b
-		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
-		INNER JOIN collections c ON c.id = b.collection_id
+		INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 		ORDER BY b.created_at ASC, b.id ASC
 	`, userID)
 	if err != nil {
@@ -82,13 +78,11 @@ func loadLibrary(ctx context.Context, db *sql.DB, userID string) (*libraryIndex,
 	}
 	for rows.Next() {
 		var b libraryBook
-		var role string
 		var hasFiles int
-		if err := rows.Scan(&b.id, &b.title, &b.collectionName, &role, &hasFiles); err != nil {
+		if err := rows.Scan(&b.id, &b.title, &hasFiles); err != nil {
 			_ = rows.Close()
 			return nil, err
 		}
-		b.canEdit = role == "owner" || role == "editor"
 		b.hasFiles = hasFiles != 0
 		idx.books = append(idx.books, &b)
 		idx.byID[b.id] = &b
@@ -102,7 +96,7 @@ func loadLibrary(ctx context.Context, db *sql.DB, userID string) (*libraryIndex,
 		FROM book_authors ba
 		INNER JOIN authors a ON a.id = ba.author_id
 		INNER JOIN books b ON b.id = ba.book_id
-		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 		ORDER BY ba.book_id, ba.position
 	`, userID)
 	if err != nil {
@@ -126,7 +120,7 @@ func loadLibrary(ctx context.Context, db *sql.DB, userID string) (*libraryIndex,
 		SELECT bi.book_id, bi.type, bi.value
 		FROM book_identifiers bi
 		INNER JOIN books b ON b.id = bi.book_id
-		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 	`, userID)
 	if err != nil {
 		return nil, err
@@ -219,12 +213,11 @@ func (b *libraryBook) candidate(score float64) Candidate {
 		authors = []string{}
 	}
 	return Candidate{
-		BookID:         b.id,
-		Title:          b.title,
-		Authors:        authors,
-		CollectionName: b.collectionName,
-		HasFiles:       b.hasFiles,
-		Score:          score,
+		BookID:   b.id,
+		Title:    b.title,
+		Authors:  authors,
+		HasFiles: b.hasFiles,
+		Score:    score,
 	}
 }
 

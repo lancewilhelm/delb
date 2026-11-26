@@ -4,7 +4,6 @@ export type GoodreadsCandidate = {
   bookId: string;
   title: string;
   authors: string[];
-  collectionName: string;
   hasFiles: boolean;
   score: number;
 };

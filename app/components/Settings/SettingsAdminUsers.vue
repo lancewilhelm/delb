@@ -6,14 +6,23 @@ import { computed, nextTick, onMounted, ref } from 'vue';
 import ModalWindow from '~/components/ModalWindow.vue';
 import SettingsUIGroup from '~/components/Settings/UI/SettingsUIGroup.vue';
 import SettingsUIToggle from '~/components/Settings/UI/SettingsUIToggle.vue';
+import SettingsAdminUserTagRules from '~/components/Settings/SettingsAdminUserTagRules.vue';
 import type { User as UserWithRole } from '~/utils/authClient';
+import {
+  ASSIGNABLE_ROLES,
+  DEFAULT_ASSIGNABLE_ROLE,
+  editableRole,
+  roleLabel,
+  roleUsesTagRules,
+  type AssignableRole,
+} from '~/utils/roles';
 
 const users = ref<UserWithRole[]>([]);
 const sortedUsers = ref<UserWithRole[]>([]);
 
 const globalSettingsStore = useGlobalSettingsStore();
 
-type EditableRole = 'admin' | 'user';
+type EditableRole = AssignableRole;
 
 // Fetch users data
 const fetchUsers = async () => {
@@ -56,7 +65,7 @@ const createUserModalVisible = ref(false);
 const newUserName = ref('');
 const newUserEmail = ref('');
 const newUserPassword = ref('');
-const newUserRole = ref<'admin' | 'user'>('user');
+const newUserRole = ref<EditableRole>(DEFAULT_ASSIGNABLE_ROLE);
 const createUserEmailInput = ref<HTMLInputElement | null>(null);
 async function createUser() {
   if (
@@ -85,7 +94,7 @@ async function createUser() {
   newUserName.value = '';
   newUserEmail.value = '';
   newUserPassword.value = '';
-  newUserRole.value = 'user';
+  newUserRole.value = DEFAULT_ASSIGNABLE_ROLE;
   createUserModalVisible.value = false;
 
   // Refetch users to update the list
@@ -174,7 +183,7 @@ const editUserOriginal = ref<UserWithRole | null>(null);
 const editUserId = ref('');
 const editUserName = ref('');
 const editUserEmail = ref('');
-const editUserRole = ref<EditableRole>('user');
+const editUserRole = ref<EditableRole>(DEFAULT_ASSIGNABLE_ROLE);
 const editUserNewPassword = ref('');
 const editUserSaving = ref(false);
 const editUserPasswordSaving = ref(false);
@@ -186,7 +195,7 @@ function openEditUser(user: UserWithRole) {
   editUserId.value = user.id;
   editUserName.value = (user.name ?? '').toString();
   editUserEmail.value = (user.email ?? '').toString();
-  editUserRole.value = user.role === 'admin' ? 'admin' : 'user';
+  editUserRole.value = editableRole(user.role);
   editUserNewPassword.value = '';
   editUserModalVisible.value = true;
   nextTick(() => {
@@ -200,7 +209,7 @@ function closeEditUser() {
   editUserId.value = '';
   editUserName.value = '';
   editUserEmail.value = '';
-  editUserRole.value = 'user';
+  editUserRole.value = DEFAULT_ASSIGNABLE_ROLE;
   editUserNewPassword.value = '';
   editUserSaving.value = false;
   editUserPasswordSaving.value = false;
@@ -245,7 +254,7 @@ async function saveUserEdits() {
   const data: Record<string, unknown> = {};
   if ((editUserOriginal.value.name ?? '') !== name) data.name = name;
   if ((editUserOriginal.value.email ?? '') !== email) data.email = email;
-  if ((editUserOriginal.value.role ?? 'user') !== editUserRole.value)
+  if (editableRole(editUserOriginal.value.role) !== editUserRole.value)
     data.role = editUserRole.value;
 
   if (Object.keys(data).length === 0) {
@@ -328,7 +337,7 @@ async function setUserPassword() {
                   {{ u.name }}
                 </td>
                 <td class="px-6 py-1 whitespace-nowrap text-sm">
-                  {{ u.role }}
+                  {{ roleLabel(u.role) }}
                 </td>
                 <td class="px-6 py-1 whitespace-nowrap text-sm">
                   {{ new Date(u.createdAt).toLocaleDateString() }}
@@ -460,8 +469,13 @@ async function setUserPassword() {
             v-model="newUserRole"
             class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
           >
-            <option value="user">user</option>
-            <option value="admin">admin</option>
+            <option
+              v-for="option in ASSIGNABLE_ROLES"
+              :key="option.value"
+              :value="option.value"
+            >
+              {{ option.label.toLowerCase() }}
+            </option>
           </select>
         </div>
         <button
@@ -574,9 +588,25 @@ async function setUserPassword() {
             class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
             :disabled="editUserSaving"
           >
-            <option value="user">user</option>
-            <option value="admin">admin</option>
+            <option
+              v-for="option in ASSIGNABLE_ROLES"
+              :key="option.value"
+              :value="option.value"
+            >
+              {{ option.label.toLowerCase() }}
+            </option>
           </select>
+          <div class="text-(--contrast-sub-color) text-xs">
+            Admins manage users and settings. Editors add and change books.
+            Readers browse and keep their own reading data.
+          </div>
+        </div>
+
+        <div
+          v-if="editUserId && roleUsesTagRules(editUserOriginal?.role)"
+          class="w-full border-t border-(--contrast-border-color) pt-4"
+        >
+          <SettingsAdminUserTagRules :user-id="editUserId" />
         </div>
 
         <div class="w-full border-t border-(--contrast-border-color) pt-4">

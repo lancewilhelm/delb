@@ -1,3 +1,4 @@
+import { setRole, setTagRules, tagBook } from './library-fixtures.mjs';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { createClient } from './sqlite-client.mjs';
@@ -50,38 +51,11 @@ try {
   const reader = await account('reader');
   const outsider = await account('outsider');
   assert.equal((await request(null, '/api/shelves')).status, 401);
-  const first = (
-    await ok(
-      await request(owner, '/api/collections', 'POST', {
-        name: `First ${suffix}`,
-      }),
-    )
-  ).data.collection.id;
-  const second = (
-    await ok(
-      await request(owner, '/api/collections', 'POST', {
-        name: `Second ${suffix}`,
-      }),
-    )
-  ).data.collection.id;
-  await ok(
-    await request(owner, `/api/collections/${first}/members`, 'PUT', {
-      email: reader.email,
-      role: 'viewer',
-    }),
-  );
-  await ok(
-    await request(owner, `/api/collections/${second}/members`, 'PUT', {
-      email: reader.email,
-      role: 'editor',
-    }),
-  );
   const one = (
     await ok(
       await request(owner, '/api/books', 'POST', {
         title: 'Synthetic One',
         authors: ['Unique Author'],
-        collectionIds: [first],
       }),
     )
   ).data.book.id;
@@ -90,10 +64,11 @@ try {
       await request(owner, '/api/books', 'POST', {
         title: 'Synthetic Two',
         authors: ['Other Author'],
-        collectionIds: [second],
       }),
     )
   ).data.book.id;
+  const hiddenTag = await tagBook(owner, one, 'Restricted shelf book');
+  await setTagRules(owner, outsider, { blockTagIds: [hiddenTag.id] });
   await db.execute({
     sql: 'INSERT INTO book_identifiers(book_id,type,value) VALUES (?,?,?)',
     args: [one, 'isbn', '978-1-23456-789-0'],
@@ -152,7 +127,7 @@ try {
   let state = await ok(await request(reader, path));
   assert.deepEqual(new Set(state.books.map((b) => b.id)), new Set([one, two]));
   assert.equal(state.books.find((b) => b.id === one).canResize, false);
-  assert.equal(state.books.find((b) => b.id === two).canResize, true);
+  assert.equal(state.books.find((b) => b.id === two).canResize, false);
   const stackedBooks = state.arrangement.bookcases.flatMap((c) =>
     c.shelves.flatMap((s) => s.items.flatMap((item) => item.books)),
   );
@@ -196,13 +171,7 @@ try {
     403,
   );
   const stale = state;
-  await ok(
-    await request(
-      owner,
-      `/api/collections/${first}/members/${reader.id}`,
-      'DELETE',
-    ),
-  );
+  await setTagRules(owner, reader, { blockTagIds: [hiddenTag.id] });
   assert.equal((await request(reader, bookShelves)).status, 404);
   state = await ok(await request(reader, path));
   assert.deepEqual(
@@ -210,6 +179,13 @@ try {
     [two],
   );
   assert.ok(!JSON.stringify(state).includes(one));
+  const filteredPage = await ok(
+    await request(reader, `/api/books?shelfId=${shelf}`),
+  );
+  assert.deepEqual(
+    filteredPage.data.books.map((book) => book.id),
+    [two],
+  );
   assert.equal(
     (
       await request(reader, path, 'PUT', {
@@ -227,12 +203,7 @@ try {
       arrangement: state.arrangement,
     }),
   );
-  await ok(
-    await request(owner, `/api/collections/${first}/members`, 'PUT', {
-      email: reader.email,
-      role: 'viewer',
-    }),
-  );
+  await setTagRules(owner, reader);
   state = await ok(await request(reader, path));
   assert.equal(state.books.length, 2);
   const restoredStack = state.arrangement.bookcases
@@ -272,11 +243,11 @@ try {
       await request(owner, '/api/books', 'POST', {
         title: 'Synthetic Three',
         authors: ['Other Author'],
-        collectionIds: [second],
       }),
     )
   ).data.book.id;
-  const sharedPath = `/api/collections/${second}/bookshelf`;
+  await setRole(owner, reader, 'editor');
+  const sharedPath = '/api/library/bookshelf';
   const shared = await ok(await request(owner, sharedPath));
   const sharedItems = shared.arrangement.bookcases.flatMap((c) =>
     c.shelves.flatMap((s) => s.items),
@@ -292,7 +263,11 @@ try {
     for (const s of c.shelves) s.items = [];
   itemTwo.x = 2;
   itemThree.x = 34;
-  firstRow.items = [itemTwo, itemThree];
+  const itemOne = sharedItems.find((item) =>
+    item.books.some((book) => book.id === one),
+  );
+  itemOne.x = 120;
+  firstRow.items = [itemTwo, itemThree, itemOne];
   await ok(
     await request(owner, sharedPath, 'PUT', {
       revision: shared.revision,
@@ -344,7 +319,7 @@ try {
   await ok(await request(reader, path, 'DELETE'));
   assert.equal((await request(reader, path)).status, 404);
   console.log(
-    'PASS personal Shelf privacy, cross-collection books, search, resize authority, revocation and restoration',
+    'PASS personal Shelf privacy, shared library books, search, resize authority, revocation and restoration',
   );
 } finally {
   db.close();

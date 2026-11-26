@@ -6,7 +6,7 @@ The [reader route](../../../app/pages/books/[id]/read.vue) prefers EPUB, then PD
 
 The [PDF component](../../../app/components/Readers/PdfReader.vue) loads [Mozilla PDF.js](https://mozilla.github.io/pdf.js/) only in the browser when opening a PDF. Its matching worker, CMaps, standard fonts, and image codecs are served locally through Vite/Nitro. No document is sent to an external viewer or CDN.
 
-The component requests `GET /api/books/:id/download?format=pdf&fileId=...`. The existing handler requires a session, checks collection visibility and book/file association, confines the stored path to the managed library, and responds with `application/pdf`, attachment disposition, and `Cache-Control: private, no-store`. The PDF reader does not introduce another file-serving endpoint.
+The component requests `GET /api/books/:id/download?format=pdf&fileId=...`. The existing handler requires a session, checks book visibility and book/file association, confines the stored path to the managed library, and responds with `application/pdf`, attachment disposition, and `Cache-Control: private, no-store`. The PDF reader does not introduce another file-serving endpoint.
 
 The viewer scrolls continuously through pages and renders canvases only near the viewport, capped at 16 million output pixels per canvas. Distant canvases are released, obsolete renders are cancelled, resize recalculates fit, and unmount destroys the PDF loading task and worker. PDF scripting, annotation actions, attachments, and forms have no viewer integration. Canvas-only rendering does not provide selectable text or a document text alternative; download remains available for readers that need those capabilities. Password-protected and malformed files show an error with a download option.
 

@@ -26,12 +26,9 @@ function memoryStorage(): Storage {
 
 test('view positions are isolated by user and shelf and survive a read', () => {
   const storage = memoryStorage();
-  const first = bookshelfViewKey('user-1', '/api/collections/first/bookshelf');
+  const first = bookshelfViewKey('user-1', '/api/library/bookshelf');
   const second = bookshelfViewKey('user-1', '/api/shelves/second');
-  const otherUser = bookshelfViewKey(
-    'user-2',
-    '/api/collections/first/bookshelf',
-  );
+  const otherUser = bookshelfViewKey('user-2', '/api/library/bookshelf');
   saveBookshelfView(storage, first, { x: -1000, y: 30, zoom: 1.7 });
   saveBookshelfView(storage, second, { x: -40, y: -20, zoom: 0.8 });
   assert.deepEqual(readBookshelfView(storage, first), {

@@ -6,7 +6,7 @@ status: accepted
 
 Delb replaces multi-collection book membership and per-user book ownership with a single shared library owned by the server. Every organizing concept in Delb gets one distinct job: server roles control who can modify the catalog, shared manual tags power browsing and Plex-style per-user visibility rules, metadata-provider categories move into dedicated genres, personal shelves hold private reader lists, and visual bookshelf layouts live in one unified table saved on demand.
 
-This decision was confirmed on 2026-11-25 in [issue #100](https://github.com/lancewilhelm/delb/issues/100). It defines the accepted target architecture for Delb `v1.0.0` and will supersede [ADR 0004](0004-exclusive-collections-and-shared-default.md) once the phased implementation completes.
+This decision was confirmed on 2026-11-25 in [issue #100](https://github.com/lancewilhelm/delb/issues/100). It defines the architecture for Delb `v1.0.0` and supersedes [ADR 0004](0004-exclusive-collections-and-shared-default.md). Phases 1 through 3 implement it; Phase 4 resets the migration chain.
 
 ## Context
 
@@ -73,6 +73,17 @@ Because collection references currently span roughly 100 files across `internal/
 3. **Phase 3 — Single shared library, server roles, and tag visibility rules ([issue #115](https://github.com/lancewilhelm/delb/issues/115)):** Add server roles (`Admin`, `Editor`, `Reader`) and per-user tag visibility rules, collapse all collections into the single shared library, remove collection plumbing across Go, Vue, MCP, Dropbox, and Calibre, mark [ADR 0004](0004-exclusive-collections-and-shared-default.md) as superseded, and update [GLOSSARY.md](../../GLOSSARY.md) and the reference docs.
 4. **Phase 4 — Pre-1.0 migration baseline ([issue #116](https://github.com/lancewilhelm/delb/issues/116)):** Squash the pre-1.0 SQL migration chain into a single `0000_initial.sql` baseline and remove obsolete upgrade shims before tagging `v1.0.0`.
 
+## Implementation decisions
+
+Phase 3 settled these details while implementing the model:
+
+- **New accounts are Readers.** Sign-up and admin-created accounts default to `reader`. Earlier versions enrolled new accounts in the default collection as editors.
+- **The upgrade keeps existing write access.** Accounts that owned or could edit at least one collection become `editor`; accounts with only viewer memberships, or none, become `reader`.
+- **Tag visibility rules never apply to `owner` and `admin` accounts.** The server refuses rules for them, so an Admin can always see and manage the whole library.
+- **An allow rule never silently widens.** A tag that a rule uses cannot be deleted, and merging a tag moves its rules to the destination tag (a block rule wins on conflict). Otherwise deleting a restricted account's only allowed tag would expose the whole library to that account.
+- **The library bookshelf is editable only without tag rules.** The shared layout must place every book, so an Editor with tag visibility rules sees it read-only, without the hidden books.
+- **Tag and genre deletion and merging stay Admin-only,** because tags drive visibility rules. Editors add and remove tags on books.
+
 ## Deferred items
 
 - **Social sharing (shared reviews in `#99`, shared ratings, shared lists):** Explicitly out of scope for this work. Moving to a single shared library provides a natural household boundary if social features are revisited later.
@@ -80,8 +91,8 @@ Because collection references currently span roughly 100 files across `internal/
 
 ## Related references
 
-- [ADR 0004: Give each book one collection and use a shared default](0004-exclusive-collections-and-shared-default.md) (active until Phase 3 completes)
-- [Collections and access control](../developing/reference/collections.md)
+- [ADR 0004: Give each book one collection and use a shared default](0004-exclusive-collections-and-shared-default.md) (superseded)
+- [Library access, server roles, and tag visibility rules](../developing/reference/library-access.md)
 - [Delb's data model](../developing/data-model.md)
 - [Metadata fetcher](../developing/reference/metadata.md)
 - [Glossary](../../GLOSSARY.md)

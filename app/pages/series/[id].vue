@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { useHead } from '~/composables/useHead';
-import { useCollectionsStore } from '~/stores/collections';
 import { $fetch } from '~/utils/apiFetch';
 import { navigateTo } from '~/utils/navigation';
 import { computed, onMounted, ref, watch } from 'vue';
@@ -47,7 +46,6 @@ type SeriesBooksResponse = {
 };
 
 const route = useRoute();
-const collectionsStore = useCollectionsStore();
 
 const seriesParam = computed(() => String(route.params.id || '').trim());
 const seriesId = computed(() => decodeURIComponent(seriesParam.value));
@@ -89,12 +87,6 @@ async function refresh() {
 
   try {
     const query: Record<string, string> = {};
-    if (
-      collectionsStore.activeSelection.kind === 'collection' &&
-      collectionsStore.activeSelection.collectionId
-    ) {
-      query.collectionId = collectionsStore.activeSelection.collectionId;
-    }
 
     const res = await $fetch<SeriesBooksResponse>(
       `/api/series/${encodeURIComponent(seriesId.value)}/books`,
@@ -142,15 +134,6 @@ onMounted(refresh);
 watch(seriesId, () => {
   refresh();
 });
-
-// Refresh when the active collection scope changes in the header
-watch(
-  () => collectionsStore.activeSelection,
-  () => {
-    refresh();
-  },
-  { deep: true },
-);
 </script>
 
 <template>
@@ -191,7 +174,7 @@ watch(
       </div>
 
       <div v-else-if="books.length === 0" class="text-sm opacity-80">
-        No books found for this series in your accessible collections.
+        No books found for this series in the library.
       </div>
 
       <div v-else class="flex flex-col gap-4">
@@ -246,7 +229,7 @@ watch(
                 <div class="relative">
                   <div class="line-clamp-3">
                     <!-- eslint-disable-next-line vue/no-v-html -->
-                      <div v-html="sanitizeDescriptionHtml(b.description)" />
+                    <div v-html="sanitizeDescriptionHtml(b.description)" />
                   </div>
                 </div>
               </div>

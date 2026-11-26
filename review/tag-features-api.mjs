@@ -1,3 +1,4 @@
+import { setRole, setTagRules } from './library-fixtures.mjs';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -55,22 +56,7 @@ async function signup(name) {
 const owner = await signup('owner');
 const member = await signup('member');
 const admin = await signup('admin');
-await db.execute({
-  sql: "UPDATE users SET role = 'admin' WHERE id = ?",
-  args: [admin.id],
-});
-const collection = async (user) =>
-  (
-    await request('/api/collections', user.cookie, 'POST', {
-      name: 'Private tag fixture',
-    })
-  ).data.data.collection.id;
-const ownerCollection = await collection(owner);
-const memberCollection = await collection(member);
-await db.execute({
-  sql: "INSERT INTO collection_members (collection_id,user_id,role,created_at) VALUES (?,?,'viewer',?)",
-  args: [ownerCollection, admin.id, 1700000000],
-});
+await setRole(owner, admin, 'admin');
 const tag = async (id, name) =>
   db.execute({
     sql: 'INSERT INTO tags(id,name,created_at,updated_at) VALUES(?,?,?,?)',
@@ -88,7 +74,7 @@ const published = [20, null, 10, 20, 30, null, 10];
 for (let i = 0; i < keys.length; i++) {
   const id = `tag-book-${i + 1}`;
   await db.execute({
-    sql: 'INSERT INTO books(id,title,sort_title,pages,published_at,created_at,updated_at,created_by_user_id,collection_id) VALUES(?,?,?,?,?,?,?,?,?)',
+    sql: 'INSERT INTO books(id,title,sort_title,pages,published_at,created_at,updated_at,created_by_user_id) VALUES(?,?,?,?,?,?,?,?)',
     args: [
       id,
       `Fixture ${i + 1} ${keys[i]}`,
@@ -98,26 +84,18 @@ for (let i = 0; i < keys.length; i++) {
       1700000000 + Math.floor(i / 2) * 100,
       1700000000,
       owner.id,
-      ownerCollection,
     ],
   });
   await link(id, 'tag-sort');
 }
-await db.execute({
-  sql: "INSERT INTO books(id,title,sort_title,created_at,updated_at,created_by_user_id,collection_id) VALUES('tag-hidden-book','Hidden fixture','hidden',1700000000,1700000000,?,?)",
-  args: [member.id, memberCollection],
-});
 await db.execute(
   "INSERT INTO authors(id,name,created_at,updated_at) VALUES('sort-author','Sorting author',1700000000,1700000000),('hidden-author','Hidden author',1700000000,1700000000)",
 );
 await db.execute(
-  "INSERT INTO publishers(id,name,created_at,updated_at) VALUES('sort-publisher','Sorting publisher',1700000000,1700000000),('hidden-publisher','Hidden publisher',1700000000,1700000000)",
+  "INSERT INTO publishers(id,name,created_at,updated_at) VALUES('sort-publisher','Sorting publisher',1700000000,1700000000)",
 );
 await db.execute(
   "INSERT INTO book_authors(book_id,author_id,position) SELECT id,'sort-author',0 FROM books",
-);
-await db.execute(
-  "INSERT INTO book_authors(book_id,author_id,position) VALUES('tag-hidden-book','hidden-author',1)",
 );
 await db.execute("UPDATE books SET publisher_id='sort-publisher'");
 const expected = {
@@ -163,19 +141,26 @@ for (const endpoint of [
     }
   }
 }
+await db.execute({
+  sql: "INSERT INTO books(id,title,sort_title,created_at,updated_at,created_by_user_id) VALUES('tag-hidden-book','Hidden fixture','hidden',1700000000,1700000000,?)",
+  args: [owner.id],
+});
+await db.execute(
+  "INSERT INTO book_authors(book_id,author_id,position) VALUES('tag-hidden-book','sort-author',0),('tag-hidden-book','hidden-author',1)",
+);
+await db.execute(
+  "UPDATE books SET publisher_id='sort-publisher' WHERE id='tag-hidden-book'",
+);
+await tag('tag-hidden', 'Hidden tag');
+await link('tag-hidden-book', 'tag-hidden');
+await setTagRules(owner, member, { allowTagIds: ['tag-sort'] });
+assert.equal(
+  (await request('/api/authors/hidden-author/books', member.cookie)).status,
+  404,
+);
+await setTagRules(owner, member, { allowTagIds: ['tag-hidden'] });
 for (const kind of ['authors', 'publishers']) {
   const id = kind === 'authors' ? 'sort-author' : 'sort-publisher';
-  const hidden = kind === 'authors' ? 'hidden-author' : 'hidden-publisher';
-  assert.equal(
-    (await request(`/api/${kind}/${hidden}/books`, owner.cookie)).status,
-    404,
-  );
-  const scoped = await request(
-    `/api/${kind}/${id}/books?collectionId=${memberCollection}&sort=pages&sortDir=asc`,
-    owner.cookie,
-  );
-  assert.equal(scoped.status, 200);
-  assert.deepEqual(scoped.data.data.books, []);
   const visible = await request(
     `/api/${kind}/${id}/books?limit=200&sort=alphabetical&sortDir=asc`,
     member.cookie,
@@ -185,7 +170,7 @@ for (const kind of ['authors', 'publishers']) {
     visible.data.data.books.map((book) => book.id),
     ['tag-hidden-book'],
   );
-  pass(`${kind} sorting preserves entity visibility and collection membership`);
+  pass(`${kind} sorting preserves entity visibility with an allow rule`);
 }
 const oldCursor = Buffer.from(
   JSON.stringify({
@@ -201,12 +186,11 @@ assert.equal(
 pass('legacy tag cursor does not crash the endpoint');
 await tag('tag-source', 'Garbage tag');
 await tag('tag-target', 'Clean tag');
-await tag('tag-hidden', 'Hidden tag');
 await tag('tag-delete', 'Delete fixture');
 for (const id of ['tag-source', 'tag-target', 'tag-delete'])
   await link('tag-book-1', id);
 await link('tag-book-2', 'tag-source');
-for (const id of ['tag-source', 'tag-hidden', 'tag-delete'])
+for (const id of ['tag-source', 'tag-delete'])
   await link('tag-hidden-book', id);
 for (const [cookie, status, label] of [
   [undefined, 401, 'guest'],
@@ -231,8 +215,6 @@ for (const [source, body, status] of [
   ['tag-source', {}, 400],
   ['tag-source', { targetId: 17 }, 400],
   ['tag-source', null, 400],
-  ['tag-source', { targetId: 'tag-hidden' }, 404],
-  ['tag-hidden', { targetId: 'tag-target' }, 404],
   ['tag-source', { targetId: 'missing-tag' }, 404],
 ]) {
   assert.equal(
@@ -242,9 +224,7 @@ for (const [source, body, status] of [
     JSON.stringify(body),
   );
 }
-pass(
-  'self merge, malformed bodies, missing tags and invisible tags are rejected',
-);
+pass('self merge, malformed bodies, missing tags are rejected');
 for (const [id, name] of [
   ['tag-percent', '%'],
   ['tag-underscore', '_'],
@@ -338,7 +318,7 @@ for (const [id, name] of [
 await mkdir('.audit', { recursive: true });
 await writeFile(
   '.audit/tag-browser-account.json',
-  JSON.stringify({ owner, member, admin, ownerCollection }),
+  JSON.stringify({ owner, member, admin }),
 );
 await writeFile(
   '.audit/tag-api-results.json',

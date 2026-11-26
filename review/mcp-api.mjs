@@ -1,3 +1,4 @@
+import { setTagRules, tagBook } from './library-fixtures.mjs';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { createClient } from './sqlite-client.mjs';
@@ -67,20 +68,16 @@ const db = createClient({ url: 'file:./review/demo/synthetic.db' });
 try {
   const owner = await account('owner');
   const outsider = await account('outsider');
-  const collection = (
-    await ok(
-      await request(owner, '/api/collections', 'POST', { name: 'MCP tests' }),
-    )
-  ).data.collection.id;
   const book = (
     await ok(
       await request(owner, '/api/books', 'POST', {
         title: 'MCP Earthsea',
         authors: ['Ursula Le Guin'],
-        collectionIds: [collection],
       }),
     )
   ).data.book.id;
+  const tag = await tagBook(owner, book, 'Restricted MCP book');
+  await setTagRules(owner, outsider, { blockTagIds: [tag.id] });
   const shelf = (
     await ok(
       await request(owner, '/api/shelves', 'POST', { name: 'Favorites' }),
@@ -173,6 +170,26 @@ try {
   assert.ok(
     names.includes('search_books') && names.includes('set_reading_status'),
   );
+  assert.equal(names.length, 11);
+  assert.ok(names.includes('get_library_access'));
+  assert.deepEqual(await call(reader, 'get_library_access'), {
+    role: 'owner',
+    canEditCatalog: true,
+    restrictedByTagRules: false,
+    connectionCanWrite: false,
+    connectionCanEditMetadata: false,
+  });
+  assert.deepEqual(await call(stranger, 'get_library_access'), {
+    role: 'reader',
+    canEditCatalog: false,
+    restrictedByTagRules: true,
+    connectionCanWrite: true,
+    connectionCanEditMetadata: false,
+  });
+  assert.deepEqual(
+    (await call(stranger, 'search_books', { query: 'MCP Earthsea' })).items,
+    [],
+  );
   const search = await call(reader, 'search_books', {
     query: 'Ursula Le Guin',
   });
@@ -216,12 +233,7 @@ try {
     ).status,
     'reading',
   );
-  await ok(
-    await request(owner, `/api/collections/${collection}/members`, 'PUT', {
-      email: outsider.email,
-      role: 'viewer',
-    }),
-  );
+  await setTagRules(owner, outsider);
   assert.equal((await call(stranger, 'get_book', { bookId: book })).id, book);
   assert.equal(
     (
@@ -232,13 +244,7 @@ try {
     ).status,
     'to_be_read',
   );
-  await ok(
-    await request(
-      owner,
-      `/api/collections/${collection}/members/${outsider.id}`,
-      'DELETE',
-    ),
-  );
+  await setTagRules(owner, outsider, { blockTagIds: [tag.id] });
   assert.equal(
     (await stranger.callTool({ name: 'get_book', arguments: { bookId: book } }))
       .isError,

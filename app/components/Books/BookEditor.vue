@@ -46,12 +46,10 @@ const props = withDefaults(
   defineProps<{
     mode?: 'edit' | 'create';
     bookId?: string | null;
-    initialCollectionIds?: string[];
   }>(),
   {
     mode: 'edit',
     bookId: null,
-    initialCollectionIds: () => [],
   },
 );
 
@@ -564,27 +562,6 @@ const form = reactive({
   // new: identifiers (lean v1)
   identifiers: '' as string, // serialized list (one per line) of type:value
 });
-
-function normalizeCollectionIds(input: string[] | undefined): string[] {
-  return Array.from(
-    new Set(
-      (input ?? [])
-        .map((id) => (id ?? '').toString().trim())
-        .filter((id) => id.length > 0),
-    ),
-  );
-}
-
-const createCollectionIds = ref<string[]>(
-  normalizeCollectionIds(props.initialCollectionIds),
-);
-
-watch(
-  () => props.initialCollectionIds,
-  (next) => {
-    createCollectionIds.value = normalizeCollectionIds(next);
-  },
-);
 
 const identifierTypeInput = ref('');
 const identifierValueInput = ref('');
@@ -1278,12 +1255,7 @@ async function createBook(options?: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify({
-        ...payload,
-        collectionIds: createCollectionIds.value.length
-          ? createCollectionIds.value
-          : undefined,
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!res.ok) {

@@ -1,3 +1,4 @@
+import { setTagRules } from './library-fixtures.mjs';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -51,34 +52,23 @@ async function signup(name) {
 }
 const owner = await signup('owner');
 const reader = await signup('reader');
-const shared = 'tbr-shared';
 const ids = Array.from(
   { length: 63 },
   (_, i) => `tbr-book-${String(i).padStart(2, '0')}`,
 );
 try {
-  await db.execute({
-    sql: 'INSERT INTO collections(id,name,owner_user_id,is_personal,created_at,updated_at) VALUES (?,?,?,0,1,1)',
-    args: [shared, 'TBR shared fixture', owner.id],
-  });
-  await db.execute({
-    sql: "INSERT INTO collection_members(collection_id,user_id,role,created_at) VALUES (?,?,'viewer',1)",
-    args: [shared, reader.id],
-  });
-  const personal = (
-    await request('/api/collections', reader.cookie, 'POST', {
-      name: 'Reader private fixture',
-    })
-  ).data.data.collection.id;
+  await db.execute(
+    "INSERT INTO tags(id,name,created_at,updated_at) VALUES ('tbr-hidden','Hidden queue fixture',1,1)",
+  );
   for (const id of ids) {
     await db.execute({
-      sql: 'INSERT INTO books(id,title,created_at,updated_at,created_by_user_id,collection_id) VALUES (?,?,1,1,?,?)',
-      args: [id, id, owner.id, shared],
+      sql: 'INSERT INTO books(id,title,created_at,updated_at,created_by_user_id) VALUES (?,?,1,1,?)',
+      args: [id, id, owner.id],
     });
   }
   await db.execute({
-    sql: 'UPDATE books SET collection_id=? WHERE id=?',
-    args: [personal, ids[0]],
+    sql: "INSERT INTO book_tags(book_id,tag_id) SELECT id,'tbr-hidden' FROM books WHERE id<>?",
+    args: [ids[0]],
   });
 
   assert.equal((await request('/api/tbr')).status, 401);
@@ -99,23 +89,11 @@ try {
   };
   assert.equal((await queue()).count, 63);
   assert.equal(new Set((await queue()).books.map((book) => book.id)).size, 63);
-  const dashboard = await request(
-    `/api/dashboard?collectionId=${personal}`,
-    reader.cookie,
-  );
-  assert.equal(dashboard.data.data.counts.total, 1);
-  assert.equal(dashboard.data.data.counts.to_be_read, 1);
-  const sharedDashboard = await request(
-    `/api/dashboard?collectionId=${shared}`,
-    reader.cookie,
-  );
-  assert.equal(sharedDashboard.data.data.counts.total, 62);
-  assert.equal(sharedDashboard.data.data.counts.to_be_read, 62);
   const allDashboard = await request('/api/dashboard', reader.cookie);
   assert.equal(allDashboard.data.data.counts.to_be_read, 63);
   assert.equal((await request('/api/tbr', owner.cookie)).data.data.count, 0);
   console.log(
-    'PASS TBR authentication, full queue, deduplication and collection-scoped dashboard count',
+    'PASS TBR authentication, full queue, deduplication and library dashboard count',
   );
 
   const notePath = `/api/books/${ids[1]}/rationale`;
@@ -202,37 +180,30 @@ try {
     'PASS long-distance rank edits, transaction rollback and status-independent rationale',
   );
 
-  assert.equal(
-    (
-      await request(
-        `/api/collections/${shared}/members/${reader.id}`,
-        owner.cookie,
-        'DELETE',
-      )
-    ).status,
-    200,
-  );
+  const beforeRestriction = (await queue()).books.map((book) => [
+    book.id,
+    book.rank,
+  ]);
+  await setTagRules(owner, reader, { blockTagIds: ['tbr-hidden'] });
   assert.deepEqual(
     (await queue()).books.map((book) => [book.id, book.rank]),
-    [[ids[0], 1]],
+    beforeRestriction.filter(([id]) => id === ids[0]),
   );
   assert.equal((await request(notePath, reader.cookie)).status, 404);
+  const restricted = await request('/api/dashboard', reader.cookie);
+  assert.equal(restricted.data.data.counts.total, 1);
+  assert.equal(restricted.data.data.counts.to_be_read, 1);
   assert.equal(
     (await request(notePath, reader.cookie, 'PUT', { rationale: 'Blocked' }))
       .status,
     404,
   );
-  assert.equal(
-    (
-      await request(`/api/collections/${shared}/members`, owner.cookie, 'PUT', {
-        email: reader.email,
-        role: 'viewer',
-      })
-    ).status,
-    200,
-  );
+  await setTagRules(owner, reader);
   assert.equal((await queue()).count, 63);
-  assert.equal((await queue()).books[0].id, ids[0]);
+  assert.deepEqual(
+    (await queue()).books.map((book) => [book.id, book.rank]),
+    beforeRestriction,
+  );
   assert.equal(
     (await request(notePath, reader.cookie)).data.data.rationale,
     'Reader reason',
@@ -247,7 +218,7 @@ try {
     '',
   );
   console.log(
-    'PASS revocation/restoration, remaining collection access, contiguous ranks and retained/cleared rationale',
+    'PASS revocation/restoration, visible books, contiguous ranks and retained/cleared rationale',
   );
 } finally {
   db.close();

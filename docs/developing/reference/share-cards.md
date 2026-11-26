@@ -4,7 +4,7 @@ A share card is a PNG image that summarizes one finished book for posting outsid
 
 ## Finish summary endpoint
 
-`GET /api/books/{id}/finish-summary` returns the data that a card draws. The [handler](../../../internal/books/finish_summary.go) requires a session and uses the same collection-membership check as `GET /api/books/{id}`. A book that the reader cannot see returns 404. Every personal field comes from the authenticated reader's own rows, so a member of a shared collection never sees another reader's dates, rating, or progress.
+`GET /api/books/{id}/finish-summary` returns the data that a card draws. The [handler](../../../internal/books/finish_summary.go) requires a session and uses the same visibility check as `GET /api/books/{id}`. A book that the reader cannot see returns 404. Every personal field comes from the authenticated reader's own rows, so another account that can see the book never sees this reader's dates, rating, or progress.
 
 | Field                             | Meaning                                                                                                                            |
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |

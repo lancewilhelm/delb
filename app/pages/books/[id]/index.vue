@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useClipboard } from '@vueuse/core';
 import { useHead } from '~/composables/useHead';
-import { useCollectionsStore } from '~/stores/collections';
 import { useShareCardStore } from '~/stores/shareCard';
 import { useUserSettingsStore } from '~/stores/userSettings';
 import { $fetch } from '~/utils/apiFetch';
@@ -17,7 +16,6 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import AppHeader from '~/components/AppHeader.vue';
 import BookCover from '~/components/BookCover.vue';
-import BooksBookMoveModal from '~/components/Books/BookMoveModal.vue';
 import BooksBookPersonalShelves from '~/components/Books/BookPersonalShelves.vue';
 import BooksBookNotes from '~/components/Books/BookNotes.vue';
 import BooksBookProgressHistory from '~/components/Books/BookProgressHistory.vue';
@@ -27,7 +25,6 @@ import HoverScrollText from '~/components/HoverScrollText.vue';
 import ModalWindow from '~/components/ModalWindow.vue';
 import UiDateInput from '~/components/ui/UiDateInput.vue';
 import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
-import type { BookMoveSelection } from '~/utils/collectionActions';
 import { readDownloadFilename } from '~/utils/downloadFilename';
 import { sanitizeDescriptionHtml } from '~/utils/descriptionHtml';
 
@@ -94,23 +91,6 @@ type Book = {
   pages?: number | null;
 
   createdAt: string | number | Date;
-};
-
-type CollectionRole = 'owner' | 'editor' | 'viewer';
-
-type BookCollectionsRow = {
-  id: string;
-  name: string;
-  ownerUserId: string;
-  role: CollectionRole;
-};
-
-type BookCollectionsGetResponse = {
-  success?: boolean;
-  data?: {
-    collections?: BookCollectionsRow[];
-  };
-  message?: string;
 };
 
 type FetchErrorLike = {
@@ -597,82 +577,6 @@ const deleting = ref(false);
 const descriptionExpanded = ref(false);
 
 // ------------------------------
-// Collections (Phase 2: per-book management)
-// ------------------------------
-const collectionsStore = useCollectionsStore();
-
-const collectionsLoading = ref(false);
-const collectionsErrorMessage = ref<string | null>(null);
-
-const collectionsManageOpen = ref(false);
-
-const collectionsSaveError = ref<string | null>(null);
-
-const bookCollections = ref<BookCollectionsRow[]>([]);
-const moveSelection = computed<BookMoveSelection>(() => ({
-  kind: 'books',
-  bookIds: bookId.value ? [bookId.value] : [],
-}));
-const canEditCollectionsForBook = computed(() =>
-  bookCollections.value.some(
-    (collection) => collection.role === 'owner' || collection.role === 'editor',
-  ),
-);
-
-async function loadBookCollections(
-  targetBookId = bookId.value,
-  generation?: number,
-) {
-  if (!targetBookId) return;
-
-  collectionsLoading.value = true;
-  collectionsErrorMessage.value = null;
-
-  try {
-    const res = await fetch(
-      `/api/books/${encodeURIComponent(targetBookId)}/collections`,
-      { method: 'GET' },
-    );
-
-    if (!res.ok) {
-      throw new Error(`Failed to load book collections (${res.status})`);
-    }
-
-    const json = (await res
-      .json()
-      .catch(() => null)) as BookCollectionsGetResponse | null;
-
-    if (generation !== undefined && generation !== bookLoadGeneration) return;
-    bookCollections.value = json?.data?.collections ?? [];
-  } catch (err) {
-    if (generation !== undefined && generation !== bookLoadGeneration) return;
-    const e = err as FetchErrorLike;
-    collectionsErrorMessage.value =
-      e?.data?.message ||
-      e?.statusMessage ||
-      e?.message ||
-      'Failed to load book collections';
-    bookCollections.value = [];
-  } finally {
-    if (generation === undefined || generation === bookLoadGeneration) {
-      collectionsLoading.value = false;
-    }
-  }
-}
-
-function openCollectionsManager() {
-  collectionsManageOpen.value = true;
-}
-function closeCollectionsManager() {
-  collectionsManageOpen.value = false;
-}
-async function onBookMoved() {
-  invalidateBookDetail(bookId.value);
-  clearDashboardCache();
-  await loadBookCollections();
-}
-
-// ------------------------------
 // Rating (per-user, half-stars)
 // ------------------------------
 // Stored as integer half-stars (1..10). `null` means unset.
@@ -1139,13 +1043,6 @@ async function loadBook() {
   const hasWarmBook = book.value?.id === id ? true : hydratePreview(id);
   loading.value = !hasWarmBook;
 
-  // Fire book detail, per-book collections, and global collections list in
-  // parallel so the hero cover and metadata never wait behind collections.
-  const collectionsPromise = loadBookCollections(id, generation);
-  if (!collectionsStore.collections.length) {
-    void collectionsStore.fetchCollections();
-  }
-
   try {
     const loaded = (await fetchBookDetail(id)) as Book | null;
     if (generation !== bookLoadGeneration) return;
@@ -1166,18 +1063,11 @@ async function loadBook() {
     book.value = null;
     ratingValue.value = null;
     ratingHoverValue.value = null;
-
-    // Reset collections state on failure
-    bookCollections.value = [];
-    collectionsErrorMessage.value = null;
-    collectionsSaveError.value = null;
   } finally {
     if (generation === bookLoadGeneration) {
       loading.value = false;
     }
   }
-
-  await collectionsPromise;
 }
 
 onMounted(() => {
@@ -1187,7 +1077,6 @@ onMounted(() => {
 watch(
   () => bookId.value,
   () => {
-    bookCollections.value = [];
     void loadBook();
   },
 );
@@ -1286,7 +1175,6 @@ const { copy } = useClipboard();
             @click="openCoverViewer"
           />
 
-          <!-- Actions & Collections -->
           <div class="flex flex-col items-center w-full">
             <!-- Actions -->
             <div class="flex flex-wrap gap-1 pt-2 items-center justify-center">
@@ -1383,7 +1271,7 @@ const { copy } = useClipboard();
               </button>
             </div>
 
-            <!-- Status + Collections -->
+            <!-- Status and personal data -->
             <div class="grid gap-3 mt-4 w-full">
               <!-- Status -->
               <div class="grid grid-cols-[min-content_1fr] gap-4 items-center">
@@ -1659,57 +1547,6 @@ const { copy } = useClipboard();
                 </div>
               </div>
 
-              <!-- Collections -->
-              <div class="grid grid-cols-[min-content_1fr] gap-4 items-center">
-                <div class="flex gap-2 items-center">
-                  <div class="font-semibold">Collection</div>
-                  <button
-                    v-if="canEditCollectionsForBook"
-                    type="button"
-                    aria-label="Move book to another collection"
-                    @click="openCollectionsManager"
-                  >
-                    <Icon
-                      name="lucide:pencil"
-                      class="text-md opacity-50 hover:opacity-80"
-                    />
-                  </button>
-                </div>
-
-                <div
-                  v-if="collectionsLoading"
-                  class="text-sm opacity-70 text-right"
-                >
-                  Loading…
-                </div>
-
-                <div
-                  v-else-if="collectionsErrorMessage"
-                  class="text-sm text-(--contrast-error-color) text-right"
-                >
-                  {{ collectionsErrorMessage }}
-                </div>
-
-                <div
-                  v-else
-                  class="flex flex-wrap gap-2 items-center justify-end"
-                >
-                  <span
-                    v-for="c in bookCollections"
-                    :key="c.id"
-                    class="border border-(--contrast-border-color) px-2 py-1 rounded-md text-xs"
-                  >
-                    {{ c.name }}
-                  </span>
-
-                  <span
-                    v-if="!bookCollections.length"
-                    class="text-sm opacity-70"
-                  >
-                    No collections.
-                  </span>
-                </div>
-              </div>
               <BooksBookPersonalShelves :key="book.id" :book-id="book.id" />
               <div class="grid grid-cols-[min-content_1fr] gap-4 items-center">
                 <div class="font-semibold">Copies</div>
@@ -2163,13 +2000,6 @@ const { copy } = useClipboard();
           @error="onCoverViewerError"
         />
       </div>
-
-      <BooksBookMoveModal
-        :open="collectionsManageOpen"
-        :selection="moveSelection"
-        @close="closeCollectionsManager"
-        @moved="onBookMoved"
-      />
     </div>
   </div>
 </template>

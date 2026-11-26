@@ -5,7 +5,15 @@ import { useUiStore } from '~/stores/ui';
 import { fontFamilyOptions, useUserSettingsStore } from '~/stores/userSettings';
 import { debounce } from '~/utils/debounce';
 import { navigateTo } from '~/utils/navigation';
-import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch, type Ref } from 'vue';
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  ref,
+  shallowRef,
+  watch,
+  type Ref,
+} from 'vue';
 import fuzzysort from 'fuzzysort';
 import themesList from '~/assets/json/themes.json';
 import { normalizeCustomTheme } from '~/utils/customTheme';
@@ -102,13 +110,6 @@ export function useCommandPalette() {
       icon: 'lucide:search',
       action: () => {
         uiStore.setGlobalSearchVisible(true);
-      },
-    },
-    {
-      label: 'add book',
-      icon: 'lucide:book-plus',
-      action: () => {
-        uiStore.setAddBookModalVisible(true);
       },
     },
     { label: 'theme', icon: 'lucide:palette', themePicker: 'fixed' },
@@ -456,9 +457,24 @@ export function useCommandPalette() {
     },
   ]);
 
+  // Readers are read-only on the catalog, so only editors and admins see it.
+  const { canEditCatalog } = useAuth();
+  const addBookOption: Option = {
+    label: 'add book',
+    icon: 'lucide:book-plus',
+    action: () => {
+      uiStore.setAddBookModalVisible(true);
+    },
+  };
+  const topLevelOptions = computed<Option[]>(() => {
+    if (!canEditCatalog.value) return options.value;
+    const [first, ...rest] = options.value;
+    return first ? [first, addBookOption, ...rest] : [addBookOption];
+  });
+
   const filteredOptions = computed(() =>
     searchPaletteOptions(
-      selectedOption.value?.options ?? options.value,
+      selectedOption.value?.options ?? topLevelOptions.value,
       query.value,
     ),
   );

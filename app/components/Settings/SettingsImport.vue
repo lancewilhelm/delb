@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import SettingsUIGroup from '~/components/Settings/UI/SettingsUIGroup.vue';
-import { useCollectionsStore } from '~/stores/collections';
+import { useAuth } from '~/composables/useAuth';
 import { $fetch } from '~/utils/apiFetch';
 import { clearDashboardCache } from '~/utils/dashboardCache';
 import {
@@ -68,7 +68,7 @@ const statusLabel: Record<UserBookStatusValue, string> = {
   dnf: 'DNF',
 };
 
-const collectionsStore = useCollectionsStore();
+const { canEditCatalog } = useAuth();
 
 const step = ref<Step>('upload');
 const file = ref<File | null>(null);
@@ -85,11 +85,10 @@ const include = reactive<ImportInclude>({
   shelves: true,
 });
 const selectedShelves = ref<Record<string, boolean>>({});
-const unmatchedMode = ref<UnmatchedMode>('reference');
-const targetMode = ref<'existing' | 'new'>('new');
-const targetCollectionId = ref('');
-const sharedConfirmed = ref(false);
-const newCollectionName = ref('Goodreads');
+// Readers cannot add books, so only editors and admins can create entries.
+const unmatchedMode = ref<UnmatchedMode>(
+  canEditCatalog.value ? 'reference' : 'skip',
+);
 const preferGoodreads = ref(false);
 const choices = ref<Record<number, string | null>>({});
 const overwriteOverrides = ref<Record<number, boolean>>({});
@@ -101,45 +100,6 @@ const result = ref<ApplyResult | null>(null);
 const createdCount = ref(0);
 const enrichedCount = ref(0);
 const createErrors = ref<string[]>([]);
-
-const editableCollections = computed(() =>
-  collectionsStore.collections.filter((c) =>
-    collectionsStore.canEditCollection(c),
-  ),
-);
-
-const selectedCollection = computed(() =>
-  editableCollections.value.find((c) => c.id === targetCollectionId.value),
-);
-const sharedDestination = computed(
-  () =>
-    targetMode.value === 'existing' &&
-    selectedCollection.value != null &&
-    (selectedCollection.value.isDefault ||
-      selectedCollection.value.isPrivate !== true),
-);
-watch(
-  [targetMode, targetCollectionId, sharedDestination],
-  () => {
-    sharedConfirmed.value = false;
-  },
-  { flush: 'sync' },
-);
-
-function pickDefaultTarget() {
-  const editable = editableCollections.value;
-  const active = collectionsStore.activeCollection;
-  const preferred =
-    (active && editable.find((c) => c.id === active.id)) ||
-    editable.find((c) => c.isDefault) ||
-    editable[0];
-  targetCollectionId.value = preferred?.id ?? '';
-}
-
-onMounted(async () => {
-  await collectionsStore.fetchCollections();
-  pickDefaultTarget();
-});
 
 function onFileChange(event: Event) {
   const input = event.target as HTMLInputElement;
@@ -249,13 +209,10 @@ const filters = computed<{ value: Filter; label: string }[]>(() => [
 
 const canImport = computed(() => {
   if (busy.value || !preview.value) return false;
-  const needsTarget =
+  const createsBooks =
     unmatchedMode.value !== 'skip' && counts.value.unmatched > 0;
-  if (!needsTarget) return counts.value.all - counts.value.unmatched > 0;
-  return targetMode.value === 'new'
-    ? newCollectionName.value.trim().length > 0
-    : Boolean(selectedCollection.value) &&
-        (!sharedDestination.value || sharedConfirmed.value);
+  if (!createsBooks) return counts.value.all - counts.value.unmatched > 0;
+  return canEditCatalog.value;
 });
 
 function goodreadsStatusText(row: GoodreadsRow) {
@@ -293,7 +250,7 @@ function goodreadsStateText(row: GoodreadsRow) {
 function candidateLabel(c: GoodreadsRow['match']['candidates'][number]) {
   const author = c.authors.join(', ');
   const files = c.hasFiles ? ' · ebook' : '';
-  return `${c.title}${author ? ` — ${author}` : ''} (${c.collectionName}${files})`;
+  return `${c.title}${author ? ` — ${author}` : ''}${files}`;
 }
 
 function setChoice(index: number, value: string) {
@@ -306,16 +263,6 @@ function setOverwrite(index: number, value: boolean) {
 
 function resetOverrides() {
   overwriteOverrides.value = {};
-}
-
-async function resolveTarget(): Promise<string> {
-  if (targetMode.value === 'existing') return targetCollectionId.value;
-  const response = await $fetch<{ data: { collection: { id: string } } }>(
-    '/api/collections',
-    { method: 'POST', body: { name: newCollectionName.value.trim() } },
-  );
-  await collectionsStore.fetchCollections();
-  return response.data.collection.id;
 }
 
 function rowPayload(row: GoodreadsRow) {
@@ -342,8 +289,6 @@ async function runImport() {
   try {
     const toCreate = rowStates.value.filter((s) => !s.bookId).map((s) => s.row);
     if (unmatchedMode.value !== 'skip' && toCreate.length) {
-      const allowShared = sharedDestination.value && sharedConfirmed.value;
-      const collectionId = await resolveTarget();
       const enrich = unmatchedMode.value === 'enrich';
       progress.label = enrich
         ? 'Creating entries and looking up metadata'
@@ -357,8 +302,6 @@ async function runImport() {
           {
             method: 'POST',
             body: {
-              collectionId,
-              allowShared,
               enrich,
               rows: batch.map(rowPayload),
             },
@@ -415,8 +358,6 @@ async function runImport() {
     error.value =
       (extractFetchErrorMessage(err) ?? 'The import stopped.') +
       ' Books created so far are kept. Run the import again to finish; it matches them by Goodreads ID.';
-    sharedConfirmed.value = false;
-    await collectionsStore.fetchCollections();
     step.value = 'review';
   } finally {
     busy.value = false;
@@ -424,8 +365,6 @@ async function runImport() {
 }
 
 function startOver() {
-  targetMode.value = 'new';
-  sharedConfirmed.value = false;
   step.value = 'upload';
   preview.value = null;
   result.value = null;
@@ -588,7 +527,12 @@ function startOver() {
                 >Skip them. Only books already in Delb get reading data.</span
               ></label
             >
-            <label class="flex gap-2 items-start"
+            <p v-if="!canEditCatalog" class="opacity-80">
+              Your account is a reader, so it cannot add books to the library.
+              Ask an editor or administrator to add the missing books, then run
+              the import again.
+            </p>
+            <label v-if="canEditCatalog" class="flex gap-2 items-start"
               ><input
                 v-model="unmatchedMode"
                 type="radio"
@@ -600,7 +544,7 @@ function startOver() {
                 series, ISBN, pages). Fast, without covers.</span
               ></label
             >
-            <label class="flex gap-2 items-start"
+            <label v-if="canEditCatalog" class="flex gap-2 items-start"
               ><input
                 v-model="unmatchedMode"
                 type="radio"
@@ -615,54 +559,11 @@ function startOver() {
               ></label
             >
           </div>
-          <div
-            v-if="unmatchedMode !== 'skip'"
-            class="flex flex-col gap-2 text-sm mt-2"
-          >
-            <span class="opacity-80"
-              >New entries go into one collection. Everyone who can open that
-              collection can see them; your reading data stays private.</span
-            >
-            <label
-              v-if="editableCollections.length"
-              class="flex gap-2 items-center flex-wrap"
-            >
-              <input v-model="targetMode" type="radio" value="existing" />
-              An existing collection
-              <select
-                v-model="targetCollectionId"
-                :disabled="targetMode !== 'existing'"
-                class="px-2 py-1 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
-              >
-                <option
-                  v-for="c in editableCollections"
-                  :key="c.id"
-                  :value="c.id"
-                >
-                  {{ c.name
-                  }}{{ c.isDefault || !c.isPrivate ? ' (shared)' : '' }}
-                </option>
-              </select>
-            </label>
-            <label class="flex gap-2 items-center flex-wrap">
-              <input v-model="targetMode" type="radio" value="new" />
-              A new private collection named
-              <input
-                v-model="newCollectionName"
-                maxlength="80"
-                :disabled="targetMode !== 'new'"
-                class="px-2 py-1 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
-              />
-            </label>
-            <label
-              v-if="sharedDestination && counts.unmatched > 0"
-              class="flex gap-2 items-center"
-            >
-              <input v-model="sharedConfirmed" type="checkbox" />
-              I want to add these books to the shared collection
-              {{ selectedCollection?.name }}.
-            </label>
-          </div>
+          <p v-if="unmatchedMode !== 'skip'" class="text-sm opacity-80 mt-2">
+            New entries go into the shared library, where everyone whose tag
+            visibility rules allow them can see them. Your reading data stays
+            private.
+          </p>
         </section>
 
         <section v-if="counts.conflicts" class="flex flex-col gap-2">

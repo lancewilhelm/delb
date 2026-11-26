@@ -16,16 +16,14 @@ const GlobalSettingsID = "00000000-0000-0000-0000-000000000000"
 
 // Settings mirrors server/utils/books/dropbox/config.ts DropboxIngestSettings.
 type Settings struct {
-	Enabled                 any      `json:"enabled"`
-	Dir                     string   `json:"dir"`
-	Extensions              any      `json:"extensions"`
-	PollIntervalMs          any      `json:"pollIntervalMs"`
-	StablePassesRequired    any      `json:"stablePassesRequired"`
-	StableMaxAgeMs          any      `json:"stableMaxAgeMs"`
-	TargetCollectionID      string   `json:"targetCollectionId"`
-	AdditionalCollectionIDs []string `json:"additionalCollectionIds"`
-	TargetUserID            string   `json:"targetUserId"`
-	TargetUserEmail         string   `json:"targetUserEmail"`
+	Enabled              any    `json:"enabled"`
+	Dir                  string `json:"dir"`
+	Extensions           any    `json:"extensions"`
+	PollIntervalMs       any    `json:"pollIntervalMs"`
+	StablePassesRequired any    `json:"stablePassesRequired"`
+	StableMaxAgeMs       any    `json:"stableMaxAgeMs"`
+	TargetUserID         string `json:"targetUserId"`
+	TargetUserEmail      string `json:"targetUserEmail"`
 }
 
 // Config is the resolved runtime configuration for the Dropbox ingest watcher.

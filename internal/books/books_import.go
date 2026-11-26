@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/library"
 	"github.com/lancewilhelm/delb/internal/storage"
 )
 
@@ -32,13 +32,11 @@ type catalogEntryInput struct {
 	Identifiers     []IdentifierInput
 	CoverURL        string
 	HasPhysicalCopy bool
-
-	RequirePrivateCollection bool
 }
 
-// createCatalogEntry inserts a book without ebook files into collectionID, then
+// createCatalogEntry inserts a book without ebook files into the library, then
 // creates its canonical directory and fetches its cover on a best-effort basis.
-func (s *Service) createCatalogEntry(ctx context.Context, userID, collectionID string, in catalogEntryInput) (string, error) {
+func (s *Service) createCatalogEntry(ctx context.Context, userID string, in catalogEntryInput) (string, error) {
 	title := strings.TrimSpace(in.Title)
 	if title == "" {
 		title = "Untitled"
@@ -47,8 +45,6 @@ func (s *Service) createCatalogEntry(ctx context.Context, userID, collectionID s
 	if len(authorNames) == 0 {
 		authorNames = []string{"Unknown Author"}
 	}
-	collectionIDs := []string{collectionID}
-
 	bookID := uuid.NewString()
 	now := time.Now().UTC().Unix()
 	physInt := 0
@@ -62,17 +58,8 @@ func (s *Service) createCatalogEntry(ctx context.Context, userID, collectionID s
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := collections.LockCollectionChanges(ctx, tx); err != nil {
+	if err := library.RequireCatalogEditor(ctx, tx, userID); err != nil {
 		return "", err
-	}
-	if _, err := collections.ResolveBookTarget(ctx, tx, userID, true, collectionIDs); err != nil {
-		return "", err
-	}
-
-	if in.RequirePrivateCollection {
-		if err := collections.AssertCollectionPrivate(ctx, tx, userID, collectionID); err != nil {
-			return "", err
-		}
 	}
 
 	var publisherID, seriesID *string
@@ -95,12 +82,12 @@ func (s *Service) createCatalogEntry(ctx context.Context, userID, collectionID s
 
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO books (
-			id, collection_id, added_by_user_id, added_at,
+			id, added_by_user_id, added_at,
 			title, sort_title, description, published, published_at,
 			language, pages, has_physical_copy, publisher_id, series_id, series_index,
 			created_by_user_id, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, bookID, collectionID, userID, now,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, bookID, userID, now,
 		title, MakeTitleSortKey(title), in.Description, in.Published, in.PublishedAt,
 		in.Language, in.Pages, physInt, publisherID, seriesID, seriesIndex,
 		userID, now, now); err != nil {
@@ -148,21 +135,10 @@ func (s *Service) createCatalogEntry(ctx context.Context, userID, collectionID s
 	s.ensureCanonicalDirBestEffort(authorNames, title, bookID)
 	if in.CoverURL != "" {
 		validateDest := func(tx *sql.Tx, id string) error {
-			target, err := collections.ResolveBookTarget(ctx, tx, userID, true, collectionIDs)
-			if err != nil {
-				return err
-			}
-			cur, err := collections.AssertBookEditor(ctx, tx, userID, id)
-			if err != nil {
-				return err
-			}
-			if cur != target {
-				return httpapi.NewError(http.StatusConflict, "This entry belongs to another collection.")
-			}
-			return nil
+			return library.AssertBookEditor(ctx, tx, userID, id)
 		}
 		_ = storage.WithBookStorageLock(ctx, s.libraryDir, bookID, func() error {
-			s.fetchAndAttachImportedCoverBestEffort(ctx, userID, collectionIDs, bookID, authorNames, title, in.CoverURL, validateDest)
+			s.fetchAndAttachImportedCoverBestEffort(ctx, userID, bookID, authorNames, title, in.CoverURL, validateDest)
 			return nil
 		})
 	}
@@ -201,15 +177,14 @@ func optionalString(s string) *string {
 }
 
 type ImportedBookOptions struct {
-	Enrich      bool
-	AllowShared bool
+	Enrich bool
 }
 
 // CreateImportedBook creates a catalog entry (without ebook files) from imported
 // data. When enrich is true, it first looks the book up with the default
 // metadata provider and fills in description, cover, and other fields from an
 // accepted result.
-func (s *Service) CreateImportedBook(ctx context.Context, userID, collectionID string, in ImportedBook, options ImportedBookOptions) (ImportedBookResult, error) {
+func (s *Service) CreateImportedBook(ctx context.Context, userID string, in ImportedBook, options ImportedBookOptions) (ImportedBookResult, error) {
 	entry := catalogEntryInput{
 		Title:           in.Title,
 		Authors:         in.Authors,
@@ -219,8 +194,6 @@ func (s *Service) CreateImportedBook(ctx context.Context, userID, collectionID s
 		Pages:           in.Pages,
 		Identifiers:     append([]IdentifierInput(nil), in.Identifiers...),
 		HasPhysicalCopy: in.HasPhysicalCopy,
-
-		RequirePrivateCollection: !options.AllowShared,
 	}
 	if p := optionalString(in.Published); p != nil {
 		entry.Published = p
@@ -238,7 +211,7 @@ func (s *Service) CreateImportedBook(ctx context.Context, userID, collectionID s
 		}
 	}
 
-	bookID, err := s.createCatalogEntry(ctx, userID, collectionID, entry)
+	bookID, err := s.createCatalogEntry(ctx, userID, entry)
 	if err != nil {
 		return ImportedBookResult{}, err
 	}
@@ -443,7 +416,7 @@ func (e ExistingReading) StatusDiffers(status string, endedAt *int64) bool {
 
 // LoadExistingReading returns the reader's current status, rating, review, and
 // notes for the given books, keyed by book ID. Books without any data are omitted.
-func LoadExistingReading(ctx context.Context, q collections.Queryable, userID string, bookIDs []string) (map[string]*ExistingReading, error) {
+func LoadExistingReading(ctx context.Context, q library.Queryable, userID string, bookIDs []string) (map[string]*ExistingReading, error) {
 	out := make(map[string]*ExistingReading)
 	get := func(id string) *ExistingReading {
 		e, ok := out[id]
@@ -597,7 +570,7 @@ func ApplyImportedReading(ctx context.Context, db *sql.DB, userID string, items 
 		}
 		rows, err := tx.QueryContext(ctx, `
 			SELECT b.id, b.pages FROM books b
-			INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+			INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 			WHERE b.id IN (`+makePlaceholders(len(chunk))+`)
 		`, args...)
 		if err != nil {
@@ -803,9 +776,8 @@ func rerankAfterImport(ctx context.Context, tx *sql.Tx, userID string, newlyQueu
 		FROM user_book_status ubs
 		WHERE ubs.user_id = ? AND ubs.status = 'to_be_read'
 		  AND EXISTS (
-			SELECT 1 FROM collection_books cb
-			INNER JOIN collection_members cm ON cm.collection_id = cb.collection_id
-			WHERE cb.book_id = ubs.book_id AND cm.user_id = ?
+			SELECT 1 FROM visible_books vb
+			WHERE vb.book_id = ubs.book_id AND vb.user_id = ?
 		  )
 	`, userID, userID)
 	if err != nil {
@@ -857,5 +829,5 @@ func rerankAfterImport(ctx context.Context, tx *sql.Tx, userID string, newlyQueu
 			return err
 		}
 	}
-	return nil
+	return rankHiddenTbrAfter(ctx, tx, userID, len(order))
 }

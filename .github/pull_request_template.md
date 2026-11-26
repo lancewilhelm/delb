@@ -11,7 +11,7 @@
 <!-- Describe effects on the schema, stored files, permissions, or a reader's personal data. Write "No data or access changes" when none apply. -->
 
 - [ ] Schema changes add a new migration and do not edit an existing one.
-- [ ] Every new or changed endpoint checks the session and the collection role or ownership.
+- [ ] Every new or changed endpoint checks the session, the server role, and tag visibility (the `visible_books` view).
 - [ ] Screenshots, fixtures, and logs contain only synthetic data, with no real library, account details, or API keys.
 
 ## Automated checks

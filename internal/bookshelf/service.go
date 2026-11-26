@@ -53,9 +53,9 @@ func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 		return httpapi.RequireSessionFunc(s.auth, s.logger, h)
 	}
 
-	// Collection bookshelves
-	mux.HandleFunc("GET /api/collections/{id}/bookshelf", reqSess(s.handleGetCollectionBookshelf))
-	mux.HandleFunc("PUT /api/collections/{id}/bookshelf", reqSess(s.handlePutCollectionBookshelf))
+	// Shared library bookshelf
+	mux.HandleFunc("GET /api/library/bookshelf", reqSess(s.handleGetLibraryBookshelf))
+	mux.HandleFunc("PUT /api/library/bookshelf", reqSess(s.handlePutLibraryBookshelf))
 
 	// Personal shelves & book-shelf membership
 	mux.HandleFunc("GET /api/shelves", reqSess(s.handleListShelves))

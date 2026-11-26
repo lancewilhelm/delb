@@ -1,49 +1,19 @@
 <script setup lang="ts">
 import { useAuth } from '~/composables/useAuth';
 import { useGlobalSettingsStore } from '~/stores/globalSettings';
-import { $fetch } from '~/utils/apiFetch';
 import { logger } from '~/utils/logger';
+import { roleCanEditCatalog } from '~/utils/roles';
 import { computed, onMounted, ref, watch } from 'vue';
 import SettingsUIGroup from '~/components/Settings/UI/SettingsUIGroup.vue';
 defineOptions({ name: 'SettingsAdminDropbox' });
 
-type CollectionOption = { id: string; name: string; isDefault?: boolean };
 type UserOption = { id: string; email: string; role?: string };
 
 const { isAdmin } = useAuth();
 const globalSettingsStore = useGlobalSettingsStore();
 
-const collectionsLoading = ref(false);
-const collections = ref<CollectionOption[]>([]);
-
 const usersLoading = ref(false);
 const users = ref<UserOption[]>([]);
-
-async function fetchCollections() {
-  collectionsLoading.value = true;
-  try {
-    const res = await $fetch<{
-      success: boolean;
-      data?: {
-        collections?: Array<{
-          id: string;
-          name: string;
-          isDefault?: boolean;
-        }>;
-      };
-    }>('/api/settings/admin/collections', { method: 'GET' });
-
-    collections.value = (res?.data?.collections ?? []).map((c) => ({
-      id: c.id,
-      name: c.name,
-      isDefault: Boolean(c.isDefault),
-    }));
-  } finally {
-    collectionsLoading.value = false;
-  }
-}
-
-onMounted(fetchCollections);
 
 async function fetchUsers() {
   usersLoading.value = true;
@@ -76,6 +46,11 @@ async function fetchUsers() {
 }
 
 onMounted(fetchUsers);
+
+// Readers cannot add books, so only editors and administrators can import.
+const importingUsers = computed(() =>
+  users.value.filter((u) => roleCanEditCatalog(u.role)),
+);
 
 function getDropboxSettings() {
   return globalSettingsStore.settings.dropbox ?? {};
@@ -139,16 +114,6 @@ const stablePassesRequired = computed({
 const stableMaxAgeMs = computed({
   get: () => Number(getDropboxSettings().stableMaxAgeMs ?? 5 * 60 * 1000),
   set: async (v: number) => updateDropbox({ stableMaxAgeMs: v }),
-});
-
-const targetCollectionId = computed({
-  get: () => String(getDropboxSettings().targetCollectionId ?? ''),
-  set: async (id: string) => {
-    await updateDropbox({
-      targetCollectionId: id,
-      additionalCollectionIds: [],
-    });
-  },
 });
 
 const targetUserId = computed({
@@ -254,43 +219,21 @@ const targetUserId = computed({
         </div>
       </div>
 
-      <label class="flex flex-col gap-1 text-sm"
-        >Destination collection
-        <select
-          v-model="targetCollectionId"
-          :disabled="!isAdmin || collectionsLoading"
-          class="border border-(--contrast-border-color) rounded p-2 bg-(--bg-color)"
-        >
-          <option value="">Use the current shared default</option>
-          <option
-            v-for="collection in collections"
-            :key="collection.id"
-            :value="collection.id"
-          >
-            {{ collection.name }}
-          </option>
-        </select>
-        <span class="text-xs opacity-70"
-          >Each batch keeps one destination. The selected importing user needs
-          owner or editor access to it.</span
-        >
-      </label>
-
       <div class="space-y-2">
-        <div class="text-sm font-semibold">book owner (optional)</div>
+        <div class="text-sm font-semibold">importing user (optional)</div>
         <select
           v-model="targetUserId"
           class="w-full p-2 border border-(--contrast-border-color) rounded-lg"
           :disabled="!isAdmin || usersLoading"
         >
           <option value="">(default: system owner)</option>
-          <option v-for="u in users" :key="u.id" :value="u.id">
+          <option v-for="u in importingUsers" :key="u.id" :value="u.id">
             {{ u.email }}{{ u.role ? ` (${u.role})` : '' }}
           </option>
         </select>
         <div class="text-xs opacity-70">
-          This user is recorded as the uploader and must have owner or editor
-          access to the destination.
+          Dropbox books go into the shared library. This user is recorded as the
+          uploader and must be an editor or administrator.
         </div>
       </div>
     </div>

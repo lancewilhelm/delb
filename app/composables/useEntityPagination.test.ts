@@ -36,7 +36,6 @@ async function settle() {
 
 test('pagination snapshots inputs, prevents duplicate requests, and ignores stale outcomes', async () => {
   const search = ref('');
-  const collection = ref('one');
   const preview = ref(8);
   const initialization = deferred<undefined>();
   const calls: {
@@ -50,7 +49,6 @@ test('pagination snapshots inputs, prevents duplicate requests, and ignores stal
         pagination = useEntityPagination({
           inputs: () => ({
             search: search.value,
-            collectionId: collection.value,
             previewLimit: preview.value,
           }),
           initialize: () => initialization.promise,
@@ -68,12 +66,12 @@ test('pagination snapshots inputs, prevents duplicate requests, and ignores stal
   app.mount({ children: [] });
   assert.equal(pagination.loading.value, true);
   assert.equal(calls.length, 0);
-  collection.value = 'two';
+  search.value = 'before';
   initialization.resolve(undefined);
   await settle();
   assert.equal(calls.length, 1);
   assert.equal(pagination.loading.value, true);
-  assert.equal(calls[0]!.query.collectionId, 'two');
+  assert.equal(calls[0]!.query.search, 'before');
   calls[0]!.result.resolve({ rows: ['a', 'b'], hasMore: true });
   await settle();
   assert.equal(pagination.loading.value, false);
@@ -88,13 +86,13 @@ test('pagination snapshots inputs, prevents duplicate requests, and ignores stal
   await settle();
   assert.equal(pagination.loading.value, true);
   assert.equal(pagination.error.value, null);
-  collection.value = 'three';
+  search.value = 'three';
   assert.equal(calls.length, 4);
   calls[2]!.result.resolve({ rows: ['stale'], hasMore: true });
   calls[3]!.result.resolve({ rows: ['fresh'], hasMore: true });
   await settle();
   assert.deepEqual(pagination.rows.value, ['fresh']);
-  assert.equal(calls[3]!.query.collectionId, 'three');
+  assert.equal(calls[3]!.query.search, 'three');
   preview.value = 4;
   assert.equal(calls[4]!.query.previewLimit, '4');
   app.unmount();

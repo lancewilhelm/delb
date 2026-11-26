@@ -68,9 +68,9 @@ Synchronization is request-driven. The current implementation does not claim a l
 
 ## Sign-out and permissions
 
-The [auth composable](../../../app/composables/useAuth.ts) resets account/UI state and clears the known persisted account, collection, UI, and filter keys when signing out. Server sessions and each endpoint's permission checks remain authoritative.
+The [auth composable](../../../app/composables/useAuth.ts) resets account/UI state and clears the known persisted account, UI, and filter keys when signing out. Server sessions and each endpoint's permission checks remain authoritative.
 
-Collection membership controls cover/file visibility. Settings persistence does not grant access to another user's books or expose provider tokens.
+Tag visibility rules control cover and file visibility. Settings persistence does not grant access to another user's books or expose provider tokens.
 
 See [book view design record](../../archive/book-view-settings.md), [system architecture](../architecture.md), and [the verification record](../documentation-status.md).
 
