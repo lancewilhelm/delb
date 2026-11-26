@@ -105,6 +105,10 @@ The Started, Finished, and DNF fields on the book details page use `UiDateInput`
 - Book detail UI: `app/pages/books/[id]/index.vue`
 - Reader sync: `app/pages/books/[id]/read.vue`
 
+## Finish summary
+
+`GET /api/books/{id}/finish-summary` returns the reader's finish stats and a daily progress series without the 50- or 200-entry limits above. Share cards draw from it. See the [share cards reference](share-cards.md#finish-summary-endpoint) for its fields and rules.
+
 ## Displayed progress
 
 The book details Progress section shows the latest saved reader percentage or progress log and up to 50 recent history entries. The dashboard Continue reading section uses the same latest-progress rule. A log dated on an earlier day stays in history instead of replacing more recent progress; a date-only manual entry for the current day is ordered by when it was saved. Progress history and reader positions remain private to each user. Showing progress does not move the reader position.

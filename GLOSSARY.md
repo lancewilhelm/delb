@@ -60,6 +60,9 @@ A reader's saved location within an ebook. It is distinct from the historical pr
 **Progress log**:
 A reader's history of progress entries for a book, recorded manually, through reader sync, or when marking the book Finished.
 
+**Share card**:
+An image that a reader exports to share a finished book outside Delb. It combines the cover with the reader's own stats, such as reading duration, pages, pace, and rating. It never includes a link to the library, the review, or notes.
+
 **TBR queue**:
 A reader's private, ordered list of books they plan to read. The queue spans all collections the reader can access.
 

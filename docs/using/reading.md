@@ -57,6 +57,21 @@ To show status icons on covers, enable **Reading status badges** under **Setting
 
 Changes affect your account's status, not the status of other collection members. See [status and date rules](../developing/reference/reading-status-progress.md) for the complete transitions.
 
+## Share a finished book
+
+A share card is an image of a book you finished, with its cover and your reading stats, for posting on social media.
+
+1. Open a book whose status is **Finished** and select **Share card** next to the status. When you choose **Finished** for a book, a notice also offers **Share card**.
+2. Choose a **Style**: **Cover palette**, **Editorial split**, **Swiss grid**, **Duotone**, or **Pace overlay**. Most styles take their colors from the cover.
+3. Choose a **Format**: **Square** for posts, **Story** for full-screen stories, or **Landscape** for link-style posts.
+4. For **Pace overlay**, choose a **Background**. **Theme** uses your Delb theme, **Soft cover** uses a blurred copy of the cover, and **Transparent** leaves the background empty so that you can place the image over your own photo.
+5. Under **Show**, clear anything that you want to leave off: the rating, duration and dates, page count and pace, the pace chart, or the Delb logo.
+6. Select **Download PNG**, **Copy image**, or **Share**. **Copy image** and **Share** appear only when your browser supports them.
+
+The card shows only details that you recorded. Without a start date, it shows no duration or pace. Without a page count, it shows no page stats. The pace chart needs progress logged on at least three different days between your start and finish dates. The card never includes a link to your library, your review, or your notes.
+
+To stop the notice after you finish a book, select **Don't ask again** in it. To turn it back on, use **Offer a share card when I finish a book** under **Settings → General → Share cards**. See the [share cards reference](../developing/reference/share-cards.md) for how stats and colors are calculated.
+
 ## Write a review and keep notes
 
 The book detail page has a **Review** and a **Notes** section under **Rating**. Only you can see them, even in a shared collection.
