@@ -1,253 +1,78 @@
-# Calibre Import (Migration)
+# Calibre import
 
-This document describes how Delb imports an existing **Calibre** library by **copying** files into Delb’s own `library/` structure.
+Delb can perform a one-way migration from an existing Calibre library by reading `calibre/metadata.db` and copying supported book files and covers into Delb's managed `library/` directory. After import, Delb manages its own database (`data/delb.db`) and files in `library/`, and changes in Delb do not write back to Calibre. Keep your original Calibre library mounted read-only as an archive if you want a path back to Calibre.
 
-> Goal: a **one-way migration** where Delb becomes the source of truth. Calibre remains read-only input.
+## How Delb reads Calibre
 
-## How Delb reads `metadata.db`
+Delb reads `calibre/metadata.db` with its pure-Go SQLite driver (`modernc.org/sqlite`), so no CGO or external native packages are required. It never modifies `calibre/metadata.db` or any files under `calibre/`.
 
-Delb reads Calibre’s `calibre/metadata.db` using the `@libsql/client` SQLite driver (local `file:` URL). This avoids relying on native Node addons for reading the Calibre database, which improves portability in Docker deployments.
+## Directory layout
 
----
+Mount or place the directories as follows:
 
-## Summary
+- `calibre/` (read-only in Docker at `/app/calibre`): Your Calibre library root containing `metadata.db` and Calibre's `<Author>/<Title> (<id>)/` book folders.
+- `library/` (writable in Docker at `/app/library`): Delb's managed storage root, where imported books are copied into `library/<Author>/<Title> (<id8>)/`.
+- `data/` (writable in Docker at `/app/data`): Delb's SQLite database (`data/delb.db`).
 
-- Delb imports a Calibre library by **copying** files into its own `library/` structure.
-- Calibre must be mounted to Delb’s `calibre/` folder and must include:
-  - `calibre/metadata.db`
-  - The Calibre book directories/files underneath `calibre/`
-- Delb writes its own database to:
-  - `data/delb.db`
-- After migration, Delb manages files in `library/` and is **not** kept in sync with Calibre.
-- If you keep Calibre around, treat it as **read-only** archive input.
+## Run the import
 
----
+1. Open **Settings → Admin → Library**.
+2. Optionally select **Dry run** to preview the import without writing to the database or copying files.
+3. Select **Import From Calibre**.
 
-## Requirements / Expectations
+The import adds new entries to the shared library and updates existing Calibre-linked entries in place. You can run it again safely against the same Calibre library because Delb links each entry by Calibre's book ID.
 
-### 1) Library layout
+## What Delb imports
 
-Delb expects your **Calibre** library root to be mounted at:
+### Metadata
 
-- `calibre/`
+Delb imports common Calibre fields:
 
-And to contain the Calibre DB at:
+- **Books:** title, description (from comments), language (best-effort across Calibre schema versions), publication date and timestamp, series name and index, and publisher.
+- **Authors:** name, sort name, and author order (`book_authors.position`).
+- **Tags:** shared catalog tags.
+- **Identifiers:** stored in `book_identifiers` (such as `isbn`, `google`, and `amazon`).
 
-- `calibre/metadata.db`
+Calibre custom columns and plugin-specific tables are not guaranteed to import. See [Calibre's schema reference](../developing/reference/calibre-schema.md) for table details.
 
-Calibre book directories typically look like:
+### Book files and formats
 
-- `calibre/<Author>/<Title> (<id>)/...`
-
-And often contain:
-
-- one or more ebook format files (e.g. `.epub`, `.pdf`, `.mobi`, `.azw3`)
-- `metadata.opf` (sidecar metadata)
-- `cover.jpg` / `cover.jpeg` / `cover.png`
-
-### 1a) Delb library layout
-
-Delb writes migrated books into its own storage root:
-
-- `library/`
-
-Example Delb storage (canonical):
-
-- `library/<Author>/<Title> (<id8>)/...`
-
-### 2) Delb database location
-
-Delb uses its own SQLite DB:
-
-- `data/delb.db`
-
-The Calibre import populates/updates Delb’s tables and does **not** change Calibre’s `metadata.db`.
-
----
-
-## How the import works
-
-### Entry point (Admin UI)
-
-The import is triggered from the Admin settings page:
-
-- **Settings → Admin → Library**
-
-You’ll see controls for:
-
-- **Import from Calibre**
-- Optional **Dry run** (preview only)
-
-#### Import (`action: "import"`)
-
-- One-time import of Calibre metadata and **file copies** into Delb’s `library/`
-- Adds newly imported entries to the shared library
-- Updates existing source-linked entries in place
-- Safe to run again if you need to reimport from the same Calibre library (idempotent via `calibre_book_id`)
-
----
-
-## What metadata is imported
-
-Delb imports the common Calibre entities:
-
-- **Books**
-  - title
-  - description/comments (when available)
-  - language (best-effort; Calibre schema differs across versions)
-  - published/timestamp (stored as a raw string in Delb v1)
-  - series + series index (when available)
-  - publisher (when available)
-- **Authors**
-  - name
-  - sort name (best-effort / Calibre-style sort)
-  - ordering: stored as `book_authors.position`
-- **Tags**
-- **Identifiers**
-  - examples: `isbn`, `google`, `amazon`, etc.
-  - Delb stores these in `book_identifiers`
-
-Calibre supports many additional fields and “custom columns”; those are not guaranteed to import in the current implementation.
-
----
-
-## Files and formats (migration)
-
-Delb **copies** supported format files from Calibre into its own `library/` folder.
-
-Delb records each discovered format as a row in `book_files`:
-
-- `book_files.format` (lowercased extension, e.g. `epub`, `pdf`)
-- `book_files.relative_path` (a `library/...` relative path pointing to the **copied** file)
-
-### Supported formats today
-
-Delb currently links/serves formats that the app already supports for download:
+Delb copies supported format files into `library/` and records each file in `book_files` with its lowercased format and relative `library/...` path. Supported formats are:
 
 - `epub`
 - `pdf`
 - `mobi`
 - `azw3`
 
-### How Delb discovers formats
+Because Calibre's file schema varies across versions, Delb first checks Calibre's database tables for format records and falls back to scanning the on-disk Calibre book directory for supported extensions.
 
-Calibre’s format/file schema varies by version. Delb uses a “best effort” approach:
+### Covers
 
-1. Try to locate format info via Calibre DB tables (when present)
-2. If DB discovery is incomplete, Delb falls back to scanning the on-disk Calibre book directory for supported files
+Delb uses a two-file cover model:
 
-This is intentional: the filesystem is the most reliable source of “what is actually present”.
+- **Source cover:** The original Calibre cover (`cover.jpg`, `cover.jpeg`, or `cover.png`) copied into the Delb book folder at full resolution.
+- **Thumbnail:** A 320px-wide `thumb.webp` generated alongside the source cover.
 
----
+Delb points `books.cover_image_path` to `thumb.webp`. Lists and grids request the thumbnail, and opening the cover on the book detail page loads the full-resolution source cover on demand. Thumbnails are generated only when missing so repeat imports stay fast. If a cover image is corrupt or unsupported, Delb skips the cover and continues importing the book.
 
-## Covers
+## Idempotency and backups
 
-Delb uses a **two-file cover model**:
+Delb stores Calibre's `books.id` in `books.calibre_book_id` with a unique index. Re-running the import updates the matching Delb record even if titles, authors, or folder names changed.
 
-- **Thumbnail (default/UI):** `thumb.webp` (320px wide)
-- **Source (full resolution):** a copied source cover (typically `cover.jpg` / `cover.png`)
-
-### What gets stored during Calibre import
-
-When a Calibre cover exists, Delb will:
-
-1. Copy the source cover into Delb’s book folder (full resolution), e.g.
-   - `cover.jpg`
-   - `cover.jpeg`
-   - `cover.png`
-
-2. Generate a lightweight thumbnail alongside it:
-   - `thumb.webp` (320px wide)
-
-Delb sets `books.cover_image_path` to point to the thumbnail:
-
-- `library/<author>/<title (id8)>/thumb.webp`
-
-### How the UI serves covers
-
-- Most pages (thumbnails, lists, grids) use the path in `books.cover_image_path` (the `thumb.webp`).
-- When a user clicks the cover on the book detail page, the UI requests the **source** cover on demand (the true original, not resized).
-
-### Notes and caveats
-
-- Delb does **not** modify Calibre files during migration.
-- Thumbnails are generated only when missing (so repeat imports stay fast).
-- If cover generation fails for a given book (corrupt/unsupported cover), Delb will continue without a cover for that book.
-
----
-
-## Idempotency and `calibre_book_id`
-
-To avoid duplicate imports and enable repeatable imports, Delb stores Calibre’s per-book ID:
-
-- Delb: `books.calibre_book_id`
-- Calibre: `metadata.db` table `books.id`
-
-This enables Delb to update the existing Delb book record even if the title/authors/folder names change.
-
-### Uniqueness
-
-Delb enforces uniqueness so that a single Calibre book maps to a single Delb book:
-
-- `books.calibre_book_id` has a unique index (nullable; non-Calibre books can still exist)
-
----
-
-## Caveats / Risks / “Can I go back to Calibre?”
-
-- Calibre’s `calibre/metadata.db` and file layout remain unchanged.
-- Delb’s edits **do not** flow back to Calibre after migration.
-- If you want a path back to Calibre, keep the original Calibre library as a read-only archive.
-
-### Backup guidance
-
-Even with migration, it’s wise to keep backups of:
-
-- `calibre/` (Calibre library folder, including `metadata.db`)
-- `library/` (Delb-managed library)
-- `data/` (Delb database)
-
-If you plan to experiment with file moves/renames under `library/`, you should duplicate the Delb library first.
-
----
+Keep backups of `calibre/`, `library/`, and `data/` before running large imports or reorganizations.
 
 ## Troubleshooting
 
-### Import fails due to schema differences
+### Schema mismatch errors
 
-Calibre schema varies significantly by version. If an import fails with a SQLite error referencing a missing table/column, it usually means:
+Calibre schemas vary across versions. If an import fails with a SQLite error referencing a missing table or column, your `metadata.db` likely omits an optional table or uses an older column layout that the importer does not yet handle.
 
-- your `metadata.db` uses a different column name than expected
-- your Calibre version omits that feature entirely
+### Missing book files after import
 
-Delb’s importer is designed to skip optional features when possible, but some schema mismatches may require additional detection logic.
+If a book imports without its file, check the following:
 
-### Import completes but missing files appear in Delb
+- Confirm that the file exists under `calibre/` and that `metadata.db` points to the actual path.
+- Confirm that the file extension is one of `epub`, `pdf`, `mobi`, or `azw3`.
+- Re-run the import after fixing the source files or mount permissions.
 
-Common causes:
-
-- Calibre’s `metadata.db` references paths that do not exist on disk
-- Formats exist but are not in the supported formats list (`epub|pdf|mobi|azw3`)
-- Files are present but not discoverable due to an uncommon Calibre layout
-
-Try:
-
-- Run the import again (it is idempotent)
-- Verify the file exists under `calibre/` (source) and `library/` (Delb copy)
-- Confirm the file extension is supported
-
----
-
-## Operational notes (Docker)
-
-Typical deployment expectation:
-
-- mount Calibre library into the container at `/app/calibre` (read-only input)
-- mount Delb library into the container at `/app/library` (writable)
-- mount Delb data volume for `/app/data`
-
-Delb reads from `calibre/metadata.db` and writes to `data/delb.db`.
-
----
-
-Each Calibre book stays linked to one Delb entry. Entries that earlier versions copied between collections are not linked to Calibre and are excluded from rescans; see [Upgrade to a single library](single-library-upgrade.md).
+Each Calibre book stays linked to one Delb entry. For pre-1.0 preview installations that previously copied books between collections, copied entries are unlinked from Calibre and skipped by rescans; see [Upgrade to a single library](single-library-upgrade.md).

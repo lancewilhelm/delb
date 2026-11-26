@@ -57,4 +57,4 @@ The palette also opens the custom theme editor and the grid and list field-order
 
 Changes save automatically. When separate mobile settings are enabled, the slider changes the active device profile. See the [contrast reference](../developing/reference/settings.md#interface-contrast) for the text and border behavior.
 
-Continue with [adding books](add-books.md). For the implementation behind registration and the shared default, read [account initialization](../developing/core-workflows.md#account-initialization).
+Continue with [adding books](add-books.md). For the implementation behind registration and owner setup, read [account initialization](../developing/core-workflows.md#account-initialization).

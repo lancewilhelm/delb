@@ -32,7 +32,7 @@ CI runs all of these on every pull request. See [the test workflow](.github/work
 ## Working rules
 
 - Branch from `main` with a prefix such as `feat/`, `fix/`, `docs/`, or `ci/`. Open a pull request; do not push to `main`.
-- Write commit subjects in Conventional Commits form (`feat:`, `fix:`, `docs:`, `chore:`). `standard-version` builds the changelog from `feat` and `fix` commits.
+- Write commit subjects in Conventional Commits form (`feat:`, `fix:`, `docs:`, `chore:`).
 - Fill in every section of the [pull request template](.github/pull_request_template.md). The manual verification section must describe what you actually did. If you could not run something, say so and say why.
 - Keep changes focused. Report unrelated problems that you find instead of fixing them in the same change.
 

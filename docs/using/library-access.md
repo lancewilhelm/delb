@@ -53,8 +53,8 @@ Rules do not apply to Owner and Admin accounts. An Editor with tag visibility ru
 - Merging a tag into another tag moves its rules to the destination tag. If an account had an allow rule on one tag and a hide rule on the other, the hide rule wins.
 - Removing a tag from a book changes who can see that book. For example, removing `family` from a book hides it from an account that only allows `family`.
 
-## Upgrade from collections
+## Upgrade from pre-1.0 collections
 
-Earlier versions split the library into collections with their own members and roles. The upgrade merges every collection into the one shared library, so every account can see every book until an Admin adds tag visibility rules. See [Upgrade to a single library](../hosting/single-library-upgrade.md) for what changes and how to review access after upgrading.
+Pre-1.0 preview versions split the library into collections with their own members and roles. If you are upgrading a pre-1.0 server, see [Upgrade to a single library](../hosting/single-library-upgrade.md) for what changes and how to review access after upgrading.
 
 See the [library access reference](../developing/reference/library-access.md) and the [reading guide](reading.md).

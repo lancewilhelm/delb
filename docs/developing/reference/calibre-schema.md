@@ -1,66 +1,47 @@
 # Calibre database schema reference (SQLite)
 
-This document captures a **reference** view of the SQLite schemas Calibre uses, primarily to inform Delb’s future import/migration planning.
+This document summarizes the SQLite schemas that Calibre uses, as a reference for Delb's Calibre importer.
 
 Sources:
 
-- The schema listing in this doc is based on an extracted summary (provided in the project discussion) from Calibre’s repository code and SQL resources.
+- Extracted summary from Calibre's repository code and SQL resources.
 - Calibre upstream code search: https://github.com/kovidgoyal/calibre/search?q=CREATE+TABLE&type=code
 
-## Calibre → Delb migration (current behavior)
+## Calibre to Delb migration (current behavior)
 
-Delb supports importing an existing Calibre library as a **one-way migration**:
+Delb imports an existing Calibre library as a **one-way migration** (see [Calibre import](../../hosting/calibre-import.md) for setup and troubleshooting):
 
-- The Calibre library is mounted at Delb’s `calibre/` directory.
-- Calibre’s database is read from `calibre/metadata.db`.
+- The Calibre library is mounted at Delb's `calibre/` directory.
+- Calibre's database is read from `calibre/metadata.db` using Delb's pure-Go SQLite driver (`modernc.org/sqlite`).
 - Delb writes its own data to `data/delb.db`.
 - Delb **copies** Calibre files into its own `library/` structure and manages them thereafter.
 
 ### Admin controls
 
-The import is driven from the admin settings page (Library Management):
+The import runs from **Settings → Admin → Library** (`Import From Calibre`), with an optional **Dry run** preview. It performs a safe, repeatable import of metadata and copied book files into Delb's `library/`.
 
-- **Import from Calibre**: one-time import of metadata + file copies into Delb’s `library/`.  
-  This is intended to be safe and repeatable.
+### Idempotency and linking to Calibre book IDs
 
-### Idempotency and linking to Calibre book ids
-
-To prevent duplicate imports, Delb stores the Calibre `books.id` value alongside the Delb book record:
-
-- Delb `books.calibre_book_id` ⇄ Calibre `books.id`
-
-Delb does **not** preserve Calibre’s _library UUID_; it only uses the Calibre book id to make imports idempotent.
+To prevent duplicate imports, Delb stores Calibre's `books.id` value in `books.calibre_book_id` with a unique index. Delb does not preserve Calibre's library UUID; it uses only the Calibre book ID to make repeat imports idempotent.
 
 ### Files and formats
 
-Calibre commonly stores formats as files inside the book folder (for example: `*.epub`, `*.pdf`, `*.mobi`, `*.azw3`), along with sidecar files such as:
+Calibre stores formats inside each book folder (for example `*.epub`, `*.pdf`, `*.mobi`, `*.azw3`), along with sidecar files such as `metadata.opf` and `cover.jpg` or `cover.png`.
 
-- `metadata.opf`
-- `cover.jpg` / `cover.png`
-
-Delb records every discovered format as a row in `book_files` and stores **copied** files under its own library:
-
-- `book_files.format` is the lowercased extension (`epub`, `pdf`, `mobi`, `azw3`, ...)
-- `book_files.relative_path` is stored as a Delb-style `library/...` path pointing at the **copied** Delb-managed file.
-
-Delb prefers discovering formats via the Calibre DB when possible, but will fall back to scanning the on-disk book directory when the DB does not expose filenames in a reliable way across Calibre versions.
+Delb records each discovered supported format (`epub`, `pdf`, `mobi`, `azw3`) in `book_files` with a `library/...` relative path pointing to the copied file. Delb checks Calibre's database tables first and falls back to scanning the on-disk Calibre book directory when the database schema omits or varies format filenames.
 
 ### Covers
 
-Delb sets `books.cover_image_path` to the generated thumbnail (`thumb.webp`) in the Delb library and stores a source cover
-(`cover.<ext>`) alongside it.
+Delb sets `books.cover_image_path` to the generated thumbnail (`thumb.webp`) in the Delb library and copies the source cover (`cover.<ext>`) alongside it.
 
-## Important notes / caveats
+## Important notes and caveats
 
-- **This may be incomplete.** Calibre evolves schemas over time and applies upgrades based on `PRAGMA user_version`.
-- Many elements are **implementation-dependent** (views, triggers, indexes, tokenizers, custom functions).
-- Calibre supports **dynamic custom columns**, which can cause additional tables/triggers to exist beyond the “core” tables listed below.
-- Calibre may **clone/backup** databases or create temporary databases for various operations; those generally reuse the same schema patterns.
-- **Delb MVP upload limitation (known):** uploading the same book more than once (same author + title) does not currently deconflict. The upload will overwrite the stored file on disk (since the storage path is deterministic) and insert another row in the database. A future improvement is to add a deconfliction flow (prompt user: replace, keep both, cancel) and/or enforce a uniqueness constraint.
+- **This reference may be incomplete.** Calibre evolves its schema over time and applies upgrades based on `PRAGMA user_version`.
+- Many elements depend on the Calibre version (views, triggers, indexes, tokenizers, and custom functions).
+- Calibre supports dynamic custom columns, which create additional tables and triggers beyond the core tables listed below.
+- Calibre may clone or back up databases or create temporary databases for internal operations; those generally follow the same schema patterns.
 
----
-
-## 1) `metadata.db` — core library database
+## 1) `metadata.db` core library database
 
 This is the main library database in a Calibre library folder. It stores books, authors, tags, series, formats, covers, identifiers, etc.
 
@@ -210,21 +191,16 @@ Stores the actual format payloads (depending on how Calibre is configured/used).
 
 ### Custom columns (dynamic schema)
 
-Calibre’s “custom columns” can be created by users at runtime. The schema is **not fixed**.
+Calibre's custom columns are created by users at runtime, so their schema is not fixed.
 
-A common normalized pattern (conceptual) for a custom column is:
+A common normalized pattern for a custom column includes:
 
-- A master values table:
-  - `id`, `value` (and optional extra columns for series-like data)
-  - UNIQUE(`value`)
-- A link table:
-  - `id`, `book` INTEGER NOT NULL, `value` INTEGER NOT NULL
-  - optional extra column (e.g. `extra` REAL)
-  - UNIQUE(`book`, `value`)
-- Plus indexes and triggers.
-- Denormalized patterns also exist depending on custom column type/config.
+- A master values table (`id`, `value`, optional extra columns for series-like data, `UNIQUE(value)`).
+- A link table (`id`, `book` INTEGER NOT NULL, `value` INTEGER NOT NULL, optional `extra` REAL, `UNIQUE(book, value)`).
+- Associated indexes and triggers.
+- Denormalized patterns also exist depending on the custom column type and configuration.
 
-For import planning in Delb: expect that a Calibre `metadata.db` may contain _many extra tables_ related to custom columns.
+Expect a real Calibre `metadata.db` to contain extra tables for custom columns beyond the core tables above.
 
 ---
 
@@ -370,9 +346,9 @@ Triggers maintain the FTS indexes and resource link integrity.
 
 ---
 
-## 4) Server / small caches and other SQLite files
+## 4) Server, caches, and other SQLite files
 
-These databases support Calibre’s server features, caches, and state tracking.
+These databases support Calibre's server features, caches, and state tracking.
 
 ### `server-users.sqlite` (Calibre server user DB)
 
@@ -420,40 +396,15 @@ These databases support Calibre’s server features, caches, and state tracking.
 
 ---
 
-## 5) Device DBs & external DBs
+## 5) Device and external databases
 
-Calibre can read device-specific SQLite databases (e.g. Kobo). These are created/owned by the device ecosystem, not by Calibre itself, and therefore are not documented here as “Calibre schema”.
+Calibre can read device-specific SQLite databases (such as Kobo). Those are owned by the device ecosystem rather than Calibre itself and are outside this reference.
 
----
+## 6) SQLite extensions and schema semantics
 
-## 6) SQLite extensions and behavior that affect schema semantics
+Some Calibre database features depend on native SQLite extensions:
 
-Some Calibre database behavior depends on SQLite extensions:
+- Custom aggregates and functions (such as `sortconcat`) provided by a C module.
+- A custom FTS5 tokenizer used by the full-text search databases.
 
-- Custom aggregates/functions (e.g. concatenation helpers) via a native module (C).
-- A custom FTS5 tokenizer used by the FTS databases.
-- Extension module registration and build metadata are defined in Calibre upstream.
-
-For Delb import planning, this matters because:
-
-- Import may need to replicate **derived fields** (e.g. `sortconcat`-like behavior) in application logic rather than relying on SQLite extensions.
-- Full-text search ingestion may require re-indexing rather than attempting to import FTS tables directly.
-
----
-
-## Suggested next steps for Delb (import-oriented)
-
-When you’re ready to implement import:
-
-1. Decide whether Delb will import:
-   - only `metadata.db` core tables, or
-   - also notes and last-read positions, or
-   - also reconstruct FTS indexes.
-2. Handle schema variance by reading:
-   - `PRAGMA user_version`
-   - `PRAGMA table_info(<table>)`
-   - presence/absence of upgrade-added tables (`identifiers`, `languages`, etc.)
-3. Treat Calibre custom columns as a first-class discovery process:
-   - enumerate tables and match Calibre’s custom-column patterns, rather than hardcoding table names.
-
-(Implementation intentionally deferred; this doc is reference-only.)
+Because Delb reads `metadata.db` with a pure-Go SQLite driver (`modernc.org/sqlite`) without Calibre's native extensions, [`internal/admin/calibre_reader.go`](../../../internal/admin/calibre_reader.go) queries core tables directly and computes derived values in Go rather than relying on Calibre views, triggers, or FTS tables.

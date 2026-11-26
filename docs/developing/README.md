@@ -15,7 +15,7 @@ pnpm dev
 
 `pnpm dev` builds the Go server, starts Vite with hot reload, and serves both at `http://localhost:3000`. The server applies pending migrations at startup. The database defaults to `data/delb.db`; managed files use `library/`. On the first visit, register an account. This creates local application data, so use a dedicated checkout when you need a disposable environment.
 
-The migration history starts from one baseline, `0000_initial.sql`, which squashes the pre-1.0 chain. Delb refuses to start on a database that stopped partway through that chain; see [Upgrade to a single library](../hosting/single-library-upgrade.md).
+The migration history starts from one baseline, `0000_initial.sql`, which squashes the pre-1.0 chain. Delb refuses to start on a pre-1.0 database that stopped partway through that chain; see [Upgrade to a single library](../hosting/single-library-upgrade.md).
 
 Migrations are SQL files in `.drizzle/migrations` that are written by hand. [AGENTS.md](../../AGENTS.md#schema-changes) lists the files that a new migration must update. Never edit a migration that has already been merged. `bin/delb --migrate-only` applies pending migrations and exits.
 
@@ -55,14 +55,17 @@ The smoke verifies guest rejection, registration, upload, listing, shared librar
 Run the checks appropriate to the changed behavior:
 
 ```sh
+pnpm docs:check
 pnpm test
 pnpm typecheck
 pnpm lint
 pnpm build
+go vet ./...
+go test -count=1 ./...
 pnpm test:integration
 ```
 
-Integration checks use disposable fixtures. Keep synthetic/offline checks distinct from a live provider, container, filesystem, or device test. Document the actual evidence and remaining gaps in the PR.
+Integration checks use disposable fixtures. Keep synthetic offline checks distinct from a live provider, container, filesystem, or device test. Document the actual evidence and remaining gaps in the PR.
 
 [Test](../../.github/workflows/test.yml) checks PR merge results with the full suite.
 [Push verification](../../.github/workflows/push-test.yml) runs the same suite for tags and branches without an open PR in this repository.

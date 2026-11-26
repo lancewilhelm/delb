@@ -28,9 +28,12 @@ pnpm test:integration
 ## Open a pull request
 
 1. Create a branch from `main` with a prefix such as `feat/`, `fix/`, or `docs/`.
-2. Write commit subjects in [Conventional Commits](https://www.conventionalcommits.org/) form, such as `feat: add a finish-date filter`. The changelog is built from `feat` and `fix` commits.
+2. Write commit subjects in [Conventional Commits](https://www.conventionalcommits.org/) form, such as `feat: add a finish-date filter`.
 3. Update the documentation in the same pull request when user-visible behavior changes. The contributor guide explains [how docs stay aligned with behavior](docs/developing/README.md#keep-docs-aligned-with-behavior).
 4. Fill in the pull request template, including the manual verification section.
+5. Use a pull request title that describes the change. GitHub uses that title in the release notes. Apply `enhancement`, `bug`, or `documentation` where it fits.
+
+See [Publish a release](docs/developing/releasing.md) for the release checklist.
 
 ## Manual verification
 

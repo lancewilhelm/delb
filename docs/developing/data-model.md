@@ -1,6 +1,6 @@
 # Delb's data model
 
-The [Drizzle schema](../../.drizzle/migrations) describes Delb's own database. [SQL migrations](../../.drizzle/migrations) define upgrades. The separate [Calibre schema reference](reference/calibre-schema.md) describes an import source, not Delb's tables.
+The [SQL migrations](../../.drizzle/migrations) define Delb's SQLite schema and upgrades, starting from the `0000_initial.sql` baseline. The separate [Calibre schema reference](reference/calibre-schema.md) describes an import source, not Delb's tables.
 
 ## Shared library and access
 
@@ -49,7 +49,7 @@ The same shared book can have different statuses, positions, ratings, rationale,
 
 ## Accounts and settings
 
-Better Auth uses `users`, `sessions`, `accounts`, and `verifications`. `users.role` holds the server role.
+Delb's Go auth package ([`internal/auth`](../../internal/auth/store.go)) uses the `users`, `sessions`, `accounts`, and `verifications` tables. `users.role` holds the server role.
 
 `user_settings` stores a JSON account document and a millisecond revision timestamp. That document includes desktop settings and an optional mobile override profile. `global_settings` stores installation-wide settings. `global_secrets` stores server-side credentials such as the Hardcover token and optional Google Books API key; settings responses expose availability rather than the secret values.
 
