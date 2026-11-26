@@ -112,7 +112,7 @@ func FindSeriesSpines(ctx context.Context, db *sql.DB, userID, bookID string, se
 		SELECT b.id, b.title, b.series_index, bs.revision, ` + selectImg + `
 		FROM books b
 		INNER JOIN book_spines bs ON bs.book_id = b.id
-		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 		WHERE b.series_id = ? AND b.id != ?` + whereExtra + `
 		ORDER BY
 			CASE WHEN b.series_index IS NULL THEN 1 ELSE 0 END ASC,

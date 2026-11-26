@@ -27,6 +27,8 @@ const browser = spawn(
     '--remote-debugging-port=0',
     `--user-data-dir=${profile}`,
     '--no-first-run',
+    '--disable-background-networking',
+    '--proxy-server=http://127.0.0.1:1',
     'about:blank',
   ],
   { stdio: 'ignore' },
@@ -340,29 +342,26 @@ try {
     path.join(tmpdir(), 'delb-bookshelf-polish.png'),
     shelfScreenshot,
   );
-  const pixels = await sharp(shelfScreenshot)
-    .removeAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-  const pixel = (x, y) => [
-    ...pixels.data.subarray(
-      (Math.floor(y) * pixels.info.width + Math.floor(x)) *
-        pixels.info.channels,
-      (Math.floor(y) * pixels.info.width + Math.floor(x)) *
-        pixels.info.channels +
-        3,
-    ),
-  ];
-  assert.deepEqual(
-    pixel(handlePlacement.left - 3, handlePlacement.rowTop - 3),
-    pixel(handlePlacement.left - 3, handlePlacement.rowTop + 8),
-    'Top left frame corner connects',
-  );
-  assert.deepEqual(
-    pixel(handlePlacement.right + 2, handlePlacement.rowTop - 3),
-    pixel(handlePlacement.right + 2, handlePlacement.rowTop + 8),
-    'Top right frame corner connects',
-  );
+  const { left, right, rowTop } = handlePlacement;
+  const pixels = await evaluate(`(async () => {
+    const image = new Image();
+    image.src = 'data:image/png;base64,${shelfScreenshot.toString('base64')}';
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d');
+    context.drawImage(image, 0, 0);
+    return ${JSON.stringify([
+      [left - 3, rowTop - 3],
+      [left - 3, rowTop + 8],
+      [right + 2, rowTop - 3],
+      [right + 2, rowTop + 8],
+    ])}
+      .map(([x, y]) => Array.from(context.getImageData(Math.floor(x), Math.floor(y), 1, 1).data));
+  })()`);
+  assert.deepEqual(pixels[0], pixels[1], 'Top left frame corner connects');
+  assert.deepEqual(pixels[2], pixels[3], 'Top right frame corner connects');
   const mouse = (type, x, y, modifiers = 0) =>
     call('Input.dispatchMouseEvent', {
       type,
@@ -444,9 +443,9 @@ try {
     ),
     true,
   );
-  const originalRows = (
-    await api(`/api/shelves/${shelfId}`)
-  ).arrangement.bookcases[0].shelves.map((shelf) => shelf.id);
+  const originalRows = await evaluate(
+    '[...document.querySelectorAll("[data-shelf-canvas]")].map(row => row.dataset.shelfCanvas)',
+  );
   await clickAt('[aria-label="Add shelf above shelf 2 in bookcase 1"]');
   await until('document.querySelectorAll("[data-shelf-canvas]").length === 4');
   await until(
@@ -1176,7 +1175,6 @@ try {
   );
   await call('Page.navigate', { url: `${base}/settings/appearance` });
   await until('!!document.querySelector(\'[aria-label="Bookshelf color"]\')');
-  await until('!!document.querySelector("#__nuxt")?.__vue_app__');
   await until(
     'document.querySelector(\'[aria-label^="Use guage_dark as fixed theme"]\')?.getAttribute("aria-pressed") === "true"',
   );

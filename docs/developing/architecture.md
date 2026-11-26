@@ -21,16 +21,16 @@ flowchart TD
 
 ## Runtime responsibilities
 
-| Responsibility            | Implementation                                                                                          | Boundary                                                                       |
-| ------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Routes and interaction    | [Pages](../../app/pages), [components](../../app/components), [composables](../../app/composables)      | Browser SPA interaction and client routing                                     |
-| Client state              | [Stores](../../app/stores)                                                                              | Account settings, collection selection, filters, selection, and UI preferences |
-| Sessions and system roles | [Auth configuration](../../internal/auth/handlers.go), [auth endpoint](../../internal/auth/handlers.go) | Authenticated identity and account administration                              |
-| Application requests      | [API handlers](../../internal/httpapi/router.go)                                                        | Input validation, authorization, queries, and mutation coordination            |
-| Persistent records        | [Schema](../../.drizzle/migrations), [database connection](../../internal/db/db.go)                     | SQLite is the default; the connection uses the libSQL client                   |
-| Book bytes and covers     | [Book utilities](../../internal/books), [storage operations](../../internal/storage)                    | Filesystem paths, exclusive writes, locks, journals, and recovery              |
-| EPUB cover manipulation   | [EPUB package](../../internal/epub/epub.go)                                                             | Independent archive inspection and rewriting                                   |
-| Background ingestion      | [Dropbox plugin](../../internal/dropbox/watcher.go), [watcher](../../internal/dropbox/watcher.go)       | In-process watcher after recovery succeeds                                     |
+| Responsibility            | Implementation                                                                                          | Boundary                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Routes and interaction    | [Pages](../../app/pages), [components](../../app/components), [composables](../../app/composables)      | Browser SPA interaction and client routing                          |
+| Client state              | [Stores](../../app/stores)                                                                              | Account settings, filters, selection, and UI preferences            |
+| Sessions and system roles | [Auth configuration](../../internal/auth/handlers.go), [auth endpoint](../../internal/auth/handlers.go) | Authenticated identity and account administration                   |
+| Application requests      | [API handlers](../../internal/httpapi/router.go)                                                        | Input validation, authorization, queries, and mutation coordination |
+| Persistent records        | [Schema](../../.drizzle/migrations), [database connection](../../internal/db/db.go)                     | SQLite is the default; the connection uses the libSQL client        |
+| Book bytes and covers     | [Book utilities](../../internal/books), [storage operations](../../internal/storage)                    | Filesystem paths, exclusive writes, locks, journals, and recovery   |
+| EPUB cover manipulation   | [EPUB package](../../internal/epub/epub.go)                                                             | Independent archive inspection and rewriting                        |
+| Background ingestion      | [Dropbox plugin](../../internal/dropbox/watcher.go), [watcher](../../internal/dropbox/watcher.go)       | In-process watcher after recovery succeeds                          |
 
 The `cloudDb` identifier names the shared Drizzle connection. Its default is `file:./data/delb.db`; the name does not imply a separately hosted database service. Library paths resolve from the server's working directory. An external database URL does not move ebook files to remote storage.
 
@@ -42,11 +42,11 @@ The browser hydrates that state. Client auth handles non-SSR and cached-page cas
 
 The [route middleware](../../app/router.ts) sends a fresh installation to registration and applies guest/user navigation rules. Each API handler still checks its own session and permissions. A hidden button is not an authorization rule.
 
-## Three different ownership questions
+## Three different access questions
 
-A book belongs to one collection. Its membership makes books visible, and collection owner/editor roles govern book metadata, files, deletion, and moves. Creator is provenance. Administrators can manage collection membership and ownership without joining. Personal status, ratings, position, and progress belong to the current reader.
+Every book belongs to the one shared library. Tag visibility rules decide which books an account can see, through the `visible_books` view. Server roles decide who can change book metadata and files, and who can delete books: Editors, Admins, and the Owner can; Readers cannot. Creator is provenance. Personal status, ratings, position, and progress belong to the current reader.
 
-These checks are related but distinct. Sharing a collection does not create a private copy of a book, grant every metadata edit, or share the owner's reading history. Read the [data model](data-model.md) and [access reference](reference/collections.md) before changing those rules.
+These checks are related but distinct. Seeing a book does not grant a metadata edit, and an edit never shares anyone's reading history. Read the [data model](data-model.md) and [library access reference](reference/library-access.md) before changing those rules.
 
 ## Startup and storage consistency
 
@@ -62,8 +62,8 @@ A busy storage lock can delay recovery and retry. An unrecoverable error prevent
 | ------------------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Accounts and dashboard         | Registration, login, totals, status and shelf tiles              | [Auth](../../internal/auth/handlers.go), [dashboard API](../../internal/books/dashboard.go), [dashboard reference](reference/dashboard.md), [account guide](../using/get-started.md) |
 | Add and edit books             | Upload, manual entry, metadata imports, duplicates, replacement  | [Add modal](../../app/components/Books/BookAddModal.vue), [editor](../../app/components/Books/BookEditor.vue), [request flows](core-workflows.md#add-a-book)                         |
-| Browse and search              | Collection scope, entities, filters, sorting, grid/list fields   | [Books page](../../app/pages/books/index.vue), [entity queries](../../internal/books/catalog.go), [search API](../../internal/books/catalog.go)                                      |
-| Collections and sharing        | Membership, roles, transfer, leave, deletion                     | [Collection store](../../app/stores/collections.ts), [collection APIs](../../internal/collections), [access reference](reference/collections.md)                                     |
+| Browse and search              | Entities, filters, sorting, grid/list fields                     | [Books page](../../app/pages/books/index.vue), [entity queries](../../internal/books/catalog.go), [search API](../../internal/books/catalog.go)                                      |
+| Library access                 | Server roles, tag visibility rules, account management           | [Access checks](../../internal/library/access.go), [tag rule API](../../internal/users/tag_rules.go), [access reference](reference/library-access.md)                                |
 | Reading data                   | EPUB/PDF position, progress history, status, dates, ratings      | [Reader](../../app/pages/books/[id]/read.vue), [book APIs](../../internal/books), [reading guide](../using/reading.md)                                                               |
 | To be read queue               | Private global ordering and rationale shared with book details   | [TBR page](../../app/pages/to-be-read.vue), [queue service](../../internal/books/reading_state.go), [status and rationale reference](reference/reading-status-progress.md)           |
 | Settings and appearance        | Profiles, fixed/system themes, custom colors, interface contrast | [User settings](../../app/stores/userSettings.ts), [settings explanation](reference/settings.md)                                                                                     |
@@ -73,6 +73,6 @@ A busy storage lock can delay recovery and retry. An unrecoverable error prevent
 | Administration and maintenance | Accounts, registration, tokens, quick/deep health checks         | [Settings components](../../app/components/Settings), [settings APIs](../../internal/settings), [health reference](../hosting/health-checks.md)                                      |
 | Storage and packaging          | Covers, archives, migrations, recovery, container startup        | [Storage recovery](../hosting/storage-recovery.md), [Docker](../hosting/docker.md), [EPUB package](../../internal/epub/epub.go)                                                      |
 
-Tag management is a global catalog operation. System admins and owners can delete or merge tags through the [tag APIs](../../internal/books/catalog.go) and [transactional mutation utility](../../internal/books/catalog.go). The change affects linked books across collections and preserves the books themselves. Bulk personal-status changes use the [bulk status endpoint](../../internal/books/reading_state.go) with explicit visible book IDs.
+Tag management is a global catalog operation. System admins and owners can delete or merge tags through the [tag APIs](../../internal/books/catalog.go) and [transactional mutation utility](../../internal/books/catalog.go). The change affects every linked book and preserves the books themselves. A tag that a visibility rule uses cannot be deleted, and merging moves its rules. Bulk personal-status changes use the [bulk status endpoint](../../internal/books/reading_state.go) with explicit visible book IDs.
 
 Schema presence alone does not establish a finished UI feature. For example, the schema includes book notes, while the first documentation release does not claim a complete notes workflow. Disabled sidebar filters remain identified as planned controls.

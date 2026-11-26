@@ -1,7 +1,6 @@
 package httpapi_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -16,7 +15,6 @@ import (
 	"github.com/lancewilhelm/delb/internal/auth"
 	"github.com/lancewilhelm/delb/internal/books"
 	"github.com/lancewilhelm/delb/internal/bookshelf"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/db"
 	"github.com/lancewilhelm/delb/internal/httpapi"
 	"github.com/lancewilhelm/delb/internal/mcp"
@@ -69,12 +67,6 @@ func TestRouterPhase2AOwnedAndUnportedProxied(t *testing.T) {
 		AuthService: authSvc,
 		Logger:      discard,
 	})
-	collectionsSvc := collections.NewService(collections.ServiceOptions{
-		DB:          opened.DB,
-		AuthService: authSvc,
-		LibraryDir:  filepath.Join(tmp, "library"),
-		Logger:      discard,
-	})
 	booksSvc := books.NewService(books.ServiceOptions{
 		DB:          opened.DB,
 		AuthService: authSvc,
@@ -113,7 +105,7 @@ func TestRouterPhase2AOwnedAndUnportedProxied(t *testing.T) {
 		DB:          opened.DB,
 		Logger:      discard,
 		AuthService: authSvc,
-		Services:    []httpapi.RouteRegistrar{settingsSvc, usersSvc, collectionsSvc, booksSvc, bookshelfSvc, spinesSvc, adminSvc, mcpSvc},
+		Services:    []httpapi.RouteRegistrar{settingsSvc, usersSvc, booksSvc, bookshelfSvc, spinesSvc, adminSvc, mcpSvc},
 		Upstream:    p,
 	})
 	front := httptest.NewServer(handler)
@@ -134,10 +126,8 @@ func TestRouterPhase2AOwnedAndUnportedProxied(t *testing.T) {
 		{http.MethodPut, "/api/settings/admin/google-books-api-key", http.StatusUnauthorized},
 		{http.MethodGet, "/api/settings/admin/spine-prompt", http.StatusUnauthorized},
 		{http.MethodDelete, "/api/users/delete", http.StatusUnauthorized},
-		{http.MethodGet, "/api/collections", http.StatusUnauthorized},
-		{http.MethodPost, "/api/collections", http.StatusUnauthorized},
-		{http.MethodGet, "/api/settings/admin/collections", http.StatusUnauthorized},
-		{http.MethodGet, "/api/settings/admin/collections-migration", http.StatusUnauthorized},
+		{http.MethodGet, "/api/settings/admin/users/u1/tag-rules", http.StatusUnauthorized},
+		{http.MethodPut, "/api/settings/admin/users/u1/tag-rules", http.StatusUnauthorized},
 		// Phase 2B Go-owned routes
 		{http.MethodGet, "/api/books", http.StatusUnauthorized},
 		{http.MethodPost, "/api/books", http.StatusUnauthorized},
@@ -149,10 +139,6 @@ func TestRouterPhase2AOwnedAndUnportedProxied(t *testing.T) {
 		{http.MethodPost, "/api/books/book-1/cover", http.StatusUnauthorized},
 		{http.MethodGet, "/api/books/book-1/download", http.StatusUnauthorized},
 		{http.MethodGet, "/api/books/book-1/files", http.StatusUnauthorized},
-		{http.MethodGet, "/api/books/book-1/collections", http.StatusUnauthorized},
-		{http.MethodPut, "/api/books/book-1/collections", http.StatusUnauthorized},
-		{http.MethodPost, "/api/books/move", http.StatusUnauthorized},
-		{http.MethodPost, "/api/books/collection-sources", http.StatusUnauthorized},
 		{http.MethodPost, "/api/books/bulk/copies", http.StatusUnauthorized},
 		{http.MethodPost, "/api/books/bulk/status", http.StatusUnauthorized},
 		{http.MethodGet, "/api/books/metadata/hardcover/search", http.StatusUnauthorized},
@@ -195,8 +181,8 @@ func TestRouterPhase2AOwnedAndUnportedProxied(t *testing.T) {
 		{http.MethodPost, "/api/genres/g1/merge", http.StatusUnauthorized},
 		{http.MethodGet, "/api/search", http.StatusUnauthorized},
 		// Phase 2C Go-owned routes
-		{http.MethodGet, "/api/collections/abc-123/bookshelf", http.StatusUnauthorized},
-		{http.MethodPut, "/api/collections/abc-123/bookshelf", http.StatusUnauthorized},
+		{http.MethodGet, "/api/library/bookshelf", http.StatusUnauthorized},
+		{http.MethodPut, "/api/library/bookshelf", http.StatusUnauthorized},
 		{http.MethodGet, "/api/shelves", http.StatusUnauthorized},
 		{http.MethodPost, "/api/shelves", http.StatusUnauthorized},
 		{http.MethodGet, "/api/shelves/s1", http.StatusUnauthorized},
@@ -205,7 +191,7 @@ func TestRouterPhase2AOwnedAndUnportedProxied(t *testing.T) {
 		{http.MethodDelete, "/api/shelves/s1", http.StatusUnauthorized},
 		{http.MethodPost, "/api/shelves/s1/books", http.StatusUnauthorized},
 		{http.MethodGet, "/api/books/book-1/shelves", http.StatusUnauthorized},
-		{http.MethodGet, "/api/bookshelf-pictures/collection/abc-123", http.StatusUnauthorized},
+		{http.MethodGet, "/api/bookshelf-pictures/library/main", http.StatusUnauthorized},
 		{http.MethodPost, "/api/bookshelf-pictures/personal/s1", http.StatusUnauthorized},
 		{http.MethodGet, "/api/books/book-1/spine", http.StatusUnauthorized},
 		{http.MethodPost, "/api/books/book-1/spine", http.StatusUnauthorized},
@@ -275,76 +261,4 @@ func TestRouterPhase2AOwnedAndUnportedProxied(t *testing.T) {
 			t.Fatalf("%s %s got header=%q body=%q (last=%q, hits=%d)", tc.method, tc.path, resp.Header.Get("X-Handled-By"), string(b), lastUpstreamPath, upstreamHits)
 		}
 	}
-}
-
-func TestCollectionMigrationGateMiddleware(t *testing.T) {
-	ctx := context.Background()
-	dbPath := filepath.Join(t.TempDir(), "gate.db")
-	opened, err := db.Open(ctx, "file:"+dbPath)
-	if err != nil {
-		t.Fatalf("db.Open: %v", err)
-	}
-	defer opened.DB.Close()
-	if _, err := db.Migrate(ctx, opened.DB, opened.FilePath, opened.IsMemory, delb.MigrationsFS); err != nil {
-		t.Fatalf("db.Migrate: %v", err)
-	}
-
-	if _, err := opened.DB.ExecContext(ctx, `UPDATE system_state SET value = 'pending' WHERE key = 'collections-model'`); err != nil {
-		t.Fatalf("set pending: %v", err)
-	}
-
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]string{"ok": r.URL.Path})
-	})
-	srv := httptest.NewServer(httpapi.CollectionMigrationGate(opened.DB, slog.New(slog.NewTextHandler(io.Discard, nil)), next))
-	defer srv.Close()
-
-	check := func(method, path string, want int) {
-		t.Helper()
-		req, _ := http.NewRequest(method, srv.URL+path, bytes.NewReader([]byte(`{}`)))
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("%s %s: %v", method, path, err)
-		}
-		resp.Body.Close()
-		if resp.StatusCode != want {
-			t.Fatalf("%s %s = %d, want %d", method, path, resp.StatusCode, want)
-		}
-	}
-
-	// Non-API and allowlisted paths pass through when pending & 0 users.
-	check(http.MethodGet, "/", http.StatusOK)
-	check(http.MethodGet, "/api/settings", http.StatusOK)
-	check(http.MethodGet, "/api/settings/user", http.StatusOK)
-	check(http.MethodGet, "/api/settings/global", http.StatusOK)
-	check(http.MethodGet, "/api/settings/admin/collections-migration", http.StatusOK)
-	check(http.MethodPost, "/api/settings/admin/collections-migration", http.StatusOK)
-	check(http.MethodGet, "/api/auth/get-session", http.StatusOK)
-	check(http.MethodPost, "/api/auth/sign-in/email", http.StatusOK)
-	check(http.MethodPost, "/api/auth/sign-out", http.StatusOK)
-	check(http.MethodPost, "/api/auth/sign-up/email", http.StatusOK)
-
-	// Ordinary API routes return 503 during pending migration.
-	check(http.MethodGet, "/api/books", http.StatusServiceUnavailable)
-	check(http.MethodGet, "/api/collections", http.StatusServiceUnavailable)
-	check(http.MethodPut, "/api/settings/user", http.StatusServiceUnavailable)
-	check(http.MethodDelete, "/api/users/delete", http.StatusServiceUnavailable)
-
-	// Once at least one user exists, sign-up is also blocked with 503.
-	if _, err := opened.DB.ExecContext(ctx, `
-		INSERT INTO users (id, name, email, email_verified, created_at, updated_at, role)
-		VALUES ('u1', 'Owner', 'owner@example.invalid', 1, 0, 0, 'owner')
-	`); err != nil {
-		t.Fatalf("insert user: %v", err)
-	}
-	check(http.MethodPost, "/api/auth/sign-up/email", http.StatusServiceUnavailable)
-
-	// Once state returns to 'exclusive', all routes pass through.
-	if _, err := opened.DB.ExecContext(ctx, `UPDATE system_state SET value = 'exclusive' WHERE key = 'collections-model'`); err != nil {
-		t.Fatalf("set exclusive: %v", err)
-	}
-	check(http.MethodGet, "/api/books", http.StatusOK)
-	check(http.MethodGet, "/api/collections", http.StatusOK)
-	check(http.MethodPut, "/api/settings/user", http.StatusOK)
 }

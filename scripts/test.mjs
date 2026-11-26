@@ -6,9 +6,11 @@ async function testFiles(directory) {
   const files = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
+    // review/audits holds dated evidence that probes the code at its audit
+    // baseline, so it is not part of the current test suite.
     if (
       entry.isDirectory() &&
-      !['node_modules', 'dist', 'baseline'].includes(entry.name)
+      !['node_modules', 'dist', 'baseline', 'audits'].includes(entry.name)
     ) {
       files.push(...(await testFiles(path)));
     } else if (entry.isFile() && /\.test\.(ts|js|mjs)$/.test(entry.name)) {
@@ -18,9 +20,7 @@ async function testFiles(directory) {
   return files;
 }
 
-const files = (
-  await Promise.all(['app', 'shared', 'review'].map(testFiles))
-)
+const files = (await Promise.all(['app', 'shared', 'review'].map(testFiles)))
   .flat()
   .sort();
 const child = spawn(process.execPath, ['--import', 'tsx', '--test', ...files], {

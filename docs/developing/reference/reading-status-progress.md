@@ -35,21 +35,17 @@ Every date is optional. A reader can record no dates, some dates, or all dates.
   - Moving a book up shifts intermediate ranks down.
   - Removing a ranked TBR book shifts higher ranks down.
   - Ranks are capped to the current TBR list size.
-  - The queue spans all accessible collections and deduplicates books.
+  - The queue contains only books that the reader can see.
   - Newly added and re-added books append at the end.
-  - Losing all collection access clears the rank and closes gaps. Restored access appends the book if its status is still `to_be_read`.
+  - A book hidden by a tag visibility rule leaves every queue response. Each renumbering gives visible books ranks 1 through N and moves hidden queued books after them in their previous order, so ranks never repeat. A book that becomes visible again rejoins at the end of the queue.
 
 ## TBR rationale and visibility
 
 `user_book_rationale` stores one private plain-text rationale per user and book, independently of `user_book_status`. Clearing status retains the rationale. Reads and writes require current book visibility and use the authenticated user's identity.
 
-The dedicated TBR page loads the full ranked queue. Its inline editor and book details use the same rationale endpoints. On the dashboard, all counts—including **To be read**—follow the selected collection scope.
+The dedicated TBR page loads the full ranked queue. Its inline editor and book details use the same rationale endpoints. On the dashboard, all counts, including **To be read**, describe the books that the reader can see.
 
-Migration `0006_tbr_queue` normalizes existing accessible ranks and installs access-change triggers on `collection_members` and `collection_books`. These triggers observe loss and restoration in the same transaction as sharing changes, including cascades. A revoke-and-restore cycle therefore appends the book even when no queue request occurs between the two operations. A book remains ranked while any collection still grants access.
-
-The status transition service handles numeric moves and single/bulk status changes transactionally. Access-change triggers use a materialized ranked sequence through SQLite `UPDATE FROM` so rank compaction preserves the existing order.
-
-The four access triggers share the same visibility and rank-order rule. A future migration that rebuilds `collection_members` or `collection_books` must recreate their triggers; SQLite drops triggers attached to a dropped table, and Drizzle's generated table snapshot does not preserve these custom triggers. Exercise membership insert/delete and book-link insert/delete with the production migrations after such a change.
+The status transition service handles numeric moves and single/bulk status changes transactionally. Migration `0022_single_library` removed the earlier access-change triggers, which compacted ranks when collection membership changed; tag visibility rules change through ordinary queries instead.
 
 ## Reviews and notes
 
@@ -60,9 +56,8 @@ The four access triggers share the same visibility and rank-order rule. A future
 The import in `internal/goodreads` reads a Goodreads library export (CSV). It has three endpoints:
 
 - `POST /api/import/goodreads/preview` parses the file and matches each row against the books that the user can see. Matching uses a recorded `goodreads` identifier first, then the ISBN (an ISBN-10 is compared in its ISBN-13 form), then the fuzzy title and author score from duplicate detection. A score of at least 0.95 is a match, a score of at least 0.82 asks the user to confirm, and lower candidates are offered but not chosen. The response includes the user's existing status, rating, and review for every candidate. It writes nothing.
-- `POST /api/import/goodreads/books` creates up to 50 catalog entries per request in a collection that the user can edit. Each entry carries `isbn13`, `isbn10`, and `goodreads` identifiers. With `enrich`, the default metadata provider supplies the description, cover, and other missing fields when its top result matches the title and author. A row whose Goodreads ID already exists on a visible book reuses that book.
-  - The destination must belong to the importing user, have no other members, and hold no Default designation unless the request sets `allowShared: true`. The server checks privacy under the collection lock before each catalog insert. The import screen sends `allowShared: true` only after the reader confirms the selected shared destination.
-- `POST /api/import/goodreads/apply` writes statuses, ratings, reviews, and notes in one transaction through `books.ApplyImportedReading`. Then it records Goodreads IDs on matched books in collections that the user can edit, and adds books to personal shelves.
+- `POST /api/import/goodreads/books` creates up to 50 catalog entries per request in the library. It requires the Editor or Admin role and returns 403 for Readers. Each entry carries `isbn13`, `isbn10`, and `goodreads` identifiers. With `enrich`, the default metadata provider supplies the description, cover, and other missing fields when its top result matches the title and author. A row whose Goodreads ID already exists on a visible book reuses that book.
+- `POST /api/import/goodreads/apply` writes statuses, ratings, reviews, and notes in one transaction through `books.ApplyImportedReading`. Then, for Editors and Admins only, it records Goodreads IDs on matched visible books, and it adds books to personal shelves.
 
 `ApplyImportedReading` differs from the status transition service:
 

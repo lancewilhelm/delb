@@ -18,7 +18,6 @@ import (
 	"github.com/lancewilhelm/delb/internal/auth"
 	"github.com/lancewilhelm/delb/internal/books"
 	"github.com/lancewilhelm/delb/internal/bookshelf"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/db"
 	"github.com/lancewilhelm/delb/internal/httpapi"
 	delbmcp "github.com/lancewilhelm/delb/internal/mcp"
@@ -47,7 +46,6 @@ func newMCPEnv(t *testing.T) *mcpEnv {
 	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
 	secret := "mcp-test-secret-0123456789abcdef0123456789"
 	authSvc := auth.NewService(auth.ServiceOptions{DB: opened.DB, Secret: secret, Logger: discard})
-	colSvc := collections.NewService(collections.ServiceOptions{DB: opened.DB, AuthService: authSvc, LibraryDir: libDir, Logger: discard})
 	booksSvc := books.NewService(books.ServiceOptions{DB: opened.DB, AuthService: authSvc, LibraryDir: libDir, Logger: discard})
 	shelfSvc := bookshelf.NewService(bookshelf.ServiceOptions{DB: opened.DB, AuthService: authSvc, TokenSecret: secret, Logger: discard})
 	mcpSvc := delbmcp.NewService(delbmcp.ServiceOptions{
@@ -61,7 +59,7 @@ func newMCPEnv(t *testing.T) *mcpEnv {
 		DB:          opened.DB,
 		Logger:      discard,
 		AuthService: authSvc,
-		Services:    []httpapi.RouteRegistrar{colSvc, booksSvc, shelfSvc, mcpSvc},
+		Services:    []httpapi.RouteRegistrar{booksSvc, shelfSvc, mcpSvc},
 	})
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
@@ -194,21 +192,11 @@ func TestMCPConnectionsAndServerParity(t *testing.T) {
 	owner := env.signUp("Owner", "owner@example.invalid")
 	outsider := env.signUp("Outsider", "outsider@example.invalid")
 
-	// Create collection, book, shelf
-	_, colRaw := env.reqJSON(&owner, http.MethodPost, "/api/collections", map[string]any{"name": "MCP Shelf"})
-	var colOut struct {
-		Data struct {
-			Collection struct{ ID string } `json:"collection"`
-		} `json:"data"`
-	}
-	_ = json.Unmarshal(colRaw, &colOut)
-	colID := colOut.Data.Collection.ID
-
+	// Create book, shelf
 	_, bookRaw := env.reqJSON(&owner, http.MethodPost, "/api/books", map[string]any{
-		"title":         "Earthsea",
-		"authors":       []string{"Ursula Le Guin"},
-		"pages":         200,
-		"collectionIds": []string{colID},
+		"title":   "Earthsea",
+		"authors": []string{"Ursula Le Guin"},
+		"pages":   200,
 	})
 	var bookOut struct {
 		Data struct {
@@ -413,6 +401,61 @@ func TestMCPConnectionsAndServerParity(t *testing.T) {
 	if genres, ok := updBook["genres"].([]any); !ok || len(genres) != 1 || genres[0] != "Fantasy" {
 		t.Fatalf("update_book_metadata genres = %v, want [Fantasy]", updBook["genres"])
 	}
+	access := callToolJSON(t, rwClient, "get_library_access", map[string]any{})
+	if access["role"] != "owner" || access["canEditCatalog"] != true || access["restrictedByTagRules"] != false {
+		t.Fatalf("owner get_library_access = %v", access)
+	}
+
+	// A reader cannot change catalog metadata even with a metadata-enabled connection,
+	// and tag visibility rules hide blocked books from MCP search and reads.
+	status, readerRaw := env.reqJSON(&outsider, http.MethodPost, "/api/mcp-connections", map[string]any{
+		"name":            "Reader writer",
+		"canWrite":        true,
+		"canEditMetadata": true,
+	})
+	if status != 200 {
+		t.Fatalf("create reader connection: %d %s", status, string(readerRaw))
+	}
+	var readerConn struct {
+		ID    string `json:"id"`
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(readerRaw, &readerConn)
+	if st, raw := env.reqJSON(&outsider, http.MethodPatch, "/api/mcp-connections", map[string]any{
+		"id":              readerConn.ID,
+		"canEditMetadata": true,
+	}); st != 200 {
+		t.Fatalf("reader PATCH = %d %s", st, string(raw))
+	}
+	readerClient := env.connectMCP(readerConn.Token)
+	readerAccess := callToolJSON(t, readerClient, "get_library_access", map[string]any{})
+	if readerAccess["role"] != "reader" || readerAccess["canEditCatalog"] != false {
+		t.Fatalf("reader get_library_access = %v", readerAccess)
+	}
+	readerDetail := callToolJSON(t, readerClient, "get_book", map[string]any{"bookId": bookID})
+	if msg := callToolExpectErr(t, readerClient, "update_book_metadata", map[string]any{
+		"bookId":          bookID,
+		"expectedVersion": readerDetail["metadataVersion"].(string),
+		"changes":         map[string]any{"title": "Reader edit"},
+	}); !strings.Contains(msg, "Editor or administrator") {
+		t.Fatalf("reader update_book_metadata message = %q", msg)
+	}
+	if _, err := env.db.Exec(`
+		INSERT INTO user_tag_rules (user_id, tag_id, mode, created_at)
+		SELECT u.id, t.id, 'block', 0 FROM users u, tags t
+		WHERE u.email = 'outsider@example.invalid' AND t.name = 'Favorites'
+	`); err != nil {
+		t.Fatalf("add block rule: %v", err)
+	}
+	hidden := callToolJSON(t, readerClient, "search_books", map[string]any{"query": "Earthsea"})
+	if len(hidden["items"].([]any)) != 0 {
+		t.Fatalf("blocked book visible to reader in MCP search: %v", hidden)
+	}
+	callToolExpectErr(t, readerClient, "get_book", map[string]any{"bookId": bookID})
+	if access := callToolJSON(t, readerClient, "get_library_access", map[string]any{}); access["restrictedByTagRules"] != true {
+		t.Fatalf("restricted reader get_library_access = %v", access)
+	}
+
 	// Stale expectedVersion returns conflict isError=true
 	msg := callToolExpectErr(t, rwClient, "update_book_metadata", map[string]any{
 		"bookId":          bookID,

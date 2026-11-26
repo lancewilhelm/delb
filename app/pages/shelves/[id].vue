@@ -48,7 +48,7 @@ async function rename() {
 }
 async function removeShelf() {
   if (library.value && !library.value.canLeave()) return;
-  if (!confirm('Delete this Shelf? The books will stay in their collections.'))
+  if (!confirm('Delete this Shelf? The books will stay in the library.'))
     return;
   try {
     await $fetch(`/api/shelves/${encodeURIComponent(id.value)}`, {

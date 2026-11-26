@@ -15,7 +15,7 @@ pnpm dev
 
 `pnpm dev` builds the Go server, starts Vite with hot reload, and serves both at `http://localhost:3000`. The server applies pending migrations at startup. The database defaults to `data/delb.db`; managed files use `library/`. On the first visit, register an account. This creates local application data, so use a dedicated checkout when you need a disposable environment.
 
-Existing installations require the [administrative collection migration](../hosting/collection-migration.md) after applying committed SQL migrations.
+Installations from before the single library apply migration `0022_single_library` automatically. See [Upgrade to a single library](../hosting/single-library-upgrade.md) for its effects.
 
 Migrations are SQL files in `.drizzle/migrations` that are written by hand. [AGENTS.md](../../AGENTS.md#schema-changes) lists the files that a new migration must update. Never edit a migration that has already been merged. `bin/delb --migrate-only` applies pending migrations and exits.
 
@@ -48,7 +48,7 @@ In a second terminal at the same checkout:
 node review/http-smoke.mjs
 ```
 
-The smoke verifies guest rejection, registration, upload, listing, shared default collection access, and download authorization/filenames. It is API evidence; it does not exercise every UI control. [The review setup](../../review/README.md#cloud-or-local-setup) has additional fixtures and their limits.
+The smoke verifies guest rejection, registration, upload, listing, shared library access, and download authorization/filenames. It is API evidence; it does not exercise every UI control. [The review setup](../../review/README.md#cloud-or-local-setup) has additional fixtures and their limits.
 
 ## Check a change
 

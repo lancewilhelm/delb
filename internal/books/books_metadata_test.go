@@ -19,7 +19,6 @@ import (
 	"github.com/lancewilhelm/delb"
 	"github.com/lancewilhelm/delb/internal/auth"
 	"github.com/lancewilhelm/delb/internal/books"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/db"
 	"github.com/lancewilhelm/delb/internal/httpapi"
 	"github.com/lancewilhelm/delb/internal/settings"
@@ -56,12 +55,6 @@ func newMetadataTestEnv(t *testing.T, googleBooksURL string) *metadataTestEnv {
 		Logger:    logger,
 		RateLimit: auth.RateLimitConfig{Disabled: true},
 	})
-	collectionsSvc := collections.NewService(collections.ServiceOptions{
-		DB:          opened.DB,
-		AuthService: authSvc,
-		LibraryDir:  libDir,
-		Logger:      logger,
-	})
 	booksSvc := books.NewService(books.ServiceOptions{
 		DB:                  opened.DB,
 		AuthService:         authSvc,
@@ -79,7 +72,7 @@ func newMetadataTestEnv(t *testing.T, googleBooksURL string) *metadataTestEnv {
 		DB:          opened.DB,
 		Logger:      logger,
 		AuthService: authSvc,
-		Services:    []httpapi.RouteRegistrar{collectionsSvc, booksSvc, settingsSvc},
+		Services:    []httpapi.RouteRegistrar{booksSvc, settingsSvc},
 	})
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)

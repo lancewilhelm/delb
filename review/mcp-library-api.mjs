@@ -78,45 +78,18 @@ const clients = [];
 try {
   const owner = await account('owner');
   const reader = await account('reader');
-  const collection = (
-    await ok(
-      await request(owner, '/api/collections', 'POST', { name: 'MCP library' }),
-    )
-  ).data.collection.id;
-  await ok(
-    await request(owner, `/api/collections/${collection}/members`, 'PUT', {
-      email: reader.email,
-      role: 'viewer',
-    }),
-  );
-  const secondCollection = (
-    await ok(
-      await request(owner, '/api/collections', 'POST', {
-        name: 'Another collection',
-      }),
-    )
-  ).data.collection.id;
-  await ok(
-    await request(
-      owner,
-      `/api/collections/${secondCollection}/members`,
-      'PUT',
-      { email: reader.email, role: 'viewer' },
-    ),
-  );
-  async function createBook(title, collectionId = collection) {
+  async function createBook(title) {
     return (
       await ok(
         await request(owner, '/api/books', 'POST', {
           title,
           authors: ['Author'],
-          collectionIds: [collectionId],
         }),
       )
     ).data.book.id;
   }
   const first = await createBook('First TBR');
-  const second = await createBook('Second TBR', secondCollection);
+  const second = await createBook('Second TBR');
   const reading = await createBook('Reading book');
   const ownerToken = await ok(
     await request(owner, '/api/mcp-connections', 'POST', {
@@ -273,11 +246,14 @@ try {
     ).canEditMetadata,
     true,
   );
-  await fails(viewer, 'update_book_metadata', {
-    bookId: first,
-    expectedVersion: before.metadataVersion,
-    changes: { title: 'No editor rights' },
-  });
+  assert.match(
+    await fails(viewer, 'update_book_metadata', {
+      bookId: first,
+      expectedVersion: before.metadataVersion,
+      changes: { title: 'No editor rights' },
+    }),
+    /Editor or administrator/,
+  );
   const updated = await call(writer, 'update_book_metadata', {
     bookId: first,
     expectedVersion: before.metadataVersion,

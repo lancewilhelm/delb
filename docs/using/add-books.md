@@ -1,17 +1,16 @@
 # Add books
 
-Sign in before adding a book. You need owner or editor access to the collection you select as a target.
+Sign in before adding a book. Adding books requires the Editor or Admin [server role](library-access.md#server-roles). Readers do not see **Add book**.
 
-Open **Add book** in the header. The dialog has **Upload files**, **By metadata**, and **Manual entry** modes. Choose one destination. Delb preselects the active editable collection or the editable shared default. If neither applies, choose or create a collection.
+Open **Add book** in the header. The dialog has **Upload files**, **By metadata**, and **Manual entry** modes. Every new book goes into the shared library.
 
 ## Upload ebook files
 
 1. Select **Upload files**.
 2. Drop files into the upload area, or browse for EPUB, PDF, MOBI, or AZW3 files.
-3. Check the destination collection.
-4. Select **Upload**.
+3. Select **Upload**.
 
-Delb extracts the available metadata and stores the files in its managed library. A successful result appears in the dialog and the book becomes available in the selected collection. Extraction varies by format; review the details after import.
+Delb extracts the available metadata and stores the files in its managed library. A successful result appears in the dialog and the book becomes available in the library. Extraction varies by format; review the details after import.
 
 Uploads run sequentially in the dialog. Check each file's result when uploading several files. A successful HTTP response for a batch can still contain an individual file failure.
 
@@ -31,7 +30,7 @@ To scan physical books, select **Mark as a physical copy** and **Keep open and r
 ## Enter a book manually
 
 1. Select **Manual entry**.
-2. Check the destination collection and open the blank editor.
+2. Open the blank editor.
 3. Enter at least a title and an author.
 4. Select **Create**.
 
@@ -39,10 +38,8 @@ The entry is created when you select Create. The dialog describes this as saving
 
 ## Resolve a possible duplicate
 
-Review visible matches before creating an independent entry. A match in another collection offers an independent entry or cancellation. Replacement requires owner or editor access and stays in the existing collection. Moving is a separate confirmed action.
+Review the matches that you can see before creating an independent entry. You can use the existing entry, replace it, create an independent entry, or cancel. Independent entries may represent the same title. Administrative health checks report possible duplicates without merging or deleting them.
 
-Each entry belongs to one collection. Independent entries may represent the same title. Administrative health checks report possible duplicates without merging or deleting them.
-
-If collections fail to load or a selected target is no longer editable, correct the target selection before retrying. For storage errors after an interrupted operation, use the [storage recovery guide](../hosting/storage-recovery.md).
+If your role changes to Reader while the dialog is open, Delb rejects the request. For storage errors after an interrupted operation, use the [storage recovery guide](../hosting/storage-recovery.md).
 
 Continue with [finding books](find-books.md). See [ingestion request flows](../developing/core-workflows.md#add-a-book) and the [metadata reference](../developing/reference/metadata.md) for backend behavior.

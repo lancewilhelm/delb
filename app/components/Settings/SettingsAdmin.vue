@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, type Component } from 'vue';
 import { useRoute } from 'vue-router';
-import SettingsAdminCollections from '~/components/Settings/SettingsAdminCollections.vue';
 import SettingsAdminDropbox from '~/components/Settings/SettingsAdminDropbox.vue';
 import SettingsAdminLibrary from '~/components/Settings/SettingsAdminLibrary.vue';
 import SettingsAdminLogs from '~/components/Settings/SettingsAdminLogs.vue';
@@ -28,12 +27,6 @@ interface Tab {
 }
 
 const tabs: Record<string, Tab> = {
-  collections: {
-    name: 'Collections',
-    component: SettingsAdminCollections,
-    icon: 'lucide:library',
-    path: '/settings/admin/collections',
-  },
   library: {
     name: 'Library',
     component: SettingsAdminLibrary,

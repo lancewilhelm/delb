@@ -1,3 +1,4 @@
+import { setRole, setTagRules, tagBook } from './library-fixtures.mjs';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import sharp from './test-image.mjs';
@@ -59,40 +60,18 @@ const owner = await signup('owner'),
   editor = await signup('editor'),
   viewer = await signup('viewer'),
   outsider = await signup('outsider');
-const createdCollection = await request('/api/collections', owner, 'POST', {
-  name: `Spine fixture ${suffix}`,
-});
-assert.equal(
-  createdCollection.status,
-  200,
-  await createdCollection.clone().text(),
-);
-const collection = (await createdCollection.json()).data.collection.id;
-for (const [account, role] of [
-  [editor, 'editor'],
-  [viewer, 'viewer'],
-]) {
-  const response = await request(
-    `/api/collections/${collection}/members`,
-    owner,
-    'PUT',
-    { email: account.email, role },
-  );
-  assert.equal(response.status, 200, await response.clone().text());
-}
+await setRole(owner, editor, 'editor');
 const created = await request('/api/books', owner, 'POST', {
   title: 'Spine fixture',
   authors: ['Sample Author'],
-  collectionIds: [collection],
 });
 assert.equal(created.status, 200, await created.clone().text());
 const id = (await created.json()).data.book.id,
   path = `/api/books/${id}/spine`;
+const restrictedTag = await tagBook(owner, id, 'Restricted spine');
+await setTagRules(owner, outsider, { blockTagIds: [restrictedTag.id] });
 async function shelfRevision() {
-  const response = await request(
-    `/api/collections/${collection}/bookshelf`,
-    viewer,
-  );
+  const response = await request('/api/library/bookshelf', viewer);
   assert.equal(response.status, 200, await response.clone().text());
   const shelf = await response.json();
   return shelf.books.find((book) => book.id === id).spineRevision;
@@ -123,9 +102,7 @@ assert.equal(response.status, 200);
 assert.equal(response.headers.get('content-type'), 'image/webp');
 const detail = await (await request(`/api/books/${id}`, viewer)).json();
 assert.equal(detail.data.book.spineRevision, revision);
-const list = await (
-  await request(`/api/books?collectionId=${collection}`, viewer)
-).json();
+const list = await (await request('/api/books', viewer)).json();
 assert.equal(list.data.books.find((b) => b.id === id).spineRevision, revision);
 assert.equal(
   (

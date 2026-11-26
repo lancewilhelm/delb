@@ -18,7 +18,6 @@ import {
 } from '~/utils/bookReadingStatus';
 import type { BookViewBook } from '~/utils/bookFields';
 import { primeBookPreviews } from '~/utils/bookPreviewCache';
-/* eslint-disable vue/require-default-prop */
 defineOptions({ name: 'BooksInfiniteGrid' });
 
 type FetchErrorLike = {
@@ -51,11 +50,6 @@ const props = withDefaults(
      */
     endpoint?: string;
     emptyMessage?: string;
-    /**
-     * Optional collection scope. If omitted, server returns books from all collections
-     * the user is a member of.
-     */
-    collectionId?: string;
     /**
      * Server-side sort mode.
      * Defaults should be enforced by the server (date added desc).
@@ -109,23 +103,8 @@ const emit = defineEmits<{
 const selectionStore = useBookSelectionStore();
 const lastRangeAnchorId = ref<string | null>(null);
 
-const selectionScope = computed(() => {
-  if (props.collectionId) {
-    return { kind: 'collection' as const, collectionId: props.collectionId };
-  }
-  return { kind: 'all' as const };
-});
-
-// Keep selection store scope in sync with view scope changes
-watch(
-  () => selectionScope.value,
-  (s) => {
-    if (!props.selectionEnabled) return;
-    selectionStore.resetForScope(s);
-    lastRangeAnchorId.value = null;
-  },
-  { deep: true, immediate: true },
-);
+// Each mounted view starts with a fresh selection.
+if (props.selectionEnabled) selectionStore.resetForScope({ kind: 'all' });
 
 watch(
   () => selectionStore.selectMode,
@@ -572,7 +551,6 @@ async function fetchPage(opts: { cursor?: string | null; append: boolean }) {
     const query: Record<string, string | number> = {
       limit: limit.value,
     };
-    if (props.collectionId) query.collectionId = props.collectionId;
     if (props.sort) query.sort = props.sort;
     if (props.sortDir) query.sortDir = props.sortDir;
     if (opts.cursor) query.cursor = opts.cursor;
@@ -643,14 +621,9 @@ async function loadNextPage() {
   await fetchPage({ cursor: nextCursor.value, append: true });
 }
 
-// Refetch when collection scope changes / endpoint changes (new author/publisher page, etc.)
+// Refetch when the endpoint changes (new author/publisher page, etc.)
 watch(
-  [
-    () => props.collectionId,
-    () => props.endpoint,
-    () => props.sort,
-    () => props.sortDir,
-  ],
+  [() => props.endpoint, () => props.sort, () => props.sortDir],
   async () => {
     await loadFirstPage();
   },

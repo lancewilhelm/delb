@@ -20,7 +20,7 @@ function compileComponent(path) {
 }
 const code = compileComponent('../app/components/Settings/SettingsImport.vue');
 
-function mount(fetch, collectionsStore) {
+function mount(fetch, canEditCatalog = true) {
   const module = { exports: {} };
   new Function('require', 'module', 'exports', code)(
     (name) => {
@@ -30,8 +30,10 @@ function mount(fetch, collectionsStore) {
       if (name === '~/utils/responseError') return responseError;
       if (name === '~/utils/dashboardCache')
         return { clearDashboardCache: () => undefined };
-      if (name === '~/stores/collections')
-        return { useCollectionsStore: () => collectionsStore };
+      if (name === '~/composables/useAuth')
+        return {
+          useAuth: () => ({ canEditCatalog: vue.ref(canEditCatalog) }),
+        };
       if (name === '~/components/Settings/UI/SettingsUIGroup.vue')
         return {
           __esModule: true,
@@ -151,7 +153,6 @@ const preview = {
             bookId: 'b1',
             title: 'The Way of Kings',
             authors: ['Brandon Sanderson'],
-            collectionName: 'Shared',
             hasFiles: true,
             score: 1,
           },
@@ -175,7 +176,6 @@ const preview = {
             bookId: 'b2',
             title: 'Dune: Messiah',
             authors: ['Frank Herbert'],
-            collectionName: 'Shared',
             hasFiles: false,
             score: 0.88,
           },
@@ -212,13 +212,10 @@ const preview = {
   shelves: [{ name: 'fantasy', count: 2 }],
 };
 
-test('the Goodreads import previews, resolves a difference, and imports into a new private collection', async () => {
-  const calls = [];
-  const fetch = async (url, options = {}) => {
+function fakeFetch(calls) {
+  return async (url, options = {}) => {
     calls.push({ url, body: options.body });
     if (url === '/api/import/goodreads/preview') return { data: preview };
-    if (url === '/api/collections')
-      return { data: { collection: { id: 'c-new' } } };
     if (url === '/api/import/goodreads/books')
       return {
         data: {
@@ -250,24 +247,22 @@ test('the Goodreads import previews, resolves a difference, and imports into a n
       };
     throw new Error(`Unexpected fetch ${url}`);
   };
-  let refreshed = 0;
-  const store = {
-    collections: [{ id: 'c1', name: 'Shared', role: 'owner', isDefault: true }],
-    activeCollection: null,
-    canEditCollection: () => true,
-    fetchCollections: async () => {
-      refreshed++;
-    },
-  };
-  const view = mount(fetch, store);
-  await settle();
+}
 
+async function previewExport(view) {
   view
     .find((el) => el.type === 'input' && el.props.type === 'file', 'file input')
     .props.onChange({ target: { files: [new File(['csv'], 'export.csv')] } });
   await settle();
   await view.button('Preview import').props.onClick();
   await settle();
+}
+
+test('the Goodreads import previews, resolves a difference, and adds missing books to the library', async () => {
+  const calls = [];
+  const view = mount(fakeFetch(calls), true);
+  await settle();
+  await previewExport(view);
 
   const text = view.text();
   assert.match(text, /3 books in the export/);
@@ -275,6 +270,8 @@ test('the Goodreads import previews, resolves a difference, and imports into a n
   assert.match(text, /Likely match — confirm/);
   assert.match(text, /Keep Delb: Finished 2021-02-02 · ★★★/);
   assert.match(text, /Use Goodreads: Finished 2023-05-14 · ★★★★★/);
+  assert.match(text, /New entries go into the shared library/);
+  assert.doesNotMatch(text, /collection/i);
 
   view
     .find(
@@ -285,69 +282,28 @@ test('the Goodreads import previews, resolves a difference, and imports into a n
       'Use Goodreads choice',
     )
     .props.onChange();
-  const chooseDestination = (mode) =>
-    view
-      .find(
-        (el) =>
-          el.type === 'input' &&
-          el.props.type === 'radio' &&
-          el.props.value === mode,
-        'destination choice',
-      )
-      .props['onUpdate:modelValue'](mode);
+  await settle();
 
   assert.equal(view.button('Import').props.disabled, false);
-  chooseDestination('existing');
-  await settle();
-  assert.match(
-    view.text(),
-    /I want to add these books to the shared collection/,
-  );
-  assert.equal(view.button('Import').props.disabled, true);
-  view
-    .find(
-      (el) =>
-        el.type === 'input' &&
-        el.props.type === 'checkbox' &&
-        el.parent?.children.some((child) =>
-          child.text.includes('I want to add these books'),
-        ),
-      'shared destination confirmation',
-    )
-    .props['onUpdate:modelValue'](true);
-  await settle();
-  assert.equal(view.button('Import').props.disabled, false);
-
-  chooseDestination('new');
-  await settle();
-  chooseDestination('existing');
-  await settle();
-  assert.equal(view.button('Import').props.disabled, true);
-  chooseDestination('new');
-  await settle();
-
   await view.button('Import').props.onClick();
   await settle();
 
   assert.match(view.text(), /Import finished\./);
-  assert.equal(refreshed, 2);
   const urls = calls.map((c) => c.url);
   assert.deepEqual(urls, [
     '/api/import/goodreads/preview',
-    '/api/collections',
     '/api/import/goodreads/books',
     '/api/import/goodreads/apply',
   ]);
-  assert.deepEqual(calls[1].body, { name: 'Goodreads' });
-  const create = calls[2].body;
-  assert.equal(create.collectionId, 'c-new');
+  const create = calls[1].body;
+  assert.equal('collectionId' in create, false);
+  assert.equal('allowShared' in create, false);
   assert.equal(create.enrich, false);
-  assert.equal(create.allowShared, false);
   assert.deepEqual(
     create.rows.map((r) => [r.index, 'match' in r]),
     [[2, false]],
   );
-  const apply = calls[3].body;
+  const apply = calls[2].body;
   assert.deepEqual(
     apply.items.map((i) => [i.index, i.bookId, i.overwrite]),
     [
@@ -362,5 +318,40 @@ test('the Goodreads import previews, resolves a difference, and imports into a n
   });
   assert.deepEqual(apply.shelves, ['fantasy']);
   assert.equal(apply.include.reviews, true);
+  view.app.unmount();
+});
+
+test('a reader can import reading data but cannot create books', async () => {
+  const calls = [];
+  const view = mount(fakeFetch(calls), false);
+  await settle();
+  await previewExport(view);
+
+  assert.match(view.text(), /Your account is a reader/);
+  const createChoices = [];
+  const walk = (el) => {
+    if (
+      el.type === 'input' &&
+      el.props.type === 'radio' &&
+      (el.props.value === 'reference' || el.props.value === 'enrich')
+    )
+      createChoices.push(el);
+    el.children.forEach(walk);
+  };
+  walk(view.find(() => true, 'root'));
+  assert.equal(createChoices.length, 0);
+
+  assert.equal(view.button('Import').props.disabled, false);
+  await view.button('Import').props.onClick();
+  await settle();
+  const urls = calls.map((c) => c.url);
+  assert.deepEqual(urls, [
+    '/api/import/goodreads/preview',
+    '/api/import/goodreads/apply',
+  ]);
+  assert.deepEqual(
+    calls[1].body.items.map((i) => i.bookId),
+    ['b1', 'b2'],
+  );
   view.app.unmount();
 });

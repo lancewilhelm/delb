@@ -1,3 +1,4 @@
+import { setRole, setTagRules, tagBook } from './library-fixtures.mjs';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import sharp from './test-image.mjs';
@@ -52,45 +53,24 @@ const owner = await signup('owner'),
   editor = await signup('editor'),
   viewer = await signup('viewer'),
   outsider = await signup('outsider');
-const createdCollection = await request('/api/collections', owner, 'POST', {
-  name: `Spine fixture ${suffix}`,
-});
-assert.equal(
-  createdCollection.status,
-  200,
-  await createdCollection.clone().text(),
-);
-const collection = (await createdCollection.json()).data.collection.id;
-for (const [account, role] of [
-  [editor, 'editor'],
-  [viewer, 'viewer'],
-]) {
-  const response = await request(
-    `/api/collections/${collection}/members`,
-    owner,
-    'PUT',
-    { email: account.email, role },
-  );
-  assert.equal(response.status, 200, await response.clone().text());
-}
+await setRole(owner, editor, 'editor');
 const created = await request('/api/books', owner, 'POST', {
   title: 'Spine fixture',
   authors: ['Sample Author'],
   seriesName: 'Synthetic sequence',
   seriesIndex: 2,
-  collectionIds: [collection],
 });
 assert.equal(created.status, 200, await created.clone().text());
 const id = (await created.json()).data.book.id,
   path = `/api/books/${id}/spine`;
+const restrictedTag = await tagBook(owner, id, 'Restricted spine');
+await setTagRules(owner, outsider, { blockTagIds: [restrictedTag.id] });
+const admin = await signup('admin');
+await setRole(owner, admin, 'admin');
 const connection = `/api/books/${id}/spine-generate/connection`;
 const adminConnection = '/api/settings/admin/chatgpt-image';
 const adminPrompt = '/api/settings/admin/spine-prompt';
 const setupDb = createClient({ url: 'file:./review/demo/synthetic.db' });
-await setupDb.execute({
-  sql: "UPDATE users SET role = 'admin' WHERE id = ?",
-  args: [outsider.id],
-});
 await setupDb.execute({
   sql: "INSERT INTO codex_image_connections (user_id, generation, state, encrypted_tokens) VALUES (?, 'old-personal', 'connected', 'preserved')",
   args: [editor.id],
@@ -139,7 +119,7 @@ const challenge = await response.json();
 assert.equal(challenge.code, 'TEST-CODE');
 assert.equal(
   (
-    await request(adminConnection, outsider, 'POST', {
+    await request(adminConnection, admin, 'POST', {
       action: 'poll',
       attemptId: challenge.attemptId,
     })
@@ -177,13 +157,12 @@ const upload = new FormData();
 upload.append('file', new Blob([cover], { type: 'image/png' }), 'cover.png');
 response = await request(`/api/books/${id}/cover`, editor, 'POST', upload);
 assert.equal(response.status, 200, await response.clone().text());
-async function makeSeriesSpine(account, collectionId, title, index, color) {
+async function makeSeriesSpine(account, title, index, color) {
   const bookResponse = await request('/api/books', account, 'POST', {
     title,
     authors: ['Sample Author'],
     seriesName: 'Synthetic sequence',
     seriesIndex: index,
-    collectionIds: [collectionId],
   });
   assert.equal(bookResponse.status, 200, await bookResponse.clone().text());
   const bookId = (await bookResponse.json()).data.book.id;
@@ -210,47 +189,31 @@ async function makeSeriesSpine(account, collectionId, title, index, color) {
 }
 const visibleSpine = await makeSeriesSpine(
   owner,
-  collection,
   'First visible volume',
   1,
   '#aa2233',
 );
 const secondSpine = await makeSeriesSpine(
   owner,
-  collection,
   'Third visible volume',
   3,
   '#2244aa',
 );
 const thirdSpine = await makeSeriesSpine(
   owner,
-  collection,
   'Fourth visible volume',
   4,
   '#55aa33',
 );
 const fourthSpine = await makeSeriesSpine(
   owner,
-  collection,
   'Fifth visible volume',
   5,
   '#bb33aa',
 );
-const hiddenCollection = await request('/api/collections', outsider, 'POST', {
-  name: `Private ${suffix}`,
-});
-assert.equal(
-  hiddenCollection.status,
-  200,
-  await hiddenCollection.clone().text(),
-);
-const hiddenSpine = await makeSeriesSpine(
-  outsider,
-  (await hiddenCollection.json()).data.collection.id,
-  'Private volume',
-  4,
-  '#eeaa11',
-);
+const hiddenSpine = await makeSeriesSpine(owner, 'Hidden volume', 4, '#eeaa11');
+const hiddenTag = await tagBook(owner, hiddenSpine.bookId, 'Hidden reference');
+await setTagRules(owner, editor, { blockTagIds: [hiddenTag.id] });
 const referencePath = `/api/books/${id}/spine-generate/series-references`;
 assert.equal((await request(referencePath, viewer)).status, 403);
 response = await request(referencePath, editor);
@@ -331,7 +294,7 @@ assert.equal(response.status, 200, await response.clone().text());
 assert.equal((await response.json()).savedPrompt, customPrompt);
 assert.equal(
   (
-    await request(adminPrompt, outsider, 'PUT', {
+    await request(adminPrompt, admin, 'PUT', {
       prompt: promptSettings.prompt,
       previous: null,
     })
@@ -406,32 +369,8 @@ assert.ok(
     ).readFile('review/demo/fake-codex-refreshes.txt', 'utf8')
   ).includes('refresh'),
 );
-const sharedReferenceCollection = await request(
-  '/api/collections',
-  owner,
-  'POST',
-  { name: `Reference access ${suffix}` },
-);
-assert.equal(sharedReferenceCollection.status, 200);
-const referenceCollectionId = (await sharedReferenceCollection.json()).data
-  .collection.id;
-assert.equal(
-  (
-    await request(
-      `/api/collections/${referenceCollectionId}/members`,
-      owner,
-      'PUT',
-      {
-        email: editor.email,
-        role: 'viewer',
-      },
-    )
-  ).status,
-  200,
-);
 const revocableSpine = await makeSeriesSpine(
   owner,
-  referenceCollectionId,
   'Revocable reference',
   2.5,
   '#33aa66',
@@ -455,12 +394,14 @@ assert.ok(
     'REVOKE_REFERENCE',
   ),
 );
-response = await request(
-  `/api/collections/${referenceCollectionId}/members/${editor.id}`,
+const revokedTag = await tagBook(
   owner,
-  'DELETE',
+  revocableSpine.bookId,
+  'Revoked reference',
 );
-assert.equal(response.status, 200, await response.clone().text());
+await setTagRules(owner, editor, {
+  blockTagIds: [hiddenTag.id, revokedTag.id],
+});
 assert.equal((await revocablePending).status, 409);
 const delayed = new FormData();
 delayed.append('prompt', 'WAIT_FOR_PERMISSION');
@@ -479,13 +420,7 @@ assert.ok(
     'WAIT_FOR_PERMISSION',
   ),
 );
-response = await request(
-  `/api/collections/${collection}/members`,
-  owner,
-  'PUT',
-  { email: editor.email, role: 'viewer' },
-);
-assert.equal(response.status, 200, await response.clone().text());
+await setRole(owner, editor, 'reader');
 assert.equal((await pending).status, 403);
 assert.equal((await request(connection, editor)).status, 403);
 assert.equal((await request(adminConnection, editor, 'DELETE')).status, 403);

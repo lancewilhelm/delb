@@ -25,7 +25,6 @@ import (
 	"github.com/lancewilhelm/delb"
 	"github.com/lancewilhelm/delb/internal/auth"
 	"github.com/lancewilhelm/delb/internal/books"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/db"
 	"github.com/lancewilhelm/delb/internal/httpapi"
 	"github.com/lancewilhelm/delb/internal/spines"
@@ -57,7 +56,7 @@ func makeJPEGWithOrientation(t *testing.T, w, h int, orientation uint16) []byte 
 
 	// Build minimal APP1 Exif segment with single IFD entry 0x0112 (Orientation).
 	var tiff bytes.Buffer
-	tiff.WriteString("MM")                              // Big-endian
+	tiff.WriteString("MM") // Big-endian
 	_ = binary.Write(&tiff, binary.BigEndian, uint16(42))
 	_ = binary.Write(&tiff, binary.BigEndian, uint32(8)) // IFD0 offset
 	_ = binary.Write(&tiff, binary.BigEndian, uint16(1)) // 1 entry
@@ -236,7 +235,6 @@ func TestSpineAndSpineGenerationEndToEnd(t *testing.T) {
 	secret := "spines-test-secret-0123456789abcdef0123456789"
 	libDir := filepath.Join(tmp, "library")
 	authSvc := auth.NewService(auth.ServiceOptions{DB: opened.DB, Secret: secret, Logger: discard})
-	colSvc := collections.NewService(collections.ServiceOptions{DB: opened.DB, AuthService: authSvc, LibraryDir: libDir, Logger: discard})
 	booksSvc := books.NewService(books.ServiceOptions{DB: opened.DB, AuthService: authSvc, LibraryDir: libDir, Logger: discard})
 	spinesSvc := spines.NewService(spines.ServiceOptions{
 		DB:           opened.DB,
@@ -252,7 +250,7 @@ func TestSpineAndSpineGenerationEndToEnd(t *testing.T) {
 		DB:          opened.DB,
 		Logger:      discard,
 		AuthService: authSvc,
-		Services:    []httpapi.RouteRegistrar{colSvc, booksSvc, spinesSvc},
+		Services:    []httpapi.RouteRegistrar{booksSvc, spinesSvc},
 	}))
 	defer srv.Close()
 
@@ -305,23 +303,9 @@ func TestSpineAndSpineGenerationEndToEnd(t *testing.T) {
 	_, ownerCookie := signUp("Owner", "owner@example.invalid")
 	_, viewerCookie := signUp("Viewer", "viewer@example.invalid")
 
-	resp, raw := reqJSON(ownerCookie, http.MethodPost, "/api/collections", map[string]any{"name": "Col"})
-	var colRes struct {
-		Data struct {
-			Collection struct{ ID string } `json:"collection"`
-		} `json:"data"`
-	}
-	_ = json.Unmarshal(raw, &colRes)
-	colID := colRes.Data.Collection.ID
-	if resp.StatusCode != 200 {
-		t.Fatalf("create col: %d", resp.StatusCode)
-	}
-	reqJSON(ownerCookie, http.MethodPut, "/api/collections/"+colID+"/members", map[string]any{
-		"email": "viewer@example.invalid", "role": "viewer",
-	})
-
-	resp, raw = reqJSON(ownerCookie, http.MethodPost, "/api/books", map[string]any{
-		"title": "Book 1", "authors": []string{"Author A"}, "seriesName": "Saga", "seriesIndex": 1, "collectionIds": []string{colID},
+	// New accounts are readers, so the second account can only view the library.
+	resp, raw := reqJSON(ownerCookie, http.MethodPost, "/api/books", map[string]any{
+		"title": "Book 1", "authors": []string{"Author A"}, "seriesName": "Saga", "seriesIndex": 1,
 	})
 	var bRes struct {
 		Data struct {

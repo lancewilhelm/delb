@@ -14,37 +14,25 @@ Delb compiles to a single `CGO_ENABLED=0` static binary (with the frontend, font
 
 Measured on a real library (76 books, 32 authors, 9 series, Apple Silicon):
 
-| Deployment Metric | Delb (Go + Vite) | Why It Matters |
-|---|---|---|
-| **Docker image size** | **~38.4 MB** (`FROM scratch`) | Fast pulls, minimal attack surface, no OS/runtime packages |
-| **Standalone binary** | **~25 MB** | Single executable — drop onto any Linux/macOS host and run |
-| **Idle memory (RSS)** | **~22 MB** (~66 MB peak under 16-client load) | Runs effortlessly on a Raspberry Pi, NAS, or tiny VPS |
-| **Cold startup time** | **~23 ms** (p50) | Instant container restarts with automatic SQLite migrations |
-| **API latency (p50)** | **0.14–1.95 ms** across library, bookshelf, search, and covers | Snappy browsing even on modest hardware |
-| **Throughput (16 clients)** | **1,260–31,000+ req/s** with zero errors | Handles concurrent readers, cover grids, and MCP clients smoothly |
-| **Offline-first assets** | **100% self-hosted** | All 10 UI fonts, icons, and PDF.js assets ship inside the binary |
+| Deployment Metric           | Delb (Go + Vite)                                               | Why It Matters                                                    |
+| --------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------- |
+| **Docker image size**       | **~38.4 MB** (`FROM scratch`)                                  | Fast pulls, minimal attack surface, no OS/runtime packages        |
+| **Standalone binary**       | **~25 MB**                                                     | Single executable — drop onto any Linux/macOS host and run        |
+| **Idle memory (RSS)**       | **~22 MB** (~66 MB peak under 16-client load)                  | Runs effortlessly on a Raspberry Pi, NAS, or tiny VPS             |
+| **Cold startup time**       | **~23 ms** (p50)                                               | Instant container restarts with automatic SQLite migrations       |
+| **API latency (p50)**       | **0.14–1.95 ms** across library, bookshelf, search, and covers | Snappy browsing even on modest hardware                           |
+| **Throughput (16 clients)** | **1,260–31,000+ req/s** with zero errors                       | Handles concurrent readers, cover grids, and MCP clients smoothly |
+| **Offline-first assets**    | **100% self-hosted**                                           | All 10 UI fonts, icons, and PDF.js assets ship inside the binary  |
 
-## Collections model (Personal-first)
+## One shared library
 
-Delb uses a **Personal-first** collections model (similar to modern photo apps: “library + albums”):
+Delb has one shared library for your household or a small group of trusted friends:
 
-- Every user has a default **Personal** collection (created automatically).
-- **All uploads/imports go to Personal by default**. Books may also be added to other collections.
-- Personal is **non-deletable** and **not shareable**.
-- Other collections can be shared and act like albums: a book can appear in multiple collections without changing ownership.
-- Books are **owned by the uploader** (future direction: only the uploader can permanently delete a book).
+- **The server owns every book.** Anyone with an account browses the same catalog, and each reader keeps private reading status, ratings, reviews, notes, a TBR queue, and personal Shelves.
+- **Server roles** decide who can change the library. The first account is the `owner`. An `admin` manages accounts, roles, and settings. An `editor` adds, edits, and deletes books. A `reader` is read-only on the catalog. New accounts are readers.
+- **Tag visibility rules** let an admin hide books from specific accounts. An allow rule limits an account to books with an allowed tag, and a block rule hides every book with that tag.
 
-### Sharing / RBAC (collections)
-
-Non-Personal collections can be shared with roles:
-
-- `owner`: can rename, manage members, transfer ownership, and delete the collection
-- `editor`: can rename and manage members
-- `viewer`: read-only access
-
-Only one `owner` is allowed per collection. Non-owners may leave a shared collection.
-
-See `docs/developing/reference/library-layout.md` for the complete philosophy and UI implications.
+See `docs/using/library-access.md` for the user guide and `docs/developing/reference/library-access.md` for the access rules. Servers upgrading from the earlier collections model should read `docs/hosting/single-library-upgrade.md`.
 
 ## Calibre import (migration)
 
@@ -69,9 +57,9 @@ See:
 ## Features
 
 - **Library Management** - Upload, organize, and browse your ebook collection
-- **Multi-user Support** - User authentication with role-based permissions (owner, admin, user, guest)
+- **Multi-user Support** - User accounts with server roles (owner, admin, editor, reader) and per-account tag visibility rules
 - **Modern UI** - Clean, responsive interface with theme support
-- **Book Details** - View metadata, descriptions, and cover images (admins can edit metadata, authors, and covers)
+- **Book Details** - View metadata, descriptions, and cover images (editors and admins can edit metadata, authors, and covers)
 - **Direct Downloads** - Download books directly from the web interface
 - **In-app Reading** - Read EPUBs and PDFs, with a saved position for each reader
 - **Search & Filter** - Find books quickly with search and filtering
@@ -80,10 +68,10 @@ See:
 
 ## Cover Delivery
 
-Delb serves covers through a membership-gated book endpoint:
+Delb serves covers through a visibility-gated book endpoint:
 
 - `GET /api/books/:id/cover?variant=thumb|source&v=<optional>`
-- Requires an authenticated session and book visibility via collection membership
+- Requires an authenticated session, and the book must be visible to the account under its tag visibility rules
 - Uses private cache revalidation (`ETag` + `Cache-Control: private, max-age=0, must-revalidate`)
 
 `books.coverImagePath` is an internal storage pointer and is not intended to be used directly as a client-facing URL.

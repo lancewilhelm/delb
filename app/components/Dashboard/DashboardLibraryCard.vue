@@ -6,6 +6,7 @@ import DashboardArtMenu from '~/components/Dashboard/DashboardArtMenu.vue';
 import DashboardCover from '~/components/Dashboard/DashboardCover.vue';
 import DashboardPile from '~/components/Dashboard/DashboardPile.vue';
 import DashboardShelfArt from '~/components/Dashboard/DashboardShelfArt.vue';
+import { useAuth } from '~/composables/useAuth';
 import { useWallDrift } from '~/composables/useWallDrift';
 import { useBooksIndexFiltersStore } from '~/stores/booksIndexFilters';
 import { useUiStore } from '~/stores/ui';
@@ -71,6 +72,7 @@ const artOptions = [
 
 const booksIndexFiltersStore = useBooksIndexFiltersStore();
 const uiStore = useUiStore();
+const { canEditCatalog } = useAuth();
 
 const total = computed(() => props.counts?.total ?? null);
 // A pile or a shelf looks natural at any size; the wall switches layout for
@@ -325,6 +327,7 @@ const note = computed(() => {
         /></RouterLink>
         <template v-else-if="counts">
           <button
+            v-if="canEditCatalog"
             type="button"
             class="lib-btn"
             @click="uiStore.setAddBookModalVisible(true)"

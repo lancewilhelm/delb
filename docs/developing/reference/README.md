@@ -5,7 +5,7 @@ These pages describe feature contracts and implementation behavior. Start with t
 | Topic                                               | Reference                                                 |
 | --------------------------------------------------- | --------------------------------------------------------- |
 | Authentication errors and account administration    | [Authentication](auth.md)                                 |
-| Collection visibility, roles, and endpoints         | [Collections and access control](collections.md)          |
+| Server roles, tag visibility rules, and endpoints   | [Library access](library-access.md)                       |
 | Library navigation and book presentation            | [Library layout](library-layout.md)                       |
 | Dashboard layout, card art, and API                 | [Dashboard](dashboard.md)                                 |
 | Accessible book and entity search                   | [Global search](global-search.md)                         |

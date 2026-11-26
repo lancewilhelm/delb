@@ -20,7 +20,6 @@ import (
 	"github.com/lancewilhelm/delb/internal/auth"
 	"github.com/lancewilhelm/delb/internal/books"
 	"github.com/lancewilhelm/delb/internal/bookshelf"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/config"
 	"github.com/lancewilhelm/delb/internal/db"
 	"github.com/lancewilhelm/delb/internal/dropbox"
@@ -172,13 +171,6 @@ func main() {
 		Logger:      rootLogger.With("component", "users"),
 	})
 
-	collectionsSvc := collections.NewService(collections.ServiceOptions{
-		DB:          opened.DB,
-		AuthService: authSvc,
-		LibraryDir:  cfg.LibraryDir,
-		Logger:      rootLogger.With("component", "collections"),
-	})
-
 	booksSvc := books.NewService(books.ServiceOptions{
 		DB:          opened.DB,
 		AuthService: authSvc,
@@ -261,7 +253,6 @@ func main() {
 		Services: []httpapi.RouteRegistrar{
 			settingsSvc,
 			usersSvc,
-			collectionsSvc,
 			booksSvc,
 			bookshelfSvc,
 			spinesSvc,

@@ -6,7 +6,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createClient } from './sqlite-client.mjs';
-import sharp from './test-image.mjs';
 import { fetchAuth } from './fetch-auth.mjs';
 
 // Production browser measurements against the disposable synthetic demo only.
@@ -46,6 +45,8 @@ const browser = spawn(
     '--remote-debugging-port=0',
     `--user-data-dir=${profile}`,
     '--no-first-run',
+    '--disable-background-networking',
+    '--proxy-server=http://127.0.0.1:1',
     '--no-default-browser-check',
     'about:blank',
   ],
@@ -74,109 +75,18 @@ try {
         password: randomBytes(20).toString('hex'),
       }),
     });
-  // Keep the shared default's required owner separate from the measured reader.
-  if (!(await db.execute('SELECT id FROM users LIMIT 1')).rows.length)
-    assert.equal((await account('owner')).status, 200);
-  const signup = await account('reader');
+  const signup = await account('owner');
   assert.equal(signup.status, 200, await signup.clone().text());
   const { user } = await signup.json();
   const cookie = signup.headers
     .getSetCookie()
     .map((v) => v.split(';')[0])
     .join('; ');
-  const collectionResponse = await fetch(base + '/api/collections', {
-    method: 'POST',
-    headers: {
-      Origin: base,
-      Cookie: cookie,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ name: `Synthetic shelf ${suffix}` }),
-  });
-  assert.equal(
-    collectionResponse.status,
-    200,
-    await collectionResponse.clone().text(),
-  );
-  const collectionId = (await collectionResponse.json()).data.collection.id;
-  const memberships = await db.execute({
-    sql: 'SELECT collection_id FROM collection_members WHERE user_id=? AND collection_id<>?',
-    args: [user.id, collectionId],
-  });
-  for (const membership of memberships.rows) {
-    const left = await fetch(
-      base +
-        `/api/collections/${encodeURIComponent(membership.collection_id)}/leave`,
-      {
-        method: 'POST',
-        headers: { Cookie: cookie, Origin: base },
-      },
-    );
-    assert.equal(left.status, 200, 'Synthetic reader leaves the empty default');
-  }
-  // Make the measured collection the default in this disposable fixture so a
-  // page reload returns to the same collection, as an ordinary session does.
-  await db.execute('UPDATE collections SET is_default=0 WHERE is_default=1');
-  await db.execute({
-    sql: 'UPDATE collections SET is_default=1 WHERE id=?',
-    args: [collectionId],
-  });
   const author = `shelf-author-${suffix}`;
   await db.execute({
     sql: 'INSERT INTO authors(id,name,sort_name,created_at,updated_at) VALUES (?,?,?,1,1)',
     args: [author, author, author],
   });
-  const image = artwork
-    ? (
-        await sharp({
-          create: {
-            width: 180,
-            height: 1000,
-            channels: 3,
-            background: '#3d6255',
-          },
-        })
-          .composite([
-            {
-              input: Buffer.from(
-                '<svg width="180" height="1000"><text x="80" y="35" fill="white" font-size="25" writing-mode="vertical-rl">Synthetic book spine</text></svg>',
-              ),
-            },
-          ])
-          .webp()
-          .toBuffer()
-      ).toString('base64')
-    : '';
-  const inserts = [];
-  for (let i = 0; i < count; i++) {
-    const id = `shelf-perf-${suffix}-${String(i).padStart(5, '0')}`;
-    const title = `Synthetic Book ${String(i).padStart(5, '0')}`;
-    inserts.push({
-      sql: 'INSERT INTO books(id,title,sort_title,pages,description,created_at,updated_at,created_by_user_id,collection_id) VALUES (?,?,?,?,?,1,1,?,?)',
-      args: [
-        id,
-        title,
-        title,
-        120 + (i % 600),
-        'Invented library metadata. '.repeat(40),
-        user.id,
-        collectionId,
-      ],
-    });
-    inserts.push({
-      sql: 'INSERT INTO book_authors(book_id,author_id,position) VALUES (?,?,0)',
-      args: [id, author],
-    });
-    if (
-      Math.floor(((i + 1) * artwork) / count) >
-      Math.floor((i * artwork) / count)
-    )
-      inserts.push({
-        sql: 'INSERT INTO book_spines(book_id,original_base64,original_type,image_base64,edits,revision) VALUES (?,?,?,?,?,?)',
-        args: [id, image, 'image/webp', image, '{}', suffix],
-      });
-  }
-  await db.batch(inserts, 'write');
   const port = await waitFor(async () => {
     try {
       return (
@@ -254,6 +164,53 @@ try {
       throw Error(JSON.stringify(result.exceptionDetails));
     return result.result.value;
   }
+  const image = artwork
+    ? await evaluate(`(() => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 180;
+        canvas.height = 1000;
+        const context = canvas.getContext('2d');
+        context.fillStyle = '#3d6255';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.translate(80, 35);
+        context.rotate(Math.PI / 2);
+        context.fillStyle = 'white';
+        context.font = '25px sans-serif';
+        context.fillText('Synthetic book spine', 0, 0);
+        return canvas.toDataURL('image/webp').split(',')[1];
+      })()`)
+    : '';
+  const inserts = [];
+  for (let i = 0; i < count; i++) {
+    const id = `shelf-perf-${suffix}-${String(i).padStart(5, '0')}`;
+    const title = `Synthetic Book ${String(i).padStart(5, '0')}`;
+    inserts.push({
+      sql: 'INSERT INTO books(id,title,sort_title,pages,description,created_at,updated_at,created_by_user_id) VALUES (?,?,?,?,?,1,1,?)',
+      args: [
+        id,
+        title,
+        title,
+        120 + (i % 600),
+        'Invented library metadata. '.repeat(40),
+        user.id,
+      ],
+    });
+    inserts.push({
+      sql: 'INSERT INTO book_authors(book_id,author_id,position) VALUES (?,?,0)',
+      args: [id, author],
+    });
+    if (
+      Math.floor(((i + 1) * artwork) / count) >
+      Math.floor((i * artwork) / count)
+    )
+      inserts.push({
+        sql: 'INSERT INTO book_spines(book_id,original_base64,original_type,image_base64,edits,revision) VALUES (?,?,?,?,?,?)',
+        args: [id, image, 'image/webp', image, '{}', suffix],
+      });
+  }
+  await db.executeMultiple('BEGIN');
+  for (const insert of inserts) await db.execute(insert);
+  await db.executeMultiple('COMMIT');
   inspectFailure = async () => ({
     text: await evaluate('document.body.innerText.slice(0,1500)'),
     failedResponses: responses.filter((response) => response.status >= 400),
@@ -298,11 +255,10 @@ try {
   await call('Page.navigate', { url: base + '/books' });
   await waitFor(
     () =>
-      responses.some((r) => r.path === '/api/collections') &&
       evaluate(
-        `document.readyState === 'complete' && !!document.querySelector('button[aria-label="Switch collection"]')`,
+        `document.readyState === 'complete' && !!document.querySelector('button[aria-label="Bookshelf View"]')`,
       ),
-    'hydrated collection picker',
+    'library view controls',
   );
   // Persist the normal shelf view once, then measure real page refreshes too.
   const measurements = [];
@@ -385,7 +341,7 @@ try {
       `performance.now() - (${kind === 'switch' ? 'window.shelfStart' : '0'})`,
     );
     const catalogRequests = requests.filter(
-      (r) => r.path === `/api/collections/${collectionId}/bookshelf`,
+      (r) => r.path === '/api/library/bookshelf',
     ).length;
     const imageRequests = requests.filter((r) => r.type === 'Image').length;
     const result = {
@@ -412,36 +368,30 @@ try {
       }),
     );
     // Confirm the real save completed before revisiting; don't measure a conflicted or pending save.
-    const response = await fetch(
-      base + `/api/collections/${collectionId}/bookshelf`,
-      {
-        headers: { Cookie: cookie },
-      },
-    );
+    const response = await fetch(base + '/api/library/bookshelf', {
+      headers: { Cookie: cookie },
+    });
     assert.equal(response.status, 200);
     const snapshot = await response.json();
     assert.equal(
       snapshot.books.length,
       count,
-      'The complete collection was loaded',
+      'The complete library was loaded',
     );
     if (snapshot.revision === 0) {
-      const saved = await fetch(
-        base + `/api/collections/${collectionId}/bookshelf`,
-        {
-          method: 'PUT',
-          headers: {
-            Cookie: cookie,
-            Origin: base,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            revision: snapshot.revision,
-            token: snapshot.token,
-            arrangement: snapshot.arrangement,
-          }),
+      const saved = await fetch(base + '/api/library/bookshelf', {
+        method: 'PUT',
+        headers: {
+          Cookie: cookie,
+          Origin: base,
+          'Content-Type': 'application/json',
         },
-      );
+        body: JSON.stringify({
+          revision: snapshot.revision,
+          token: snapshot.token,
+          arrangement: snapshot.arrangement,
+        }),
+      });
       assert.equal(saved.status, 200, await saved.clone().text());
     }
   };
@@ -552,66 +502,6 @@ try {
     );
   }
   console.log(JSON.stringify({ idleFrames, pan }));
-  if (process.argv.includes('--move-controls')) {
-    const destinationName = `Move destination ${suffix}`;
-    const destination = await fetch(base + '/api/collections', {
-      method: 'POST',
-      headers: {
-        Cookie: cookie,
-        Origin: base,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ name: destinationName }),
-    });
-    assert.equal(destination.status, 200);
-    const targetId = (await destination.json()).data.collection.id;
-    await evaluate(
-      `[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Select').click()`,
-    );
-    await evaluate(
-      `[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Select all').click()`,
-    );
-    await evaluate(
-      `[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Actions').click()`,
-    );
-    await evaluate(
-      `[...document.querySelectorAll('[role=menuitem]')].find(b=>b.textContent.trim()==='Move to collection').click()`,
-    );
-    await waitFor(
-      () =>
-        evaluate(
-          `!!document.querySelector('[aria-labelledby="book-move-title"] select option[value="${targetId}"]')`,
-        ),
-      'move destination',
-    );
-    await evaluate(
-      `(()=>{const dialog=document.querySelector('[aria-labelledby="book-move-title"]');const select=dialog.querySelector('select');select.value=${JSON.stringify(targetId)};select.dispatchEvent(new Event('change',{bubbles:true}));dialog.querySelector('input[type=checkbox]').click()})()`,
-    );
-    await evaluate(
-      `[...document.querySelectorAll('[aria-labelledby="book-move-title"] button')].find(b=>b.textContent.trim()==='Move books').click()`,
-    );
-    await waitFor(
-      () =>
-        evaluate(
-          `!document.querySelector('[aria-labelledby="book-move-title"]')`,
-        ),
-      'move completion',
-    );
-    await waitFor(
-      () =>
-        evaluate(
-          `document.querySelector('.bookshelf-view') && !document.querySelector('.spine-button')`,
-        ),
-      'source shelf refresh after move',
-    );
-    const moved = await (
-      await fetch(base + `/api/collections/${targetId}/bookshelf`, {
-        headers: { Cookie: cookie },
-      })
-    ).json();
-    assert.equal(moved.books.length, count, 'All books reach the destination');
-    console.log('PASS bulk move refreshes the open source shelf');
-  }
   if (process.argv.includes('--controls')) {
     const until = (expression) =>
       waitFor(() => evaluate(expression), expression);
@@ -716,21 +606,21 @@ try {
     }
     await resize('.height-handle', 0, -18);
     await resize('.width-handle', 18, 0);
-    const shelfCount = await evaluate(
-      `document.querySelector('.bookcase').querySelectorAll('[data-shelf-canvas]').length`,
+    const caseId = await evaluate(
+      "document.querySelector('.bookcase-controls').dataset.controlCaseId",
     );
-    await evaluate(
-      `document.querySelector('.bookcase-controls .shelf-action').click()`,
+    const bookcase = `[data-bookcase-id="${caseId}"]`;
+    const controls = `[data-control-case-id="${caseId}"]`;
+    const rows = `document.querySelector(${JSON.stringify(bookcase)}).querySelectorAll('[data-shelf-canvas]').length`;
+    const shelfCount = await evaluate(rows);
+    await click(
+      `${controls} button[aria-label^="Add shelf above shelf 1 in bookcase"]`,
     );
-    await until(
-      `document.querySelector('.bookcase').querySelectorAll('[data-shelf-canvas]').length===${shelfCount + 1}`,
+    await until(`${rows} === ${shelfCount + 1}`);
+    await click(
+      `${controls} button[aria-label^="Remove shelf 1 from bookcase"]`,
     );
-    await evaluate(
-      `document.querySelector('.bookcase-controls .shelf-control-viewport .shelf-action:nth-child(2)').click()`,
-    );
-    await until(
-      `document.querySelector('.bookcase').querySelectorAll('[data-shelf-canvas]').length===${shelfCount}`,
-    );
+    await until(`${rows} === ${shelfCount}`);
     await click('button[aria-label="Done editing shelves"]');
     await evaluate(
       `[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Filters').click()`,
@@ -748,38 +638,8 @@ try {
     await until(
       `document.querySelectorAll('.shelf-spine:not(.dimmed)').length>0 && !document.querySelector('.shelf-spine.dimmed')`,
     );
-    const empty = await fetch(base + '/api/collections', {
-      method: 'POST',
-      headers: {
-        Cookie: cookie,
-        Origin: base,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ name: 'Synthetic empty scope ' + suffix }),
-    });
-    assert.equal(empty.status, 200);
-    await click('button[aria-label="Switch collection"]');
-    await until(
-      `[...document.querySelectorAll('[role=menuitem]')].some(b=>b.textContent.includes('Synthetic empty scope ${suffix}'))`,
-    );
-    await evaluate(
-      `[...document.querySelectorAll('[role=menuitem]')].find(b=>b.textContent.includes('Synthetic empty scope ${suffix}')).click()`,
-    );
-    await until(
-      `document.querySelector('.bookshelf-view') && !document.querySelector('.spine-button') && !document.querySelector('.bookshelf-view').textContent.includes('Loading your bookshelf')`,
-    );
-    await click('button[aria-label="Switch collection"]');
-    await until(
-      `[...document.querySelectorAll('[role=menuitem]')].some(b=>b.textContent.trim()==='All')`,
-    );
-    await evaluate(
-      `[...document.querySelectorAll('[role=menuitem]')].find(b=>b.textContent.trim()==='All').click()`,
-    );
-    await until(
-      `!document.querySelector('.bookshelf-view') && !document.querySelector('button[aria-label="Bookshelf View"]')`,
-    );
     const saved = await (
-      await fetch(base + `/api/collections/${collectionId}/bookshelf`, {
+      await fetch(base + '/api/library/bookshelf', {
         headers: { Cookie: cookie },
       })
     ).json();
@@ -790,7 +650,7 @@ try {
       count,
     );
     console.log(
-      'PASS live book sizing, shelf and case resizing, keyboard case order, empty shelf add/remove, filters and collection selection',
+      'PASS live book sizing, shelf and case resizing, keyboard case order, empty shelf add/remove, title filters',
     );
   }
   assert.deepEqual(failures, [], 'No unhandled browser exceptions');
@@ -815,7 +675,7 @@ try {
   const repeat = measurements.filter((m) => !m.first);
   assert.ok(
     measurements.every((m) => m.catalogRequests === 1),
-    'The compact collection shelf is fetched once',
+    'The compact library bookshelf is fetched once',
   );
   assert.ok(
     repeat.every((m) => m.ms < budget),

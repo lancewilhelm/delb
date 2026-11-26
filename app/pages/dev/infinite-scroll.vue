@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { useHead } from '~/composables/useHead';
-import { useCollectionsStore } from '~/stores/collections';
 import { $fetch } from '~/utils/apiFetch';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from 'vue';
 import BookThumbnail from '~/components/BookThumbnail.vue';
 useHead({ title: 'Dev: Infinite Scroll' });
 
@@ -33,8 +39,6 @@ type BooksListResponse = {
   success?: boolean;
   message?: string;
 };
-
-const collectionsStore = useCollectionsStore();
 
 /**
  * Incremental test modes:
@@ -76,16 +80,6 @@ const loading = ref(false);
 const errorMessage = ref<string | null>(null);
 
 const hasMore = computed(() => Boolean(nextCursor.value));
-
-const collectionId = computed<string | undefined>(() => {
-  if (
-    collectionsStore.activeSelection.kind === 'collection' &&
-    collectionsStore.activeSelection.collectionId
-  ) {
-    return collectionsStore.activeSelection.collectionId;
-  }
-  return undefined;
-});
 
 // Scroll container + sentinel for observer mode
 const scrollContainerRef = ref<HTMLElement | null>(null);
@@ -145,7 +139,6 @@ async function fetchPage(opts?: { cursor?: string | null; append?: boolean }) {
       limit: effectiveLimit.value,
     };
 
-    if (collectionId.value) query.collectionId = collectionId.value;
     if (opts?.cursor) query.cursor = opts.cursor;
 
     const res = await $fetch<BooksListResponse>('/api/books', {
@@ -226,14 +219,6 @@ function setupObserver() {
 
   io.observe(sentinel);
 }
-
-// Re-fetch when scope changes
-watch(
-  () => collectionId.value,
-  async () => {
-    await loadFirstPage();
-  },
-);
 
 // Re-create observer when config/mode changes OR when `hasMore` flips (end reached).
 watch(
@@ -446,10 +431,6 @@ onBeforeUnmount(() => {
           <div>
             <span class="opacity-70">nextCursor:</span>
             {{ nextCursor ?? 'null' }}
-          </div>
-          <div>
-            <span class="opacity-70">collectionId:</span>
-            {{ collectionId ?? 'all' }}
           </div>
           <div>
             <span class="opacity-70">limitMode:</span>

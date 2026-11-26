@@ -1,9 +1,7 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 
-export type BookSelectionScope =
-  | { kind: 'all' }
-  | { kind: 'collection'; collectionId: string };
+export type BookSelectionScope = { kind: 'all' };
 
 type SetModeOpts = {
   enabled: boolean;
@@ -26,7 +24,7 @@ type SetSelectedAllInScopeOpts = {
  * Design goals:
  * - Selection survives infinite scrolling pagination (loaded list changing).
  * - Supports both "select specific ids" and "select all in scope" behavior.
- * - Scope-aware: selection is specific to the current view scope (All vs Collection).
+ * - Scope-aware: selection is specific to the current view scope.
  *
  * NOTE:
  * - This store intentionally does NOT enforce permission rules; the UI should
@@ -41,8 +39,7 @@ export const useBookSelectionStore = defineStore('bookSelection', () => {
 
   /**
    * The scope the selection applies to.
-   * This should be set by the page when entering selection mode and/or when
-   * the active collection changes.
+   * This should be set by the page when entering selection mode.
    */
   const scope = ref<BookSelectionScope>({ kind: 'all' });
 
@@ -65,7 +62,7 @@ export const useBookSelectionStore = defineStore('bookSelection', () => {
    * This array can be updated by the grid as pages load.
    *
    * Phase 4's server-backed "select all" does NOT require this, but keeping it
-   * allows a good UX for "select all loaded" vs "select all in collection".
+   * allows a good UX for "select all loaded" vs "select all in the library".
    */
   const knownBookIdsInScope = ref<Set<string>>(new Set());
 
@@ -213,7 +210,7 @@ export const useBookSelectionStore = defineStore('bookSelection', () => {
    *   show an accurate selected count for what's currently known/loaded.
    *
    * Phase 4 behavior:
-   * - The server will be the source of truth for "all in collection" actions,
+   * - The server will be the source of truth for "all in scope" actions,
    *   so we don't need to materialize IDs client-side.
    */
   function setSelectedAllInScope(

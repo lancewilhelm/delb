@@ -1,3 +1,4 @@
+import { setTagRules, tagBook } from './library-fixtures.mjs';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -53,21 +54,10 @@ async function signup(label) {
 }
 const a = await signup('a');
 const b = await signup('b');
-const privateCollections = new Map();
-for (const account of [a, b])
-  privateCollections.set(
-    account.id,
-    (
-      await request('/api/collections', account.cookie, 'POST', {
-        name: 'Private dashboard fixture',
-      })
-    ).data.data.collection.id,
-  );
 async function createBook(user, title) {
   const result = await request('/api/books', user.cookie, 'POST', {
     title,
     authors: ['Dashboard Author'],
-    collectionIds: [privateCollections.get(user.id)],
   });
   assert.equal(result.status, 200, JSON.stringify(result.data));
   return result.data.data.book.id;
@@ -77,22 +67,12 @@ try {
   const older = await createBook(a, 'Dashboard older finished');
   const newer = await createBook(a, 'Dashboard newer finished');
   const undated = await createBook(a, 'Dashboard undated finished');
-  const hidden = await createBook(b, 'Dashboard private other reader');
+  const hidden = await createBook(a, 'Dashboard hidden book');
   const queued = await createBook(a, 'Dashboard queued');
-  const shared = (
-    await request('/api/collections', a.cookie, 'POST', {
-      name: 'Dashboard shared',
-    })
-  ).data.data.collection.id;
-  await db.execute({
-    sql: "INSERT INTO collection_members(collection_id,user_id,role,created_at) VALUES (?,?,'viewer',0)",
-    args: [shared, b.id],
-  });
-  for (const id of [reading, newer])
-    await db.execute({
-      sql: 'UPDATE books SET collection_id=?,added_by_user_id=? WHERE id=?',
-      args: [shared, a.id, id],
-    });
+  const sharedTag = await tagBook(a, reading, 'Shared dashboard');
+  await tagBook(a, newer, sharedTag.name);
+  await tagBook(a, hidden, sharedTag.name);
+  await setTagRules(a, b, { allowTagIds: [sharedTag.id] });
   for (const [id, change] of [
     [reading, { status: 'reading' }],
     [older, { status: 'finished', finishedAt: '2026-10-01' }],
@@ -125,18 +105,12 @@ try {
     titleCursor = next.data.data.nextCursor;
   }
   assert.deepEqual(new Set(matchingFinished), new Set([older, newer, undated]));
-  const scopedTitle = await request(
-    `/api/books?title=READING&collectionId=${shared}`,
-    a.cookie,
-  );
+  const scopedTitle = await request('/api/books?title=READING', a.cookie);
   assert.deepEqual(
     scopedTitle.data.data.books.map((book) => book.id),
     [reading],
   );
-  const privateTitle = await request(
-    '/api/books?title=private%20other',
-    a.cookie,
-  );
+  const privateTitle = await request('/api/books?title=older', b.cookie);
   assert.deepEqual(privateTitle.data.data.books, []);
   const mismatchedStatus = await request(
     '/api/books?title=reading&status=finished',
@@ -199,8 +173,8 @@ try {
   assert.equal(first.headers.get('cache-control'), 'private, no-store');
   assert.equal(
     first.data.data.counts.total,
-    5,
-    'books across exclusive collections are counted once',
+    6,
+    'every library book is counted once for the owner',
   );
   assert.equal(first.data.data.counts.to_be_read, 1);
   assert.deepEqual(
@@ -221,16 +195,6 @@ try {
     tbr.data.data.shelf.books.map((book) => book.id),
     [queued],
   );
-  const scoped = await request(
-    `/api/dashboard?shelf=finished&collectionId=${shared}`,
-    a.cookie,
-  );
-  assert.deepEqual(
-    scoped.data.data.shelf.books.map((book) => book.id),
-    [newer],
-  );
-  assert.equal(scoped.data.data.counts.total, 2);
-  assert.equal(scoped.data.data.counts.to_be_read, 0);
   const other = await request('/api/dashboard?shelf=finished', b.cookie);
   assert.deepEqual(
     other.data.data.shelf.books,
@@ -244,8 +208,7 @@ try {
   assert.equal(overview.status, 200);
   assert.equal(overview.headers.get('cache-control'), 'private, no-store');
   assert.deepEqual(overview.data.data.counts, first.data.data.counts);
-  assert.equal(overview.data.data.recent.length, 5);
-  assert.ok(!overview.data.data.recent.some((book) => book.id === hidden));
+  assert.equal(overview.data.data.recent.length, 6);
   assert.deepEqual(
     overview.data.data.lists.reading.map((book) => [book.id, book.progress]),
     [[reading, 42]],
@@ -258,15 +221,6 @@ try {
   assert.deepEqual(
     overview.data.data.lists.to_be_read.map((book) => book.id),
     [queued],
-  );
-  const overviewScoped = await request(
-    `/api/dashboard/overview?collectionId=${shared}`,
-    a.cookie,
-  );
-  assert.equal(overviewScoped.data.data.counts.total, 2);
-  assert.deepEqual(
-    overviewScoped.data.data.lists.finished.map((book) => book.id),
-    [newer],
   );
   assert.equal((await request('/api/dashboard/recent')).status, 401);
   assert.equal(
@@ -288,26 +242,17 @@ try {
     'overview lists use only the reader’s own statuses',
   );
   assert.equal(overviewOther.data.data.lists.none.length, 3);
-  await db.execute({
-    sql: 'DELETE FROM collection_members WHERE collection_id=? AND user_id=?',
-    args: [shared, b.id],
+  const hiddenTag = await tagBook(a, hidden, 'Dashboard exception');
+  await setTagRules(a, b, {
+    allowTagIds: [sharedTag.id],
+    blockTagIds: [hiddenTag.id],
   });
-  assert.equal(
-    (await request('/api/dashboard', b.cookie)).data.data.counts.total,
-    1,
-  );
-  assert.deepEqual(
-    (
-      await request(
-        `/api/dashboard?shelf=finished&collectionId=${shared}`,
-        b.cookie,
-      )
-    ).data.data.shelf.books,
-    [],
-  );
+  const restricted = await request('/api/dashboard/overview', b.cookie);
+  assert.equal(restricted.data.data.counts.total, 2);
+  assert.ok(!restricted.data.data.recent.some((book) => book.id === hidden));
   assert.ok(!recent.data.data.shelf.books.some((book) => book.id === hidden));
   console.log(
-    'PASS dashboard API: auth, validation, collection visibility, finish-date order, overview lists, private reading history, revoked access, and deferred favorites',
+    'PASS dashboard API: auth, validation, tag visibility, finish-date order, overview lists, private reading history, revoked access, and deferred favorites',
   );
 } finally {
   db.close();

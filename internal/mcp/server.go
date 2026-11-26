@@ -15,6 +15,7 @@ import (
 
 	"github.com/lancewilhelm/delb/internal/books"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/library"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -126,6 +127,9 @@ func wrapToolResult(op func() (any, error)) (*sdkmcp.CallToolResult, error) {
 				msg = "Book or shelf not found."
 			case http.StatusForbidden:
 				msg = "Connection does not permit this change."
+				if httpErr.Message == library.EditorRequiredMessage {
+					msg = "Your account is a reader. " + library.EditorRequiredMessage + "."
+				}
 			case http.StatusConflict:
 				msg = "Book metadata changed. Read the book again before updating it."
 			case http.StatusBadRequest:
@@ -167,15 +171,15 @@ func (s *Service) buildMCPServer(actor *Actor) *sdkmcp.Server {
 	idSchema := map[string]any{"type": "string", "minLength": 1, "maxLength": 128}
 	statusValues := []string{"to_be_read", "reading", "finished", "dnf"}
 
-	// 1. list_collections
+	// 1. get_library_access
 	srv.AddTool(&sdkmcp.Tool{
-		Name:        "list_collections",
-		Description: "List your accessible collections.",
+		Name:        "get_library_access",
+		Description: "Report your server role (owner, admin, editor, or reader), whether you can change shared catalog entries, whether tag visibility rules hide part of the library from you, and what this connection may change.",
 		InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest) (*sdkmcp.CallToolResult, error) {
 		return wrapToolResult(func() (any, error) {
-			return s.listCollections(ctx, actor)
+			return s.libraryAccess(ctx, actor)
 		})
 	})
 
@@ -194,10 +198,9 @@ func (s *Service) buildMCPServer(actor *Actor) *sdkmcp.Server {
 					"maxItems":    5,
 					"items":       map[string]any{"type": "string", "enum": append(append([]string(nil), statusValues...), "none")},
 				},
-				"collectionId": idSchema,
-				"shelfId":      idSchema,
-				"after":        idSchema,
-				"limit":        map[string]any{"type": "integer", "minimum": 1, "maximum": 50, "default": 20},
+				"shelfId": idSchema,
+				"after":   idSchema,
+				"limit":   map[string]any{"type": "integer", "minimum": 1, "maximum": 50, "default": 20},
 			},
 		},
 		Annotations: readOnlyAnnotations(),
@@ -226,11 +229,6 @@ func (s *Service) buildMCPServer(actor *Actor) *sdkmcp.Server {
 					}
 				}
 				in.Statuses = statuses
-			}
-			if raw, ok := args["collectionId"]; ok {
-				if err := json.Unmarshal(raw, &in.CollectionID); err != nil || !isValidID(in.CollectionID) {
-					return nil, httpapi.NewError(http.StatusBadRequest, "Invalid collectionId.")
-				}
 			}
 			if raw, ok := args["shelfId"]; ok {
 				if err := json.Unmarshal(raw, &in.ShelfID); err != nil || !isValidID(in.ShelfID) {
@@ -548,7 +546,7 @@ func (s *Service) buildMCPServer(actor *Actor) *sdkmcp.Server {
 	// 10. update_book_metadata
 	srv.AddTool(&sdkmcp.Tool{
 		Name:        "update_book_metadata",
-		Description: "Update only the supplied shared catalog fields. Read get_book first and provide its metadataVersion to prevent overwriting later changes. Authors, tags, genres, and identifiers replace their entire lists. Requires metadata permission and collection editor access. Changing title or authors may move managed storage; inspect storageWarning.",
+		Description: "Update only the supplied shared catalog fields. Read get_book first and provide its metadataVersion to prevent overwriting later changes. Authors, tags, genres, and identifiers replace their entire lists. Requires metadata permission on this connection and an editor or administrator account. Changing title or authors may move managed storage; inspect storageWarning.",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

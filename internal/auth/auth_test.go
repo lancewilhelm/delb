@@ -59,9 +59,9 @@ func TestPasswordBetterAuthCompatibility(t *testing.T) {
 
 func TestCookieBetterAuthCompatibility(t *testing.T) {
 	const (
-		token       = "AbCdEfGhIjKlMnOpQrStUvWxYz012345"
-		secret      = "test-secret-0123456789abcdef0123456789"
-		wantSigned  = "AbCdEfGhIjKlMnOpQrStUvWxYz012345.OVpRClpfvN0ee%2Bhx1C4lgPff4CWs%2BvGdrzGaB8xCjPA%3D"
+		token      = "AbCdEfGhIjKlMnOpQrStUvWxYz012345"
+		secret     = "test-secret-0123456789abcdef0123456789"
+		wantSigned = "AbCdEfGhIjKlMnOpQrStUvWxYz012345.OVpRClpfvN0ee%2Bhx1C4lgPff4CWs%2BvGdrzGaB8xCjPA%3D"
 	)
 
 	got := auth.SignCookieValue(token, secret)
@@ -241,16 +241,16 @@ func TestBootstrapOwnerConcurrency(t *testing.T) {
 		t.Fatalf("owner-bootstrap = %q, want complete", bootstrapState)
 	}
 
-	var memberCount int
-	if err := env.opened.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM collection_members`).Scan(&memberCount); err != nil {
-		t.Fatalf("count collection_members: %v", err)
+	var readerCount int
+	if err := env.opened.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE role = 'reader'`).Scan(&readerCount); err != nil {
+		t.Fatalf("count readers: %v", err)
 	}
-	if memberCount != workers {
-		t.Fatalf("collection_members count = %d, want %d", memberCount, workers)
+	if readerCount != workers-1 {
+		t.Fatalf("reader count = %d, want %d", readerCount, workers-1)
 	}
 
 	// Lowering owner role must NOT allow a later signup to reclaim owner.
-	if _, err := env.opened.DB.ExecContext(ctx, `UPDATE users SET role = 'user' WHERE role = 'owner'`); err != nil {
+	if _, err := env.opened.DB.ExecContext(ctx, `UPDATE users SET role = 'reader' WHERE role = 'owner'`); err != nil {
 		t.Fatalf("demote owner in test: %v", err)
 	}
 	code, _, _ := env.doJSON(http.MethodPost, "/api/auth/sign-up/email", "", map[string]any{
@@ -341,7 +341,7 @@ func TestAuthEndpointsFullLifecycleAndRBAC(t *testing.T) {
 		"name":     "Reader User",
 		"email":    "reader@example.invalid",
 		"password": "reader-password-123",
-		"role":     "user",
+		"role":     "reader",
 	})
 	if code != http.StatusOK {
 		t.Fatalf("admin create-user = %d %v", code, createdBody)
@@ -406,8 +406,8 @@ func TestAuthEndpointsFullLifecycleAndRBAC(t *testing.T) {
 		body map[string]any
 	}{
 		{"/api/auth/admin/remove-user", map[string]any{"userId": ownerID}},
-		{"/api/auth/admin/set-role", map[string]any{"userId": ownerID, "role": "user"}},
-		{"/api/auth/admin/update-user", map[string]any{"userId": ownerID, "data": map[string]any{"role": "user"}}},
+		{"/api/auth/admin/set-role", map[string]any{"userId": ownerID, "role": "reader"}},
+		{"/api/auth/admin/update-user", map[string]any{"userId": ownerID, "data": map[string]any{"role": "reader"}}},
 		{"/api/auth/admin/ban-user", map[string]any{"userId": ownerID}},
 	} {
 		code, errBody, _ := env.doJSON(http.MethodPost, tc.path, readerCookie, tc.body)
@@ -423,9 +423,9 @@ func TestAuthEndpointsFullLifecycleAndRBAC(t *testing.T) {
 	}
 	code, updBody, _ := env.doJSON(http.MethodPost, "/api/auth/admin/update-user", ownerCookie, map[string]any{
 		"userId": readerID,
-		"data":   map[string]any{"name": "Admin Edited", "role": "user"},
+		"data":   map[string]any{"name": "Admin Edited", "role": "reader"},
 	})
-	if code != http.StatusOK || updBody["name"] != "Admin Edited" || updBody["role"] != "user" {
+	if code != http.StatusOK || updBody["name"] != "Admin Edited" || updBody["role"] != "reader" {
 		t.Fatalf("admin update-user = %d %v", code, updBody)
 	}
 	code, _, _ = env.doJSON(http.MethodPost, "/api/auth/admin/set-user-password", ownerCookie, map[string]any{
@@ -469,40 +469,42 @@ func TestAuthEndpointsFullLifecycleAndRBAC(t *testing.T) {
 		t.Fatalf("sign-out = %d", code)
 	}
 
-	// 12. Removing user who owns a collection returns 400 (matching server/utils/auth.ts)
+	// 12. Removing a user who added books keeps the books in the library.
 	if _, err := env.opened.DB.ExecContext(ctx, `
-		INSERT INTO collections (id, name, owner_user_id, is_personal, is_default, created_at, updated_at)
-		VALUES ('col-owned-by-reader', 'Owned', ?, 0, 0, 1700000000, 1700000000)
-	`, readerID); err != nil {
-		t.Fatalf("create collection owned by reader: %v", err)
-	}
-	code, _, _ = env.doJSON(http.MethodPost, "/api/auth/admin/remove-user", ownerCookie, map[string]any{
-		"userId": readerID,
-	})
-	if code != http.StatusBadRequest {
-		t.Fatalf("remove-user with owned collection = %d, want 400", code)
-	}
-	if _, err := env.opened.DB.ExecContext(ctx, `DELETE FROM collections WHERE id = 'col-owned-by-reader'`); err != nil {
-		t.Fatalf("delete owned collection: %v", err)
+		INSERT INTO books (id, title, created_by_user_id, added_by_user_id, created_at, updated_at)
+		VALUES ('book-by-reader', 'Kept', ?, ?, 1700000000, 1700000000)
+	`, readerID, readerID); err != nil {
+		t.Fatalf("create book added by reader: %v", err)
 	}
 	code, _, _ = env.doJSON(http.MethodPost, "/api/auth/admin/remove-user", ownerCookie, map[string]any{
 		"userId": readerID,
 	})
 	if code != http.StatusOK {
-		t.Fatalf("remove-user after deleting collection = %d, want 200", code)
+		t.Fatalf("remove-user = %d, want 200", code)
+	}
+	var kept int
+	if err := env.opened.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM books WHERE id = 'book-by-reader'`).Scan(&kept); err != nil || kept != 1 {
+		t.Fatalf("book after remove-user = (%d, %v), want 1", kept, err)
 	}
 
-	// 13. Pending collection migration blocks auth mutations (503) while keeping get-session/sign-in/sign-out working.
-	if _, err := env.opened.DB.ExecContext(ctx, `UPDATE system_state SET value = 'pending' WHERE key = 'collections-model'`); err != nil {
-		t.Fatalf("set pending: %v", err)
+	// 13. The legacy "user" role is no longer assignable.
+	code, _, _ = env.doJSON(http.MethodPost, "/api/auth/admin/create-user", ownerCookie, map[string]any{
+		"name":     "Legacy Role",
+		"email":    "legacy@example.invalid",
+		"password": "legacy-password-123",
+		"role":     "user",
+	})
+	if code != http.StatusBadRequest {
+		t.Fatalf("create-user with legacy role = %d, want 400", code)
 	}
-	code, _, _ = env.doJSON(http.MethodGet, "/api/auth/get-session", ownerCookie, nil)
-	if code != http.StatusOK {
-		t.Fatalf("get-session during pending migration = %d, want 200", code)
-	}
-	code, _, _ = env.doJSON(http.MethodPost, "/api/auth/update-user", ownerCookie, map[string]any{"name": "Blocked"})
-	if code != http.StatusServiceUnavailable {
-		t.Fatalf("update-user during pending migration = %d, want 503", code)
+	code, editorBody, _ := env.doJSON(http.MethodPost, "/api/auth/admin/create-user", ownerCookie, map[string]any{
+		"name":     "Editor User",
+		"email":    "editor@example.invalid",
+		"password": "editor-password-123",
+		"role":     "editor",
+	})
+	if code != http.StatusOK || editorBody["user"].(map[string]any)["role"] != "editor" {
+		t.Fatalf("create-user editor = %d %v", code, editorBody)
 	}
 }
 

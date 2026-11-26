@@ -82,7 +82,7 @@ export const useUiStore = defineStore(
     }
 
     /**
-     * Left sidebar (Collections sidebar) UI state.
+     * Left sidebar UI state.
      * Stored in pixels and persisted via Pinia persist.
      */
     const leftSidebarWidthPx = ref(260);

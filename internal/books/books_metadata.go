@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/library"
 	"github.com/lancewilhelm/delb/internal/storage"
 )
 
@@ -686,17 +686,10 @@ func (s *Service) handleMetadataImportCreate(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	colProvided, colIDs, err := parseCollectionIDsField(body)
-	if err != nil {
-		httpapi.WriteHTTPError(w, err)
+	if err := library.RequireCatalogEditor(r.Context(), s.db, userID); err != nil {
+		s.writeErr(w, "POST /api/books/metadata-import/create auth failed", err)
 		return
 	}
-	collectionID, err := collections.ResolveBookTarget(r.Context(), s.db, userID, colProvided, colIDs)
-	if err != nil {
-		s.writeErr(w, "POST /api/books/metadata-import/create target failed", err)
-		return
-	}
-	collectionIDs := []string{collectionID}
 
 	var duplicateAction string
 	if rawDA, ok := body["duplicateAction"]; ok {
@@ -867,18 +860,7 @@ func (s *Service) handleMetadataImportCreate(w http.ResponseWriter, r *http.Requ
 	}
 
 	validateExistingDest := func(tx *sql.Tx, bookID string) error {
-		target, err := collections.ResolveBookTarget(r.Context(), tx, userID, true, collectionIDs)
-		if err != nil {
-			return err
-		}
-		cur, err := collections.AssertBookEditor(r.Context(), tx, userID, bookID)
-		if err != nil {
-			return err
-		}
-		if cur != target {
-			return httpapi.NewError(http.StatusConflict, "This entry belongs to another collection. Create an independent entry or use Move collection.")
-		}
-		return nil
+		return library.AssertBookEditor(r.Context(), tx, userID, bookID)
 	}
 
 	// Duplicate resolution: use_existing
@@ -905,10 +887,6 @@ func (s *Service) handleMetadataImportCreate(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		defer func() { _ = tx.Rollback() }()
-		if err := collections.LockCollectionChanges(r.Context(), tx); err != nil {
-			s.writeErr(w, "metadata-import use_existing lock failed", err)
-			return
-		}
 		if err := validateExistingDest(tx, useBookID); err != nil {
 			s.writeErr(w, "metadata-import use_existing validate failed", err)
 			return
@@ -934,7 +912,6 @@ func (s *Service) handleMetadataImportCreate(w http.ResponseWriter, r *http.Requ
 				"duplicateResolution": "use_existing",
 				"provider":            provider,
 				"query":               query,
-				"collectionIds":       collectionIDs,
 			},
 		})
 		return
@@ -964,9 +941,6 @@ func (s *Service) handleMetadataImportCreate(w http.ResponseWriter, r *http.Requ
 				return err
 			}
 			defer func() { _ = tx.Rollback() }()
-			if err := collections.LockCollectionChanges(r.Context(), tx); err != nil {
-				return err
-			}
 			if err := validateExistingDest(tx, replaceBookID); err != nil {
 				return err
 			}
@@ -1053,12 +1027,9 @@ func (s *Service) handleMetadataImportCreate(w http.ResponseWriter, r *http.Requ
 			// Ensure canonical directory & optional cover best-effort.
 			s.ensureCanonicalDirBestEffort(authorNames, title, replaceBookID)
 			if coverURL != "" {
-				s.fetchAndAttachImportedCoverBestEffort(r.Context(), userID, collectionIDs, replaceBookID, authorNames, title, coverURL, validateExistingDest)
+				s.fetchAndAttachImportedCoverBestEffort(r.Context(), userID, replaceBookID, authorNames, title, coverURL, validateExistingDest)
 			}
 			_, _ = storage.MoveBookStorageToCanonical(r.Context(), s.db, s.libraryDir, replaceBookID, func(tx *sql.Tx) error {
-				if err := collections.LockCollectionChanges(r.Context(), tx); err != nil {
-					return err
-				}
 				return validateExistingDest(tx, replaceBookID)
 			})
 			return nil
@@ -1074,14 +1045,13 @@ func (s *Service) handleMetadataImportCreate(w http.ResponseWriter, r *http.Requ
 				"duplicateResolution": "replace_existing",
 				"provider":            provider,
 				"query":               query,
-				"collectionIds":       collectionIDs,
 			},
 		})
 		return
 	}
 
 	// Normal creation
-	bookID, err := s.createCatalogEntry(r.Context(), userID, collectionID, catalogEntryInput{
+	bookID, err := s.createCatalogEntry(r.Context(), userID, catalogEntryInput{
 		Title:           title,
 		Authors:         authorNames,
 		Description:     description,
@@ -1109,9 +1079,8 @@ func (s *Service) handleMetadataImportCreate(w http.ResponseWriter, r *http.Requ
 				"id":    bookID,
 				"title": title,
 			},
-			"provider":      provider,
-			"query":         query,
-			"collectionIds": collectionIDs,
+			"provider": provider,
+			"query":    query,
 		},
 	})
 }
@@ -1127,7 +1096,6 @@ func (s *Service) ensureCanonicalDirBestEffort(authorNames []string, title, book
 func (s *Service) fetchAndAttachImportedCoverBestEffort(
 	ctx context.Context,
 	userID string,
-	collectionIDs []string,
 	bookID string,
 	authorNames []string,
 	title string,
@@ -1152,9 +1120,6 @@ func (s *Service) fetchAndAttachImportedCoverBestEffort(
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := collections.LockCollectionChanges(ctx, tx); err != nil {
-		return
-	}
 	if err := validateDest(tx, bookID); err != nil {
 		return
 	}

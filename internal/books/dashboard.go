@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/library"
 )
 
 // dashboardBook is one book on a dashboard shelf, list preview, or cover wall.
@@ -59,19 +60,10 @@ var dashboardStatusLists = []struct {
 	{"none", `ubs.status IS NULL`, `b.created_at DESC, b.id ASC`},
 }
 
-// dashboardVisibility returns the SQL clause limiting books to the reader's
-// accessible collections, optionally narrowed to one collection.
-func dashboardVisibility(userID, collectionID string) (string, []any) {
-	clause := `EXISTS (
-		SELECT 1 FROM collection_books cb
-		INNER JOIN collection_members cm ON cm.collection_id = cb.collection_id
-		WHERE cb.book_id = b.id AND cm.user_id = ?`
-	args := []any{userID}
-	if collectionID != "" {
-		clause += ` AND cb.collection_id = ?`
-		args = append(args, collectionID)
-	}
-	return clause + `)`, args
+// dashboardVisibility returns the SQL clause limiting books to the ones that
+// the reader's tag visibility rules allow.
+func dashboardVisibility(userID string) (string, []any) {
+	return library.VisibleBookFilter("b"), []any{userID}
 }
 
 func (s *Service) dashboardCounts(ctx context.Context, userID, visClause string, visArgs []any) (map[string]int, error) {
@@ -233,7 +225,7 @@ func (s *Service) queryDashboardBooks(
 	return found, nil
 }
 
-// GET /api/dashboard/overview?collectionId=&pile=
+// GET /api/dashboard/overview?pile=
 //
 // One request for the whole dashboard: counts, the most recently added books
 // for the All books cover wall, a short preview of every status list, and a
@@ -260,7 +252,7 @@ func (s *Service) handleGetDashboardOverview(w http.ResponseWriter, r *http.Requ
 		libraryPile, listPile = n, n
 	}
 	userID := swu.User.ID
-	visClause, visArgs := dashboardVisibility(userID, r.URL.Query().Get("collectionId"))
+	visClause, visArgs := dashboardVisibility(userID)
 	ctx := r.Context()
 	const failMsg = "Failed to load dashboard"
 
@@ -315,7 +307,7 @@ func (s *Service) handleGetDashboardOverview(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-// GET /api/dashboard/recent?collectionId=&offset=&spines=
+// GET /api/dashboard/recent?offset=&spines=
 //
 // Pages through the All books cover wall's books (newest first) after the
 // overview's first page, so a drifting wall can keep showing new covers.
@@ -352,7 +344,7 @@ func (s *Service) handleGetDashboardRecent(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	userID := swu.User.ID
-	visClause, visArgs := dashboardVisibility(userID, q.Get("collectionId"))
+	visClause, visArgs := dashboardVisibility(userID)
 
 	found, err := s.queryDashboardBooks(r.Context(), userID, visClause, visArgs, filter, nil, dashboardRecentOrder, dashboardRecentLimit+1, offset)
 	if err != nil {

@@ -1,3 +1,4 @@
+import { setTagRules, tagBook } from './library-fixtures.mjs';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import {
@@ -78,19 +79,6 @@ try {
   const owner = await account('owner');
   const reader = await account('reader');
   const outsider = await account('outsider');
-  const collection = (
-    await ok(
-      await request(owner, '/api/collections', 'POST', {
-        name: 'Progress collection',
-      }),
-    )
-  ).data.collection.id;
-  await ok(
-    await request(owner, `/api/collections/${collection}/members`, 'PUT', {
-      email: reader.email,
-      role: 'viewer',
-    }),
-  );
   async function createBook(title, pages) {
     return (
       await ok(
@@ -98,12 +86,13 @@ try {
           title,
           authors: ['Test author'],
           pages,
-          collectionIds: [collection],
         }),
       )
     ).data.book.id;
   }
   const book = await createBook('Progress book', 120);
+  const tag = await tagBook(owner, book, 'Restricted progress');
+  await setTagRules(owner, outsider, { blockTagIds: [tag.id] });
   const noPages = await createBook('No page count', null);
   async function newToken(user, canWrite) {
     return ok(
@@ -305,13 +294,7 @@ try {
     ).status,
     400,
   );
-  await ok(
-    await request(
-      owner,
-      `/api/collections/${collection}/members/${reader.id}`,
-      'DELETE',
-    ),
-  );
+  await setTagRules(owner, reader, { blockTagIds: [tag.id] });
   assert.equal(
     (await request(reader, `/api/books/${book}/progress`)).status,
     404,

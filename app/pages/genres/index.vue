@@ -2,7 +2,6 @@
 import { useAuth } from '~/composables/useAuth';
 import { useEntityPagination } from '~/composables/useEntityPagination';
 import { useHead } from '~/composables/useHead';
-import { useCollectionsStore } from '~/stores/collections';
 import { useUserSettingsStore } from '~/stores/userSettings';
 import { $fetch } from '~/utils/apiFetch';
 import { ref } from 'vue';
@@ -17,7 +16,6 @@ useHead({
   title: 'Genres',
 });
 
-const collectionsStore = useCollectionsStore();
 const { isAdmin } = useAuth();
 
 const actions = ref<InstanceType<typeof GenresActions> | null>(null);
@@ -82,15 +80,8 @@ const {
   inputs: () => ({
     search: genreQuery.value,
     previewLimit: maxCovers.value ?? 8,
-    collectionId:
-      collectionsStore.activeSelection.kind === 'collection'
-        ? collectionsStore.activeSelection.collectionId
-        : undefined,
   }),
-  initialize: async () => {
-    if (!collectionsStore.collections.length)
-      await collectionsStore.fetchCollections();
-  },
+  initialize: async () => {},
   fetchPage: async (query) => {
     const response = await $fetch<{
       data?: { genres?: GenreRow[]; hasMore?: boolean };
@@ -149,7 +140,7 @@ const filteredGenres = genres;
               v-else-if="filteredGenres.length === 0 && !errorMessage"
               class="text-sm opacity-80"
             >
-              No genres found in the selected collection.
+              No genres found in the library.
             </div>
 
             <div v-else class="grid gap-2 md:grid-cols-2 lg:grid-cols-3">

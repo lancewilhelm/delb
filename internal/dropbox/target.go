@@ -7,14 +7,15 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/library"
 )
 
-// Target specifies the resolved importing user and exclusive destination collection.
+// Target specifies the resolved importing user. Dropbox books go into the
+// single shared library; the importing user is recorded as the creator and
+// must be an editor or administrator.
 type Target struct {
-	OwnerUserID   string   `json:"ownerUserId"`
-	CollectionIDs []string `json:"collectionIds"`
+	OwnerUserID string `json:"ownerUserId"`
 }
 
 func resolveOwnerUserIDFromSettings(ctx context.Context, db *sql.DB, s Settings) (string, error) {
@@ -57,29 +58,8 @@ func resolveDropboxTarget(ctx context.Context, db *sql.DB) (Target, error) {
 		return Target{}, httpapi.NewError(http.StatusBadRequest, "No users exist to receive dropbox books; create a user or set dropbox.targetUserId")
 	}
 
-	seen := make(map[string]struct{})
-	var requested []string
-	addID := func(raw string) {
-		trimmed := strings.TrimSpace(raw)
-		if trimmed == "" {
-			return
-		}
-		if _, ok := seen[trimmed]; !ok {
-			seen[trimmed] = struct{}{}
-			requested = append(requested, trimmed)
-		}
+	if err := library.RequireCatalogEditor(ctx, db, ownerUserID); err != nil {
+		return Target{}, httpapi.NewError(http.StatusForbidden, "The Dropbox importing user must be an editor or administrator")
 	}
-	addID(s.TargetCollectionID)
-	for _, id := range s.AdditionalCollectionIDs {
-		addID(id)
-	}
-
-	collectionID, err := collections.ResolveBookTarget(ctx, db, ownerUserID, len(requested) > 0, requested)
-	if err != nil {
-		return Target{}, err
-	}
-	return Target{
-		OwnerUserID:   ownerUserID,
-		CollectionIDs: []string{collectionID},
-	}, nil
+	return Target{OwnerUserID: ownerUserID}, nil
 }

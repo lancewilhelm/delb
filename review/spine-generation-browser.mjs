@@ -27,6 +27,8 @@ const browser = spawn(
     '--remote-debugging-port=0',
     `--user-data-dir=${profile}`,
     '--no-first-run',
+    '--disable-background-networking',
+    '--proxy-server=http://127.0.0.1:1',
     'about:blank',
   ],
   { stdio: 'ignore' },

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { useHead } from '~/composables/useHead';
-import { useCollectionsStore } from '~/stores/collections';
 import { useUiStore } from '~/stores/ui';
 import { $fetch } from '~/utils/apiFetch';
 import { navigateTo } from '~/utils/navigation';
@@ -21,7 +20,6 @@ type FetchErrorLike = {
 
 const route = useRoute();
 const uiStore = useUiStore();
-const collectionsStore = useCollectionsStore();
 
 const genreParam = computed(() => String(route.params.id || '').trim());
 const genreId = computed(() => decodeURIComponent(genreParam.value));
@@ -33,16 +31,6 @@ let headerGeneration = 0;
 const bookCount = ref<number>(0);
 
 const gridKey = ref(0);
-
-const activeCollectionId = computed<string | undefined>(() => {
-  if (
-    collectionsStore.activeSelection.kind === 'collection' &&
-    collectionsStore.activeSelection.collectionId
-  ) {
-    return collectionsStore.activeSelection.collectionId;
-  }
-  return undefined;
-});
 
 const booksViewMode = computed(() => uiStore.booksViewMode);
 const hydrated = ref(false);
@@ -65,14 +53,9 @@ async function refreshHeaderName() {
   loadedGenre.value = null;
   if (!requestedGenreId) return;
 
-  if (!collectionsStore.collections.length) {
-    await collectionsStore.fetchCollections();
-  }
-
   if (generation !== headerGeneration) return;
   try {
     const query: Record<string, string | number> = { limit: 1 };
-    if (activeCollectionId.value) query.collectionId = activeCollectionId.value;
 
     const res = await $fetch<{
       data?: {
@@ -124,17 +107,6 @@ watch(genreId, async () => {
   gridKey.value++;
   await refreshHeaderName();
 });
-
-watch(
-  () => collectionsStore.activeSelection,
-  async () => {
-    errorMessage.value = null;
-    bookCount.value = 0;
-    gridKey.value++;
-    await refreshHeaderName();
-  },
-  { deep: true },
-);
 
 onMounted(async () => {
   await refreshHeaderName();
@@ -191,7 +163,6 @@ onMounted(async () => {
         v-if="effectiveBooksViewMode === 'grid'"
         :key="`${gridKey}-${effectiveBooksViewMode}`"
         :endpoint="endpoint"
-        :collection-id="activeCollectionId"
         :sort="uiStore.booksSortKey"
         :sort-dir="uiStore.booksSortDirection"
         class="flex-1 min-h-0"
@@ -202,7 +173,6 @@ onMounted(async () => {
         v-else
         :key="`${gridKey}-${effectiveBooksViewMode}`"
         :endpoint="endpoint"
-        :collection-id="activeCollectionId"
         :sort="uiStore.booksSortKey"
         :sort-dir="uiStore.booksSortDirection"
         class="flex-1 min-h-0"

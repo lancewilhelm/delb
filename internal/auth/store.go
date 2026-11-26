@@ -13,8 +13,7 @@ import (
 )
 
 const (
-	collectionMigrationMessage = "Collection migration required. An administrator must preview and apply it in Settings > Admin > Collections."
-	bannedUserDefaultMessage   = "You have been banned from this application. Please contact support if you believe this is an error."
+	bannedUserDefaultMessage = "You have been banned from this application. Please contact support if you believe this is an error."
 )
 
 type queryable interface {
@@ -37,22 +36,6 @@ func (s *Store) UserCount(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("count users: %w", err)
 	}
 	return n, nil
-}
-
-func (s *Store) CollectionModelState(ctx context.Context) (string, error) {
-	return collectionModelStateQ(ctx, s.db)
-}
-
-func collectionModelStateQ(ctx context.Context, q queryable) (string, error) {
-	var val string
-	err := q.QueryRowContext(ctx, `SELECT value FROM system_state WHERE key = 'collections-model' LIMIT 1`).Scan(&val)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "pending", nil
-	}
-	if err != nil {
-		return "", fmt.Errorf("read collections-model state: %w", err)
-	}
-	return val, nil
 }
 
 func allowRegistrationQ(ctx context.Context, q queryable) (bool, error) {
@@ -303,8 +286,7 @@ type SignUpParams struct {
 }
 
 // SignUpWithEmail atomically creates a user, credential account, claims owner
-// bootstrap if first user, enrolls in the default collection if exclusive, and
-// creates a session.
+// bootstrap if first user, and creates a session. New accounts are readers.
 func (s *Store) SignUpWithEmail(ctx context.Context, p SignUpParams) (User, Session, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -321,16 +303,6 @@ func (s *Store) SignUpWithEmail(ctx context.Context, p SignUpParams) (User, Sess
 	isFirst := userCount == 0
 
 	if !isFirst {
-		modelState, err := collectionModelStateQ(ctx, tx)
-		if err != nil {
-			return User{}, Session{}, false, err
-		}
-		if modelState != "exclusive" {
-			return User{}, Session{}, false, &APIError{
-				Status:  http.StatusServiceUnavailable,
-				Message: collectionMigrationMessage,
-			}
-		}
 		allowed, err := allowRegistrationQ(ctx, tx)
 		if err != nil {
 			return User{}, Session{}, false, err
@@ -374,7 +346,7 @@ func (s *Store) SignUpWithEmail(ctx context.Context, p SignUpParams) (User, Sess
 
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO users (id, name, email, email_verified, image, created_at, updated_at, role, banned, ban_reason, ban_expires)
-		VALUES (?, ?, ?, 0, ?, ?, ?, 'user', 0, NULL, NULL)
+		VALUES (?, ?, ?, 0, ?, ?, ?, 'reader', 0, NULL, NULL)
 	`, userID, p.Name, email, imgArg, now, now); err != nil {
 		if isUniqueConstraintError(err) {
 			return User{}, Session{}, false, &APIError{
@@ -435,18 +407,6 @@ func (s *Store) AdminCreateUser(ctx context.Context, p AdminCreateUserParams) (U
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&userCount); err != nil {
 		return User{}, err
 	}
-	if userCount > 0 {
-		modelState, err := collectionModelStateQ(ctx, tx)
-		if err != nil {
-			return User{}, err
-		}
-		if modelState != "exclusive" {
-			return User{}, &APIError{
-				Status:  http.StatusServiceUnavailable,
-				Message: collectionMigrationMessage,
-			}
-		}
-	}
 
 	email := strings.ToLower(strings.TrimSpace(p.Email))
 	existing, err := findUserByEmailQ(ctx, tx, email)
@@ -461,8 +421,8 @@ func (s *Store) AdminCreateUser(ctx context.Context, p AdminCreateUserParams) (U
 		}
 	}
 
-	role := "user"
-	if p.Role == "admin" || p.Role == "user" {
+	role := "reader"
+	if p.Role == "admin" || p.Role == "editor" || p.Role == "reader" {
 		role = p.Role
 	}
 
@@ -521,8 +481,7 @@ func (s *Store) AdminCreateUser(ctx context.Context, p AdminCreateUserParams) (U
 
 // claimBootstrapOwnerTx mirrors server/utils/security/bootstrap.ts:
 // atomically claims 'owner-bootstrap' in system_state, promotes the first user
-// to 'owner' if no owner exists yet, and enrolls the user in the default shared
-// collection whenever collections-model == 'exclusive'.
+// to 'owner' if no owner exists yet.
 func claimBootstrapOwnerTx(ctx context.Context, tx *sql.Tx, userID string, now int64) (bool, error) {
 	res, err := tx.ExecContext(ctx, `
 		INSERT OR IGNORE INTO system_state (key, value) VALUES ('owner-bootstrap', 'complete')
@@ -550,65 +509,7 @@ func claimBootstrapOwnerTx(ctx context.Context, tx *sql.Tx, userID string, now i
 		}
 	}
 
-	modelState, err := collectionModelStateQ(ctx, tx)
-	if err != nil {
-		return false, err
-	}
-	if modelState == "exclusive" {
-		if err := enrollUserInDefaultTx(ctx, tx, userID, now); err != nil {
-			return false, err
-		}
-	}
 	return promoted, nil
-}
-
-// enrollUserInDefaultTx mirrors server/utils/collections/model.ts enrollUserInDefault.
-func enrollUserInDefaultTx(ctx context.Context, tx *sql.Tx, userID string, now int64) error {
-	if _, err := tx.ExecContext(ctx, `UPDATE system_state SET value = value WHERE key = 'collections-model'`); err != nil {
-		return fmt.Errorf("lock collections-model: %w", err)
-	}
-
-	var defaultID, defaultOwnerID string
-	err := tx.QueryRowContext(ctx, `SELECT id, owner_user_id FROM collections WHERE is_default = 1 LIMIT 1`).Scan(&defaultID, &defaultOwnerID)
-	if errors.Is(err, sql.ErrNoRows) {
-		var ownerID string
-		if err := tx.QueryRowContext(ctx, `SELECT id FROM users WHERE role = 'owner' LIMIT 1`).Scan(&ownerID); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return &APIError{
-					Status:  http.StatusConflict,
-					Message: "The system owner must be initialized first",
-				}
-			}
-			return fmt.Errorf("find system owner for default collection: %w", err)
-		}
-		defaultID, err = newUUIDv4()
-		if err != nil {
-			return err
-		}
-		defaultOwnerID = ownerID
-		// Note: SQLite trigger `collections_create_owner` automatically inserts
-		// the owner's membership row into collection_members on INSERT.
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO collections (id, name, owner_user_id, is_personal, is_default, created_at, updated_at)
-			VALUES (?, 'Default', ?, 0, 1, ?, ?)
-		`, defaultID, ownerID, now, now); err != nil {
-			return fmt.Errorf("create default collection: %w", err)
-		}
-	} else if err != nil {
-		return fmt.Errorf("find default collection: %w", err)
-	}
-
-	memberRole := "editor"
-	if defaultOwnerID == userID {
-		memberRole = "owner"
-	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT OR IGNORE INTO collection_members (collection_id, user_id, role, created_at)
-		VALUES (?, ?, ?, ?)
-	`, defaultID, userID, memberRole, now); err != nil {
-		return fmt.Errorf("enroll user in default collection: %w", err)
-	}
-	return nil
 }
 
 func (s *Store) ChangePassword(ctx context.Context, userID, currentToken, newHash string, revokeOthers bool, ipAddress, userAgent string) (*string, User, error) {
@@ -830,7 +731,6 @@ func (s *Store) ListUsers(ctx context.Context, q ListUsersQuery) (ListUsersRespo
 
 // GuardUserDeletion enforces server/utils/auth.ts guardUserDeletion:
 //   - System owner -> 403 Forbidden ("The system owner cannot be removed")
-//   - User owning collections -> 400 Bad Request ("Transfer or delete owned collections before deleting this account")
 func guardUserDeletionQ(ctx context.Context, q queryable, userID string) error {
 	var role string
 	err := q.QueryRowContext(ctx, `SELECT role FROM users WHERE id = ? LIMIT 1`, userID).Scan(&role)
@@ -844,17 +744,6 @@ func guardUserDeletionQ(ctx context.Context, q queryable, userID string) error {
 		return fmt.Errorf("check user role before deletion: %w", err)
 	}
 
-	var ownedID string
-	err = q.QueryRowContext(ctx, `SELECT id FROM collections WHERE owner_user_id = ? LIMIT 1`, userID).Scan(&ownedID)
-	if err == nil {
-		return &APIError{
-			Status:  http.StatusBadRequest,
-			Message: "Transfer or delete owned collections before deleting this account",
-		}
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("check owned collections before deletion: %w", err)
-	}
 	return nil
 }
 
@@ -893,12 +782,6 @@ func (s *Store) AdminRemoveUser(ctx context.Context, actorID, targetUserID strin
 		return fmt.Errorf("delete user sessions: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, targetUserID); err != nil {
-		if strings.Contains(err.Error(), "owned collections") {
-			return &APIError{
-				Status:  http.StatusBadRequest,
-				Message: "Transfer or delete owned collections before deleting this account",
-			}
-		}
 		return fmt.Errorf("delete user: %w", err)
 	}
 	return tx.Commit()

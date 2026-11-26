@@ -65,7 +65,7 @@ func (e *readingEnv) statusCode(method, path string) int {
 func (e *readingEnv) newReader(name, email string) *readingEnv {
 	e.t.Helper()
 	jar, _ := cookiejar.New(nil)
-	other := &readingEnv{t: e.t, srv: e.srv, client: &http.Client{Jar: jar}}
+	other := &readingEnv{t: e.t, srv: e.srv, client: &http.Client{Jar: jar}, db: e.db}
 	other.do(http.MethodPost, "/api/auth/sign-up/email", map[string]any{
 		"name": name, "email": email, "password": "StrongPassword123!",
 	}, nil)
@@ -83,7 +83,6 @@ func (e *readingEnv) bookWithPages(title string, pages int) string {
 	}
 	e.do(http.MethodPost, "/api/books", map[string]any{
 		"title": title, "authors": []string{"Ada Example", "Ben Sample"}, "pages": pages,
-		"collectionIds": []string{e.collectionID},
 	}, &out)
 	return out.Data.Book.ID
 }
@@ -209,7 +208,18 @@ func TestFinishSummaryAccessAndOwnership(t *testing.T) {
 	owner.setStatus(id, map[string]any{"status": "finished", "startedAt": "2026-01-01", "finishedAt": "2026-01-10"})
 	owner.do(http.MethodPost, "/api/books/"+id+"/rating", map[string]any{"rating": 10}, nil)
 
+	// A reader whose tag rules hide the book cannot load it.
 	stranger := owner.newReader("Stranger", "stranger@example.invalid")
+	for _, stmt := range []string{
+		`INSERT INTO tags (id, name, created_at, updated_at) VALUES ('t-hidden', 'hidden', 0, 0)`,
+		`INSERT INTO book_tags (book_id, tag_id) VALUES ('` + id + `', 't-hidden')`,
+		`INSERT INTO user_tag_rules (user_id, tag_id, mode, created_at)
+		 SELECT id, 't-hidden', 'block', 0 FROM users WHERE email = 'stranger@example.invalid'`,
+	} {
+		if _, err := owner.db.Exec(stmt); err != nil {
+			t.Fatalf("seed rule: %v", err)
+		}
+	}
 	if code := stranger.statusCode(http.MethodGet, "/api/books/"+id+"/finish-summary"); code != http.StatusNotFound {
 		t.Fatalf("stranger finish-summary = %d, want 404", code)
 	}
@@ -219,11 +229,8 @@ func TestFinishSummaryAccessAndOwnership(t *testing.T) {
 		t.Fatalf("anonymous finish-summary = %d, want 401", code)
 	}
 
-	// A collection member sees the book but only their own reading data.
+	// Another reader sees the book but only their own reading data.
 	member := owner.newReader("Member", "member@example.invalid")
-	owner.do(http.MethodPut, "/api/collections/"+owner.collectionID+"/members", map[string]any{
-		"email": "member@example.invalid", "role": "viewer",
-	}, nil)
 	got := member.finishSummary(id)
 	if got.Book.Title != "Shared Synthetic" {
 		t.Fatalf("member book = %+v", got.Book)

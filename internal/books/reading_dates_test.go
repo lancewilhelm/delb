@@ -3,6 +3,7 @@ package books_test
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -18,16 +19,15 @@ import (
 	"github.com/lancewilhelm/delb"
 	"github.com/lancewilhelm/delb/internal/auth"
 	"github.com/lancewilhelm/delb/internal/books"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/db"
 	"github.com/lancewilhelm/delb/internal/httpapi"
 )
 
 type readingEnv struct {
-	t            *testing.T
-	srv          *httptest.Server
-	client       *http.Client
-	collectionID string
+	t      *testing.T
+	srv    *httptest.Server
+	client *http.Client
+	db     *sql.DB
 }
 
 func newReadingEnv(t *testing.T) *readingEnv {
@@ -45,27 +45,17 @@ func newReadingEnv(t *testing.T) *readingEnv {
 	}
 	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
 	authSvc := auth.NewService(auth.ServiceOptions{DB: opened.DB, Secret: "reading-dates-secret-0123456789abcdef012345", Logger: discard})
-	colSvc := collections.NewService(collections.ServiceOptions{DB: opened.DB, AuthService: authSvc, LibraryDir: libDir, Logger: discard})
 	booksSvc := books.NewService(books.ServiceOptions{DB: opened.DB, AuthService: authSvc, LibraryDir: libDir, Logger: discard})
 	srv := httptest.NewServer(httpapi.NewHandler(httpapi.RouterOptions{
 		DB: opened.DB, Logger: discard, AuthService: authSvc,
-		Services: []httpapi.RouteRegistrar{colSvc, booksSvc},
+		Services: []httpapi.RouteRegistrar{booksSvc},
 	}))
 	t.Cleanup(srv.Close)
 	jar, _ := cookiejar.New(nil)
-	e := &readingEnv{t: t, srv: srv, client: &http.Client{Jar: jar}}
+	e := &readingEnv{t: t, srv: srv, client: &http.Client{Jar: jar}, db: opened.DB}
 	e.do(http.MethodPost, "/api/auth/sign-up/email", map[string]any{
 		"name": "Reader", "email": "dates@example.test", "password": "StrongPassword123!",
 	}, nil)
-	var col struct {
-		Data struct {
-			Collection struct {
-				ID string `json:"id"`
-			} `json:"collection"`
-		} `json:"data"`
-	}
-	e.do(http.MethodPost, "/api/collections", map[string]any{"name": "Mine"}, &col)
-	e.collectionID = col.Data.Collection.ID
 	return e
 }
 
@@ -107,7 +97,7 @@ func (e *readingEnv) book(title string) string {
 		} `json:"data"`
 	}
 	e.do(http.MethodPost, "/api/books", map[string]any{
-		"title": title, "authors": []string{"Author"}, "collectionIds": []string{e.collectionID},
+		"title": title, "authors": []string{"Author"},
 	}, &out)
 	return out.Data.Book.ID
 }
