@@ -29,9 +29,10 @@ logs
 data/
 !data/.gitkeep
 
-# library storage (keep folder via placeholder file: library/.gitkeep)
-library/
-!library/.gitkeep
+# library storage (keep folder via placeholder file: library/.gitkeep).
+# Anchored to the repository root so that internal/library stays tracked.
+/library/
+!/library/.gitkeep
 
 # calibre library (used for calibre imports)
 calibre/
