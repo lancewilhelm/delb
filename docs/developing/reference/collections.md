@@ -42,7 +42,7 @@ Dropbox and Calibre pin one new-entry destination at batch start and recheck acc
 
 | Endpoint                                         | Responsibility                                               |
 | ------------------------------------------------ | ------------------------------------------------------------ |
-| `GET /api/collections`                           | Membership-based list with roles and default designation     |
+| `GET /api/collections`                           | Membership, roles, default designation, and privacy          |
 | `POST /api/collections`                          | Atomic collection and owner creation                         |
 | `PUT /api/collections/:id`                       | Rename                                                       |
 | `GET /api/collections/:id/members`               | Managed member listing                                       |

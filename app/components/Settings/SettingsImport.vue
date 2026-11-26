@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import SettingsUIGroup from '~/components/Settings/UI/SettingsUIGroup.vue';
 import { useCollectionsStore } from '~/stores/collections';
 import { $fetch } from '~/utils/apiFetch';
@@ -86,8 +86,9 @@ const include = reactive<ImportInclude>({
 });
 const selectedShelves = ref<Record<string, boolean>>({});
 const unmatchedMode = ref<UnmatchedMode>('reference');
-const targetMode = ref<'existing' | 'new'>('existing');
+const targetMode = ref<'existing' | 'new'>('new');
 const targetCollectionId = ref('');
+const sharedConfirmed = ref(false);
 const newCollectionName = ref('Goodreads');
 const preferGoodreads = ref(false);
 const choices = ref<Record<number, string | null>>({});
@@ -107,6 +108,24 @@ const editableCollections = computed(() =>
   ),
 );
 
+const selectedCollection = computed(() =>
+  editableCollections.value.find((c) => c.id === targetCollectionId.value),
+);
+const sharedDestination = computed(
+  () =>
+    targetMode.value === 'existing' &&
+    selectedCollection.value != null &&
+    (selectedCollection.value.isDefault ||
+      selectedCollection.value.isPrivate !== true),
+);
+watch(
+  [targetMode, targetCollectionId, sharedDestination],
+  () => {
+    sharedConfirmed.value = false;
+  },
+  { flush: 'sync' },
+);
+
 function pickDefaultTarget() {
   const editable = editableCollections.value;
   const active = collectionsStore.activeCollection;
@@ -115,13 +134,10 @@ function pickDefaultTarget() {
     editable.find((c) => c.isDefault) ||
     editable[0];
   targetCollectionId.value = preferred?.id ?? '';
-  if (!preferred) targetMode.value = 'new';
 }
 
 onMounted(async () => {
-  if (!collectionsStore.collections.length) {
-    await collectionsStore.fetchCollections();
-  }
+  await collectionsStore.fetchCollections();
   pickDefaultTarget();
 });
 
@@ -238,7 +254,8 @@ const canImport = computed(() => {
   if (!needsTarget) return counts.value.all - counts.value.unmatched > 0;
   return targetMode.value === 'new'
     ? newCollectionName.value.trim().length > 0
-    : Boolean(targetCollectionId.value);
+    : Boolean(selectedCollection.value) &&
+        (!sharedDestination.value || sharedConfirmed.value);
 });
 
 function goodreadsStatusText(row: GoodreadsRow) {
@@ -325,6 +342,7 @@ async function runImport() {
   try {
     const toCreate = rowStates.value.filter((s) => !s.bookId).map((s) => s.row);
     if (unmatchedMode.value !== 'skip' && toCreate.length) {
+      const allowShared = sharedDestination.value && sharedConfirmed.value;
       const collectionId = await resolveTarget();
       const enrich = unmatchedMode.value === 'enrich';
       progress.label = enrich
@@ -338,7 +356,12 @@ async function runImport() {
           '/api/import/goodreads/books',
           {
             method: 'POST',
-            body: { collectionId, enrich, rows: batch.map(rowPayload) },
+            body: {
+              collectionId,
+              allowShared,
+              enrich,
+              rows: batch.map(rowPayload),
+            },
           },
         );
         for (const r of response.data.results) {
@@ -370,7 +393,7 @@ async function runImport() {
       );
     }
     if (!items.length) {
-      throw new Error('No books to import.');
+      throw new Error(createErrors.value[0] ?? 'No books to import.');
     }
     const shelves = include.shelves
       ? Object.entries(selectedShelves.value)
@@ -392,6 +415,8 @@ async function runImport() {
     error.value =
       (extractFetchErrorMessage(err) ?? 'The import stopped.') +
       ' Books created so far are kept. Run the import again to finish; it matches them by Goodreads ID.';
+    sharedConfirmed.value = false;
+    await collectionsStore.fetchCollections();
     step.value = 'review';
   } finally {
     busy.value = false;
@@ -399,6 +424,8 @@ async function runImport() {
 }
 
 function startOver() {
+  targetMode.value = 'new';
+  sharedConfirmed.value = false;
   step.value = 'upload';
   preview.value = null;
   result.value = null;
@@ -612,7 +639,8 @@ function startOver() {
                   :key="c.id"
                   :value="c.id"
                 >
-                  {{ c.name }}
+                  {{ c.name
+                  }}{{ c.isDefault || !c.isPrivate ? ' (shared)' : '' }}
                 </option>
               </select>
             </label>
@@ -625,6 +653,14 @@ function startOver() {
                 :disabled="targetMode !== 'new'"
                 class="px-2 py-1 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
               />
+            </label>
+            <label
+              v-if="sharedDestination && counts.unmatched > 0"
+              class="flex gap-2 items-center"
+            >
+              <input v-model="sharedConfirmed" type="checkbox" />
+              I want to add these books to the shared collection
+              {{ selectedCollection?.name }}.
             </label>
           </div>
         </section>

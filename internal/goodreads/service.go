@@ -223,6 +223,7 @@ func (s *Service) buildPreview(ctx context.Context, userID string, rows []Row) (
 type createBooksRequest struct {
 	CollectionID string `json:"collectionId"`
 	Enrich       bool   `json:"enrich"`
+	AllowShared  bool   `json:"allowShared"`
 	Rows         []Row  `json:"rows"`
 }
 
@@ -254,6 +255,14 @@ func (s *Service) handleCreateBooks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !req.AllowShared {
+		if err := collections.AssertCollectionPrivate(r.Context(), s.db, userID, collectionID); err != nil {
+			s.writeErr(w, "POST /api/import/goodreads/books privacy check failed", err)
+			return
+		}
+	}
+	options := books.ImportedBookOptions{Enrich: req.Enrich, AllowShared: req.AllowShared}
+
 	results := make([]CreatedBook, 0, len(req.Rows))
 	for _, row := range req.Rows {
 		res := CreatedBook{Index: row.Index}
@@ -271,7 +280,7 @@ func (s *Service) handleCreateBooks(w http.ResponseWriter, r *http.Request) {
 			results = append(results, res)
 			continue
 		}
-		created, err := s.books.CreateImportedBook(r.Context(), userID, collectionID, importedBookFromRow(row), req.Enrich)
+		created, err := s.books.CreateImportedBook(r.Context(), userID, collectionID, importedBookFromRow(row), options)
 		if err != nil {
 			var httpErr *httpapi.HTTPError
 			if errors.As(err, &httpErr) {

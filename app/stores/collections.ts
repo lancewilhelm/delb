@@ -11,6 +11,7 @@ export type Collection = {
   ownerUserId: string;
   role: CollectionRole | null;
   isDefault: boolean;
+  isPrivate: boolean;
   canAdminister?: boolean;
 };
 

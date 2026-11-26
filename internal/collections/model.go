@@ -84,6 +84,26 @@ func AssertCollectionEditor(ctx context.Context, q Queryable, userID, collection
 	return assertCollectionEditor(ctx, q, userID, collectionID)
 }
 
+// collectionIsPrivate is used with collections aliased as c. The default can
+// enroll new accounts, so it is shared even before another member joins.
+const collectionIsPrivate = `c.is_default = 0 AND NOT EXISTS (
+	SELECT 1 FROM collection_members other
+	WHERE other.collection_id = c.id AND other.user_id <> c.owner_user_id
+)`
+
+// AssertCollectionPrivate checks a destination after its edit access has been verified.
+func AssertCollectionPrivate(ctx context.Context, q Queryable, userID, collectionID string) error {
+	var private bool
+	err := q.QueryRowContext(ctx, `
+		SELECT `+collectionIsPrivate+` FROM collections c
+		WHERE c.id = ? AND c.owner_user_id = ?
+	`, collectionID, userID).Scan(&private)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && !private) {
+		return httpapi.NewError(http.StatusConflict, "Choose a private collection or a different name. To import into a shared collection, select it and confirm.")
+	}
+	return err
+}
+
 // AssertBookEditor mirrors server/utils/collections/model.ts assertBookEditor:
 // returns 404 if the book is not visible to userID, 403 if the user lacks owner/editor role,
 // and returns the book's collection_id on success.
