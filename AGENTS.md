@@ -51,7 +51,7 @@ CI runs all of these on every pull request. See [the test workflow](.github/work
 
 ## Schema changes
 
-Migrations are SQL files that are written by hand and follow Drizzle's format. A new migration needs all of these:
+Migrations are SQL files that are written by hand and follow Drizzle's format. `0000_initial.sql` is the squashed pre-1.0 baseline; add new migrations after it. A new migration needs all of these:
 
 1. A new `.drizzle/migrations/NNNN_name.sql` file. Separate statements with `--> statement-breakpoint`.
 2. A matching `meta/NNNN_snapshot.json` and a new entry in `meta/_journal.json`.

@@ -6,7 +6,7 @@ status: accepted
 
 Delb replaces multi-collection book membership and per-user book ownership with a single shared library owned by the server. Every organizing concept in Delb gets one distinct job: server roles control who can modify the catalog, shared manual tags power browsing and Plex-style per-user visibility rules, metadata-provider categories move into dedicated genres, personal shelves hold private reader lists, and visual bookshelf layouts live in one unified table saved on demand.
 
-This decision was confirmed on 2026-11-25 in [issue #100](https://github.com/lancewilhelm/delb/issues/100). It defines the architecture for Delb `v1.0.0` and supersedes [ADR 0004](0004-exclusive-collections-and-shared-default.md). Phases 1 through 3 implement it; Phase 4 resets the migration chain.
+This decision was confirmed on 2026-11-25 in [issue #100](https://github.com/lancewilhelm/delb/issues/100). It defines the architecture for Delb `v1.0.0` and supersedes [ADR 0004](0004-exclusive-collections-and-shared-default.md). Phases 1 through 3 implement it, and Phase 4 replaced the pre-1.0 migration chain with the `0000_initial.sql` baseline.
 
 ## Context
 

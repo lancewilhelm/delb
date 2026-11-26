@@ -2,6 +2,15 @@
 
 Delb now has one shared library instead of collections. Upgrading an existing server collapses every collection into that library and gives each account a server role. Migration `0022_single_library` does this automatically at startup; there is no separate migration page.
 
+## Choose the release to upgrade with
+
+Delb `v1.0` starts its database history from a single baseline migration, `0000_initial.sql`, and no longer includes the earlier migrations one by one. It can start on:
+
+- a new, empty database, or
+- a database that has already applied `0022_single_library`.
+
+If your server runs an older release, first upgrade to the last release before `v1.0`, which still includes the full migration chain and applies `0022_single_library`. Start it once, review access as described below, and then upgrade to `v1.0`. If you start `v1.0` on an older database, it stops before changing anything and reports that the database predates the migration baseline.
+
 > [!IMPORTANT]
 > After the upgrade, **every account can see every book**, including books that were in private collections. If some books should stay hidden from some accounts, tag those books and add tag visibility rules right after upgrading. Consider closing registration until you have reviewed access.
 

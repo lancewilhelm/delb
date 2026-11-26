@@ -1,1 +1,0 @@
-CREATE INDEX `book_spines_book_revision_idx` ON `book_spines` (`book_id`,`revision`);

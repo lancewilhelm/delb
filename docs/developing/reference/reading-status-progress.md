@@ -45,7 +45,7 @@ Every date is optional. A reader can record no dates, some dates, or all dates.
 
 The dedicated TBR page loads the full ranked queue. Its inline editor and book details use the same rationale endpoints. On the dashboard, all counts, including **To be read**, describe the books that the reader can see.
 
-The status transition service handles numeric moves and single/bulk status changes transactionally. Migration `0022_single_library` removed the earlier access-change triggers, which compacted ranks when collection membership changed; tag visibility rules change through ordinary queries instead.
+The status transition service handles numeric moves and single/bulk status changes transactionally. The pre-1.0 migration `0022_single_library` removed the earlier access-change triggers, which compacted ranks when collection membership changed; tag visibility rules change through ordinary queries instead.
 
 ## Reviews and notes
 

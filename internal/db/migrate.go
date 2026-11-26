@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"path"
@@ -38,6 +39,10 @@ type migrationFile struct {
 	Hash       string
 	Statements []string
 }
+
+// ErrPredatesBaseline reports a database that started before the pre-1.0
+// migration squash and never reached the schema that the baseline describes.
+var ErrPredatesBaseline = errors.New("this database predates Delb's v1.0 migration baseline: upgrade it with the last release before v1.0 (which applies migration 0022_single_library), then start this version")
 
 // MigrateResult describes what Migrate did.
 type MigrateResult struct {
@@ -95,6 +100,15 @@ func Migrate(ctx context.Context, sqlDB *sql.DB, dbFilePath string, isMemory boo
 	}
 	if len(pending) == 0 {
 		return MigrateResult{}, nil
+	}
+
+	// The pre-1.0 migrations were squashed into one baseline. A database with
+	// migration history that still needs the baseline was created before the
+	// squash and stopped short of its final schema, so applying the baseline's
+	// CREATE statements would fail. Ask the operator to upgrade through the
+	// last release that has the full migration chain first.
+	if hasLast && len(migrations) > 0 && pending[0].Tag == migrations[0].Tag {
+		return MigrateResult{}, ErrPredatesBaseline
 	}
 
 	var result MigrateResult

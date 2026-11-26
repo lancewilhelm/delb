@@ -27,7 +27,7 @@ Every book belongs to the one shared library; there is no owning account or coll
 
 `users.role` (`owner`, `admin`, `editor`, or `reader`) governs book mutations. `user_tag_rules` holds an account's `allow` and `block` rules against shared tags. The `visible_books(user_id, book_id)` view applies those rules, and every book query joins it. Owners and admins see every book. See the [library access reference](reference/library-access.md).
 
-Migration `0022_single_library` removed the earlier `collections`, `collection_members`, `collection_books`, and `legacy_collection_books` objects and `books.collection_id`. See [Upgrade to a single library](../hosting/single-library-upgrade.md).
+The pre-1.0 migration `0022_single_library`, now folded into the `0000_initial.sql` baseline, removed the earlier `collections`, `collection_members`, `collection_books`, and `legacy_collection_books` objects and `books.collection_id`. See [Upgrade to a single library](../hosting/single-library-upgrade.md).
 
 ## Records scoped to a reader
 
