@@ -10,13 +10,21 @@ Separate entries can represent the same title. Each reader has separate ratings,
 
 ## Navigation and book views
 
-The navigation exposes Dashboard, Books, Authors, Series, Publishers, and Tags. These are ways to browse the library. Within supported book listings, grid and list are separate book views with independent visible fields and ordering.
+The navigation exposes Dashboard, Books, Shelves, To be read, Authors, Series, Publishers, Genres, and Tags. Within supported book listings, grid and list are separate book views with independent visible fields and ordering.
 
-Books, author, publisher, and tag book listings use the shared grid/list field preferences. Series retains a separate presentation. The view-settings button sits beside the grid/list switch. Changes apply immediately through account settings, including the mobile profile when enabled.
+Books, author, publisher, genre, and tag book listings use the shared grid and list field preferences. Series retains a separate presentation. The view-settings button sits beside the grid and list switch. Changes apply immediately through account settings, including the mobile profile when enabled.
 
 Grid cards keep selected values on one line and omit missing metadata. List cells wrap to at most three lines and use a dash for missing values. Covers remain fixed first. See [book view design record](../../archive/book-view-settings.md) and [the user guide](../../using/find-books.md).
 
 Grid/list components virtualize rendered items while the server paginates records with stable sort keys and cursors. Those are different limits. Virtualization does not mean the client downloads the entire library.
+
+### Responsive navigation
+
+The **Delb** wordmark opens the dashboard. The toolbar shows all eight library
+tabs when they fit. At smaller widths, Books, Shelves, and To be read stay
+visible. **More** holds Authors, Series, Publishers, Genres, and Tags. When
+that row cannot fit, a single dropdown contains the eight tabs. Its button
+shows the current view or **Browse** when no tab is active.
 
 ### Library bookshelf
 
@@ -30,7 +38,7 @@ A Shelf is a private selection of book entries from the library. Its owner can a
 
 ## Filters and search
 
-The Books page exposes a filter dropdown for personal reading status, date added, and file presence. Dashboard status counts navigate to the corresponding Books filters.
+The Books page exposes a filter dropdown for title search, personal reading status, date added, finish date, file presence, and physical or audiobook copy marks. Dashboard status counts navigate to the corresponding Books filters.
 
 Global search searches visible books and entities, including stored ISBNs. It is separate from the command palette and does not inherit every page filter. [Global search](global-search.md) names the relevant source files.
 

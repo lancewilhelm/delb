@@ -1,39 +1,39 @@
 # Library health checks
 
-Delb implements on-demand administrative checks at `POST /api/settings/admin/health`. The [admin library UI](../../app/components/Settings/SettingsAdminLibrary.vue) exposes them in Settings. System admin/owner authorization is required.
+Delb provides on-demand administrative checks at `POST /api/settings/admin/health`. The [admin library UI](../../app/components/Settings/SettingsAdminLibrary.vue) exposes them under **Settings → Admin → Library**. Running health checks requires the Admin or Owner server role.
 
-The checks report findings. They do not automatically repair or delete the affected records/files.
+Health checks report findings only. They do not automatically repair or delete records or files.
 
 ## Modes and results
 
-| Mode    | Checks                                                                                                                       |
-| ------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `quick` | Empty titles and duplicate identifiers                                                                                       |
-| `deep`  | Quick checks plus bounded fuzzy title/author comparisons, file existence, cover-path existence, and missing thumbnail checks |
+| Mode    | Checks                                                                                                                           |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `quick` | Empty titles and duplicate identifiers                                                                                           |
+| `deep`  | Quick checks plus bounded fuzzy title and author comparisons, file existence, cover-path existence, and missing thumbnail checks |
 
-Each result includes an ID, name, `ok`, `warn`, or `error` status, a message, and optional remediation guidance, metadata, and sample rows. The response uses `sample`, not the earlier proposed `sampleIds` contract.
+Each result includes an ID, name, status (`ok`, `warn`, or `error`), message, and optional remediation guidance, metadata, and sample rows (`sample`).
 
-Deep requests have bounded sampling and comparison/stat limits. A clean bounded result does not prove an unlimited scan of every file or book completed.
+Deep checks enforce bounded sampling, comparison, and filesystem stat limits. A clean bounded result does not prove that every book or file on disk was scanned.
 
-Independent copies and different editions are valid. Fuzzy results report inspected book counts, limits, and incomplete scans.
+Independent copies and separate editions of the same title are valid in Delb. Fuzzy duplicate results report inspected book counts, configured limits, and whether the scan reached a bound.
 
 ## Reference-only books
 
-A book with no associated file can be a valid physical-library entry. Missing-file checks inspect claimed file records. A missing ebook file is different from an intentional metadata-only book.
+A book entry without an attached file is a valid catalog entry for a physical or reference-only book. Missing-file checks inspect only recorded `book_files` rows, so an intentional reference-only book does not trigger a missing-file error.
 
 ## Interpret findings
 
-| Finding                             | Next investigation                                                                    |
-| ----------------------------------- | ------------------------------------------------------------------------------------- |
-| Empty title                         | Inspect and correct the metadata                                                      |
-| Duplicate identifier or fuzzy match | Compare the books; similarity is not proof they are the same edition                  |
-| Missing file or cover               | Compare the database pointer with the managed library and retained operation journals |
-| Missing thumbnail                   | Check the source cover and prior cover operation before regeneration                  |
+| Finding                             | Next step                                                                              |
+| ----------------------------------- | -------------------------------------------------------------------------------------- |
+| Empty title                         | Inspect the book entry and correct its metadata                                        |
+| Duplicate identifier or fuzzy match | Compare the entries; similarity does not prove that they are the same edition          |
+| Missing file or cover               | Compare the database path with the managed library and any retained operation journals |
+| Missing thumbnail                   | Inspect the source cover and prior cover operation before regenerating thumbnails      |
 
-Preserve a matching database/library backup before manual repair. Follow [storage recovery](storage-recovery.md) when operations or retained journals are involved.
+Back up the database and managed library together before performing manual repairs. Follow [storage recovery](storage-recovery.md) whenever retained operation journals are involved.
 
-## Ingestion checks and future work
+## Ingestion checks and scope
 
-Ingestion handlers perform their own input and duplicate checks. This reference does not claim that every import automatically runs the complete admin health suite. Automatic repair, duplicate merging, and deployment-specific restore drills require separate work and verification.
+Upload, Calibre, Goodreads, and dropbox ingestion handlers run their own input and duplicate checks rather than executing the full admin health suite. Automatic repair, duplicate merging, and deployment-specific restore drills are outside the health endpoint's scope.
 
-The [health handler](../../internal/admin/health.go) is the source for current limits, result IDs, and response fields. The [documentation record](../developing/documentation-status.md) distinguishes source inspection from demo execution.
+See the [health handler](../../internal/admin/health.go) for current limits, check IDs, and response fields.

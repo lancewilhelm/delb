@@ -32,7 +32,9 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
     <!-- Left: app/home -->
     <div class="flex items-center gap-3 sm:gap-4 px-2 app-header-left">
       <RouterLink
+        v-tooltip="'Dashboard'"
         class="text-(--contrast-main-color) cursor-pointer header-icon font-medium text-2xl logo"
+        aria-label="Delb dashboard"
         to="/"
       >
         Delb

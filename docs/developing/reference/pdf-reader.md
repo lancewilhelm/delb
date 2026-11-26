@@ -1,10 +1,10 @@
 # PDF reader reference
 
-The [reader route](../../../app/pages/books/[id]/read.vue) prefers EPUB, then PDF. An explicit `?format=pdf` selects PDF for books with both formats. Book details expose Read for either format and a separate Read PDF action when both exist. Upload, Dropbox, and Calibre already store PDF file records; this change requires no ingestion or database migration. Uploaded PDFs retain the existing filename-based metadata behavior.
+The [reader route](../../../app/pages/books/[id]/read.vue) prefers EPUB, then PDF. An explicit `?format=pdf` selects PDF for books with both formats. Book details expose **Read book** for either format and a separate **Read PDF** action when both exist. Upload, dropbox, and Calibre ingestion all store PDF file records; uploaded PDFs use filename-based metadata extraction.
 
 ## Rendering and access
 
-The [PDF component](../../../app/components/Readers/PdfReader.vue) loads [Mozilla PDF.js](https://mozilla.github.io/pdf.js/) only in the browser when opening a PDF. Its matching worker, CMaps, standard fonts, and image codecs are served locally through Vite/Nitro. No document is sent to an external viewer or CDN.
+The [PDF component](../../../app/components/Readers/PdfReader.vue) loads [Mozilla PDF.js](https://mozilla.github.io/pdf.js/) in the browser when opening a PDF. Its matching worker, CMaps, standard fonts, and image codecs are served locally by Vite in development and from the embedded Go binary (`embed_web.go`) in production. No document is sent to an external viewer or CDN.
 
 The component requests `GET /api/books/:id/download?format=pdf&fileId=...`. The existing handler requires a session, checks book visibility and book/file association, confines the stored path to the managed library, and responds with `application/pdf`, attachment disposition, and `Cache-Control: private, no-store`. The PDF reader does not introduce another file-serving endpoint.
 

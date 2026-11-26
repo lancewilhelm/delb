@@ -1,22 +1,20 @@
-# Tooltip Directive
+# Tooltip directive
 
-Delb includes a simple, reusable tooltip directive (`v-tooltip`) that you can attach to **any** element. The tooltip is rendered into `document.body` (so it won’t be clipped by scroll/overflow containers), and it will **auto-flip / clamp** to stay within the viewport.
+Delb includes a reusable tooltip directive (`v-tooltip`) in [`app/directives/tooltip.ts`](../../../app/directives/tooltip.ts). The directive renders tooltips into `document.body` so scroll or overflow containers do not clip them, and it flips and clamps placement to stay inside the viewport.
 
 ## Usage
 
-### 1) Basic (string)
+### Basic string form
 
-```/dev/null/example.vue#L1-7
+```vue
 <template>
-  <button v-tooltip="'Save changes'">
-    Save
-  </button>
+  <button v-tooltip="'Save changes'">Save</button>
 </template>
 ```
 
-### 2) With options (object)
+### Options object form
 
-```/dev/null/example.vue#L1-18
+```vue
 <template>
   <button
     v-tooltip="{
@@ -25,7 +23,7 @@ Delb includes a simple, reusable tooltip directive (`v-tooltip`) that you can at
       offset: 10,
       viewportPadding: 12,
       showDelay: 200,
-      hideDelay: 0
+      hideDelay: 0,
     }"
   >
     Save
@@ -35,85 +33,29 @@ Delb includes a simple, reusable tooltip directive (`v-tooltip`) that you can at
 
 ## Options
 
-You can pass either:
+Pass either a `string` (tooltip text) or an object with the fields below:
 
-- a `string` (tooltip text), or
-- an object with the following fields:
-
-### `text` (required for object form)
-
-- Type: `string`
-- The tooltip content.
-
-### `side`
-
-- Type: `"top" | "right" | "bottom" | "left"`
-- Default: `"top"`
-- Preferred placement side. If `autoFlip` is enabled, the tooltip may render on a different side to avoid clipping.
-
-### `offset`
-
-- Type: `number`
-- Default: `8`
-- Gap (in pixels) between the target element and the tooltip.
-
-### `viewportPadding`
-
-- Type: `number`
-- Default: `8`
-- Minimum distance (in pixels) to keep from the viewport edges.
-
-### `showDelay`
-
-- Type: `number`
-- Default: `150`
-- Delay (ms) before showing the tooltip on hover/focus.
-
-### `hideDelay`
-
-- Type: `number`
-- Default: `0`
-- Delay (ms) before hiding the tooltip on leave/blur.
-
-### `maxWidth`
-
-- Type: `string` (CSS value, e.g. `"240px"`, `"20rem"`)
-- Optional
-- Sets a per-tooltip max width; otherwise defaults to the global CSS variable `--tooltip-max-width`.
-
-### `autoFlip`
-
-- Type: `boolean`
-- Default: `true`
-- When enabled, the tooltip will choose a side that best fits within the viewport.
-
-### `interactive`
-
-- Type: `boolean`
-- Default: `false`
-- When enabled, the tooltip allows pointer interaction (sets `pointer-events: auto` on the tooltip).  
-  Note: the tooltip is non-interactive by default (`pointer-events: none`) to avoid interfering with hovering/clicking the target.
+- **`text`** (`string`, required in object form): The tooltip content.
+- **`side`** (`"top" | "right" | "bottom" | "left"`, default `"top"`): Preferred placement side. When `autoFlip` is enabled, the tooltip can render on another side to avoid clipping.
+- **`offset`** (`number`, default `8`): Gap in pixels between the target element and the tooltip.
+- **`viewportPadding`** (`number`, default `8`): Minimum distance in pixels from the viewport edges.
+- **`showDelay`** (`number`, default `500`): Delay in milliseconds before showing the tooltip on hover or focus.
+- **`hideDelay`** (`number`, default `0`): Delay in milliseconds before hiding the tooltip on leave or blur.
+- **`maxWidth`** (`string`, optional): Per-tooltip CSS `max-width` value such as `"240px"` or `"20rem"`. Defaults to `--tooltip-max-width`.
+- **`autoFlip`** (`boolean`, default `true`): Allows the tooltip to choose the side that best fits within the viewport.
+- **`interactive`** (`boolean`, default `false`): Sets `pointer-events: auto` on the tooltip so pointer interaction is possible. Tooltips default to `pointer-events: none` so they do not interfere with hovering or clicking the target.
 
 ## Behavior notes
 
-- **Teleported to body:** Tooltip DOM is appended to `document.body`, which avoids clipping by containers with `overflow: hidden/auto/scroll`.
-- **Viewport safety:** Tooltip coordinates are clamped to the viewport with `viewportPadding`, and it can `autoFlip` when there isn’t enough room on the preferred side.
-- **Keyboard accessibility:** The directive shows tooltips on `focus` and hides them on `blur`.
-  - For non-focusable elements, the directive may add `tabindex="0"` so keyboard users can reveal the tooltip.
-  - The directive should **not** add `tabindex` to elements that are `aria-hidden="true"` (common for decorative icon spans), because a focused `aria-hidden` element triggers browser accessibility warnings and hides focus from assistive technology users.
-- **ARIA wiring:**
-  - When the target is accessible, the directive uses `aria-describedby` to associate the tooltip content.
-  - If the target is `aria-hidden="true"` (or otherwise should not be described), the directive should avoid `aria-describedby` and instead rely on an accessible wrapper element (e.g. a `<button aria-label="...">...</button>`) for the name/description.
-- **Dismiss on outside click/tap:** If a tooltip is open, pointer down outside the target (and outside the tooltip when `interactive: true`) hides it.
+- **Teleported to `document.body`.** Appending the tooltip node to `document.body` prevents clipping by ancestors with `overflow: hidden`, `auto`, or `scroll`.
+- **Viewport clamping.** Coordinates clamp to the viewport using `viewportPadding`, and `autoFlip` switches sides when the preferred side lacks space.
+- **Keyboard accessibility.** The directive shows tooltips on `focus` and hides them on `blur`. For non-focusable elements, it can add `tabindex="0"`, but it skips elements with `aria-hidden="true"` so decorative icons never receive focus.
+- **ARIA wiring.** Accessible targets receive `aria-describedby` pointing to the tooltip. Elements with `aria-hidden="true"` rely on an accessible wrapper (such as a `<button aria-label="...">`) instead.
+- **Outside dismissal.** A pointer-down event outside the target (and outside the tooltip when `interactive: true`) hides an open tooltip.
 
 ## Styling
 
-Tooltips use global CSS under the `.tooltip` class, with CSS variables for customization (defined in the main stylesheet). The directive sets positioning via:
-
-- `--tooltip-x`
-- `--tooltip-y`
-
-You can adjust visuals by overriding variables such as:
+Tooltips use global styles under `.tooltip` in [`app/assets/css/main.css`](../../../app/assets/css/main.css). The directive sets `--tooltip-x` and `--tooltip-y` for positioning. Available CSS variables include:
 
 - `--tooltip-bg`
 - `--tooltip-fg`
