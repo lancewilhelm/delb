@@ -31,6 +31,8 @@ import type { DashboardBook, DashboardCounts } from '#shared/types/dashboard';
 const props = defineProps<{
   counts: DashboardCounts | null;
   recent: DashboardBook[];
+  /** Size of the overview's first page, before older covers are appended. */
+  initialCoverCount: number;
   /** Books per pile from the reader's settings; Auto shows fewer when narrow. */
   pileSize?: PileSize;
   /** A random sample for Pile art; without it the pile uses `recent`. */
@@ -104,6 +106,10 @@ const isWall = computed(
   () => mode.value === 'wall' || mode.value === 'wall-small',
 );
 const wallCols = computed(() => (mode.value === 'wall-small' ? 7 : 9));
+const wallSeed = Math.random();
+const wallStart = computed(() =>
+  Math.floor(wallSeed * props.initialCoverCount),
+);
 const wallEl = ref<HTMLElement | null>(null);
 const trackEl = ref<HTMLElement | null>(null);
 const drift = useWallDrift({
@@ -130,7 +136,14 @@ const wall = computed(() => {
   for (let r = 0; r < wallRows.value; r++) {
     const row = start + r;
     for (let col = 0; col < cols; col++) {
-      const index = wallBookIndex(row, col, cols, props.recent.length, small);
+      const index = wallBookIndex(
+        row,
+        col,
+        cols,
+        props.recent.length,
+        small,
+        wallStart.value,
+      );
       slots.push({ key: `${row}:${col}`, book: props.recent[index]! });
     }
   }
@@ -139,17 +152,19 @@ const wall = computed(() => {
 
 // Ask for the next page of covers about three rows before the drift needs it.
 watch(
-  () => [drift.active.value, drift.rowStart.value, props.recent.length],
+  [drift.active, drift.rowStart, wallStart, () => props.recent.length],
   () => {
     if (!drift.active.value || mode.value !== 'wall') return;
-    const needed = (drift.rowStart.value + wallRows.value + 3) * wallCols.value;
+    const needed =
+      wallStart.value +
+      (drift.rowStart.value + wallRows.value + 3) * wallCols.value;
     const total = props.counts?.total ?? 0;
     if (needed >= props.recent.length && props.recent.length < total)
       emit('need-more');
   },
   { immediate: true },
 );
-// A different collection starts its wall from the top.
+// Start from the chosen cover again if the newest book changes.
 watch(
   () => props.recent[0]?.id,
   () => drift.reset(),

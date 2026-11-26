@@ -84,7 +84,9 @@ See [book view design record](../../archive/book-view-settings.md), [system arch
 
 `dashboard.pileSize` is `auto` or a whole number from 1 to 250, and defaults to `auto`. **Pile size** in **Appearance → Dashboard** sets it: **Auto**, or **Custom** with the **Books per pile** slider. It sets how many books every pile holds, on the All books card and on Pile tiles; `auto` keeps 24 on All books (20 on narrow cards) and 10 on a tile. Numbers are rounded and clamped; other values fall back to `auto`.
 
-`dashboard.pourSpeed` is a whole number from 1 to 10 and defaults to 5. **Pour speed** in **Appearance → Dashboard** sets it. The default pours a pile in at most 2.5 seconds; each level scales that time by 5 ÷ level, so 10 takes half as long and 1 five times as long. Other values are rounded and clamped; non-numbers fall back to 5.
+`dashboard.pilePourMode` is `staggered`, `together`, or `none` and defaults to `staggered`. **Pile pour** in **Appearance → Dashboard** sets it for the All books card and Pile tiles. The system's reduced-motion preference skips the drop in every mode.
+
+`dashboard.pourSpeed` is a whole number from 1 to 10 and defaults to 5. **Pour speed** in **Appearance → Dashboard** sets it while **Staggered** is selected. Delb saves the speed when another mode is selected. The default pours a pile in at most 2.5 seconds; each level scales that time by 5 ÷ level, so 10 takes half as long and 1 five times as long. Other values are rounded and clamped; non-numbers fall back to 5.
 
 `dashboard.wallMotion` is `off` or `up` and defaults to `off`. **Wall motion** in **Appearance → Dashboard** and the command palette's **dashboard › wall drift up** toggle set it; the card's **⋯** menu does not. With `up`, the All books wall drifts slowly upward unless the system asks for reduced motion. Unknown values fall back to `off`, which leaves room for more directions later.
 

@@ -3,7 +3,7 @@ import { useIsMobileDevice } from '~/composables/useIsMobileDevice';
 import { useUiStore } from '~/stores/ui';
 import { useUserSettingsStore } from '~/stores/userSettings';
 import { navigateTo } from '~/utils/navigation';
-import { useRoute } from 'vue-router';
+import { RouterLink, useRoute } from 'vue-router';
 import CollectionPickerDropdown from '~/components/CollectionPickerDropdown.vue';
 import BookAddModal from '~/components/Books/BookAddModal.vue';
 
@@ -32,34 +32,12 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
   >
     <!-- Left: app/home -->
     <div class="flex items-center gap-3 sm:gap-4 px-2 app-header-left">
-      <div
+      <RouterLink
         class="text-(--contrast-main-color) cursor-pointer header-icon font-medium text-2xl logo"
-        @click="
-          () => {
-            if (route.path === '/') {
-              return;
-            } else if (
-              route.path === '/books' ||
-              route.path === '/authors' ||
-              route.path === '/series' ||
-              route.path === '/publishers' ||
-              route.path === '/tags' ||
-              route.path === '/to-be-read' ||
-              route.path === '/shelves' ||
-              route.path.startsWith('/shelves/')
-            ) {
-              uiStore.setLibraryView('books');
-              navigateTo('/');
-            } else {
-              navigateTo(`/${uiStore.libraryView}`);
-            }
-            {
-            }
-          }
-        "
+        to="/"
       >
         Delb
-      </div>
+      </RouterLink>
       <CollectionPickerDropdown
         v-if="
           route.path !== '/to-be-read' &&

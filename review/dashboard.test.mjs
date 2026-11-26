@@ -159,6 +159,7 @@ async function libraryCard() {
   const cardProps = {
     counts,
     recent: Array.from({ length: 20 }, (_, i) => book(`recent-${i}`)),
+    initialCoverCount: 20,
     showStatusBar: true,
   };
   const values = new Map();

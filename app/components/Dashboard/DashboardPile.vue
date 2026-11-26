@@ -93,6 +93,8 @@ async function setup() {
     if (rest) return { ...rest, drop: false };
     return { ...place, drop: !thrown || keepResting };
   });
+  const { pilePourMode, pourSpeed } =
+    userSettingsStore.activeSettings.dashboard;
   physics = attachPilePhysics(
     el,
     Array.from(el.querySelectorAll<HTMLElement>(':scope > .pile-item')),
@@ -100,9 +102,8 @@ async function setup() {
     {
       reducedMotion: reducedMotion.value === 'reduce',
       region: props.region,
-      pourScale: pourTimeScale(
-        userSettingsStore.activeSettings.dashboard.pourSpeed,
-      ),
+      pourMode: pilePourMode,
+      pourScale: pourTimeScale(pourSpeed),
     },
   );
   thrown ||= ids.length > 0;

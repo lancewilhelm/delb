@@ -1,6 +1,7 @@
 import {
   FULL_PILE_REGION,
   type PilePlacement,
+  type PilePourMode,
   type PileRegion,
 } from '~/utils/dashboardArt';
 
@@ -60,8 +61,9 @@ export function attachPilePhysics(
   options: {
     reducedMotion: boolean;
     region?: PileRegion;
+    pourMode: PilePourMode;
     /** Multiplies the pour's length: 2 pours twice as slowly. */
-    pourScale?: number;
+    pourScale: number;
   },
 ): {
   dispose: () => void;
@@ -74,9 +76,11 @@ export function attachPilePhysics(
   // Books pour in one after another; big piles pour faster so the whole pour
   // stays short.
   const dropping = items.filter((_, i) => placements[i]?.drop !== false);
-  const pourScale = options.pourScale ?? 1;
   const gap =
-    Math.min(POUR_GAP, POUR_TIME / Math.max(1, dropping.length)) * pourScale;
+    options.pourMode === 'staggered'
+      ? Math.min(POUR_GAP, POUR_TIME / Math.max(1, dropping.length)) *
+        options.pourScale
+      : 0;
   let dropIndex = 0;
   let zTop = 10;
   let raf = 0;
@@ -86,7 +90,8 @@ export function attachPilePhysics(
 
   const bodies: Body[] = items.map((el, i) => {
     const p = placements[i] ?? { x: 0.3, y: 0.3, r: 0 };
-    const drops = !options.reducedMotion && p.drop !== false;
+    const drops =
+      !options.reducedMotion && options.pourMode !== 'none' && p.drop !== false;
     return {
       el,
       w: el.offsetWidth,
@@ -94,7 +99,6 @@ export function attachPilePhysics(
       x: p.x * W,
       y: p.y * H,
       a: p.r,
-      // Books drop in one after another unless motion is reduced.
       z: drops ? DROP_HEIGHT : 0,
       wait: drops ? dropIndex++ * gap : 0,
       awake: true,

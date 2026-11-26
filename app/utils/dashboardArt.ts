@@ -62,6 +62,9 @@ export const MIN_POUR_SPEED = 1;
 export const MAX_POUR_SPEED = 10;
 export const DEFAULT_POUR_SPEED = 5;
 
+export const PILE_POUR_MODES = ['staggered', 'together', 'none'] as const;
+export type PilePourMode = (typeof PILE_POUR_MODES)[number];
+
 /** How much longer (above 1) or shorter (below 1) a pour takes than the default. */
 export function pourTimeScale(level: number): number {
   const clamped = Math.min(MAX_POUR_SPEED, Math.max(MIN_POUR_SPEED, level));
@@ -108,6 +111,7 @@ export type DashboardSettings = {
   pileSize: PileSize;
   /** Whether the All books shelf shows only books with spine artwork. */
   shelfSpinesOnly: boolean;
+  pilePourMode: PilePourMode;
   /** How quickly a pile's books pour in, from 1 (slowest) to 10. */
   pourSpeed: number;
   cardArt: {
@@ -127,6 +131,7 @@ export function defaultDashboardSettings(): DashboardSettings {
     wallDriftSpeed: DEFAULT_WALL_DRIFT_SPEED,
     pileSize: 'auto',
     shelfSpinesOnly: false,
+    pilePourMode: 'staggered',
     pourSpeed: DEFAULT_POUR_SPEED,
     cardArt: { default: 'auto', overrides: {} },
   };
@@ -187,6 +192,9 @@ export function normalizeDashboardSettings(value: unknown): DashboardSettings {
       typeof source.pileSize === 'number' && Number.isFinite(source.pileSize)
         ? Math.min(MAX_PILE_SIZE, Math.max(1, Math.round(source.pileSize)))
         : defaults.pileSize,
+    pilePourMode:
+      PILE_POUR_MODES.find((mode) => mode === source.pilePourMode) ??
+      defaults.pilePourMode,
     pourSpeed:
       typeof source.pourSpeed === 'number' && Number.isFinite(source.pourSpeed)
         ? Math.min(
@@ -253,9 +261,10 @@ export function wallBookIndex(
   cols: number,
   count: number,
   strided: boolean,
+  startIndex = 0,
 ): number {
   if (count <= 0) return 0;
-  const raw = strided ? col + row * 2 : row * cols + col;
+  const raw = startIndex + (strided ? col + row * 2 : row * cols + col);
   return ((raw % count) + count) % count;
 }
 

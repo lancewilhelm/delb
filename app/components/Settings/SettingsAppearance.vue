@@ -31,6 +31,7 @@ import {
   MAX_POUR_SPEED,
   MIN_POUR_SPEED,
   type LibraryArtStyle,
+  type PilePourMode,
   type PileSize,
   type WallMotion,
 } from '~/utils/dashboardArt';
@@ -87,6 +88,14 @@ const dashboardCustomPileSize = computed<number>({
 const dashboardPourSpeed = userSettingsStore.settingRef<number>(
   'dashboard.pourSpeed',
 );
+const dashboardPilePourMode = userSettingsStore.settingRef<PilePourMode>(
+  'dashboard.pilePourMode',
+);
+const pilePourOptions: { value: PilePourMode; label: string }[] = [
+  { value: 'staggered', label: 'Staggered' },
+  { value: 'together', label: 'All at once' },
+  { value: 'none', label: 'No pour' },
+];
 const dashboardWallMotion = userSettingsStore.settingRef<WallMotion>(
   'dashboard.wallMotion',
 );
@@ -428,8 +437,8 @@ function handleSortChange(target: string) {
           <span
             ><strong>Pile size</strong
             ><small
-              >How many books drop into each pile, on the All books card and on
-              Pile cards. Auto drops 24 on All books and 10 on a card.</small
+              >How many books each pile holds, on the All books card and on Pile
+              cards. Auto uses 24 on All books and 10 on a card.</small
             ></span
           >
           <div
@@ -463,7 +472,32 @@ function handleSortChange(target: string) {
           :step="1"
           :value-input="true"
         />
+        <div class="bookshelf-texture-choice">
+          <span
+            ><strong>Pile pour</strong
+            ><small
+              >Choose how books arrive. When your system reduces motion, books
+              start in place.</small
+            ></span
+          >
+          <div
+            class="bookshelf-texture-options flex-wrap"
+            role="group"
+            aria-label="Pile pour"
+          >
+            <button
+              v-for="option in pilePourOptions"
+              :key="option.value"
+              type="button"
+              :aria-pressed="dashboardPilePourMode === option.value"
+              @click="dashboardPilePourMode = option.value"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </div>
         <SettingsUISlider
+          v-if="dashboardPilePourMode === 'staggered'"
           v-model="dashboardPourSpeed"
           title="Pour speed"
           :description="`How quickly a pile's books pour in: 1 is the slowest, 10 the fastest (default: ${DEFAULT_POUR_SPEED})`"
