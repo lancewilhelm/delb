@@ -15,7 +15,7 @@ pnpm dev
 
 `pnpm dev` builds the Go server, starts Vite with hot reload, and serves both at `http://localhost:3000`. The server applies pending migrations at startup. The database defaults to `data/delb.db`; managed files use `library/`. On the first visit, register an account. This creates local application data, so use a dedicated checkout when you need a disposable environment.
 
-Installations from before the single library apply migration `0022_single_library` automatically. See [Upgrade to a single library](../hosting/single-library-upgrade.md) for its effects.
+The migration history starts from one baseline, `0000_initial.sql`, which squashes the pre-1.0 chain. Delb refuses to start on a database that stopped partway through that chain; see [Upgrade to a single library](../hosting/single-library-upgrade.md).
 
 Migrations are SQL files in `.drizzle/migrations` that are written by hand. [AGENTS.md](../../AGENTS.md#schema-changes) lists the files that a new migration must update. Never edit a migration that has already been merged. `bin/delb --migrate-only` applies pending migrations and exits.
 

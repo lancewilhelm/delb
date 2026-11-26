@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -78,24 +79,24 @@ func TestMigrateFreshAndIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Migrate fresh: %v", err)
 	}
-	if res.Applied != 23 {
-		t.Fatalf("Applied = %d, want 23", res.Applied)
+	if res.Applied != 1 {
+		t.Fatalf("Applied = %d, want 1", res.Applied)
 	}
 	if res.BackupPath != "" {
 		t.Fatalf("expected no backup on fresh DB, got %q", res.BackupPath)
 	}
 
-	// Verify __drizzle_migrations has 23 rows with Drizzle-compatible hash and timestamp.
+	// Verify __drizzle_migrations has 1 row with Drizzle-compatible hash and timestamp.
 	var count int
 	if err := opened.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM "__drizzle_migrations"`).Scan(&count); err != nil {
 		t.Fatalf("count __drizzle_migrations: %v", err)
 	}
-	if count != 23 {
-		t.Fatalf("__drizzle_migrations count = %d, want 23", count)
+	if count != 1 {
+		t.Fatalf("__drizzle_migrations count = %d, want 1", count)
 	}
 
-	// Verify hash of first migration matches sha256(0000_medical_naoko.sql).
-	raw0, err := delb.MigrationsFS.ReadFile(".drizzle/migrations/0000_medical_naoko.sql")
+	// Verify hash of the baseline matches sha256(0000_initial.sql).
+	raw0, err := delb.MigrationsFS.ReadFile(".drizzle/migrations/0000_initial.sql")
 	if err != nil {
 		t.Fatalf("read 0000 sql: %v", err)
 	}
@@ -106,11 +107,11 @@ func TestMigrateFreshAndIdempotent(t *testing.T) {
 	if err := opened.DB.QueryRowContext(ctx, `SELECT hash, created_at FROM "__drizzle_migrations" ORDER BY created_at ASC LIMIT 1`).Scan(&gotHash0, &gotWhen0); err != nil {
 		t.Fatalf("select first migration row: %v", err)
 	}
-	if gotHash0 != wantHash0 || gotWhen0 != 1769400740951 {
-		t.Fatalf("first migration = (%q, %d), want (%q, 1769400740951)", gotHash0, gotWhen0, wantHash0)
+	if gotHash0 != wantHash0 || gotWhen0 != 1795300000000 {
+		t.Fatalf("first migration = (%q, %d), want (%q, 1795300000000)", gotHash0, gotWhen0, wantHash0)
 	}
 
-	// Verify 0022 removed the collection model and created the visibility view.
+	// Verify the baseline has no collection model and has the visibility view.
 	var leftover int
 	if err := opened.DB.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE name IN ('collections', 'collection_members', 'collection_books', 'legacy_collection_books')`).Scan(&leftover); err != nil {
 		t.Fatalf("check collection tables: %v", err)
@@ -230,5 +231,56 @@ func TestMigrateSkipsExternalSchemaWithoutDrizzleTable(t *testing.T) {
 	}
 	if !res.SkippedExternalSchema || res.Applied != 0 {
 		t.Fatalf("got %+v, want SkippedExternalSchema=true, Applied=0", res)
+	}
+}
+
+// seedHistory creates a database that looks like it was migrated by an older
+// release: a users table and one __drizzle_migrations row at lastCreatedAt.
+func seedHistory(t *testing.T, lastCreatedAt int64) (*db.OpenResult, func()) {
+	t.Helper()
+	ctx := context.Background()
+	opened, err := db.Open(ctx, "file:"+filepath.Join(t.TempDir(), "history.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	for _, stmt := range []string{
+		`CREATE TABLE users (id text PRIMARY KEY)`,
+		`CREATE TABLE "__drizzle_migrations" (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at numeric)`,
+	} {
+		if _, err := opened.DB.ExecContext(ctx, stmt); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+	if _, err := opened.DB.ExecContext(ctx, `INSERT INTO "__drizzle_migrations" (hash, created_at) VALUES ('old', ?)`, lastCreatedAt); err != nil {
+		t.Fatalf("seed history: %v", err)
+	}
+	return opened, func() { _ = opened.DB.Close() }
+}
+
+func TestMigrateSkipsBaselineForDatabasesAtFinalPreBaselineMigration(t *testing.T) {
+	// 1795300000000 is when 0022_single_library ran; such a database already
+	// has the baseline schema.
+	opened, done := seedHistory(t, 1795300000000)
+	defer done()
+	res, err := db.Migrate(context.Background(), opened.DB, opened.FilePath, opened.IsMemory, delb.MigrationsFS)
+	if err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	if res.Applied != 0 || res.BackupPath != "" {
+		t.Fatalf("got %+v, want no migrations and no backup", res)
+	}
+}
+
+func TestMigrateRejectsDatabasesThatPredateTheBaseline(t *testing.T) {
+	// 1795200000000 is when 0021 ran, one migration short of the baseline.
+	opened, done := seedHistory(t, 1795200000000)
+	defer done()
+	_, err := db.Migrate(context.Background(), opened.DB, opened.FilePath, opened.IsMemory, delb.MigrationsFS)
+	if !errors.Is(err, db.ErrPredatesBaseline) {
+		t.Fatalf("Migrate error = %v, want ErrPredatesBaseline", err)
+	}
+	var tables int
+	if err := opened.DB.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'books'`).Scan(&tables); err != nil || tables != 0 {
+		t.Fatalf("books table after refused migration = (%d, %v), want 0", tables, err)
 	}
 }

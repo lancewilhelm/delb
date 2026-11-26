@@ -70,4 +70,4 @@ The shared Bookshelf view layout is stored in `bookshelf_layouts` with `scope_ki
 
 ## Upgrade from collections
 
-Migration `0022_single_library` collapses every collection into the library. See [Upgrade to a single library](../../hosting/single-library-upgrade.md) for the exact mapping. [ADR 0004](../../adr/0004-exclusive-collections-and-shared-default.md) describes the earlier collection model and is superseded.
+The pre-1.0 migration `0022_single_library` collapsed every collection into the library. Servers upgrading from collections must run a release that includes it before running a release that starts from the `0000_initial.sql` baseline. See [Upgrade to a single library](../../hosting/single-library-upgrade.md) for the exact mapping. [ADR 0004](../../adr/0004-exclusive-collections-and-shared-default.md) describes the earlier collection model and is superseded.
