@@ -732,6 +732,30 @@ func TestDashboardTBRCountFollowsCollectionScope(t *testing.T) {
 	if got := spineLists["to_be_read"].([]any)[0].(map[string]any)["spineRevision"]; got != nil {
 		t.Fatalf("to_be_read spineRevision = %v, want null", got)
 	}
+	// Shelf art sizes spines from the page count and any stored bookshelf size.
+	readingEntry := spineLists["reading"].([]any)[0].(map[string]any)
+	for _, key := range []string{"pages", "shelfWidth", "shelfHeight"} {
+		if _, ok := readingEntry[key]; !ok {
+			t.Fatalf("overview book missing %q: %v", key, readingEntry)
+		}
+	}
+	if _, err := opened.DB.ExecContext(ctx, `
+		UPDATE book_shelf_dimensions SET width = 41, height = 199 WHERE book_id = ?`, readingID); err != nil {
+		t.Fatalf("update shelf dimensions: %v", err)
+	}
+	// spines=1 lists only books with spine artwork, with their stored size.
+	_, spineOnly := doJSON(http.MethodGet, "/api/dashboard/recent?spines=1", nil)
+	spineBooks := spineOnly["data"].(map[string]any)["books"].([]any)
+	if len(spineBooks) != 1 {
+		t.Fatalf("recent spines=1 = %v, want only the book with spine art", spineBooks)
+	}
+	spineBook := spineBooks[0].(map[string]any)
+	if spineBook["id"] != readingID || spineBook["shelfWidth"] != float64(41) || spineBook["shelfHeight"] != float64(199) {
+		t.Fatalf("recent spines=1 book = %v, want %s at 41×199", spineBook, readingID)
+	}
+	if r, _ := doJSON(http.MethodGet, "/api/dashboard/recent?spines=yes", nil); r.StatusCode != http.StatusBadRequest {
+		t.Fatalf("recent spines=yes status = %d, want 400", r.StatusCode)
+	}
 	anonReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/dashboard/overview", nil)
 	anonResp, err := http.DefaultClient.Do(anonReq)
 	if err != nil {

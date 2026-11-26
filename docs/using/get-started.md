@@ -31,7 +31,7 @@ Select **Delb** to open the dashboard. It describes the collection selected in t
 - **Reading status** has a tile for each status. To be read opens your ranked queue; the others open the Books view filtered to that status.
 - **Your shelves** has a tile for each personal shelf and a **New shelf** tile.
 
-Each tile's **⋯** menu changes its card art: Collage, Fan, Stack, Shelf, Pile, or Wall. The All books card's **⋯** menu switches between Wall and Pile. A Pile shows a random handful of the list's books each time the page loads, and you can drag them around. **Pile size** in **Appearance → Dashboard** sets how many books each pile holds, up to 100. **Appearance → Dashboard** sets these defaults, turns the status bar on the All books card on or off, and can make the Wall drift slowly upward through your covers.
+Each tile's **⋯** menu changes its card art: Collage, Fan, Stack, Shelf, Pile, or Wall. The All books card's **⋯** menu switches between Wall, Pile, and Shelf. A Pile shows a random handful of the list's books each time the page loads, and you can drag them around. **Pile size** in **Appearance → Dashboard** sets how many books each pile holds, up to 100. Shelf stands the books' spines in a row; turn on **Spine art only** in **Appearance → Dashboard** to show only books that have spine art. **Appearance → Dashboard** sets these defaults, turns the status bar on the All books card on or off, and can make the Wall drift slowly upward through your covers.
 
 See the [dashboard reference](../developing/reference/dashboard.md) for list order and data rules.
 

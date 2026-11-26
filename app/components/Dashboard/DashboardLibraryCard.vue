@@ -5,6 +5,7 @@ import { RouterLink } from 'vue-router';
 import DashboardArtMenu from '~/components/Dashboard/DashboardArtMenu.vue';
 import DashboardCover from '~/components/Dashboard/DashboardCover.vue';
 import DashboardPile from '~/components/Dashboard/DashboardPile.vue';
+import DashboardShelfArt from '~/components/Dashboard/DashboardShelfArt.vue';
 import { useWallDrift } from '~/composables/useWallDrift';
 import { useBooksIndexFiltersStore } from '~/stores/booksIndexFilters';
 import { useUiStore } from '~/stores/ui';
@@ -24,6 +25,7 @@ import {
   type PileSize,
   type WallMotion,
 } from '~/utils/dashboardArt';
+import type { SpineBook } from '~/utils/dashboardShelf';
 import type { DashboardBook, DashboardCounts } from '#shared/types/dashboard';
 
 const props = defineProps<{
@@ -38,8 +40,14 @@ const props = defineProps<{
     coverImagePath?: string | null;
     updatedAt?: string;
   }[];
+  /** Books for Shelf art, in shelf order (all books, or only those with spine art). */
+  shelfBooks?: SpineBook[];
+  /** True once every book for the shelf has loaded. */
+  shelfComplete?: boolean;
+  /** Whether the shelf shows only books with spine art. */
+  shelfSpinesOnly?: boolean;
   showStatusBar: boolean;
-  /** Wall or Pile, from the reader's dashboard settings. */
+  /** Wall, Pile, or Shelf, from the reader's dashboard settings. */
   libraryArt: LibraryArtStyle;
   /** Whether the wall drifts (Appearance → Dashboard). */
   wallMotion: WallMotion;
@@ -49,23 +57,26 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'set-art', style: LibraryArtStyle): void;
-  /** A drifting wall is close to the end of the loaded covers. */
+  /** A drifting wall is close to the end of the loaded covers, or the shelf has room. */
   (e: 'need-more'): void;
 }>();
 
 const artOptions = [
   { value: 'wall', label: 'Wall' },
   { value: 'pile', label: 'Pile' },
+  { value: 'shelf', label: 'Shelf' },
 ] as const;
 
 const booksIndexFiltersStore = useBooksIndexFiltersStore();
 const uiStore = useUiStore();
 
 const total = computed(() => props.counts?.total ?? null);
-// A pile looks natural at any size; the wall switches layout for small libraries.
+// A pile or a shelf looks natural at any size; the wall switches layout for
+// small libraries.
 const mode = computed(() => {
   if (!props.counts) return props.libraryArt;
   if (props.libraryArt === 'pile' && props.recent.length) return 'pile';
+  if (props.libraryArt === 'shelf' && props.counts.total) return 'shelf';
   return heroArtMode(props.recent.length);
 });
 
@@ -167,6 +178,13 @@ const note = computed(() => {
     return 'Add a book or import a folder and your covers will fill this card.';
   if (mode.value === 'spotlight')
     return 'A good start. Add a few more to fill the wall.';
+  if (
+    mode.value === 'shelf' &&
+    props.shelfSpinesOnly &&
+    props.shelfComplete &&
+    !props.shelfBooks?.length
+  )
+    return 'No books here have spine art yet. Add it from a book’s Edit spine.';
   return '';
 });
 </script>
@@ -189,6 +207,13 @@ const note = computed(() => {
           :region="pile.region"
         />
       </template>
+      <div v-else-if="mode === 'shelf'" class="lib-shelf">
+        <DashboardShelfArt
+          :books="shelfBooks ?? []"
+          :start="narrow ? 0 : 0.5"
+          @room="!shelfComplete && emit('need-more')"
+        />
+      </div>
       <div v-else-if="isWall" ref="wallEl" class="lib-wall">
         <div
           ref="trackEl"
@@ -277,7 +302,7 @@ const note = computed(() => {
       </nav>
       <div class="lib-actions">
         <RouterLink
-          v-if="mode === 'wall' || mode === 'wall-small' || mode === 'pile'"
+          v-if="['wall', 'wall-small', 'pile', 'shelf'].includes(mode)"
           to="/books"
           class="lib-btn"
           @click="booksIndexFiltersStore.clearAll()"
@@ -350,6 +375,12 @@ const note = computed(() => {
 .lib-art:has(.lib-wall) {
   -webkit-mask: linear-gradient(90deg, transparent 26%, #000 52%);
   mask: linear-gradient(90deg, transparent 26%, #000 52%);
+}
+/* Shelf: a row of spines beside the text, on a ground along the card's
+   bottom edge; on narrow cards, the row and its ground sit above the text. */
+.lib-shelf {
+  position: absolute;
+  inset: 0;
 }
 .lib-spot {
   position: absolute;
@@ -591,8 +622,13 @@ const note = computed(() => {
     font-size: 52px;
     margin: 4px 0;
   }
-  .mode-pile .lib-label {
+  .mode-pile .lib-label,
+  .mode-shelf .lib-label {
     min-height: 480px;
+  }
+  .lib-shelf {
+    bottom: auto;
+    height: 200px;
   }
   .lib-chips {
     margin-bottom: 0;

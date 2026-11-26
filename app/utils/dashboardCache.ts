@@ -10,11 +10,14 @@ export type DashboardShelfSummary = {
   pile?: DashboardShelfPreview[];
 };
 
-/** A book in a shelf preview. */
+/** A book in a shelf preview, with what Shelf art needs to size its spine. */
 export type DashboardShelfPreview = {
   id: string;
   title: string;
   spineRevision?: string | null;
+  pages?: number | null;
+  shelfWidth?: number | null;
+  shelfHeight?: number | null;
 };
 
 const STORAGE_PREFIX = 'delb.dashboardCache.v2:';

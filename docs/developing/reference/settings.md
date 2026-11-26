@@ -78,7 +78,9 @@ See [book view design record](../../archive/book-view-settings.md), [system arch
 
 `dashboard.showStatusBar` defaults to `true`. **Status bar** in **Appearance → Dashboard** shows or hides the color-coded reading-status bar on the dashboard's All books card. The status links below it remain either way.
 
-`dashboard.libraryArt` is `wall` or `pile` and defaults to `wall`. **All books art** in **Appearance → Dashboard**, or the All books card's **⋯** menu, sets it. Unknown values fall back to `wall`.
+`dashboard.libraryArt` is `wall`, `pile`, or `shelf` and defaults to `wall`. **All books art** in **Appearance → Dashboard**, or the All books card's **⋯** menu, sets it. Unknown values fall back to `wall`.
+
+`dashboard.shelfSpinesOnly` defaults to `false`. **Spine art only** in **Appearance → Dashboard**, shown while All books art is Shelf, limits the All books shelf to books with spine artwork. Non-boolean values fall back to `false`.
 
 `dashboard.pileSize` is `auto` or one of 10, 25, 50, or 100, and defaults to `auto`. **Pile size** in **Appearance → Dashboard** sets it. It sets how many books every pile holds, on the All books card and on Pile tiles; `auto` keeps 24 on All books (20 on narrow cards) and 10 on a tile. Other values fall back to `auto`.
 

@@ -67,6 +67,9 @@ const dashboardLibraryArt = userSettingsStore.settingRef<LibraryArtStyle>(
 );
 const dashboardPileSize =
   userSettingsStore.settingRef<PileSize>('dashboard.pileSize');
+const dashboardShelfSpinesOnly = userSettingsStore.settingRef<boolean>(
+  'dashboard.shelfSpinesOnly',
+);
 const dashboardWallMotion = userSettingsStore.settingRef<WallMotion>(
   'dashboard.wallMotion',
 );
@@ -366,8 +369,8 @@ function handleSortChange(target: string) {
           <span
             ><strong>All books art</strong
             ><small
-              >A tilted wall of recent covers, or a pile you can pick up and
-              toss.</small
+              >A tilted wall of recent covers, a pile you can pick up and toss,
+              or a bookcase of spines.</small
             ></span
           >
           <div
@@ -389,8 +392,21 @@ function handleSortChange(target: string) {
             >
               Pile
             </button>
+            <button
+              type="button"
+              :aria-pressed="dashboardLibraryArt === 'shelf'"
+              @click="dashboardLibraryArt = 'shelf'"
+            >
+              Shelf
+            </button>
           </div>
         </div>
+        <SettingsUIToggle
+          v-if="dashboardLibraryArt === 'shelf'"
+          v-model="dashboardShelfSpinesOnly"
+          title="Spine art only"
+          description="Fill the All books shelf with only the books that have spine art."
+        />
         <div class="bookshelf-texture-choice">
           <span
             ><strong>Pile size</strong

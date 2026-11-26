@@ -439,10 +439,20 @@ type ShelfPreviewDTO struct {
 	Title string `json:"title"`
 	// SpineRevision is set when the book has spine artwork.
 	SpineRevision *string `json:"spineRevision"`
+	// Pages and the stored bookshelf size let the dashboard's Shelf art size
+	// each spine as the bookshelf does; the size is null until it is stored.
+	Pages       *int `json:"pages"`
+	ShelfWidth  *int `json:"shelfWidth"`
+	ShelfHeight *int `json:"shelfHeight"`
 }
 
 func shelfPreview(row personalShelfVisibleRow) ShelfPreviewDTO {
-	return ShelfPreviewDTO{ID: row.ID, Title: row.Title, SpineRevision: row.SpineRevision}
+	preview := ShelfPreviewDTO{ID: row.ID, Title: row.Title, SpineRevision: row.SpineRevision, Pages: row.Pages}
+	if row.Dimensions != nil {
+		width, height := row.Dimensions.Width, row.Dimensions.Height
+		preview.ShelfWidth, preview.ShelfHeight = &width, &height
+	}
+	return preview
 }
 
 // ShelfSummaryDTO mirrors server/utils/shelves/model.ts listShelves items.
