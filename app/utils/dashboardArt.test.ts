@@ -104,6 +104,17 @@ test('dashboard settings drop invalid and reset overrides', () => {
     normalizeDashboardSettings({ libraryArt: 'pile' }).libraryArt,
     'pile',
   );
+  const shelf = normalizeDashboardSettings({
+    libraryArt: 'shelf',
+    shelfSpinesOnly: true,
+  });
+  assert.equal(shelf.libraryArt, 'shelf');
+  assert.equal(shelf.shelfSpinesOnly, true);
+  assert.equal(normalized.shelfSpinesOnly, false, 'spines-only is opt-in');
+  assert.equal(
+    normalizeDashboardSettings({ shelfSpinesOnly: 'yes' }).shelfSpinesOnly,
+    false,
+  );
   assert.equal(normalized.cardArt.default, 'auto');
   assert.deepEqual(normalized.cardArt.overrides, {
     reading: 'wall',

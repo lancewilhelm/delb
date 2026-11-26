@@ -112,7 +112,7 @@ export function estimatedWidth(pages: number | null | undefined): number {
     ? Math.max(22, Math.min(55, Math.round(20 + pages / 25)))
     : 32;
 }
-function stableHeight(id: string): number {
+export function stableHeight(id: string): number {
   let hash = 0;
   for (const c of id) hash = (hash * 31 + c.charCodeAt(0)) >>> 0;
   return 180 + (hash % 41);

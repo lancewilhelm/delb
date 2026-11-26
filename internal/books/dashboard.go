@@ -21,6 +21,13 @@ type dashboardBook struct {
 	FinishedDate     *string  `json:"finishedDate"`
 	// SpineRevision is set when the book has spine artwork (GET /api/books/{id}/spine?v=).
 	SpineRevision *string `json:"spineRevision"`
+	// Pages and the stored bookshelf size let Shelf art size each spine the
+	// way the bookshelf does. ShelfWidth is set only when someone set the
+	// width by hand; otherwise the width follows the current page count.
+	// ShelfHeight is the stored height, or null if the book has none.
+	Pages       *int64 `json:"pages"`
+	ShelfWidth  *int64 `json:"shelfWidth"`
+	ShelfHeight *int64 `json:"shelfHeight"`
 }
 
 // Dashboard overview limits. The All books wall needs enough distinct covers
@@ -132,10 +139,12 @@ func (s *Service) queryDashboardBooks(
 			pos.progress, pos.updated_at,
 			pl.progress_percent, pl.page_number, pl.source, pl.occurred_at, pl.created_at,
 			ubs.finished_at,
-			(SELECT revision FROM book_spines WHERE book_id = b.id)
+			(SELECT revision FROM book_spines WHERE book_id = b.id),
+			b.pages, CASE WHEN bsd.manual_width = 1 THEN bsd.width END, bsd.height
 		FROM books b
 		LEFT JOIN user_book_status ubs ON ubs.book_id = b.id AND ubs.user_id = ?
 		LEFT JOIN user_book_reading_position pos ON pos.book_id = b.id AND pos.user_id = ?
+		LEFT JOIN book_shelf_dimensions bsd ON bsd.book_id = b.id
 		LEFT JOIN user_book_progress_log pl ON pl.user_id = ? AND pl.id = (
 			SELECT id FROM user_book_progress_log
 			WHERE user_id = ? AND book_id = b.id
@@ -169,12 +178,16 @@ func (s *Service) queryDashboardBooks(
 			logCreated  sql.NullInt64
 			finishedAt  sql.NullInt64
 			spineRev    sql.NullString
+			pages       sql.NullInt64
+			shelfWidth  sql.NullInt64
+			shelfHeight sql.NullInt64
 		)
 		if err := rows.Scan(
 			&id, &title, &cover, &hasPhys, &hasAudio, &updatedAt,
 			&posProg, &posUpd,
 			&logProg, &logPage, &logSource, &logOccurred, &logCreated,
 			&finishedAt, &spineRev,
+			&pages, &shelfWidth, &shelfHeight,
 		); err != nil {
 			return nil, err
 		}
@@ -209,6 +222,9 @@ func (s *Service) queryDashboardBooks(
 			Progress:         progOut,
 			FinishedDate:     finDate,
 			SpineRevision:    nullStringPtr(spineRev),
+			Pages:            nullInt64Ptr(pages),
+			ShelfWidth:       nullInt64Ptr(shelfWidth),
+			ShelfHeight:      nullInt64Ptr(shelfHeight),
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -299,10 +315,11 @@ func (s *Service) handleGetDashboardOverview(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-// GET /api/dashboard/recent?collectionId=&offset=
+// GET /api/dashboard/recent?collectionId=&offset=&spines=
 //
 // Pages through the All books cover wall's books (newest first) after the
 // overview's first page, so a drifting wall can keep showing new covers.
+// `spines=1` lists only books with spine artwork, for the Shelf art.
 func (s *Service) handleGetDashboardRecent(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
 
@@ -325,10 +342,19 @@ func (s *Service) handleGetDashboardRecent(w http.ResponseWriter, r *http.Reques
 		httpapi.WriteError(w, http.StatusBadRequest, "Invalid offset")
 		return
 	}
+	filter := `1 = 1`
+	switch q.Get("spines") {
+	case "", "0":
+	case "1":
+		filter = `EXISTS (SELECT 1 FROM book_spines WHERE book_id = b.id)`
+	default:
+		httpapi.WriteError(w, http.StatusBadRequest, "Invalid spines filter")
+		return
+	}
 	userID := swu.User.ID
 	visClause, visArgs := dashboardVisibility(userID, q.Get("collectionId"))
 
-	found, err := s.queryDashboardBooks(r.Context(), userID, visClause, visArgs, `1 = 1`, nil, dashboardRecentOrder, dashboardRecentLimit+1, offset)
+	found, err := s.queryDashboardBooks(r.Context(), userID, visClause, visArgs, filter, nil, dashboardRecentOrder, dashboardRecentLimit+1, offset)
 	if err != nil {
 		s.writeErrWithFallback(w, "GET /api/dashboard/recent failed", "Failed to load covers", err)
 		return

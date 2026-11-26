@@ -20,6 +20,13 @@ export type DashboardBook = {
   finishedDate: string | null;
   /** Set when the book has spine artwork (`/api/books/:id/spine?v=`). */
   spineRevision?: string | null;
+  /**
+   * Page count and bookshelf size, for sizing Shelf art spines. `shelfWidth`
+   * is set only for a width set by hand; otherwise the width follows `pages`.
+   */
+  pages?: number | null;
+  shelfWidth?: number | null;
+  shelfHeight?: number | null;
 };
 
 export type DashboardData = {

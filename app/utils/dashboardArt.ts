@@ -35,7 +35,7 @@ export const AUTO_CARD_ART: Record<DashboardListKey | 'shelf', CardArtStyle> = {
 };
 
 /** Art styles for the All books card. */
-export const LIBRARY_ART_STYLES = ['wall', 'pile'] as const;
+export const LIBRARY_ART_STYLES = ['wall', 'pile', 'shelf'] as const;
 export type LibraryArtStyle = (typeof LIBRARY_ART_STYLES)[number];
 
 /**
@@ -106,6 +106,8 @@ export type DashboardSettings = {
   wallDriftSpeed: number;
   /** Books in each pile, on the All books card and on tiles. */
   pileSize: PileSize;
+  /** Whether the All books shelf shows only books with spine artwork. */
+  shelfSpinesOnly: boolean;
   /** How quickly a pile's books pour in, from 1 (slowest) to 10. */
   pourSpeed: number;
   cardArt: {
@@ -124,6 +126,7 @@ export function defaultDashboardSettings(): DashboardSettings {
     wallMotion: 'off',
     wallDriftSpeed: DEFAULT_WALL_DRIFT_SPEED,
     pileSize: 'auto',
+    shelfSpinesOnly: false,
     pourSpeed: DEFAULT_POUR_SPEED,
     cardArt: { default: 'auto', overrides: {} },
   };
@@ -191,6 +194,10 @@ export function normalizeDashboardSettings(value: unknown): DashboardSettings {
             Math.max(MIN_POUR_SPEED, Math.round(source.pourSpeed)),
           )
         : defaults.pourSpeed,
+    shelfSpinesOnly:
+      typeof source.shelfSpinesOnly === 'boolean'
+        ? source.shelfSpinesOnly
+        : defaults.shelfSpinesOnly,
     cardArt: {
       default:
         rawDefault === 'auto' || isCardArtStyle(rawDefault)

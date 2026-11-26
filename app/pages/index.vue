@@ -224,6 +224,7 @@ let moreRequest = 0;
 let loadingMore = false;
 
 async function loadMoreRecent() {
+  if (shelfUsesSpines.value) return loadMoreSpines();
   const total = overview.value?.counts.total ?? 0;
   const offset = wallBooks.value.length;
   if (loadingMore || disposed || offset >= total) return;
@@ -243,6 +244,64 @@ async function loadMoreRecent() {
     if (request === moreRequest) loadingMore = false;
   }
 }
+
+// ---- Shelf: every book, or only books with spine art ----------------------
+const shelfUsesSpines = computed(
+  () =>
+    dashboardSettings.value.libraryArt === 'shelf' &&
+    dashboardSettings.value.shelfSpinesOnly,
+);
+const spineBooks = ref<DashboardBook[]>([]);
+const spinesComplete = ref(false);
+let spineRequest = 0;
+let loadingSpines = false;
+
+async function loadMoreSpines() {
+  if (loadingSpines || disposed || spinesComplete.value) return;
+  loadingSpines = true;
+  const request = ++spineRequest;
+  try {
+    const response = await $fetch<{
+      data: { books: DashboardBook[]; nextOffset: number | null };
+    }>('/api/dashboard/recent', {
+      query: {
+        collectionId: scope.value,
+        offset: spineBooks.value.length,
+        spines: 1,
+      },
+    });
+    if (request !== spineRequest) return;
+    spineBooks.value = [...spineBooks.value, ...response.data.books];
+    spinesComplete.value = response.data.nextOffset === null;
+  } catch {
+    // The shelf keeps the spines it has; the next request tries again.
+  } finally {
+    if (request === spineRequest) loadingSpines = false;
+  }
+}
+
+function resetSpines() {
+  ++spineRequest;
+  loadingSpines = false;
+  spineBooks.value = [];
+  spinesComplete.value = false;
+}
+
+const shelfBooks = computed(() =>
+  shelfUsesSpines.value ? spineBooks.value : wallBooks.value,
+);
+const shelfComplete = computed(() =>
+  shelfUsesSpines.value
+    ? spinesComplete.value
+    : wallBooks.value.length >= (overview.value?.counts.total ?? 0),
+);
+watch(
+  shelfUsesSpines,
+  (on) => {
+    if (on && !spineBooks.value.length) void loadMoreSpines();
+  },
+  { immediate: true },
+);
 
 // ---- Lists -----------------------------------------------------------------
 function readDate(value: string) {
@@ -320,6 +379,8 @@ watch(scope, () => {
   ++moreRequest;
   loadingMore = false;
   moreRecent.value = [];
+  resetSpines();
+  if (shelfUsesSpines.value) void loadMoreSpines();
   void loadOverview();
 });
 onMounted(() => {
@@ -359,6 +420,9 @@ onBeforeUnmount(() => {
           :recent="wallBooks"
           :pile-books="piles.all?.books ?? []"
           :pile-size="dashboardSettings.pileSize"
+          :shelf-books="shelfBooks"
+          :shelf-complete="shelfComplete"
+          :shelf-spines-only="dashboardSettings.shelfSpinesOnly"
           :show-status-bar="dashboardSettings.showStatusBar"
           :library-art="dashboardSettings.libraryArt"
           :wall-motion="dashboardSettings.wallMotion"
