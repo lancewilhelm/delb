@@ -8,6 +8,16 @@ import {
   spineSize,
 } from './dashboardShelf.ts';
 
+const books = (count: number) =>
+  Array.from({ length: count }, (_, i) => ({
+    id: `b${i}`,
+    title: `B${i}`,
+    shelfWidth: 30,
+    shelfHeight: 400,
+  }));
+const ids = (row: ReturnType<typeof fillShelf>) =>
+  row.spines.map((spine) => spine.book.id);
+
 test('spines use the stored bookshelf size, else the bookshelf estimate', () => {
   assert.deepEqual(
     spineSize({ id: 'a', title: 'A', shelfWidth: 40, shelfHeight: 190 }),
@@ -19,29 +29,30 @@ test('spines use the stored bookshelf size, else the bookshelf estimate', () => 
   });
 });
 
-test('a shelf is one centered row that leaves out books that do not fit', () => {
-  const books = Array.from({ length: 10 }, (_, i) => ({
-    id: `b${i}`,
-    title: `B${i}`,
-    shelfWidth: 30,
-    shelfHeight: 400,
-  }));
-  // Room for three 30-unit spines (plus 1-unit gaps).
-  const width = DASHBOARD_SHELF_INSET * 2 + 30 * 3 + 2;
-  const row = fillShelf(books, width);
-  assert.deepEqual(
-    row.map((spine) => spine.book.id),
-    ['b0', 'b1', 'b2'],
-  );
-  assert.equal(row[0]!.x, DASHBOARD_SHELF_INSET);
-  assert.equal(row[1]!.x, DASHBOARD_SHELF_INSET + 31);
+test('a row that fits is centered, or set against the right end', () => {
+  const width = 200;
+  const centered = fillShelf(books(2), width);
+  assert.equal(centered.overflows, false);
+  assert.equal(centered.spines[0]!.x, (width - 61) / 2);
   assert.equal(
-    row[0]!.height,
+    centered.spines[0]!.height,
     DASHBOARD_SPINE_MAX_HEIGHT,
     'a tall spine is cut down',
   );
+  const end = fillShelf(books(2), width, 'end');
+  assert.equal(end.spines[1]!.x + 30, width - DASHBOARD_SHELF_INSET);
+});
 
-  const short = fillShelf(books.slice(0, 1), width);
-  assert.equal(short[0]!.x, (width - 30) / 2, 'a short row is centered');
-  assert.deepEqual(fillShelf(books, 20), [], 'nothing fits a tiny row');
+test('a long row runs past the edges and shows only spines in view', () => {
+  // Ten 30-unit spines with 1-unit gaps make a 309-unit row.
+  const centered = fillShelf(books(10), 100);
+  assert.equal(centered.overflows, true);
+  assert.ok(centered.spines[0]!.x < 0, 'cut at the left end');
+  const last = centered.spines.at(-1)!;
+  assert.ok(last.x + last.width > 100, 'cut at the right end');
+  assert.deepEqual(ids(centered), ['b3', 'b4', 'b5', 'b6']);
+
+  const end = fillShelf(books(10), 100, 'end');
+  assert.equal(end.spines[0]!.x, 0, 'starts at the left end');
+  assert.deepEqual(ids(end), ['b0', 'b1', 'b2', 'b3']);
 });

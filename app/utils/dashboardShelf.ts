@@ -36,22 +36,26 @@ export function spineSize(book: SpineBook): { width: number; height: number } {
   };
 }
 
+/** How a row lines up: centered, or against the right end. */
+export type ShelfAlign = 'center' | 'end';
+
 /**
  * Stands books left to right in a row `rowWidth` units wide, in the given
- * order, until the next book does not fit. The row is centered, so a short
- * row sits in the middle.
+ * order. A row that fits lines up by `align`. A row longer than the shelf
+ * runs past its edges so the cut spines show that it continues: centered
+ * rows run past both ends; `end` rows start at the left end and run past
+ * the right one. Only spines that show at least in part are returned.
  */
 export function fillShelf<T extends SpineBook>(
   books: T[],
   rowWidth: number,
-): PlacedSpine<T>[] {
-  const row: PlacedSpine<T>[] = [];
-  const end = rowWidth - DASHBOARD_SHELF_INSET;
-  let x = DASHBOARD_SHELF_INSET;
+  align: ShelfAlign = 'center',
+): { spines: PlacedSpine<T>[]; overflows: boolean } {
+  const placed: PlacedSpine<T>[] = [];
+  let x = 0;
   for (const book of books) {
     const size = spineSize(book);
-    if (x + size.width > end) break;
-    row.push({
+    placed.push({
       book,
       x,
       width: size.width,
@@ -59,10 +63,15 @@ export function fillShelf<T extends SpineBook>(
     });
     x += size.width + SPINE_GAP;
   }
-  const used = x - SPINE_GAP - DASHBOARD_SHELF_INSET;
-  const shift = row.length
-    ? (rowWidth - 2 * DASHBOARD_SHELF_INSET - used) / 2
-    : 0;
-  for (const spine of row) spine.x += shift;
-  return row;
+  const total = Math.max(0, x - SPINE_GAP);
+  const room = rowWidth - 2 * DASHBOARD_SHELF_INSET;
+  const overflows = total > room;
+  let shift: number;
+  if (align === 'center') shift = (rowWidth - total) / 2;
+  else if (overflows) shift = 0;
+  else shift = rowWidth - DASHBOARD_SHELF_INSET - total;
+  const spines = placed
+    .map((spine) => ({ ...spine, x: spine.x + shift }))
+    .filter((spine) => spine.x < rowWidth && spine.x + spine.width > 0);
+  return { spines, overflows };
 }

@@ -5,20 +5,22 @@ import BookshelfSpine from '~/components/Books/BookshelfSpine.vue';
 import {
   DASHBOARD_SPINE_MAX_HEIGHT,
   fillShelf,
+  type ShelfAlign,
   type SpineBook,
 } from '~/utils/dashboardShelf';
 
 /**
  * One row of spines standing on a plain ground in the theme's colors. The
- * spines are the bookshelf's own, scaled to fit the box.
+ * spines are the bookshelf's own, scaled to fit the box. A row longer than
+ * the box runs past its edges, so the cut spines show that it continues.
  */
 const props = withDefaults(
   defineProps<{
     books: SpineBook[];
-    /** Where the row starts, as a fraction of the box width; the ground spans it all. */
-    start?: number;
+    /** How a row that fits lines up, and which way a long row runs off. */
+    align?: ShelfAlign;
   }>(),
-  { start: 0 },
+  { align: 'center' },
 );
 
 const emit = defineEmits<{
@@ -48,18 +50,19 @@ const scale = computed(() =>
       )
     : 0,
 );
-const left = computed(() => Math.round(width.value * props.start));
 const rowWidth = computed(() =>
-  scale.value > 0 ? Math.floor((width.value - left.value) / scale.value) : 0,
+  scale.value > 0 ? Math.ceil(width.value / scale.value) : 0,
 );
-const spines = computed(() =>
-  rowWidth.value > 0 ? fillShelf(props.books, rowWidth.value) : [],
+const row = computed(() =>
+  rowWidth.value > 0
+    ? fillShelf(props.books, rowWidth.value, props.align)
+    : { spines: [], overflows: false },
 );
 
 watch(
-  spines,
-  (row) => {
-    if (rowWidth.value > 0 && row.length >= props.books.length) emit('room');
+  row,
+  (next) => {
+    if (rowWidth.value > 0 && !next.overflows) emit('room');
   },
   { immediate: true },
 );
@@ -72,14 +75,13 @@ watch(
       v-if="scale > 0"
       class="dash-shelf-row"
       :style="{
-        left: `${left}px`,
         width: `${rowWidth}px`,
         height: `${DASHBOARD_SPINE_MAX_HEIGHT}px`,
         transform: `scale(${scale})`,
       }"
     >
       <div
-        v-for="spine in spines"
+        v-for="spine in row.spines"
         :key="spine.book.id"
         class="dash-shelf-item"
         :style="{
@@ -124,6 +126,7 @@ watch(
 }
 .dash-shelf-row {
   position: absolute;
+  left: 0;
   bottom: var(--ground);
   transform-origin: bottom left;
 }

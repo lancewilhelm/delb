@@ -210,7 +210,7 @@ const note = computed(() => {
       <div v-else-if="mode === 'shelf'" class="lib-shelf">
         <DashboardShelfArt
           :books="shelfBooks ?? []"
-          :start="narrow ? 0 : 0.5"
+          :align="narrow ? 'center' : 'end'"
           @room="!shelfComplete && emit('need-more')"
         />
       </div>
@@ -376,11 +376,16 @@ const note = computed(() => {
   -webkit-mask: linear-gradient(90deg, transparent 26%, #000 52%);
   mask: linear-gradient(90deg, transparent 26%, #000 52%);
 }
-/* Shelf: a row of spines beside the text, on a ground along the card's
-   bottom edge; on narrow cards, the row and its ground sit above the text. */
+/* Shelf: a row of spines across the card, on a ground along its bottom
+   edge, fading out under the text like the wall. On narrow cards the row and
+   its ground sit above the text instead. */
 .lib-shelf {
   position: absolute;
   inset: 0;
+}
+.lib-art:has(.lib-shelf) {
+  -webkit-mask: linear-gradient(90deg, transparent 26%, #000 52%);
+  mask: linear-gradient(90deg, transparent 26%, #000 52%);
 }
 .lib-spot {
   position: absolute;
@@ -629,6 +634,10 @@ const note = computed(() => {
   .lib-shelf {
     bottom: auto;
     height: 200px;
+  }
+  .lib-art:has(.lib-shelf) {
+    -webkit-mask: none;
+    mask: none;
   }
   .lib-chips {
     margin-bottom: 0;
