@@ -10,8 +10,8 @@ import (
 	"unicode/utf16"
 
 	"github.com/google/uuid"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/library"
 )
 
 // MaxReviewLength is the longest review, in UTF-16 code units, that Delb stores.
@@ -40,7 +40,7 @@ func utf16Len(s string) int {
 	return len(utf16.Encode([]rune(s)))
 }
 
-func readReview(ctx context.Context, q collections.Queryable, userID, bookID string) (ReviewDTO, error) {
+func readReview(ctx context.Context, q library.Queryable, userID, bookID string) (ReviewDTO, error) {
 	var text string
 	var spoilers int64
 	var createdAt, updatedAt int64
@@ -60,7 +60,7 @@ func readReview(ctx context.Context, q collections.Queryable, userID, bookID str
 }
 
 // writeReview stores or clears (when text is blank) a reader's review.
-func writeReview(ctx context.Context, q collections.Queryable, userID, bookID, text string, spoilers bool, now int64) error {
+func writeReview(ctx context.Context, q library.Queryable, userID, bookID, text string, spoilers bool, now int64) error {
 	if strings.TrimSpace(text) == "" {
 		_, err := q.ExecContext(ctx, `DELETE FROM user_book_reviews WHERE user_id = ? AND book_id = ?`, userID, bookID)
 		return err

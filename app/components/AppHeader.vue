@@ -1,13 +1,14 @@
 <script setup lang="ts">
+import { useAuth } from '~/composables/useAuth';
 import { useIsMobileDevice } from '~/composables/useIsMobileDevice';
 import { useUiStore } from '~/stores/ui';
 import { useUserSettingsStore } from '~/stores/userSettings';
 import { navigateTo } from '~/utils/navigation';
-import { RouterLink, useRoute } from 'vue-router';
-import CollectionPickerDropdown from '~/components/CollectionPickerDropdown.vue';
+import { RouterLink } from 'vue-router';
 import BookAddModal from '~/components/Books/BookAddModal.vue';
 
 const uiStore = useUiStore();
+const { canEditCatalog } = useAuth();
 
 const emit = defineEmits<{
   (e: 'book-uploaded'): void;
@@ -16,8 +17,6 @@ const emit = defineEmits<{
 function openAddBook() {
   uiStore.setAddBookModalVisible(true);
 }
-
-const route = useRoute();
 
 const isMobileDevice = useIsMobileDevice();
 const userSettingsStore = useUserSettingsStore();
@@ -38,23 +37,18 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
       >
         Delb
       </RouterLink>
-      <CollectionPickerDropdown
-        v-if="
-          route.path !== '/to-be-read' &&
-          route.path !== '/shelves' &&
-          !route.path.startsWith('/shelves/')
-        "
-      />
-      <button type="button" aria-label="Add book" @click="openAddBook">
+      <button
+        v-if="canEditCatalog"
+        type="button"
+        aria-label="Add book"
+        @click="openAddBook"
+      >
         <Icon
           name="lucide:book-plus"
           class="text-(--contrast-main-color) cursor-pointer text-xl header-icon"
         />
       </button>
     </div>
-
-    <!-- Center: Collection switcher (scope) -->
-    <!-- <div class="flex items-center gap-2"></div> -->
 
     <!-- Right: actions -->
     <div class="flex gap-3 items-center p-4 justify-self-end app-header-right">
@@ -80,7 +74,10 @@ const mobileSearchButton = userSettingsStore.mobileSettingRef<boolean>(
         @click="navigateTo('/settings')"
       />
     </div>
-    <BookAddModal @book-uploaded="emit('book-uploaded')" />
+    <BookAddModal
+      v-if="canEditCatalog"
+      @book-uploaded="emit('book-uploaded')"
+    />
 
     <!-- Mobile: Search button at bottom right of scren -->
     <div

@@ -385,7 +385,7 @@ export const STATUS_LABELS: Record<DashboardListKey, string> = {
   none: 'No status',
 };
 
-/** Non-empty status segments for the collection status bar, as percentages. */
+/** Non-empty status segments for the library status bar, as percentages. */
 export function statusSegments(
   counts: DashboardCounts,
 ): { key: DashboardListKey; count: number; percent: number }[] {

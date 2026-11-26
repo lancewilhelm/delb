@@ -1,6 +1,5 @@
 import { computed, ref } from 'vue';
 import { useBooksIndexFiltersStore } from '~/stores/booksIndexFilters';
-import { useCollectionsStore } from '~/stores/collections';
 import { useGlobalSettingsStore } from '~/stores/globalSettings';
 import { useUiStore } from '~/stores/ui';
 import { useUserSettingsStore } from '~/stores/userSettings';
@@ -15,6 +14,7 @@ import {
   type User,
 } from '~/utils/authClient';
 import { navigateTo } from '~/utils/navigation';
+import { normalizeRole, roleCanEditCatalog, roleIsAdmin } from '~/utils/roles';
 
 export interface RuntimeAuthConfig {
   redirectUserTo: string;
@@ -30,7 +30,6 @@ const PERSISTED_USER_STORES = [
   'delb.userSettings',
   'delb.globalSettings',
   'delb.ui',
-  'delb.collections',
   'delb.booksIndexFilters',
 ];
 
@@ -44,12 +43,10 @@ function clearUserStoresAndStorage(clearAuthUserId: boolean) {
   const userSettingsStore = useUserSettingsStore();
   const globalSettingsStore = useGlobalSettingsStore();
   const uiStore = useUiStore();
-  const collectionsStore = useCollectionsStore();
 
   userSettingsStore.$reset();
   globalSettingsStore.$reset();
   uiStore.$reset();
-  collectionsStore.$reset();
   useBooksIndexFiltersStore().clearAll();
   clearBookPreviewCache();
   clearDashboardCache();
@@ -134,10 +131,12 @@ export function useAuth() {
     signIn: client.signIn,
     signUp: client.signUp,
     admin: client.admin,
-    isAdmin: computed(() => {
-      if (!user.value) return false;
-      return user.value.role === 'admin' || user.value.role === 'owner';
-    }),
+    role: computed(() => (user.value ? normalizeRole(user.value.role) : null)),
+    isAdmin: computed(() => roleIsAdmin(user.value?.role)),
+    canEditCatalog: computed(() => roleCanEditCatalog(user.value?.role)),
+    isReader: computed(
+      () => !!user.value && !roleCanEditCatalog(user.value.role),
+    ),
     changePassword: client.changePassword,
     changeEmail: client.changeEmail,
     updateUser: client.updateUser,

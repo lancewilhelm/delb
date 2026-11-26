@@ -21,11 +21,8 @@ async function matcher() {
   const calls = [];
   let request = async () => [{ id: 'b' }];
   const state = {
-    props: { endpoint: '/api/books', collectionId: undefined },
-    catalog: ref([
-      { id: 'a', collectionId: 'one' },
-      { id: 'b', collectionId: 'two' },
-    ]),
+    props: { endpoint: '/api/books', personalShelfId: undefined },
+    catalog: ref([{ id: 'a' }, { id: 'b' }]),
     matches: ref(new Set()),
     notice: ref(''),
     errorText: (error) => error.message,
@@ -58,38 +55,34 @@ test('the unfiltered shelf reuses its loaded catalog without another network pas
   assert.deepEqual(calls, []);
 });
 
-test('collection dimming uses the sole collection returned with each catalog entry', async () => {
+test('a personal shelf reuses its catalog when only its own filter applies', async () => {
   const { state, load, calls } = await matcher();
-  state.props.collectionId = 'two';
+  state.props.personalShelfId = 'shelf 1';
+  state.props.endpoint = '/api/books?shelfId=shelf%201';
   await load();
-  assert.deepEqual([...state.matches.value], ['b']);
-  state.props.collectionId = 'missing';
-  await load();
-  assert.deepEqual([...state.matches.value], []);
+  assert.deepEqual([...state.matches.value], ['a', 'b']);
   assert.deepEqual(calls, []);
 });
 
-test('applied filters still use the authorized endpoint and collection scope', async () => {
+test('applied filters use the authorized endpoint', async () => {
   const { state, load, calls } = await matcher();
   state.props.endpoint = '/api/books?status=reading';
-  state.props.collectionId = 'two';
   await load();
   assert.deepEqual([...state.matches.value], ['b']);
-  assert.deepEqual(calls, [['/api/books?status=reading', 'two']]);
+  assert.deepEqual(calls, [['/api/books?status=reading']]);
 });
 
-test('a late filtered response cannot override cleared filters or a new collection', async () => {
+test('a late filtered response cannot override cleared filters', async () => {
   const { state, load, setRequest } = await matcher();
   const pending = Promise.withResolvers();
   setRequest(() => pending.promise);
   state.props.endpoint = '/api/books?title=old';
   const old = load();
   state.props.endpoint = '/api/books';
-  state.props.collectionId = 'one';
   await load();
   pending.resolve([{ id: 'b' }]);
   await old;
-  assert.deepEqual([...state.matches.value], ['a']);
+  assert.deepEqual([...state.matches.value], ['a', 'b']);
 });
 
 test('a failed filter read retains the previous matches and reports the error', async () => {

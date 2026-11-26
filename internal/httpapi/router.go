@@ -27,9 +27,9 @@ type RouterOptions struct {
 }
 
 // NewHandler constructs the root HTTP handler:
-//   - Wraps all /api/* routes with the global collections-model maintenance gate
-//     and any caller-supplied outer middleware (such as startup storage recovery).
-//   - Mounts /api/auth/* and all domain services (Settings, Users, Collections,
+//   - Wraps all /api/* routes with any caller-supplied outer middleware (such
+//     as startup storage recovery).
+//   - Mounts /api/auth/* and all domain services (Settings, Users,
 //     Books/Catalog/Reading/Search/Dashboard, Bookshelves/Shelves/Pictures,
 //     Spines/SpineGeneration/ChatGPT-Image, Admin Health/Calibre/Nuke, MCP
 //     Connections & Streamable HTTP MCP Server).
@@ -69,7 +69,7 @@ func NewHandler(opts RouterOptions) http.Handler {
 		})
 	}
 
-	var handler http.Handler = CollectionMigrationGate(opts.DB, opts.Logger, mux)
+	var handler http.Handler = mux
 	for i := len(opts.Middleware) - 1; i >= 0; i-- {
 		if opts.Middleware[i] != nil {
 			handler = opts.Middleware[i](handler)

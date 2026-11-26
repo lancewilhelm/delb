@@ -1,3 +1,4 @@
+import { setTagRules, tagBook } from './library-fixtures.mjs';
 import { fetchAuth } from './fetch-auth.mjs';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -59,11 +60,6 @@ assert.ok(
   'uploaded synthetic book must appear in authenticated list',
 );
 record('PASS synthetic EPUB upload and authenticated book listing');
-const collection = await fetch(base + '/api/collections', {
-  headers: { Cookie: cookies },
-});
-assert.equal(collection.status, 200);
-record('PASS shared default collection listing');
 const bookId = uploadData.data.results.find((result) => result.success).book.id;
 const originalBytes = await readFile('review/demo/ordinary.epub');
 for (const title of ['日本語の本 📚', '100% done; %2F stays literal']) {
@@ -110,18 +106,13 @@ const otherCookies = otherRegistration.headers
   .getSetCookie()
   .map((value) => value.split(';')[0])
   .join('; ');
-const defaultCollection = (await collection.json()).data.collections.find(
-  (item) => item.isDefault,
-);
-assert.ok(defaultCollection);
-const left = await fetch(
-  `${base}/api/collections/${defaultCollection.id}/leave`,
-  {
-    method: 'POST',
-    headers: { Cookie: otherCookies, Origin: base },
-  },
-);
-assert.equal(left.status, 200, await left.text());
+const other = {
+  id: (await otherRegistration.json()).user.id,
+  cookie: otherCookies,
+};
+const owner = { cookie: cookies };
+const tag = await tagBook(owner, bookId, 'Restricted smoke fixture');
+await setTagRules(owner, other, { blockTagIds: [tag.id] });
 assert.equal(
   (
     await fetch(`${base}/api/books/${bookId}/download`, {

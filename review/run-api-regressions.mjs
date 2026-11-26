@@ -1,12 +1,13 @@
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { cp, mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, symlink } from 'node:fs/promises';
 import { createServer as createHttpServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 
 const root = process.cwd();
 const externalBaseUrl = (
@@ -33,8 +34,11 @@ const environment = {
     : {}),
 };
 
-async function run(args, cwd) {
-  const child = spawn(process.execPath, args, { cwd, env: environment });
+async function run(args, cwd, extraEnvironment = {}) {
+  const child = spawn(process.execPath, args, {
+    cwd,
+    env: { ...environment, ...extraEnvironment },
+  });
   let output = '';
   child.stdout.on('data', (bytes) => {
     output += bytes;
@@ -64,15 +68,14 @@ if (!externalBaseUrl) {
   await new Promise((resolve) => probe.close(resolve));
 }
 
+// The 2026-10-27 audit suites depend on the retired collection model and its audit baseline.
 const suites = [
-  'review/audits/2026-10-27/bootstrap-regression.mjs',
-  'review/audits/2026-10-27/server-regression.mjs',
   'review/tag-features-api.mjs',
   'review/dashboard-api.mjs',
   'review/tbr-api.mjs',
   'review/pdf-reader-api.mjs',
-  'review/collections-api.mjs',
-  'review/collection-bookshelf-api.mjs',
+  'review/library-access-api.mjs',
+  'review/library-bookshelf-api.mjs',
   'review/bookshelf-pictures-api.mjs',
   'review/spine-artwork-api.mjs',
   'review/spine-generation-api.mjs',
@@ -88,7 +91,9 @@ if (
       ![
         ...suites,
         'review/http-smoke.mjs',
-        'review/collections-browser.mjs',
+        'review/book-status-browser.mjs',
+        'review/pdf-reader-browser.mjs',
+        'review/tag-features-browser.mjs',
         'review/bookshelf-load-browser.mjs',
         'review/personal-shelves-browser.mjs',
         'review/spine-generation-browser.mjs',
@@ -177,6 +182,7 @@ async function startFakeCodexBridge(directory) {
 for (const suite of requested.length ? requested : suites) {
   const directory = await mkdtemp(path.join(tmpdir(), 'delb-api-regression-'));
   let server;
+  let tagBrowser;
   let fakeCodexBridge = null;
   let serverOutput = '';
   try {
@@ -189,12 +195,16 @@ for (const suite of requested.length ? requested : suites) {
       'package.json',
       'review/isolation.mjs',
       'review/fetch-auth.mjs',
+      'review/library-fixtures.mjs',
       'review/sqlite-client.mjs',
       'review/test-image.mjs',
       'review/setup-demo.mjs',
       'review/http-smoke.mjs',
       'review/pdf-fixture.mjs',
       suite,
+      ...(suite === 'review/tag-features-browser.mjs'
+        ? ['review/tag-features-api.mjs']
+        : []),
       ...(suite === 'review/mcp-api.mjs'
         ? ['review/mcp-python-client.py']
         : []),
@@ -281,13 +291,61 @@ for (const suite of requested.length ? requested : suites) {
           serverOutput,
       );
     try {
-      await run([suite], directory);
+      if (suite === 'review/tag-features-browser.mjs') {
+        await run(['review/tag-features-api.mjs'], directory);
+        const profile = path.join(directory, 'chrome-profile');
+        tagBrowser = spawn(
+          process.env.CHROME_BIN ||
+            '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+          [
+            '--headless=new',
+            '--remote-debugging-port=0',
+            `--user-data-dir=${profile}`,
+            '--no-first-run',
+            '--disable-background-networking',
+            '--proxy-server=http://127.0.0.1:1',
+            'about:blank',
+          ],
+          { stdio: 'ignore' },
+        );
+        let browserError;
+        tagBrowser.on('error', (error) => {
+          browserError = error;
+        });
+        let port;
+        for (let attempt = 0; attempt < 100 && !port; attempt++) {
+          if (browserError) throw browserError;
+          if (tagBrowser.exitCode !== null)
+            throw Error('Chrome exited before opening its debugging port');
+          port = await readFile(
+            path.join(profile, 'DevToolsActivePort'),
+            'utf8',
+          ).then(
+            (info) => info.split('\n')[0],
+            () => '',
+          );
+          if (!port) await delay(100);
+        }
+        if (!port) throw Error('Chrome did not open its debugging port');
+        await run([suite], directory, { DELB_CHROME_DEBUG_PORT: port });
+      } else {
+        await run([suite], directory);
+      }
     } catch (error) {
       throw new Error(`${String(error)}\nServer output:\n${serverOutput}`);
     }
-    if (suite.endsWith('/server-regression.mjs'))
-      await run(['review/http-smoke.mjs'], directory);
   } finally {
+    if (
+      tagBrowser?.pid &&
+      tagBrowser.exitCode === null &&
+      tagBrowser.signalCode === null
+    ) {
+      const closed = new Promise((resolve) =>
+        tagBrowser.once('close', resolve),
+      );
+      tagBrowser.kill();
+      await closed;
+    }
     if (server && server.exitCode === null) {
       const closed = new Promise((resolve) => server.once('close', resolve));
       process.kill(-server.pid, 'SIGTERM');

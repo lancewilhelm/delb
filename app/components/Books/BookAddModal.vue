@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import { useDropZone } from '@vueuse/core';
-import { useCollectionsStore } from '~/stores/collections';
 import { useUiStore } from '~/stores/ui';
 import { $fetch } from '~/utils/apiFetch';
 import { navigateTo } from '~/utils/navigation';
 import { computed, ref, watch } from 'vue';
 import BookMetadataSearchModal from '~/components/BookMetadataSearchModal.vue';
 import ModalWindow from '~/components/ModalWindow.vue';
-import { chooseBookTarget } from '~/utils/collectionActions';
 import { buildBookCoverUrl } from '~/utils/covers';
 
 defineOptions({ name: 'BookAddModal' });
@@ -24,13 +22,6 @@ const emit = defineEmits<{
 
 type Mode = 'upload' | 'metadata' | 'manual';
 
-type CollectionOption = {
-  id: string;
-  name: string;
-  isDefault?: boolean;
-  role: string | null;
-};
-
 type FetchErrorLike = {
   data?: unknown;
   statusMessage?: string;
@@ -38,57 +29,6 @@ type FetchErrorLike = {
 };
 
 const mode = ref<Mode>('upload');
-
-// Shared collections
-const collectionsLoading = ref(false);
-const collections = ref<CollectionOption[]>([]);
-const selectedCollectionIds = ref<string[]>([]);
-
-const targetCollectionId = computed({
-  get: () => selectedCollectionIds.value[0] ?? '',
-  set: (id: string) => {
-    selectedCollectionIds.value = id ? [id] : [];
-  },
-});
-const newTargetName = ref('');
-const creatingTarget = ref(false);
-async function fetchCollections() {
-  collectionsLoading.value = true;
-  try {
-    const response = await $fetch<{
-      data: { collections: CollectionOption[] };
-    }>('/api/collections');
-    const available = response.data.collections;
-    collections.value = available.filter(
-      (collection) =>
-        collection.role === 'owner' || collection.role === 'editor',
-    );
-    targetCollectionId.value =
-      chooseBookTarget(available, useCollectionsStore().activeCollectionId) ??
-      '';
-  } finally {
-    collectionsLoading.value = false;
-  }
-}
-async function createTarget() {
-  if (!newTargetName.value.trim() || creatingTarget.value) return;
-  creatingTarget.value = true;
-  try {
-    const response = await $fetch<{ data: { collection: { id: string } } }>(
-      '/api/collections',
-      { method: 'POST', body: { name: newTargetName.value.trim() } },
-    );
-    await fetchCollections();
-    targetCollectionId.value = response.data.collection.id;
-    newTargetName.value = '';
-    await useCollectionsStore().fetchCollections();
-  } catch (cause) {
-    errorMessage.value =
-      cause instanceof Error ? cause.message : 'Unable to create collection';
-  } finally {
-    creatingTarget.value = false;
-  }
-}
 
 // Modal open/reset behavior
 const errorMessage = ref<string | null>(null);
@@ -188,8 +128,6 @@ function resetPerOpen() {
 
 function close() {
   uiStore.setAddBookModalVisible(false);
-  // Clear the selected collections
-  selectedCollectionIds.value = [];
   metadataSearchOpen.value = false;
   pendingMetadataImport.value = null;
   duplicateReviewOpen.value = false;
@@ -201,7 +139,7 @@ const isOpen = computed(() => uiStore.addBookModalVisible);
 
 watch(
   () => uiStore.addBookModalVisible,
-  async (open) => {
+  (open) => {
     if (!open) return;
 
     resetPerOpen();
@@ -209,8 +147,6 @@ watch(
     // Unified modal always starts in upload mode by default.
     // (If you want to preserve last-used mode later, we can persist `mode`.)
     mode.value = 'upload';
-
-    await fetchCollections();
   },
 );
 
@@ -276,12 +212,6 @@ useDropZone(dropZoneRef, {
 async function uploadBooks() {
   if (!files.value.length || uploading.value) return;
 
-  const collectionIds = selectedCollectionIds.value.filter(Boolean);
-  if (!collectionIds.length) {
-    errorMessage.value = 'Choose one collection.';
-    return;
-  }
-
   uploading.value = true;
   errorMessage.value = null;
   successMessage.value = null;
@@ -295,7 +225,6 @@ async function uploadBooks() {
 
       const form = new FormData();
       form.append('file', file);
-      for (const id of collectionIds) form.append('collectionId', id);
 
       const res = await $fetch<{
         success: boolean;
@@ -353,7 +282,6 @@ type DuplicateCandidate = {
   score: number;
   book: {
     id: string;
-    collectionId: string;
     title: string;
     coverImagePath: string | null;
     updatedAt?: string | number | Date;
@@ -373,11 +301,9 @@ const duplicateReviewOpen = ref(false);
 const duplicateReview = ref<DuplicateReview | null>(null);
 
 const selectedDuplicateBookId = ref<string>('');
-const duplicateInTarget = computed(() =>
+const duplicateSelected = computed(() =>
   parseDuplicateCandidates(duplicateReview.value?.details).some(
-    (candidate) =>
-      candidate.book.id === selectedDuplicateBookId.value &&
-      candidate.book.collectionId === targetCollectionId.value,
+    (candidate) => candidate.book.id === selectedDuplicateBookId.value,
   ),
 );
 
@@ -485,12 +411,6 @@ async function uploadAnyway() {
   const file = review?.file;
   if (!review || !file || uploading.value) return;
 
-  const collectionIds = selectedCollectionIds.value.filter(Boolean);
-  if (!collectionIds.length) {
-    errorMessage.value = 'Choose one collection.';
-    return;
-  }
-
   uploading.value = true;
   errorMessage.value = null;
   let continueQueue = false;
@@ -498,7 +418,6 @@ async function uploadAnyway() {
   try {
     const form = new FormData();
     form.append('file', file);
-    for (const id of collectionIds) form.append('collectionId', id);
     form.append('allowDuplicate', '1');
 
     const res = await $fetch<{
@@ -582,12 +501,6 @@ async function replaceSelected() {
   const replaceBookId = selectedDuplicateBookId.value.trim();
   if (!file || !replaceBookId || uploading.value) return;
 
-  const collectionIds = selectedCollectionIds.value.filter(Boolean);
-  if (!collectionIds.length) {
-    errorMessage.value = 'Choose one collection.';
-    return;
-  }
-
   uploading.value = true;
   errorMessage.value = null;
   let continueQueue = false;
@@ -595,7 +508,6 @@ async function replaceSelected() {
   try {
     const form = new FormData();
     form.append('file', file);
-    for (const id of collectionIds) form.append('collectionId', id);
     form.append('allowDuplicate', '1');
     form.append('replaceBookId', replaceBookId);
 
@@ -659,13 +571,6 @@ async function resolveMetadataDuplicate(
   const pending = pendingMetadataImport.value;
   if (!pending) return;
 
-  const collectionIds = selectedCollectionIds.value.filter(Boolean);
-  if (!collectionIds.length) {
-    errorMessage.value = 'Choose one collection.';
-    successMessage.value = null;
-    return;
-  }
-
   creating.value = true;
   errorMessage.value = null;
   successMessage.value = null;
@@ -682,7 +587,6 @@ async function resolveMetadataDuplicate(
       body: {
         provider: pending.provider,
         item: pending.item,
-        collectionIds,
         hasPhysicalCopy: pending.hasPhysicalCopy,
         duplicateAction: action,
         existingBookId: selectedDuplicateBookId.value || undefined,
@@ -741,13 +645,6 @@ async function createFromMetadataItem(opts: {
 }) {
   if (creating.value) return;
 
-  const collectionIds = selectedCollectionIds.value.filter(Boolean);
-  if (!collectionIds.length) {
-    errorMessage.value = 'Choose one collection.';
-    successMessage.value = null;
-    return;
-  }
-
   creating.value = true;
   errorMessage.value = null;
   successMessage.value = null;
@@ -763,7 +660,6 @@ async function createFromMetadataItem(opts: {
       body: {
         provider: opts.provider,
         item: opts.item,
-        collectionIds,
         hasPhysicalCopy,
       },
     });
@@ -833,13 +729,6 @@ async function createFromMetadata() {
     return;
   }
 
-  const collectionIds = selectedCollectionIds.value.filter(Boolean);
-  if (!collectionIds.length) {
-    errorMessage.value = 'Choose one collection.';
-    successMessage.value = null;
-    return;
-  }
-
   creating.value = true;
   errorMessage.value = null;
   successMessage.value = null;
@@ -854,7 +743,6 @@ async function createFromMetadata() {
       method: 'POST',
       body: {
         query: q,
-        collectionIds,
         hasPhysicalCopy,
       },
     });
@@ -945,13 +833,11 @@ watch(
 );
 
 const actionDisabled = computed(() => {
-  const noCollections = !selectedCollectionIds.value.length;
-
   if (mode.value === 'upload') {
-    return uploading.value || !files.value.length || noCollections;
+    return uploading.value || !files.value.length;
   }
 
-  return creating.value || !query.value.trim() || noCollections;
+  return creating.value || !query.value.trim();
 });
 
 const busy = computed(() => uploading.value || creating.value);
@@ -984,16 +870,8 @@ function handleMetadataSearchSelect(selection: {
 }
 
 function startManualEntry() {
-  const collectionIds = selectedCollectionIds.value.filter(Boolean);
-  if (!collectionIds.length) {
-    errorMessage.value = 'Choose one collection.';
-    successMessage.value = null;
-    return;
-  }
-
-  const query = `?collections=${encodeURIComponent(collectionIds.join(','))}`;
   close();
-  navigateTo(`/books/new${query}`);
+  navigateTo('/books/new');
 }
 </script>
 
@@ -1067,50 +945,6 @@ function startManualEntry() {
             <span>Manual entry</span>
           </span>
         </button>
-      </div>
-
-      <div class="space-y-2">
-        <label class="flex flex-col gap-1 text-sm font-semibold"
-          >Collection
-          <select
-            v-model="targetCollectionId"
-            :disabled="busy || collectionsLoading"
-            class="border border-(--contrast-border-color) rounded p-2 bg-(--bg-color)"
-          >
-            <option value="" disabled>Choose one collection</option>
-            <option
-              v-for="collection in collections"
-              :key="collection.id"
-              :value="collection.id"
-            >
-              {{ collection.name
-              }}{{ collection.isDefault ? ' (default)' : '' }}
-            </option>
-          </select>
-        </label>
-        <div
-          v-if="!collectionsLoading && !collections.length"
-          class="space-y-2 text-sm"
-        >
-          <p>
-            You have no writable collections. Create one or ask an owner for
-            editor access.
-          </p>
-          <label class="flex flex-col gap-1"
-            >New collection name<input
-              v-model="newTargetName"
-              class="border border-(--contrast-border-color) rounded p-2"
-              :disabled="creatingTarget"
-          /></label>
-          <button
-            type="button"
-            :disabled="creatingTarget || !newTargetName.trim()"
-            class="px-3 py-2 border border-(--contrast-border-color) rounded disabled:opacity-50"
-            @click="createTarget"
-          >
-            {{ creatingTarget ? 'Creating…' : 'Create collection' }}
-          </button>
-        </div>
       </div>
 
       <!-- Duplicate review modal -->
@@ -1287,7 +1121,7 @@ function startManualEntry() {
             </button>
 
             <button
-              v-if="duplicateReview?.kind === 'metadata' && duplicateInTarget"
+              v-if="duplicateReview?.kind === 'metadata' && duplicateSelected"
               type="button"
               class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
               :disabled="busy || !pendingMetadataImport"
@@ -1297,7 +1131,7 @@ function startManualEntry() {
             </button>
 
             <button
-              v-if="duplicateReview?.kind === 'metadata' && duplicateInTarget"
+              v-if="duplicateReview?.kind === 'metadata' && duplicateSelected"
               type="button"
               class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
               :disabled="busy || !pendingMetadataImport"
@@ -1327,7 +1161,7 @@ function startManualEntry() {
             </button>
 
             <button
-              v-if="duplicateReview?.kind === 'upload' && duplicateInTarget"
+              v-if="duplicateReview?.kind === 'upload' && duplicateSelected"
               type="button"
               class="px-3 py-2 bg-(--sub-color)/15 disabled:opacity-50"
               :disabled="busy || !selectedDuplicateBookId"
@@ -1401,11 +1235,7 @@ function startManualEntry() {
             </button>
 
             <button
-              v-tooltip="
-                !selectedCollectionIds.length
-                  ? 'Choose one collection'
-                  : 'Upload selected books'
-              "
+              v-tooltip="'Upload selected books'"
               class="px-3 py-2 w-full disabled:opacity-50 bg-(--sub-color)/15"
               :disabled="actionDisabled"
               @click="uploadBooks"
@@ -1482,7 +1312,7 @@ function startManualEntry() {
           <button
             type="button"
             class="flex-1 border border-(--contrast-border-color) p-2 rounded-md bg-(--sub-color)/15 hover:bg-(--sub-color)/25 transition"
-            :disabled="busy || !selectedCollectionIds.length"
+            :disabled="busy"
             @click="metadataSearchOpen = true"
           >
             Search results
@@ -1500,15 +1330,11 @@ function startManualEntry() {
         <button
           type="button"
           class="w-full border border-(--contrast-border-color) p-2 rounded-md bg-(--sub-color)/15 hover:bg-(--sub-color)/25 transition"
-          :disabled="busy || !selectedCollectionIds.length"
+          :disabled="busy"
           @click="startManualEntry"
         >
           Start manual entry
         </button>
-
-        <div v-if="!selectedCollectionIds.length" class="text-xs opacity-70">
-          Choose one collection first.
-        </div>
       </div>
 
       <div v-if="errorMessage" class="text-sm text-(--contrast-error-color)">

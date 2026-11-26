@@ -65,6 +65,13 @@ export const routes: RouteRecordRaw[] = [
     name: 'books-new',
     component: () => import('~/pages/books/new.vue'),
     meta: userOnly,
+    beforeEnter: async () => {
+      // Readers are read-only on the catalog; the server rejects their
+      // uploads too, so keep them off the form.
+      const auth = useAuth();
+      if (!auth.sessionInitialized.value) await auth.fetchSession();
+      if (!auth.canEditCatalog.value) return { path: '/books', replace: true };
+    },
   },
   {
     path: '/books/:id',

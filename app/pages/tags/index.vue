@@ -2,7 +2,6 @@
 import { useAuth } from '~/composables/useAuth';
 import { useEntityPagination } from '~/composables/useEntityPagination';
 import { useHead } from '~/composables/useHead';
-import { useCollectionsStore } from '~/stores/collections';
 import { useUserSettingsStore } from '~/stores/userSettings';
 import { $fetch } from '~/utils/apiFetch';
 import { ref } from 'vue';
@@ -18,8 +17,6 @@ useHead({
   title: 'Home',
 });
 
-// Scope (collection) lives in the header collection switcher dropdown.
-const collectionsStore = useCollectionsStore();
 const { isAdmin } = useAuth();
 
 const actions = ref<InstanceType<typeof TagsActions> | null>(null);
@@ -80,15 +77,8 @@ const {
   inputs: () => ({
     search: tagQuery.value,
     previewLimit: maxTagsCovers.value ?? 8,
-    collectionId:
-      collectionsStore.activeSelection.kind === 'collection'
-        ? collectionsStore.activeSelection.collectionId
-        : undefined,
   }),
-  initialize: async () => {
-    if (!collectionsStore.collections.length)
-      await collectionsStore.fetchCollections();
-  },
+  initialize: async () => {},
   fetchPage: async (query) => {
     const response = await $fetch<{
       data?: { tags?: TagRow[]; hasMore?: boolean };
@@ -149,7 +139,7 @@ const filteredTags = tags;
               v-else-if="filteredTags.length === 0 && !errorMessage"
               class="text-sm opacity-80"
             >
-              No tags found in the selected collection.
+              No tags found in the library.
             </div>
 
             <div v-else class="grid gap-2 md:grid-cols-2 lg:grid-cols-3">

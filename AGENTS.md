@@ -7,7 +7,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow that every change follo
 ## Project layout
 
 - `cmd/delb/`: the server entry point. It applies pending migrations at startup and serves the API and the embedded web app.
-- `internal/`: Go packages by area. `httpapi/` holds the router and middleware. `books/`, `collections/`, `users/`, and `settings/` hold the main APIs. `storage/` owns managed files, operation journals, and recovery. `mcp/` is the MCP server for connected agents.
+- `internal/`: Go packages by area. `httpapi/` holds the router and middleware. `books/`, `bookshelf/`, `users/`, and `settings/` hold the main APIs. `library/` holds the server-role and tag-visibility checks. `storage/` owns managed files, operation journals, and recovery. `mcp/` is the MCP server for connected agents.
 - `app/`: the Vue 3 single-page app. Vite builds it into `dist/`, and `embed_web.go` embeds it in the binary.
 - `shared/`: TypeScript modules that the app and its tests share.
 - `.drizzle/migrations/`: SQL migrations. `embed_migrations.go` embeds them in the binary.
@@ -41,12 +41,12 @@ CI runs all of these on every pull request. See [the test workflow](.github/work
 - Never read, copy, or modify a real library. That includes `.env` files and the contents of `data/`, `library/`, `dropbox/`, and `calibre/` in a working checkout.
 - For manual checks, use the [synthetic demo](docs/developing/README.md#run-the-synthetic-demo) in a separate worktree. Use invented names and `example.invalid` email addresses.
 - Tests must not make outbound network requests. Mock metadata providers instead of calling Google Books or Hardcover.
-- Screenshots, fixtures, logs, and pull request text must not contain real book collections, account names, email addresses, or API keys.
+- Screenshots, fixtures, logs, and pull request text must not contain real book libraries, account names, email addresses, or API keys.
 
 ## Authorization and storage
 
 - Every API handler checks its own session and permissions. Hiding a control in the UI does not authorize or forbid anything.
-- Keep the three ownership questions separate. Collection membership decides which books a reader can see. Collection roles decide who can change book metadata and files. Reading data (status, dates, ratings, progress, reviews, and notes) belongs only to the reader. Read the [collections reference](docs/developing/reference/collections.md) before changing any of these rules.
+- Keep the three access questions separate. Tag visibility rules decide which books an account can see; every book query joins the `visible_books` view. Server roles decide who can change book metadata and files. Reading data (status, dates, ratings, progress, reviews, and notes) belongs only to the reader. Read the [library access reference](docs/developing/reference/library-access.md) before changing any of these rules.
 - Write book files and covers only through `internal/storage`, which journals each operation, takes per-book locks, and recovers interrupted work at startup. Do not write into `library/` directly.
 
 ## Schema changes
@@ -56,7 +56,6 @@ Migrations are SQL files that are written by hand and follow Drizzle's format. A
 1. A new `.drizzle/migrations/NNNN_name.sql` file. Separate statements with `--> statement-breakpoint`.
 2. A matching `meta/NNNN_snapshot.json` and a new entry in `meta/_journal.json`.
 3. Updated migration counts in `internal/db/migrate_test.go`.
-4. For a new table, an entry in the table lists in `internal/collections/migration.go`.
 
 Never edit a migration that has already been merged. Add a new one instead. The server applies pending migrations at startup, and `bin/delb --migrate-only` applies them and exits.
 

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { useHead } from '~/composables/useHead';
-import { useCollectionsStore } from '~/stores/collections';
 import { useUiStore } from '~/stores/ui';
 import { $fetch } from '~/utils/apiFetch';
 import { navigateTo } from '~/utils/navigation';
@@ -21,7 +20,6 @@ type FetchErrorLike = {
 
 const route = useRoute();
 const uiStore = useUiStore();
-const collectionsStore = useCollectionsStore();
 
 const tagParam = computed(() => String(route.params.id || '').trim());
 const tagId = computed(() => decodeURIComponent(tagParam.value));
@@ -34,16 +32,6 @@ const bookCount = ref<number>(0);
 
 // Used to force-recreate the BooksInfiniteGrid (scope changes, navigation, etc.)
 const gridKey = ref(0);
-
-const activeCollectionId = computed<string | undefined>(() => {
-  if (
-    collectionsStore.activeSelection.kind === 'collection' &&
-    collectionsStore.activeSelection.collectionId
-  ) {
-    return collectionsStore.activeSelection.collectionId;
-  }
-  return undefined;
-});
 
 const booksViewMode = computed(() => uiStore.booksViewMode);
 const hydrated = ref(false);
@@ -66,15 +54,9 @@ async function refreshHeaderName() {
   loadedTag.value = null;
   if (!requestedTagId) return;
 
-  // Ensure collections are loaded so scoped queries work
-  if (!collectionsStore.collections.length) {
-    await collectionsStore.fetchCollections();
-  }
-
   if (generation !== headerGeneration) return;
   try {
     const query: Record<string, string | number> = { limit: 1 };
-    if (activeCollectionId.value) query.collectionId = activeCollectionId.value;
 
     // Prefer explicit tag metadata returned by the API.
     const res = await $fetch<{
@@ -125,17 +107,6 @@ watch(tagId, async () => {
   gridKey.value++;
   await refreshHeaderName();
 });
-
-watch(
-  () => collectionsStore.activeSelection,
-  async () => {
-    errorMessage.value = null;
-    bookCount.value = 0;
-    gridKey.value++;
-    await refreshHeaderName();
-  },
-  { deep: true },
-);
 
 onMounted(async () => {
   await refreshHeaderName();
@@ -194,7 +165,6 @@ onMounted(async () => {
         v-if="effectiveBooksViewMode === 'grid'"
         :key="`${gridKey}-${effectiveBooksViewMode}`"
         :endpoint="endpoint"
-        :collection-id="activeCollectionId"
         :sort="uiStore.booksSortKey"
         :sort-dir="uiStore.booksSortDirection"
         class="flex-1 min-h-0"
@@ -205,7 +175,6 @@ onMounted(async () => {
         v-else
         :key="`${gridKey}-${effectiveBooksViewMode}`"
         :endpoint="endpoint"
-        :collection-id="activeCollectionId"
         :sort="uiStore.booksSortKey"
         :sort-dir="uiStore.booksSortDirection"
         class="flex-1 min-h-0"

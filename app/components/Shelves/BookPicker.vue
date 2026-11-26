@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { useCollectionsStore } from '~/stores/collections';
 import { $fetch } from '~/utils/apiFetch';
 import { computed, nextTick, ref, watch } from 'vue';
 import SearchBookResult from '~/components/Search/BookResult.vue';
@@ -15,10 +14,8 @@ const props = withDefaults(
   { mode: 'add' },
 );
 const emit = defineEmits<{ close: []; added: [] }>();
-const collections = useCollectionsStore();
 const query = ref('');
 const inputRef = ref<HTMLInputElement | null>(null);
-const collectionId = ref('');
 const books = ref<BookViewBook[]>([]);
 const selected = ref(new Set<string>());
 const cursor = ref<string | null>(null);
@@ -40,7 +37,6 @@ async function load(append = false) {
       query: {
         search: query.value.trim() || undefined,
         shelfId: props.mode === 'remove' ? props.shelfId : undefined,
-        collectionId: collectionId.value || undefined,
         limit: 50,
         cursor: append ? cursor.value : undefined,
       },
@@ -62,8 +58,6 @@ watch(
     if (open) {
       selected.value = new Set();
       query.value = '';
-      collectionId.value = '';
-      void collections.fetchCollections();
       void load();
       void nextTick(() => inputRef.value?.focus());
     } else {
@@ -72,7 +66,7 @@ watch(
     }
   },
 );
-watch([query, collectionId], () => {
+watch(query, () => {
   if (!props.open) return;
   sequence++;
   books.value = [];
@@ -138,19 +132,6 @@ async function add() {
       <span>{{
         mode === 'add' ? 'Add books to Shelf' : 'Remove books from Shelf'
       }}</span>
-      <label class="flex items-center gap-2"
-        >Collection
-        <select v-model="collectionId" class="bg-transparent! max-w-48">
-          <option value="">All collections</option>
-          <option
-            v-for="collection in collections.collections"
-            :key="collection.id"
-            :value="collection.id"
-          >
-            {{ collection.name }}
-          </option>
-        </select></label
-      >
     </div>
     <p v-if="error" role="alert" class="px-3 py-2">{{ error }}</p>
     <div
@@ -180,7 +161,7 @@ async function add() {
         >
           <SearchBookResult
             :title="book.title"
-            :subtitle="`${book.authorNames?.join(', ') || book.author || 'Unknown author'} · ${collections.collections.find((c) => c.id === book.collectionId)?.name || 'Collection'}${mode === 'add' && existingIds.has(book.id) ? ' · Already on Shelf' : ''}`"
+            :subtitle="`${book.authorNames?.join(', ') || book.author || 'Unknown author'} ${mode === 'add' && existingIds.has(book.id) ? ' · Already on Shelf' : ''}`"
             :cover-src="
               book.coverImagePath
                 ? `/api/books/${encodeURIComponent(book.id)}/cover?variant=thumb`

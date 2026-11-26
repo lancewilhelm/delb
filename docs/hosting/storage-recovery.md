@@ -2,7 +2,7 @@
 
 Delb coordinates book creation, replacement, moves, cover changes and deletion with durable operation journals and database decisions. The decision is inserted in the same database transaction as the book change. Startup reconciles interrupted operations before serving requests or starting Dropbox ingestion.
 
-Back up the SQLite database and the library together before upgrading. Apply migrations with the documented startup command. The new bootstrap marker records completed initialization, and reading-position columns support request ordering. A further migration converts user settings timestamps from seconds to milliseconds. Rollback to an older binary requires restoring the matching database backup or explicitly reversing that conversion after stopping writers. Existing book IDs, collections and personal reading records are retained during replacement.
+Back up the SQLite database and the library together before upgrading. Apply migrations with the documented startup command. The new bootstrap marker records completed initialization, and reading-position columns support request ordering. A further migration converts user settings timestamps from seconds to milliseconds. Rollback to an older binary requires restoring the matching database backup or explicitly reversing that conversion after stopping writers. Existing book IDs and personal reading records are retained during replacement.
 
 ## Interrupted operations
 

@@ -16,8 +16,8 @@ import (
 	"unicode/utf16"
 
 	"github.com/google/uuid"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/library"
 )
 
 const (
@@ -39,19 +39,19 @@ type personalShelfVisibleRow struct {
 	ID            string
 	Title         string
 	Pages         *int
-	CollectionID  string
 	SpineRevision *string
 	AuthorNames   []string
 	Dimensions    *BookDimensions
 	Placement     sql.NullString
-	Role          string
+	// Role is "editor" when the reader can change shared spine dimensions
+	// and "viewer" otherwise.
+	Role string
 }
 
 type personalShelfBookDTO struct {
 	ID            string   `json:"id"`
 	Title         string   `json:"title"`
 	Pages         *int     `json:"pages"`
-	CollectionID  string   `json:"collectionId"`
 	SpineRevision *string  `json:"spineRevision"`
 	AuthorNames   []string `json:"authorNames"`
 	CanResize     bool     `json:"canResize"`
@@ -68,7 +68,7 @@ type personalShelfSnapshot struct {
 	Books       []personalShelfBookDTO `json:"books"`
 }
 
-func ownedPersonalShelf(ctx context.Context, q collections.Queryable, userID, shelfID string) (*personalShelfRow, error) {
+func ownedPersonalShelf(ctx context.Context, q library.Queryable, userID, shelfID string) (*personalShelfRow, error) {
 	var (
 		row      personalShelfRow
 		revNull  sql.NullInt64
@@ -103,13 +103,12 @@ func ownedPersonalShelf(ctx context.Context, q collections.Queryable, userID, sh
 	return &row, nil
 }
 
-func visiblePersonalShelfBooks(ctx context.Context, q collections.Queryable, userID, shelfID string) ([]personalShelfVisibleRow, error) {
+func visiblePersonalShelfBooks(ctx context.Context, q library.Queryable, userID, shelfID string) ([]personalShelfVisibleRow, error) {
 	rows, err := q.QueryContext(ctx, `
 		SELECT
 			b.id,
 			b.title,
 			b.pages,
-			b.collection_id,
 			(SELECT revision FROM book_spines INDEXED BY book_spines_book_revision_idx WHERE book_id = b.id),
 			COALESCE(
 				(SELECT json_group_array(name) FROM (
@@ -127,10 +126,11 @@ func visiblePersonalShelfBooks(ctx context.Context, q collections.Queryable, use
 			bsd.manual_height,
 			bsd.source_pages,
 			psb.placement,
-			cm.role
+			(SELECT CASE WHEN u.role IN ('owner', 'admin', 'editor') THEN 'editor' ELSE 'viewer' END
+			 FROM users u WHERE u.id = vb.user_id)
 		FROM personal_shelf_books psb
 		INNER JOIN books b ON b.id = psb.book_id
-		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 		LEFT JOIN book_shelf_dimensions bsd ON bsd.book_id = b.id
 		WHERE psb.shelf_id = ?
 		ORDER BY psb.added_at ASC, psb.book_id ASC
@@ -155,7 +155,7 @@ func visiblePersonalShelfBooks(ctx context.Context, q collections.Queryable, use
 			dimSrcPages sql.NullInt64
 		)
 		if err := rows.Scan(
-			&r.ID, &r.Title, &pages, &r.CollectionID, &spineRev, &authorJSON,
+			&r.ID, &r.Title, &pages, &spineRev, &authorJSON,
 			&dimW, &dimH, &dimManualW, &dimManualH, &dimSrcPages,
 			&r.Placement, &r.Role,
 		); err != nil {
@@ -217,7 +217,7 @@ func resolvedShelfBookDimensions(row personalShelfVisibleRow) ShelfBook {
 func (s *Service) personalShelfToken(shelfID string, rows []personalShelfVisibleRow) string {
 	entries := make([][]any, len(rows))
 	for i, r := range rows {
-		entries[i] = []any{r.ID, r.CollectionID, r.Role, r.Pages, r.Dimensions}
+		entries[i] = []any{r.ID, r.Role, r.Pages, r.Dimensions}
 	}
 	payload, _ := json.Marshal([]any{shelfID, entries})
 	mac := hmac.New(sha256.New, []byte(s.tokenSecret))
@@ -225,7 +225,7 @@ func (s *Service) personalShelfToken(shelfID string, rows []personalShelfVisible
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func (s *Service) personalShelfSnapshot(ctx context.Context, q collections.Queryable, userID, shelfID string) (*personalShelfSnapshot, error) {
+func (s *Service) personalShelfSnapshot(ctx context.Context, q library.Queryable, userID, shelfID string) (*personalShelfSnapshot, error) {
 	shelf, err := ownedPersonalShelf(ctx, q, userID, shelfID)
 	if err != nil {
 		return nil, err
@@ -261,7 +261,6 @@ func (s *Service) personalShelfSnapshot(ctx context.Context, q collections.Query
 			ID:            r.ID,
 			Title:         r.Title,
 			Pages:         r.Pages,
-			CollectionID:  r.CollectionID,
 			SpineRevision: r.SpineRevision,
 			AuthorNames:   r.AuthorNames,
 			CanResize:     r.Role == "owner" || r.Role == "editor",
@@ -280,7 +279,7 @@ func (s *Service) personalShelfSnapshot(ctx context.Context, q collections.Query
 	}, nil
 }
 
-func persistVisiblePlacements(ctx context.Context, q collections.Queryable, shelfID string, layout *Bookshelf, rows []personalShelfVisibleRow) error {
+func persistVisiblePlacements(ctx context.Context, q library.Queryable, shelfID string, layout *Bookshelf, rows []personalShelfVisibleRow) error {
 	previous := make(map[string]*BookPlacementAnchor, len(rows))
 	visibleIDs := make(map[string]struct{}, len(rows))
 	for _, r := range rows {
@@ -713,10 +712,6 @@ func (s *Service) handlePatchShelf(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := collections.LockCollectionChanges(r.Context(), tx); err != nil {
-		s.writeErr(w, "PATCH /api/shelves/{id} lock failed", err)
-		return
-	}
 	shelf, err := ownedPersonalShelf(r.Context(), tx, userID, shelfID)
 	if err != nil {
 		s.writeErr(w, "PATCH /api/shelves/{id} auth failed", err)
@@ -760,10 +755,6 @@ func (s *Service) handleDeleteShelf(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := collections.LockCollectionChanges(r.Context(), tx); err != nil {
-		s.writeErr(w, "DELETE /api/shelves/{id} lock failed", err)
-		return
-	}
 	if _, err := ownedPersonalShelf(r.Context(), tx, userID, shelfID); err != nil {
 		s.writeErr(w, "DELETE /api/shelves/{id} auth failed", err)
 		return
@@ -832,10 +823,6 @@ func (s *Service) handlePutShelf(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := collections.LockCollectionChanges(r.Context(), tx); err != nil {
-		s.writeErr(w, "PUT /api/shelves/{id} lock failed", err)
-		return
-	}
 	shelf, err := ownedPersonalShelf(r.Context(), tx, userID, shelfID)
 	if err != nil {
 		s.writeErr(w, "PUT /api/shelves/{id} auth failed", err)
@@ -983,9 +970,6 @@ func (s *Service) ChangeShelfBooks(
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := collections.LockCollectionChanges(ctx, tx); err != nil {
-		return nil, err
-	}
 	if authorize != nil {
 		if err := authorize(tx); err != nil {
 			return nil, err
@@ -1011,7 +995,7 @@ func (s *Service) ChangeShelfBooks(
 		rows, err := tx.QueryContext(ctx, `
 			SELECT b.id
 			FROM books b
-			INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+			INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 			WHERE b.id IN (`+makePlaceholders(len(chunk))+`)
 		`, args...)
 		if err != nil {
@@ -1210,7 +1194,7 @@ func (s *Service) handleGetBookShelves(w http.ResponseWriter, r *http.Request) {
 	err := s.db.QueryRowContext(r.Context(), `
 		SELECT b.id
 		FROM books b
-		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 		WHERE b.id = ?
 		LIMIT 1
 	`, userID, bookID).Scan(&found)

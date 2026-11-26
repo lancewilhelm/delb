@@ -31,7 +31,7 @@ Scroll continuously between pages, use the page controls to jump, and use the pl
 
 ## Mark available copies
 
-On the book details page, select **Physical** or **Audiobook** under **Copies**. Collection owners and editors can change these marks. Everyone who can access the book sees the same marks. An unmarked copy does not mean that no copy exists. These marks do not add files or audiobook playback.
+On the book details page, select **Physical** or **Audiobook** under **Copies**. Editors and Admins can change these marks. Everyone who can see the book sees the same marks. An unmarked copy does not mean that no copy exists. These marks do not add files or audiobook playback.
 
 To update several books, select them in **Books**, then choose **Actions → Set copies**. For each copy type, choose **Mark available**, **Clear mark**, or **Leave unchanged**, then select **Apply**. Delb reports how many books it skipped because you could not edit them.
 
@@ -55,7 +55,7 @@ The menu closes after a successful save. The book's status updates in place, pre
 
 To show status icons on covers, enable **Reading status badges** under **Settings → Appearance → Cover Style**. Badges start disabled. A bookmark means To be read, an open book means Reading, a check means Finished, and a circle-slash means DNF. Books with no status have no badge. Badges use your theme's accent color.
 
-Changes affect your account's status, not the status of other collection members. See [status and date rules](../developing/reference/reading-status-progress.md) for the complete transitions.
+Changes affect your account's status, not anyone else's. See [status and date rules](../developing/reference/reading-status-progress.md) for the complete transitions.
 
 ## Share a finished book
 
@@ -74,7 +74,7 @@ To stop the notice after you finish a book, select **Don't ask again** in it. To
 
 ## Write a review and keep notes
 
-The book detail page has a **Review** and a **Notes** section under **Rating**. Only you can see them, even in a shared collection.
+The book detail page has a **Review** and a **Notes** section under **Rating**. Only you can see them.
 
 1. Select **Write a review**, or select your existing review to edit it.
 2. Select **Contains spoilers** if the review reveals the plot. Delb then hides the review until you select **Show review with spoilers**.
@@ -91,7 +91,7 @@ To bring reviews and notes from Goodreads, see [import from Goodreads](import-go
 3. Click **Add rationale** or an existing rationale to edit it on the page.
 4. Select **Save** to keep the note or **Cancel** to discard the edit.
 
-Your private queue includes books from every collection you can access. Rank 1 is the book you most want to read. On the dashboard, the **To be read** count and tile track the selected collection, matching the other counts.
+Your private queue includes every queued book that you can see. Rank 1 is the book you most want to read. A book that an administrator later hides from you leaves the queue. If it becomes visible again, it returns at the end of the queue.
 
 Book details show the same rationale and offer numeric rank entry for longer moves. A rationale remains after you start, finish, or remove a book from TBR. Clear the text and save to remove the rationale. If saving fails, the editor keeps your draft for retry.
 

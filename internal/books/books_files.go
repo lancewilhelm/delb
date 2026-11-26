@@ -21,9 +21,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/epub"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/library"
 	"github.com/lancewilhelm/delb/internal/storage"
 )
 
@@ -125,7 +125,6 @@ func (s *Service) handleUploadBooks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var incomingTargets []string
 	var fileParts []multipartPart
 	allowDuplicate := false
 	var replaceBookID string
@@ -136,8 +135,6 @@ func (s *Service) handleUploadBooks(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		switch p.Name {
-		case "collectionId":
-			incomingTargets = append(incomingTargets, string(p.Data))
 		case "allowDuplicate":
 			v := strings.ToLower(strings.TrimSpace(string(p.Data)))
 			if v == "1" || v == "true" || v == "yes" || v == "on" {
@@ -152,9 +149,8 @@ func (s *Service) handleUploadBooks(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	collectionID, err := collections.ResolveBookTarget(r.Context(), s.db, user.ID, len(incomingTargets) > 0, incomingTargets)
-	if err != nil {
-		s.writeErr(w, "POST /api/books/upload target failed", err)
+	if err := library.RequireCatalogEditor(r.Context(), s.db, user.ID); err != nil {
+		s.writeErr(w, "POST /api/books/upload auth failed", err)
 		return
 	}
 	if len(fileParts) == 0 {
@@ -183,7 +179,7 @@ func (s *Service) handleUploadBooks(w http.ResponseWriter, r *http.Request) {
 	uploaded := make([]any, 0, len(fileParts))
 
 	for _, fp := range fileParts {
-		bookRes, perr := s.processOneBookUpload(r.Context(), fp, user.ID, collectionID, allowDuplicate, replaceBookID)
+		bookRes, perr := s.processOneBookUpload(r.Context(), fp, user.ID, allowDuplicate, replaceBookID)
 		if perr != nil {
 			s.logger.Error("POST /api/books/upload: failed to process one upload", "filename", fp.Filename, "error", perr)
 			res := uploadResult{
@@ -233,7 +229,6 @@ func (s *Service) processOneBookUpload(
 	ctx context.Context,
 	part multipartPart,
 	userID string,
-	collectionID string,
 	allowDuplicate bool,
 	replaceBookID string,
 ) (map[string]any, error) {
@@ -299,12 +294,8 @@ func (s *Service) processOneBookUpload(
 			if err != nil {
 				return err
 			}
-			sourceCol, err := collections.AssertBookEditor(ctx, s.db, userID, replaceBookID)
-			if err != nil {
+			if err := library.AssertBookEditor(ctx, s.db, userID, replaceBookID); err != nil {
 				return err
-			}
-			if sourceCol != collectionID {
-				return httpapi.NewError(http.StatusConflict, "Replacement must stay in the existing collection. Create an independent entry instead.")
 			}
 			existingCoverImagePath = nullStringPtr(existingCover)
 		}
@@ -424,21 +415,12 @@ func (s *Service) processOneBookUpload(
 			}
 			defer func() { _ = tx.Rollback() }()
 
-			if err := collections.LockCollectionChanges(ctx, tx); err != nil {
-				return err
-			}
-			targetCol, err := collections.ResolveBookTarget(ctx, tx, userID, true, []string{collectionID})
-			if err != nil {
-				return err
-			}
 			if replaceBookID != "" {
-				curCol, err := collections.AssertBookEditor(ctx, tx, userID, bookID)
-				if err != nil {
+				if err := library.AssertBookEditor(ctx, tx, userID, bookID); err != nil {
 					return err
 				}
-				if curCol != targetCol {
-					return httpapi.NewError(http.StatusConflict, "The source collection changed. Review the import again.")
-				}
+			} else if err := library.RequireCatalogEditor(ctx, tx, userID); err != nil {
+				return err
 			}
 			if operationID != "" {
 				kind := "create"
@@ -472,11 +454,11 @@ func (s *Service) processOneBookUpload(
 			} else {
 				if _, err := tx.ExecContext(ctx, `
 					INSERT INTO books (
-						id, collection_id, added_by_user_id, added_at,
+						id, added_by_user_id, added_at,
 						title, sort_title, description, published, published_at,
 						language, cover_image_path, created_by_user_id, created_at, updated_at
-					) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-				`, bookID, targetCol, userID, now,
+					) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				`, bookID, userID, now,
 					title, MakeTitleSortKey(title), descPtr, pubPtr, pubAtPtr,
 					langPtr, coverImagePath, userID, now, now); err != nil {
 					return err
@@ -613,7 +595,7 @@ func (s *Service) handleGetBookCover(w http.ResponseWriter, r *http.Request) {
 	err := s.db.QueryRowContext(r.Context(), `
 		SELECT b.cover_image_path
 		FROM books b
-		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 		WHERE b.id = ?
 		LIMIT 1
 	`, userID, bookID).Scan(&coverImagePath)
@@ -731,7 +713,7 @@ func ResolveBookCoverSourcePath(ctx context.Context, db *sql.DB, libraryDir, use
 	err := db.QueryRowContext(ctx, `
 		SELECT b.cover_image_path
 		FROM books b
-		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 		WHERE b.id = ?
 		LIMIT 1
 	`, userID, bookID).Scan(&coverImagePath)
@@ -822,7 +804,7 @@ func (s *Service) handleUploadBookCover(w http.ResponseWriter, r *http.Request) 
 		err := s.db.QueryRowContext(r.Context(), `
 			SELECT b.title, b.cover_image_path
 			FROM books b
-			INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+			INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 			WHERE b.id = ?
 			LIMIT 1
 		`, userID, bookID).Scan(&title, &coverImagePath)
@@ -832,7 +814,7 @@ func (s *Service) handleUploadBookCover(w http.ResponseWriter, r *http.Request) 
 		if err != nil {
 			return err
 		}
-		if _, err := collections.AssertBookEditor(r.Context(), s.db, userID, bookID); err != nil {
+		if err := library.AssertBookEditor(r.Context(), s.db, userID, bookID); err != nil {
 			return err
 		}
 
@@ -1056,10 +1038,7 @@ func (s *Service) handleUploadBookCover(w http.ResponseWriter, r *http.Request) 
 					return err
 				}
 				defer func() { _ = tx.Rollback() }()
-				if err := collections.LockCollectionChanges(r.Context(), tx); err != nil {
-					return err
-				}
-				if _, err := collections.AssertBookEditor(r.Context(), tx, userID, bookID); err != nil {
+				if err := library.AssertBookEditor(r.Context(), tx, userID, bookID); err != nil {
 					return err
 				}
 				now := time.Now().UTC().Unix()
@@ -1153,7 +1132,7 @@ func (s *Service) handleDownloadBook(w http.ResponseWriter, r *http.Request) {
 	err := s.db.QueryRowContext(r.Context(), `
 		SELECT b.title
 		FROM books b
-		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 		WHERE b.id = ?
 		LIMIT 1
 	`, userID, bookID).Scan(&title)

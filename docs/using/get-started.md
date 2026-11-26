@@ -8,23 +8,19 @@ You need a running Delb installation and its URL. For a local demonstration with
 2. Enter your name, email address, password, and matching password confirmation. The current minimum password length is six characters.
 3. Select **Register**.
 
-Delb signs you in and opens the dashboard. On a fresh installation, the first successful bootstrap claimant becomes the system owner. Subsequent self-registrations create normal users. Registration can be closed by an administrator after initial setup.
+Delb signs you in and opens the dashboard. On a fresh installation, the first successful bootstrap claimant becomes the system owner. Subsequent self-registrations create [Reader](library-access.md#server-roles) accounts, which can browse and read but not change the library. Registration can be closed by an administrator after initial setup.
 
-If registration is closed, ask the installation administrator to create your account. Collection sharing uses an existing account's email address; adding a collection member does not send an invitation email.
+If registration is closed, ask the installation administrator to create your account. Delb does not send invitation email.
 
 ## Find your library
 
-1. Open the collection picker beside **Delb** in the header.
-2. Select the shared **Default** collection, or **All** to include every collection you can access.
-3. Select **Books** in the navigation to browse books in that scope.
+Select **Books** in the navigation to browse the library. Every account shares the same library. An administrator can hide some books from your account with [tag visibility rules](library-access.md#tag-visibility-rules), so you might not see every book on the server.
 
-New users join the shared default as editors. It can already contain books. You can also create private collections, and you may leave every collection.
-
-**All** includes books in shared collections where you are a member. It does not expose every book stored on the installation.
+Ask an administrator for the Editor role if you need to add or edit books.
 
 ## Use the dashboard
 
-Select **Delb** in the header from any page to open the dashboard. It describes the collection selected in the header.
+Select **Delb** in the header from any page to open the dashboard. It describes the books that you can see.
 
 - The **All books** card shows your total, covers of recently added books, and a link for each reading status. Select **Browse all books** to open every book with filters cleared.
 - **Continue reading** shows your latest logged progress or saved reader percentage. Right-click or long-press a cover to change its reading status.
@@ -37,7 +33,7 @@ A Pile shows a random handful of the list's books, and you can drag them around.
 
 See the [dashboard reference](../developing/reference/dashboard.md) for list order and data rules.
 
-![Dashboard with collection counts above the reading shelf tabs](../images/dashboard.png)
+![Dashboard with library counts above the reading shelf tabs](../images/dashboard.png)
 
 ## Sign in again
 

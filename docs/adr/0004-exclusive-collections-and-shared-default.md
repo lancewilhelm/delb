@@ -1,8 +1,11 @@
 ---
-status: accepted
+status: superseded by ADR 0005
 ---
 
 # Give each book one collection and use a shared default
+
+> [!NOTE]
+> This decision is superseded by [ADR 0005](0005-single-library-roles-and-tag-visibility.md). Delb no longer has collections: one shared library, server roles, and tag visibility rules replace them. This record describes the earlier model and is kept for history.
 
 Delb replaces automatic per-user Personal collections with one shared default. Each book entry belongs to exactly one collection. This gives new readers a shared starting library and replaces overlapping book memberships with exclusive collection membership.
 
@@ -67,6 +70,6 @@ Replace the health check that expects a Personal collection for each user. The n
 
 ## Implementation references
 
-The [collection model](../../internal/collections/model.go) owns target authorization, default selection, and atomic moves. The [migration engine](../../internal/collections/migration.go) retains plans and verifies independent file copies. The [collection reference](../developing/reference/collections.md) documents endpoints and roles.
+The collection model (`internal/collections/model.go`, removed when collections were replaced) owns target authorization, default selection, and atomic moves. The migration engine (`internal/collections/migration.go`, removed when collections were replaced) retains plans and verifies independent file copies. The collection reference (`docs/developing/reference/collections.md`, removed when collections were replaced) documents endpoints and roles.
 
-The [migration guide](../hosting/collection-migration.md) covers backup, preview, apply, recovery, and verification. Administrative health checks report duplicate identifiers, cross-collection title matches, and bounded fuzzy matches without automatic repair.
+The migration guide (`docs/hosting/collection-migration.md`, removed when collections were replaced) covers backup, preview, apply, recovery, and verification. Administrative health checks report duplicate identifiers, cross-collection title matches, and bounded fuzzy matches without automatic repair.

@@ -13,8 +13,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lancewilhelm/delb/internal/auth"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/library"
 )
 
 const iso8601Millis = "2006-01-02T15:04:05.000Z"
@@ -104,11 +104,7 @@ func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/books/{id}/download", reqSess(s.handleDownloadBook))
 	mux.HandleFunc("GET /api/books/{id}/files", reqSess(s.handleListBookFiles))
 
-	// Books collections, moves, bulk operations
-	mux.HandleFunc("GET /api/books/{id}/collections", reqSess(s.handleGetBookCollections))
-	mux.HandleFunc("PUT /api/books/{id}/collections", reqSess(s.handlePutBookCollections))
-	mux.HandleFunc("POST /api/books/move", reqSess(s.handleMoveBooks))
-	mux.HandleFunc("POST /api/books/collection-sources", reqSess(s.handleBookCollectionSources))
+	// Bulk operations
 	mux.HandleFunc("POST /api/books/bulk/copies", reqSess(s.handleBulkCopies))
 	mux.HandleFunc("POST /api/books/bulk/status", reqSess(s.handleBulkStatus))
 
@@ -278,36 +274,12 @@ func uniqByLower(values []string) []string {
 	return out
 }
 
-func getUserMemberCollectionIDs(ctx context.Context, q collections.Queryable, userID string) ([]string, error) {
-	rows, err := q.QueryContext(ctx, `SELECT collection_id FROM collection_members WHERE user_id = ?`, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	seen := make(map[string]struct{})
-	var ids []string
-	for rows.Next() {
-		var cid string
-		if err := rows.Scan(&cid); err != nil {
-			return nil, err
-		}
-		if cid == "" {
-			continue
-		}
-		if _, ok := seen[cid]; !ok {
-			seen[cid] = struct{}{}
-			ids = append(ids, cid)
-		}
-	}
-	return ids, rows.Err()
-}
-
-func isBookVisibleToUser(ctx context.Context, q collections.Queryable, userID, bookID string) (bool, error) {
+func isBookVisibleToUser(ctx context.Context, q library.Queryable, userID, bookID string) (bool, error) {
 	var found string
 	err := q.QueryRowContext(ctx, `
 		SELECT b.id
 		FROM books b
-		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 		WHERE b.id = ?
 		LIMIT 1
 	`, userID, bookID).Scan(&found)
@@ -320,7 +292,7 @@ func isBookVisibleToUser(ctx context.Context, q collections.Queryable, userID, b
 	return true, nil
 }
 
-func findOrCreateAuthorByName(ctx context.Context, q collections.Queryable, name string) (string, error) {
+func findOrCreateAuthorByName(ctx context.Context, q library.Queryable, name string) (string, error) {
 	var id string
 	err := q.QueryRowContext(ctx, `SELECT id FROM authors WHERE name = ? LIMIT 1`, name).Scan(&id)
 	if err == nil {
@@ -340,7 +312,7 @@ func findOrCreateAuthorByName(ctx context.Context, q collections.Queryable, name
 	return id, nil
 }
 
-func findOrCreateTagByName(ctx context.Context, q collections.Queryable, name string) (string, error) {
+func findOrCreateTagByName(ctx context.Context, q library.Queryable, name string) (string, error) {
 	var id string
 	err := q.QueryRowContext(ctx, `SELECT id FROM tags WHERE name = ? LIMIT 1`, name).Scan(&id)
 	if err == nil {
@@ -360,7 +332,7 @@ func findOrCreateTagByName(ctx context.Context, q collections.Queryable, name st
 	return id, nil
 }
 
-func findOrCreateGenreByName(ctx context.Context, q collections.Queryable, name string) (string, error) {
+func findOrCreateGenreByName(ctx context.Context, q library.Queryable, name string) (string, error) {
 	var id string
 	err := q.QueryRowContext(ctx, `SELECT id FROM genres WHERE name = ? LIMIT 1`, name).Scan(&id)
 	if err == nil {
@@ -380,7 +352,7 @@ func findOrCreateGenreByName(ctx context.Context, q collections.Queryable, name 
 	return id, nil
 }
 
-func findOrCreatePublisherByName(ctx context.Context, q collections.Queryable, name string) (string, error) {
+func findOrCreatePublisherByName(ctx context.Context, q library.Queryable, name string) (string, error) {
 	var id string
 	err := q.QueryRowContext(ctx, `SELECT id FROM publishers WHERE name = ? LIMIT 1`, name).Scan(&id)
 	if err == nil {
@@ -400,7 +372,7 @@ func findOrCreatePublisherByName(ctx context.Context, q collections.Queryable, n
 	return id, nil
 }
 
-func findOrCreateSeriesByName(ctx context.Context, q collections.Queryable, name string) (string, error) {
+func findOrCreateSeriesByName(ctx context.Context, q library.Queryable, name string) (string, error) {
 	var id string
 	err := q.QueryRowContext(ctx, `SELECT id FROM series WHERE name = ? LIMIT 1`, name).Scan(&id)
 	if err == nil {
@@ -420,7 +392,7 @@ func findOrCreateSeriesByName(ctx context.Context, q collections.Queryable, name
 	return id, nil
 }
 
-func deleteAuthorIfUnreferenced(ctx context.Context, q collections.Queryable, authorID string) error {
+func deleteAuthorIfUnreferenced(ctx context.Context, q library.Queryable, authorID string) error {
 	var used string
 	err := q.QueryRowContext(ctx, `SELECT author_id FROM book_authors WHERE author_id = ? LIMIT 1`, authorID).Scan(&used)
 	if err == nil {
@@ -433,9 +405,17 @@ func deleteAuthorIfUnreferenced(ctx context.Context, q collections.Queryable, au
 	return err
 }
 
-func deleteTagIfUnreferenced(ctx context.Context, q collections.Queryable, tagID string) error {
+// deleteTagIfUnreferenced removes a tag that no book and no tag visibility
+// rule uses. Rules keep their tags so that removing the last tagged book
+// never widens what a restricted account can see.
+func deleteTagIfUnreferenced(ctx context.Context, q library.Queryable, tagID string) error {
 	var used string
-	err := q.QueryRowContext(ctx, `SELECT tag_id FROM book_tags WHERE tag_id = ? LIMIT 1`, tagID).Scan(&used)
+	err := q.QueryRowContext(ctx, `
+		SELECT tag_id FROM book_tags WHERE tag_id = ?
+		UNION ALL
+		SELECT tag_id FROM user_tag_rules WHERE tag_id = ?
+		LIMIT 1
+	`, tagID, tagID).Scan(&used)
 	if err == nil {
 		return nil
 	}
@@ -446,7 +426,7 @@ func deleteTagIfUnreferenced(ctx context.Context, q collections.Queryable, tagID
 	return err
 }
 
-func deleteGenreIfUnreferenced(ctx context.Context, q collections.Queryable, genreID string) error {
+func deleteGenreIfUnreferenced(ctx context.Context, q library.Queryable, genreID string) error {
 	var used string
 	err := q.QueryRowContext(ctx, `SELECT genre_id FROM book_genres WHERE genre_id = ? LIMIT 1`, genreID).Scan(&used)
 	if err == nil {
@@ -459,7 +439,7 @@ func deleteGenreIfUnreferenced(ctx context.Context, q collections.Queryable, gen
 	return err
 }
 
-func deletePublisherIfUnreferenced(ctx context.Context, q collections.Queryable, publisherID string) error {
+func deletePublisherIfUnreferenced(ctx context.Context, q library.Queryable, publisherID string) error {
 	var used string
 	err := q.QueryRowContext(ctx, `SELECT id FROM books WHERE publisher_id = ? LIMIT 1`, publisherID).Scan(&used)
 	if err == nil {
@@ -472,7 +452,7 @@ func deletePublisherIfUnreferenced(ctx context.Context, q collections.Queryable,
 	return err
 }
 
-func deleteSeriesIfUnreferenced(ctx context.Context, q collections.Queryable, seriesID string) error {
+func deleteSeriesIfUnreferenced(ctx context.Context, q library.Queryable, seriesID string) error {
 	var used string
 	err := q.QueryRowContext(ctx, `SELECT id FROM books WHERE series_id = ? LIMIT 1`, seriesID).Scan(&used)
 	if err == nil {

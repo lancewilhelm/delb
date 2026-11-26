@@ -21,7 +21,6 @@ import (
 	"github.com/lancewilhelm/delb/internal/admin"
 	"github.com/lancewilhelm/delb/internal/auth"
 	"github.com/lancewilhelm/delb/internal/books"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/db"
 	"github.com/lancewilhelm/delb/internal/httpapi"
 	_ "modernc.org/sqlite"
@@ -62,12 +61,6 @@ func newAdminTestEnv(t *testing.T) *testEnv {
 		Secret: "admin-test-secret-0123456789abcdef0123456789",
 		Logger: discard,
 	})
-	colSvc := collections.NewService(collections.ServiceOptions{
-		DB:          opened.DB,
-		AuthService: authSvc,
-		LibraryDir:  libDir,
-		Logger:      discard,
-	})
 	booksSvc := books.NewService(books.ServiceOptions{
 		DB:          opened.DB,
 		AuthService: authSvc,
@@ -85,7 +78,7 @@ func newAdminTestEnv(t *testing.T) *testEnv {
 		DB:          opened.DB,
 		Logger:      discard,
 		AuthService: authSvc,
-		Services:    []httpapi.RouteRegistrar{colSvc, booksSvc, adminSvc},
+		Services:    []httpapi.RouteRegistrar{booksSvc, adminSvc},
 	})
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
@@ -207,9 +200,7 @@ func TestAdminHealthQuickAndDeep(t *testing.T) {
 		t.Fatalf("non-admin health = %d, want 403", status)
 	}
 
-	// Create two collections with matching titles & duplicate identifiers + missing disk file/cover
-	_, colResp := env.doJSON(&owner, http.MethodPost, "/api/collections", map[string]any{"name": "Second Shelf"})
-	secondCol := colResp["data"].(map[string]any)["collection"].(map[string]any)["id"].(string)
+	// Create two entries with matching titles & duplicate identifiers + missing disk file/cover
 
 	_, b1Resp := env.doJSON(&owner, http.MethodPost, "/api/books", map[string]any{
 		"title":   "Dune",
@@ -218,9 +209,8 @@ func TestAdminHealthQuickAndDeep(t *testing.T) {
 	b1ID := b1Resp["data"].(map[string]any)["book"].(map[string]any)["id"].(string)
 
 	_, b2Resp := env.doJSON(&owner, http.MethodPost, "/api/books", map[string]any{
-		"title":         "Dune",
-		"authors":       []string{"Frank Herbert"},
-		"collectionIds": []string{secondCol},
+		"title":   "Dune",
+		"authors": []string{"Frank Herbert"},
 	})
 	b2ID := b2Resp["data"].(map[string]any)["book"].(map[string]any)["id"].(string)
 
@@ -259,8 +249,8 @@ func TestAdminHealthQuickAndDeep(t *testing.T) {
 	if checks["identifiers.duplicates"]["status"] != "warn" {
 		t.Fatalf("expected identifiers.duplicates warn, got %v", checks["identifiers.duplicates"])
 	}
-	if checks["duplicates.cross-collection-titles"]["status"] != "warn" {
-		t.Fatalf("expected cross-collection-titles warn, got %v", checks["duplicates.cross-collection-titles"])
+	if _, hasCollections := checks["collections.default"]; hasCollections {
+		t.Fatalf("collection health checks should be gone: %v", checks["collections.default"])
 	}
 	if _, hasDeep := checks["duplicates.fuzzy-title-author"]; hasDeep {
 		t.Fatalf("quick mode should not include deep checks")
@@ -298,13 +288,9 @@ func TestAdminCalibreImportRescanAndRevocation(t *testing.T) {
 	env := newAdminTestEnv(t)
 	owner := env.signUp("Owner", "owner@example.invalid")
 
-	_, colResp := env.doJSON(&owner, http.MethodPost, "/api/collections", map[string]any{"name": "Calibre Dest"})
-	destCol := colResp["data"].(map[string]any)["collection"].(map[string]any)["id"].(string)
-
 	// Missing metadata.db returns 400
 	if status, _ := env.doJSON(&owner, http.MethodPost, "/api/settings/admin/calibre", map[string]any{
-		"action":        "import",
-		"collectionIds": []string{destCol},
+		"action": "import",
 	}); status != http.StatusBadRequest {
 		t.Fatalf("missing calibre metadata.db = %d, want 400", status)
 	}
@@ -357,9 +343,8 @@ func TestAdminCalibreImportRescanAndRevocation(t *testing.T) {
 
 	// Dry run leaves Delb DB empty
 	status, dryResp := env.doJSON(&owner, http.MethodPost, "/api/settings/admin/calibre", map[string]any{
-		"action":        "import",
-		"collectionIds": []string{destCol},
-		"dryRun":        true,
+		"action": "import",
+		"dryRun": true,
 	})
 	if status != http.StatusOK {
 		t.Fatalf("calibre dryRun = %d %v", status, dryResp)
@@ -372,8 +357,7 @@ func TestAdminCalibreImportRescanAndRevocation(t *testing.T) {
 
 	// Real import
 	status, impResp := env.doJSON(&owner, http.MethodPost, "/api/settings/admin/calibre", map[string]any{
-		"action":        "import",
-		"collectionIds": []string{destCol},
+		"action": "import",
 	})
 	if status != http.StatusOK {
 		t.Fatalf("calibre import = %d %v", status, impResp)
@@ -391,8 +375,7 @@ func TestAdminCalibreImportRescanAndRevocation(t *testing.T) {
 		t.Fatal(err)
 	}
 	status, _ = env.doJSON(&owner, http.MethodPost, "/api/settings/admin/calibre", map[string]any{
-		"action":        "rescan",
-		"collectionIds": []string{destCol},
+		"action": "rescan",
 	})
 	if status != http.StatusOK {
 		t.Fatalf("calibre rescan = %d", status)
@@ -400,15 +383,5 @@ func TestAdminCalibreImportRescanAndRevocation(t *testing.T) {
 	_ = env.db.QueryRow(`SELECT title FROM books WHERE id = ?`, bookID).Scan(&title)
 	if title != "The Calibre Novel Updated" {
 		t.Fatalf("rescan did not update title: %q", title)
-	}
-
-	// Multiple collectionIds rejected with 400
-	_, defColResp := env.doJSON(&owner, http.MethodGet, "/api/collections", nil)
-	defaultCol := defColResp["data"].(map[string]any)["collections"].([]any)[0].(map[string]any)["id"].(string)
-	if status, _ := env.doJSON(&owner, http.MethodPost, "/api/settings/admin/calibre", map[string]any{
-		"action":        "import",
-		"collectionIds": []string{destCol, defaultCol},
-	}); status != http.StatusBadRequest {
-		t.Fatalf("multi-collection calibre import = %d, want 400", status)
 	}
 }

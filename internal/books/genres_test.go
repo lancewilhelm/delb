@@ -15,7 +15,6 @@ import (
 	"github.com/lancewilhelm/delb"
 	"github.com/lancewilhelm/delb/internal/auth"
 	"github.com/lancewilhelm/delb/internal/books"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/db"
 	"github.com/lancewilhelm/delb/internal/httpapi"
 )
@@ -41,12 +40,6 @@ func TestGenresCRUDMergeDeleteAndMetadataImport(t *testing.T) {
 		Secret: "genres-test-secret-0123456789abcdef0123456789",
 		Logger: discard,
 	})
-	collectionsSvc := collections.NewService(collections.ServiceOptions{
-		DB:          opened.DB,
-		AuthService: authSvc,
-		LibraryDir:  libDir,
-		Logger:      discard,
-	})
 	booksSvc := books.NewService(books.ServiceOptions{
 		DB:          opened.DB,
 		AuthService: authSvc,
@@ -58,7 +51,7 @@ func TestGenresCRUDMergeDeleteAndMetadataImport(t *testing.T) {
 		DB:          opened.DB,
 		Logger:      discard,
 		AuthService: authSvc,
-		Services:    []httpapi.RouteRegistrar{collectionsSvc, booksSvc},
+		Services:    []httpapi.RouteRegistrar{booksSvc},
 	})
 	srv := httptest.NewServer(handler)
 	defer srv.Close()

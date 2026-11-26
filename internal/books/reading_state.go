@@ -304,9 +304,8 @@ func transitionBookStatusesWithAuth(
 		vRows, err := tx.QueryContext(ctx, `
 			SELECT DISTINCT b.id, b.pages
 			FROM books b
-			INNER JOIN collection_books cb ON cb.book_id = b.id
-			INNER JOIN collection_members cm ON cm.collection_id = cb.collection_id
-			WHERE b.id IN (`+makePlaceholders(len(bookIDs))+`) AND cm.user_id = ?
+			INNER JOIN visible_books vb ON vb.book_id = b.id
+			WHERE b.id IN (`+makePlaceholders(len(bookIDs))+`) AND vb.user_id = ?
 		`, args...)
 		if err != nil {
 			return statusTransitionResult{}, err
@@ -345,9 +344,8 @@ func transitionBookStatusesWithAuth(
 		FROM user_book_status ubs
 		WHERE ubs.user_id = ?
 		  AND EXISTS (
-			SELECT 1 FROM collection_books cb
-			INNER JOIN collection_members cm ON cm.collection_id = cb.collection_id
-			WHERE cb.book_id = ubs.book_id AND cm.user_id = ?
+			SELECT 1 FROM visible_books vb
+			WHERE vb.book_id = ubs.book_id AND vb.user_id = ?
 		  )
 	`, userID, userID)
 	if err != nil {
@@ -587,6 +585,9 @@ func transitionBookStatusesWithAuth(
 		`, i+1, userID, id); err != nil {
 			return statusTransitionResult{}, err
 		}
+	}
+	if err := rankHiddenTbrAfter(ctx, tx, userID, len(tbr)); err != nil {
+		return statusTransitionResult{}, err
 	}
 
 	tbrRankByID := make(map[string]int, len(tbr))
@@ -901,7 +902,7 @@ func ReadReadingProgress(ctx context.Context, db *sql.DB, userID, bookID string,
 	err = tx.QueryRowContext(ctx, `
 		SELECT b.pages
 		FROM books b
-		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 		WHERE b.id = ?
 		LIMIT 1
 	`, userID, bookID).Scan(&bookPages)
@@ -918,9 +919,9 @@ func ReadReadingProgress(ctx context.Context, db *sql.DB, userID, bookID string,
 	`, userID, bookID).Scan(&syncEnabled)
 
 	var (
-		posProg    sql.NullFloat64
-		posUpd     sql.NullInt64
-		hasPosRow  bool
+		posProg   sql.NullFloat64
+		posUpd    sql.NullInt64
+		hasPosRow bool
 	)
 	if err := tx.QueryRowContext(ctx, `
 		SELECT progress, updated_at FROM user_book_reading_position WHERE user_id = ? AND book_id = ? LIMIT 1
@@ -1045,7 +1046,7 @@ func RecordManualProgress(
 	err = tx.QueryRowContext(ctx, `
 		SELECT b.pages
 		FROM books b
-		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 		WHERE b.id = ?
 		LIMIT 1
 	`, userID, bookID).Scan(&bookPages)
@@ -1684,7 +1685,7 @@ func (s *Service) handlePostProgressLog(w http.ResponseWriter, r *http.Request) 
 	err = tx.QueryRowContext(r.Context(), `
 		SELECT b.pages
 		FROM books b
-		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 		WHERE b.id = ?
 		LIMIT 1
 	`, userID, bookID).Scan(&bookPages)
@@ -1837,9 +1838,8 @@ func (s *Service) handleGetTbr(w http.ResponseWriter, r *http.Request) {
 		WHERE ubs.status = 'to_be_read'
 		  AND ubs.tbr_rank IS NOT NULL
 		  AND EXISTS (
-			SELECT 1 FROM collection_books cb
-			INNER JOIN collection_members cm ON cm.collection_id = cb.collection_id
-			WHERE cb.book_id = b.id AND cm.user_id = ?
+			SELECT 1 FROM visible_books vb
+			WHERE vb.book_id = b.id AND vb.user_id = ?
 		  )
 		ORDER BY ubs.tbr_rank ASC, ba.position ASC, a.id ASC
 	`, userID, userID, userID)
@@ -1948,7 +1948,6 @@ func (s *Service) handleGetDashboard(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "Invalid dashboard shelf")
 		return
 	}
-	collectionID := q.Get("collectionId")
 	rawOffset := q.Get("offset")
 	if rawOffset == "" {
 		rawOffset = "0"
@@ -1963,7 +1962,7 @@ func (s *Service) handleGetDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	visClause, visArgs := dashboardVisibility(userID, collectionID)
+	visClause, visArgs := dashboardVisibility(userID)
 	counts, err := s.dashboardCounts(r.Context(), userID, visClause, visArgs)
 	if err != nil {
 		s.writeErrWithFallback(w, "GET /api/dashboard counts failed", "Failed to load dashboard", err)
@@ -2009,4 +2008,48 @@ func (s *Service) handleGetDashboard(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 	})
+}
+
+// rankHiddenTbrAfter gives the reader's queued books that tag visibility rules
+// hide the ranks after visibleCount, keeping their relative order. Callers
+// renumber only the visible queue, so without this a hidden book could keep a
+// rank that a visible book now uses. A book that becomes visible again
+// therefore rejoins at the end of the queue.
+func rankHiddenTbrAfter(ctx context.Context, tx *sql.Tx, userID string, visibleCount int) error {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT ubs.book_id
+		FROM user_book_status ubs
+		WHERE ubs.user_id = ? AND ubs.status = 'to_be_read'
+		  AND NOT EXISTS (
+			SELECT 1 FROM visible_books vb
+			WHERE vb.book_id = ubs.book_id AND vb.user_id = ?
+		  )
+		ORDER BY ubs.tbr_rank IS NULL, ubs.tbr_rank, ubs.book_id
+	`, userID, userID)
+	if err != nil {
+		return err
+	}
+	var hidden []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		hidden = append(hidden, id)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for i, id := range hidden {
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE user_book_status SET tbr_rank = ? WHERE user_id = ? AND book_id = ?
+		`, visibleCount+i+1, userID, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }

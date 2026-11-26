@@ -117,7 +117,7 @@ export interface BaseUserSettings {
   };
 
   /**
-   * Dashboard: the collection status bar and each tile's card art.
+   * Dashboard: the library status bar and each tile's card art.
    */
   dashboard: DashboardSettings;
 

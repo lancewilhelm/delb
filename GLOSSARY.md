@@ -1,19 +1,31 @@
 # Delb
 
-Delb organizes books and their metadata in a library of shared and private collections.
+Delb organizes books and their metadata in one shared library. Server roles decide who can change the library, and tag visibility rules decide which books each account can see.
 
-Collection terminology follows the [accepted collection model](docs/adr/0004-exclusive-collections-and-shared-default.md). The [collections reference](docs/developing/reference/collections.md) describes the current implementation.
+The terms follow [ADR 0005](docs/adr/0005-single-library-roles-and-tag-visibility.md). The [library access reference](docs/developing/reference/library-access.md) describes the current implementation.
 
 ## Language
 
 **Library**:
-The books a reader can access through their collection memberships. The All selection includes every accessible collection.
+The single shared catalog of book entries on a Delb server. The server owns every entry; no account owns a book. Each account sees the part of the library that its tag visibility rules allow.
 
-**Collection**:
-A named group of books with its own members and access roles. Each book entry belongs to exactly one collection, while separate entries for the same title can exist in different collections.
+**Server role**:
+An account's level of access to the library: Owner, Admin, Editor, or Reader. Server roles replace the per-collection roles of earlier versions.
 
-**Default collection**:
-The shared collection selected when members open the app, for automatic enrollment of new readers, and as the fallback destination when an added book has no explicit collection target. Its default designation does not grant access to users who are not members.
+**Owner**:
+The first account on a server, also called the system owner. The owner is an Admin whose role cannot be changed and whose account cannot be deleted.
+
+**Admin**:
+A server role that manages accounts, server roles, tag visibility rules, and server settings, and can change the library. Tag visibility rules never apply to Admins.
+
+**Editor**:
+A server role that can add books, edit book metadata, upload and replace files, arrange the library bookshelf, and delete book entries.
+
+**Reader**:
+A server role that is read-only on the library. A Reader browses, reads, and downloads the books they can see, and keeps their own reading data, TBR queue, and Shelves. New accounts are Readers.
+
+**Tag visibility rule**:
+An Admin's rule on an Editor or Reader account that uses a shared tag to hide books from that account. An allow rule limits the account to books with at least one allowed tag. A block rule hides every book with that tag. Hidden books do not appear anywhere for that account, including counts, search, and agent tools.
 
 **Book entry**:
 A book in Delb's catalog with its own metadata, files, and reader-specific reading data. Separate entries can represent the same title.
@@ -21,17 +33,8 @@ A book in Delb's catalog with its own metadata, files, and reader-specific readi
 **Copy indicator**:
 A mark on a book entry that the shared library has ongoing access to a physical or audiobook copy. An unmarked indicator does not establish that no copy exists.
 
-**Book move**:
-A change to a book entry's sole collection that preserves its identity and reading data. Access follows membership in the destination collection.
-
-**Personal collection (legacy)**:
-A reader's protected default collection in Delb's existing model. It can be renamed but cannot be shared, transferred, left, or deleted.
-
-**Collection owner**:
-The single required member who controls a collection's ownership and deletion. This role is separate from the system owner and a book's creator.
-
 **Book creator**:
-The user recorded as having created a book entry. Creator provenance does not grant book-management privileges independently of collection roles.
+The user recorded as having created a book entry. Creator provenance does not grant book-management privileges; server roles decide who can change an entry.
 
 **Reference-only book**:
 A catalog entry without a downloadable ebook file. It can represent a physical book and can still have a cover and reading history.
@@ -46,7 +49,7 @@ The authors, genres, tags, series, and publishers shared across Delb's book entr
 A shared bibliographic category attached to a book entry, populated automatically from metadata providers or embedded EPUB subjects and editable in the book editor.
 
 **Tag**:
-A manual shared label attached to a book entry for browsing and filtering, kept separate from provider-imported genres.
+A manual shared label attached to a book entry for browsing and filtering, kept separate from provider-imported genres. Tags also drive tag visibility rules.
 
 **Catalog metadata**:
 Book metadata recorded in Delb's catalog.
@@ -70,7 +73,7 @@ A reader's history of progress entries for a book, recorded manually, through re
 An image that a reader exports to share a finished book outside Delb. It combines the cover with the reader's own stats, such as reading duration, pages, pace, and rating. It never includes a link to the library, the review, or notes.
 
 **TBR queue**:
-A reader's private, ordered list of books they plan to read. The queue spans all collections the reader can access.
+A reader's private, ordered list of books they plan to read. The queue contains only books that the reader can see.
 
 **TBR rank**:
 A book's position in a reader's TBR queue, starting at 1 for the book they most want to read.
@@ -79,13 +82,13 @@ A book's position in a reader's TBR queue, starting at 1 for the book they most 
 A reader's optional, private note explaining a book's place in their TBR queue. The note remains associated with the reader and book after the book leaves the queue.
 
 **Book view**:
-A presentation of books as a grid of cover cards, a list of rows, or a collection bookshelf.
+A presentation of books as a grid of cover cards, a list of rows, or a bookshelf.
 
-**Collection bookshelf**:
-The shared arrangement of a collection's books, visible to its members. Each collection has its own bookshelf.
+**Library bookshelf**:
+The shared arrangement of the library's books in Bookshelf view. Editors and Admins without tag visibility rules can rearrange it; everyone else sees it read-only, without the books that are hidden from them.
 
 **Shelf**:
-A reader's private, named selection of book entries from the collections they can access. A book can appear on several Shelves without leaving its collection.
+A reader's private, named selection of book entries from the library. A book can appear on several Shelves, and a Shelf can have its own bookshelf arrangement.
 
 **Spine dimensions**:
 The shared width and height of a book entry as it appears on a bookshelf.

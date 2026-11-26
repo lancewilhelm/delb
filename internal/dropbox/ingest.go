@@ -15,9 +15,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lancewilhelm/delb/internal/books"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/epub"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/library"
 	"github.com/lancewilhelm/delb/internal/storage"
 )
 
@@ -66,7 +66,7 @@ func readBoundedFile(absPath string, maxBytes int64) ([]byte, error) {
 	return data, nil
 }
 
-func findOrCreateAuthorByName(ctx context.Context, q collections.Queryable, name string) (string, error) {
+func findOrCreateAuthorByName(ctx context.Context, q library.Queryable, name string) (string, error) {
 	var id string
 	err := q.QueryRowContext(ctx, `SELECT id FROM authors WHERE name = ? LIMIT 1`, name).Scan(&id)
 	if err == nil && id != "" {
@@ -211,11 +211,7 @@ func ingestDropboxFile(
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := collections.LockCollectionChanges(ctx, tx); err != nil {
-		return nil, err
-	}
-	collectionID, err := collections.ResolveBookTarget(ctx, tx, target.OwnerUserID, len(target.CollectionIDs) > 0, target.CollectionIDs)
-	if err != nil {
+	if err := library.RequireCatalogEditor(ctx, tx, target.OwnerUserID); err != nil {
 		return nil, err
 	}
 
@@ -228,11 +224,11 @@ func ingestDropboxFile(
 
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO books (
-			id, collection_id, added_by_user_id, added_at,
+			id, added_by_user_id, added_at,
 			title, sort_title, description, published, published_at,
 			language, cover_image_path, created_by_user_id, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, bookID, collectionID, target.OwnerUserID, nowSec,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, bookID, target.OwnerUserID, nowSec,
 		title, books.MakeTitleSortKey(title), descPtr, pubPtr, pubAtPtr,
 		langPtr, coverImagePath, target.OwnerUserID, nowSec, nowSec); err != nil {
 		return nil, fmt.Errorf("insert dropbox book: %w", err)

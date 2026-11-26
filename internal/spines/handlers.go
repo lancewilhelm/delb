@@ -21,8 +21,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lancewilhelm/delb/internal/books"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/library"
 )
 
 const (
@@ -45,7 +45,7 @@ func rejectCrossSite(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
-func assertCollectionAdminDB(ctx context.Context, q collections.Queryable, userID string) error {
+func assertAdminDB(ctx context.Context, q library.Queryable, userID string) error {
 	var role string
 	err := q.QueryRowContext(ctx, `SELECT role FROM users WHERE id = ? LIMIT 1`, userID).Scan(&role)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && role != "admin" && role != "owner") {
@@ -119,7 +119,7 @@ func (s *Service) handleBookSpine(w http.ResponseWriter, r *http.Request) {
 	err := s.db.QueryRowContext(r.Context(), `
 		SELECT b.id
 		FROM books b
-		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 		WHERE b.id = ?
 		LIMIT 1
 	`, swu.User.ID, bookID).Scan(&visibleID)
@@ -176,7 +176,7 @@ func (s *Service) handleBookSpine(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if variant == "source" {
-			if _, err := collections.AssertBookEditor(r.Context(), s.db, swu.User.ID, bookID); err != nil {
+			if err := library.AssertBookEditor(r.Context(), s.db, swu.User.ID, bookID); err != nil {
 				s.writeErr(w, "GET /api/books/{id}/spine source auth failed", err)
 				return
 			}
@@ -262,7 +262,7 @@ func (s *Service) handleBookSpine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := collections.AssertBookEditor(r.Context(), s.db, swu.User.ID, bookID); err != nil {
+	if err := library.AssertBookEditor(r.Context(), s.db, swu.User.ID, bookID); err != nil {
 		s.writeErr(w, "/api/books/{id}/spine editor auth failed", err)
 		return
 	}
@@ -292,11 +292,7 @@ func (s *Service) handleBookSpine(w http.ResponseWriter, r *http.Request) {
 		}
 		defer func() { _ = tx.Rollback() }()
 
-		if err := collections.LockCollectionChanges(r.Context(), tx); err != nil {
-			s.writeErr(w, "DELETE /api/books/{id}/spine lock failed", err)
-			return
-		}
-		if _, err := collections.AssertBookEditor(r.Context(), tx, swu.User.ID, bookID); err != nil {
+		if err := library.AssertBookEditor(r.Context(), tx, swu.User.ID, bookID); err != nil {
 			s.writeErr(w, "DELETE /api/books/{id}/spine tx auth failed", err)
 			return
 		}
@@ -358,9 +354,9 @@ func (s *Service) handleBookSpine(w http.ResponseWriter, r *http.Request) {
 	expected := string(revisionPart.Data)
 
 	var (
-		prevRev      string
-		prevOrigB64  string
-		hasPrevious  bool
+		prevRev     string
+		prevOrigB64 string
+		hasPrevious bool
 	)
 	err = s.db.QueryRowContext(r.Context(), `
 		SELECT revision, original_base64 FROM book_spines WHERE book_id = ? LIMIT 1
@@ -414,11 +410,7 @@ func (s *Service) handleBookSpine(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := collections.LockCollectionChanges(r.Context(), tx); err != nil {
-		s.writeErr(w, "POST /api/books/{id}/spine lock failed", err)
-		return
-	}
-	if _, err := collections.AssertBookEditor(r.Context(), tx, swu.User.ID, bookID); err != nil {
+	if err := library.AssertBookEditor(r.Context(), tx, swu.User.ID, bookID); err != nil {
 		s.writeErr(w, "POST /api/books/{id}/spine tx auth failed", err)
 		return
 	}
@@ -481,7 +473,7 @@ func (s *Service) handleAdminChatGPTImage(w http.ResponseWriter, r *http.Request
 		httpapi.WriteError(w, http.StatusUnauthorized, "Sign in to Delb first.")
 		return
 	}
-	if err := assertCollectionAdminDB(r.Context(), s.db, swu.User.ID); err != nil {
+	if err := assertAdminDB(r.Context(), s.db, swu.User.ID); err != nil {
 		s.writeErr(w, "/api/settings/admin/chatgpt-image admin check failed", err)
 		return
 	}
@@ -533,7 +525,7 @@ func (s *Service) handleAdminChatGPTImage(w http.ResponseWriter, r *http.Request
 			if current == nil || current.Session.ID != swu.Session.ID {
 				return errors.New("Session expired")
 			}
-			return assertCollectionAdminDB(r.Context(), s.db, swu.User.ID)
+			return assertAdminDB(r.Context(), s.db, swu.User.ID)
 		}
 
 		if action == "start" {
@@ -590,7 +582,7 @@ func (s *Service) handleSpineGenerateConnection(w http.ResponseWriter, r *http.R
 		httpapi.WriteError(w, http.StatusBadRequest, "Missing book.")
 		return
 	}
-	if _, err := collections.AssertBookEditor(r.Context(), s.db, swu.User.ID, bookID); err != nil {
+	if err := library.AssertBookEditor(r.Context(), s.db, swu.User.ID, bookID); err != nil {
 		s.writeErr(w, "GET /api/books/{id}/spine-generate/connection editor check failed", err)
 		return
 	}
@@ -612,7 +604,7 @@ func (s *Service) handleSpineGenerateSeriesReferences(w http.ResponseWriter, r *
 		httpapi.WriteError(w, http.StatusBadRequest, "Missing book.")
 		return
 	}
-	if _, err := collections.AssertBookEditor(r.Context(), s.db, swu.User.ID, bookID); err != nil {
+	if err := library.AssertBookEditor(r.Context(), s.db, swu.User.ID, bookID); err != nil {
 		s.writeErr(w, "GET /api/books/{id}/spine-generate/series-references editor check failed", err)
 		return
 	}
@@ -646,7 +638,7 @@ func (s *Service) handleSpineGenerate(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "Missing book.")
 		return
 	}
-	if _, err := collections.AssertBookEditor(r.Context(), s.db, swu.User.ID, bookID); err != nil {
+	if err := library.AssertBookEditor(r.Context(), s.db, swu.User.ID, bookID); err != nil {
 		s.writeErr(w, "POST /api/books/{id}/spine-generate editor check failed", err)
 		return
 	}
@@ -658,10 +650,10 @@ func (s *Service) handleSpineGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var (
-		prompt          string
-		previous        []byte
-		hasPrevious     bool
-		seriesRefsRaw   = "[]"
+		prompt        string
+		previous      []byte
+		hasPrevious   bool
+		seriesRefsRaw = "[]"
 	)
 	for _, p := range parts {
 		switch p.Name {
@@ -798,7 +790,7 @@ func (s *Service) handleSpineGenerate(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, "POST /api/books/{id}/spine-generate get connection failed", err)
 		return
 	}
-	if _, err := collections.AssertBookEditor(r.Context(), s.db, swu.User.ID, bookID); err != nil {
+	if err := library.AssertBookEditor(r.Context(), s.db, swu.User.ID, bookID); err != nil {
 		s.writeErr(w, "POST /api/books/{id}/spine-generate pre-call editor check failed", err)
 		return
 	}
@@ -950,7 +942,7 @@ func (s *Service) handleSpineGenerate(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusUnauthorized, "Your session expired.")
 		return
 	}
-	if _, err := collections.AssertBookEditor(r.Context(), s.db, swu.User.ID, bookID); err != nil {
+	if err := library.AssertBookEditor(r.Context(), s.db, swu.User.ID, bookID); err != nil {
 		s.writeErr(w, "POST /api/books/{id}/spine-generate post-editor check failed", err)
 		return
 	}

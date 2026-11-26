@@ -14,8 +14,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lancewilhelm/delb/internal/books"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/library"
 )
 
 const (
@@ -29,11 +29,11 @@ const (
 )
 
 type PictureScope struct {
-	Kind string // "collection" | "personal"
+	Kind string // "library" | "personal"
 	ID   string
 }
 
-func pictureAccess(ctx context.Context, q collections.Queryable, userID string, scope PictureScope, edit bool) error {
+func pictureAccess(ctx context.Context, q library.Queryable, userID string, scope PictureScope, edit bool) error {
 	if scope.Kind == "personal" {
 		var id string
 		err := q.QueryRowContext(ctx, `
@@ -45,23 +45,23 @@ func pictureAccess(ctx context.Context, q collections.Queryable, userID string, 
 		return err
 	}
 
-	var role string
-	err := q.QueryRowContext(ctx, `
-		SELECT role FROM collection_members WHERE collection_id = ? AND user_id = ? LIMIT 1
-	`, scope.ID, userID).Scan(&role)
-	if errors.Is(err, sql.ErrNoRows) {
-		return httpapi.NewError(http.StatusNotFound, "Collection not found")
+	if scope.ID != library.LibraryScopeID {
+		return httpapi.NewError(http.StatusNotFound, "Shelf not found")
 	}
+	if !edit {
+		return nil
+	}
+	canEdit, err := libraryBookshelfEditable(ctx, q, userID)
 	if err != nil {
 		return err
 	}
-	if edit && role != "owner" && role != "editor" {
-		return httpapi.NewError(http.StatusForbidden, "Owner or editor access required")
+	if !canEdit {
+		return httpapi.NewError(http.StatusForbidden, "Editor or administrator access without tag visibility rules is required.")
 	}
 	return nil
 }
 
-func validatePictureAssets(ctx context.Context, q collections.Queryable, scope PictureScope, layout *Bookshelf) error {
+func validatePictureAssets(ctx context.Context, q library.Queryable, scope PictureScope, layout *Bookshelf) error {
 	used := make(map[string]struct{}, len(layout.Pictures))
 	for _, pic := range layout.Pictures {
 		used[pic.AssetID] = struct{}{}
@@ -176,9 +176,6 @@ func (s *Service) uploadPicture(ctx context.Context, userID string, scope Pictur
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := collections.LockCollectionChanges(ctx, tx); err != nil {
-		return nil, err
-	}
 	if err := pictureAccess(ctx, tx, userID, scope, true); err != nil {
 		return nil, err
 	}
@@ -256,18 +253,15 @@ func (s *Service) readPicture(ctx context.Context, userID string, scope PictureS
 		return nil, "", false, err
 	}
 
-	if scope.Kind == "collection" {
-		var role string
-		err := tx.QueryRowContext(ctx, `
-			SELECT role FROM collection_members WHERE collection_id = ? AND user_id = ? LIMIT 1
-		`, scope.ID, userID).Scan(&role)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if scope.Kind == "library" {
+		canEdit, err := libraryBookshelfEditable(ctx, tx, userID)
+		if err != nil {
 			return nil, "", false, err
 		}
-		if role == "viewer" {
+		if !canEdit {
 			var rawArr string
 			err := tx.QueryRowContext(ctx, `
-				SELECT layout FROM bookshelf_layouts WHERE scope_kind = 'collection' AND scope_id = ? LIMIT 1
+				SELECT layout FROM bookshelf_layouts WHERE scope_kind = 'library' AND scope_id = ? LIMIT 1
 			`, scope.ID).Scan(&rawArr)
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil, "", false, httpapi.NewError(http.StatusNotFound, "Picture not found")
@@ -331,7 +325,7 @@ func (s *Service) handleBookshelfPictures(w http.ResponseWriter, r *http.Request
 	swu := httpapi.SessionFromContext(r.Context())
 	kind := r.PathValue("scope")
 	id := r.PathValue("id")
-	if (kind != "collection" && kind != "personal") || id == "" {
+	if (kind != "library" && kind != "personal") || id == "" {
 		httpapi.WriteError(w, http.StatusNotFound, "Shelf not found")
 		return
 	}

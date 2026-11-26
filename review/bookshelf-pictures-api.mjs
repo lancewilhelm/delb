@@ -1,3 +1,4 @@
+import { setRole, setTagRules, tagBook } from './library-fixtures.mjs';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import sharp from './test-image.mjs';
@@ -22,7 +23,7 @@ async function account(name) {
   });
   assert.equal(response.status, 200, await response.clone().text());
   return {
-    email,
+    id: (await response.json()).user.id,
     cookie: response.headers
       .getSetCookie()
       .map((value) => value.split(';')[0])
@@ -56,35 +57,31 @@ async function upload(actor, path, bytes) {
 const owner = await account('owner');
 const viewer = await account('viewer');
 const outsider = await account('outsider');
-const first = (
+await setRole(owner, outsider, 'editor');
+const book = (
   await ok(
-    await request(owner, '/api/collections', 'POST', {
-      name: `Pictures ${suffix}`,
+    await request(owner, '/api/books', 'POST', {
+      title: 'Picture scope fixture',
+      authors: ['Synthetic Author'],
     }),
   )
-).data.collection.id;
-const other = (
-  await ok(
-    await request(owner, '/api/collections', 'POST', {
-      name: `Other ${suffix}`,
-    }),
-  )
-).data.collection.id;
-await ok(
-  await request(owner, `/api/collections/${first}/members`, 'PUT', {
-    email: viewer.email,
-    role: 'viewer',
-  }),
-);
-const collectionPath = `/api/collections/${first}/bookshelf`;
-const picturesPath = `/api/bookshelf-pictures/collection/${first}`;
+).data.book.id;
+const tag = await tagBook(owner, book, 'Restricted picture fixture');
+await setTagRules(owner, outsider, { blockTagIds: [tag.id] });
+const libraryPath = '/api/library/bookshelf';
+const picturesPath = '/api/bookshelf-pictures/library/main';
+const shelf = (
+  await ok(await request(owner, '/api/shelves', 'POST', { name: 'Pictures' }))
+).data.id;
+const shelfPath = `/api/shelves/${shelf}`;
+const personalPictures = `/api/bookshelf-pictures/personal/${shelf}`;
 const image = await sharp({
   create: { width: 40, height: 20, channels: 4, background: '#c07534' },
 })
   .png()
   .toBuffer();
 assert.equal((await upload(viewer, picturesPath, image)).status, 403);
-assert.equal((await upload(outsider, picturesPath, image)).status, 404);
+assert.equal((await upload(outsider, picturesPath, image)).status, 403);
 assert.equal(
   (await upload(owner, picturesPath, Buffer.from('not an image'))).status,
   400,
@@ -94,7 +91,7 @@ assert.equal(
   (await request(viewer, `${picturesPath}?asset=${asset.id}`)).status,
   404,
 );
-let state = await ok(await request(owner, collectionPath));
+let state = await ok(await request(owner, libraryPath));
 state.arrangement.pictures.push({
   id: 'picture',
   assetId: asset.id,
@@ -105,24 +102,22 @@ state.arrangement.pictures.push({
   rotation: 30,
 });
 await ok(
-  await request(owner, collectionPath, 'PUT', {
+  await request(owner, libraryPath, 'PUT', {
     revision: state.revision,
     token: state.token,
     arrangement: state.arrangement,
   }),
 );
-state = await ok(await request(owner, collectionPath));
+state = await ok(await request(owner, libraryPath));
 assert.equal(state.arrangement.pictures[0].rotation, 30);
 const served = await request(viewer, `${picturesPath}?asset=${asset.id}`);
 assert.equal(served.status, 200);
 assert.match(served.headers.get('content-type'), /^image\/webp/);
 assert.equal(
   (await request(outsider, `${picturesPath}?asset=${asset.id}`)).status,
-  404,
+  200,
 );
-const wrong = await ok(
-  await request(owner, `/api/collections/${other}/bookshelf`),
-);
+const wrong = await ok(await request(owner, shelfPath));
 wrong.arrangement.pictures.push({
   id: 'wrong',
   assetId: asset.id,
@@ -134,7 +129,7 @@ wrong.arrangement.pictures.push({
 });
 assert.equal(
   (
-    await request(owner, `/api/collections/${other}/bookshelf`, 'PUT', {
+    await request(owner, shelfPath, 'PUT', {
       revision: wrong.revision,
       token: wrong.token,
       arrangement: wrong.arrangement,
@@ -147,7 +142,7 @@ delete oldClient.version;
 delete oldClient.pictures;
 assert.equal(
   (
-    await request(owner, collectionPath, 'PUT', {
+    await request(owner, libraryPath, 'PUT', {
       revision: state.revision,
       token: state.token,
       arrangement: oldClient,
@@ -158,7 +153,7 @@ assert.equal(
 const picture = state.arrangement.pictures[0];
 state.arrangement.pictures = [];
 await ok(
-  await request(owner, collectionPath, 'PUT', {
+  await request(owner, libraryPath, 'PUT', {
     revision: state.revision,
     token: state.token,
     arrangement: state.arrangement,
@@ -172,19 +167,19 @@ assert.equal(
   (await request(owner, `${picturesPath}?asset=${asset.id}`)).status,
   200,
 );
-state = await ok(await request(owner, collectionPath));
+state = await ok(await request(owner, libraryPath));
 state.arrangement.pictures.push(picture);
 await ok(
-  await request(owner, collectionPath, 'PUT', {
+  await request(owner, libraryPath, 'PUT', {
     revision: state.revision,
     token: state.token,
     arrangement: state.arrangement,
   }),
 );
-state = await ok(await request(owner, collectionPath));
+state = await ok(await request(owner, libraryPath));
 state.arrangement.pictures = [];
 await ok(
-  await request(owner, collectionPath, 'PUT', {
+  await request(owner, libraryPath, 'PUT', {
     revision: state.revision,
     token: state.token,
     arrangement: state.arrangement,
@@ -201,11 +196,6 @@ assert.equal(
   (await request(owner, `${picturesPath}?asset=${asset.id}`)).status,
   404,
 );
-const shelf = (
-  await ok(await request(owner, '/api/shelves', 'POST', { name: 'Pictures' }))
-).data.id;
-const shelfPath = `/api/shelves/${shelf}`;
-const personalPictures = `/api/bookshelf-pictures/personal/${shelf}`;
 const personalAsset = await ok(await upload(owner, personalPictures, image));
 let personal = await ok(await request(owner, shelfPath));
 personal.arrangement.pictures.push({

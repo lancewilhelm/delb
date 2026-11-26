@@ -78,8 +78,6 @@ function evaluate(source, globals = {}, linkCapture = null) {
       if (name === '~/composables/useAuth') return { useAuth: globals.useAuth };
       if (name === '~/composables/useHead')
         return { useHead: globals.useHead ?? (() => undefined) };
-      if (name === '~/stores/collections')
-        return { useCollectionsStore: globals.useCollectionsStore };
       if (name === '~/stores/booksIndexFilters')
         return { useBooksIndexFiltersStore: globals.useBooksIndexFiltersStore };
       if (name === '~/stores/ui')
@@ -130,7 +128,6 @@ function compile(filename, globals, links) {
 
 const { useBooksIndexFiltersStore } = loadStore('booksIndexFilters');
 const { useUiStore } = loadStore('ui');
-const { useCollectionsStore } = loadStore('collections');
 
 const counts = {
   total: 20,
@@ -174,7 +171,6 @@ async function libraryCard() {
   app.use(pinia);
   const filters = useBooksIndexFiltersStore(pinia);
   const ui = useUiStore(pinia);
-  const collections = useCollectionsStore(pinia);
   filters.$patch({
     addedStart: '2026-01-01',
     addedEnd: '2026-11-04',
@@ -185,16 +181,15 @@ async function libraryCard() {
   ui.setBooksSortKey('pages');
   ui.setBooksSortDirection('desc');
   ui.setBooksViewMode('list');
-  collections.setActiveCollection('selected-collection');
   const initialFilters = JSON.stringify(filters.$state);
   const initialUi = JSON.stringify(ui.$state);
-  const initialCollections = JSON.stringify(collections.$state);
 
   card = compile(
     '../app/components/Dashboard/DashboardLibraryCard.vue',
     {
       useBooksIndexFiltersStore: () => filters,
       useUiStore: () => ui,
+      useAuth: () => ({ canEditCatalog: vue.ref(true) }),
     },
     links,
   );
@@ -204,10 +199,8 @@ async function libraryCard() {
     html,
     filters,
     ui,
-    collections,
     initialFilters,
     initialUi,
-    initialCollections,
     links,
     storage,
   };
@@ -226,10 +219,6 @@ test('All books clears every persisted filter and preserves browsing preferences
   assert.equal(view.filters.includeNoStatus, false);
   assert.equal(view.filters.filesFilter, 'any');
   assert.equal(JSON.stringify(view.ui.$state), view.initialUi);
-  assert.equal(
-    JSON.stringify(view.collections.$state),
-    view.initialCollections,
-  );
 
   view.filters.$persist();
   const pinia = createPinia();
@@ -349,10 +338,7 @@ function settingsStore() {
   return store;
 }
 
-function harness(
-  t,
-  collections = { collections: [{}], activeSelection: { kind: 'all' } },
-) {
+function harness(t) {
   const requests = [];
   const tiles = [];
   const TileStub = {
@@ -375,7 +361,6 @@ function harness(
   const view = mountedPage({
     useHead() {},
     useAuth: () => ({ user: vue.ref({ id: 'u1', name: 'Reader' }) }),
-    useCollectionsStore: () => collections,
     useUserSettingsStore: () => settings,
     TileStub,
     $fetch: (url, options) =>
@@ -402,53 +387,43 @@ const overview = (title) => ({
   },
 });
 
-test('collection changes ignore stale overview responses and errors can retry', async (t) => {
-  const collections = vue.reactive({
-    collections: [{}],
-    activeSelection: { kind: 'all' },
-    activeCollection: null,
-  });
-  const { view, requests } = harness(t, collections);
+test('overview errors can retry and status changes reload the overview', async (t) => {
+  const { view, requests } = harness(t);
   const overviews = () =>
     requests.filter((r) => r.url === '/api/dashboard/overview');
   const shelves = requests.find((r) => r.url === '/api/shelves');
   assert.equal(shelves.query.previews, 25, 'shelves ask for card-art previews');
   assert.equal(shelves.query.pile, 10, 'shelves ask for a pile sample');
   assert.equal(overviews().length, 1);
+  assert.equal(
+    'collectionId' in overviews()[0].query,
+    false,
+    'the overview has no collection scope',
+  );
   assert.ok(view.text().includes('Loading…'));
 
-  collections.activeSelection = { kind: 'collection', collectionId: 'scope-b' };
-  await flush();
-  assert.equal(overviews()[0].signal.aborted, true);
-  assert.equal(overviews()[1].query.collectionId, 'scope-b');
-
-  overviews()[0].resolve(overview('Old scope book'));
-  await flush();
-  assert.ok(!view.text().includes('Old scope book'));
-
-  overviews()[1].reject(new Error('offline'));
+  overviews()[0].reject(new Error('offline'));
   await flush();
   assert.ok(view.text().includes('Could not load your dashboard'));
   view.button('Retry').props.onClick();
   await flush();
-  assert.equal(overviews()[2].query.collectionId, 'scope-b');
-  overviews()[2].resolve(overview('New scope book'));
+  overviews()[1].resolve(overview('New book'));
   await flush();
-  assert.ok(view.text().includes('New scope book'), 'Continue reading shows');
+  assert.ok(view.text().includes('New book'), 'Continue reading shows');
   assert.ok(view.text().includes('42.0%'));
   assert.ok(!view.text().includes('Could not load your dashboard'));
 
   // Re-saving Reading keeps the overview; moving a book out reloads it.
-  const card = continueCards.findLast(
-    (c) => c.props.book.id === 'New scope book',
-  );
+  const card = continueCards.findLast((c) => c.props.book.id === 'New book');
   card.change('reading');
   await flush();
-  assert.equal(overviews().length, 3);
+  assert.equal(overviews().length, 2);
   card.change('finished');
   await flush();
-  assert.equal(overviews().length, 4, 'status change reloads the overview');
-  assert.equal(overviews()[3].query.collectionId, 'scope-b');
+  assert.equal(overviews().length, 3, 'status change reloads the overview');
+  overviews()[2].resolve(overview('Fresh book'));
+  await flush();
+  assert.ok(view.text().includes('Fresh book'));
 });
 
 test('status tiles use Auto art, link to their lists, and save per-tile choices', async (t) => {
@@ -504,13 +479,8 @@ test('the All books card switches between Wall and Pile through settings', async
   assert.equal(card.props.libraryArt, 'pile');
 });
 
-test('a drifting wall loads older covers in pages and drops them on collection change', async (t) => {
-  const collections = vue.reactive({
-    collections: [{}],
-    activeSelection: { kind: 'all' },
-    activeCollection: null,
-  });
-  const { requests } = harness(t, collections);
+test('a drifting wall loads older covers in pages', async (t) => {
+  const { requests } = harness(t);
   const firstPage = {
     success: true,
     data: {
@@ -543,26 +513,9 @@ test('a drifting wall loads older covers in pages and drops them on collection c
   await flush();
   assert.equal(pages()[1].query.offset, 90);
 
-  collections.activeSelection = { kind: 'collection', collectionId: 'c2' };
+  pages()[1].resolve({ data: { books: [book('r90')], nextOffset: null } });
   await flush();
-  pages()[1].resolve({ data: { books: [book('stale')], nextOffset: null } });
-  await flush();
-  assert.equal(
-    card().props.recent.length,
-    0,
-    'no covers from the old collection',
-  );
-  requests
-    .filter((r) => r.url === '/api/dashboard/overview')
-    .at(-1)
-    .resolve(firstPage);
-  await flush();
-  assert.equal(
-    card().props.recent.length,
-    45,
-    'older covers reset per collection',
-  );
-  assert.ok(!card().props.recent.some((b) => b.id === 'stale'));
+  assert.equal(card().props.recent.length, 91);
 });
 
 test('piles show random samples and keep them through a refresh', async (t) => {

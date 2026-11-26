@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useEntityPagination } from '~/composables/useEntityPagination';
 import { useHead } from '~/composables/useHead';
-import { useCollectionsStore } from '~/stores/collections';
 import { useUserSettingsStore } from '~/stores/userSettings';
 import { $fetch } from '~/utils/apiFetch';
 import { ref } from 'vue';
@@ -15,8 +14,6 @@ useHead({
   title: 'Home',
 });
 
-// Scope (collection) lives in the header collection switcher dropdown.
-const collectionsStore = useCollectionsStore();
 const router = useRouter();
 
 type SeriesRow = {
@@ -48,15 +45,8 @@ const {
   inputs: () => ({
     search: seriesQuery.value,
     previewLimit: maxSeriesCovers.value ?? 8,
-    collectionId:
-      collectionsStore.activeSelection.kind === 'collection'
-        ? collectionsStore.activeSelection.collectionId
-        : undefined,
   }),
-  initialize: async () => {
-    if (!collectionsStore.collections.length)
-      await collectionsStore.fetchCollections();
-  },
+  initialize: async () => {},
   fetchPage: async (query) => {
     const response = await $fetch<{
       data?: { series?: SeriesRow[]; hasMore?: boolean };
@@ -113,7 +103,7 @@ const filteredSeries = seriesRows;
               v-else-if="filteredSeries.length === 0 && !errorMessage"
               class="text-sm opacity-80"
             >
-              No series found in the selected collection.
+              No series found in the library.
             </div>
 
             <!-- Series content -->

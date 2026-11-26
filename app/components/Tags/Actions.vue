@@ -267,12 +267,12 @@ async function submit() {
         </div>
         <p v-if="state.kind === 'merge'" class="text-sm mb-4">
           Move all books tagged “{{ source?.name }}” to an existing tag across
-          all collections. The destination tag stays and “{{ source?.name }}” is
+          the library. The destination tag stays and “{{ source?.name }}” is
           deleted. Books are not deleted.
         </p>
         <p v-else class="text-sm mb-4">
-          Delete “{{ source?.name }}” from all books across all collections.
-          Books are not deleted.
+          Delete “{{ source?.name }}” from all books in the library. Books are
+          not deleted.
         </p>
         <div v-if="state.kind === 'merge'" class="space-y-2">
           <div

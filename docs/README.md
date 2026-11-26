@@ -1,6 +1,6 @@
 # Delb documentation
 
-Delb manages a shared book catalog, collection access, ebook files, and each reader's personal reading data. Start with the path that matches your task.
+Delb manages a shared book library, access to it, ebook files, and each reader's personal reading data. Start with the path that matches your task.
 
 ## Use Delb
 
@@ -9,12 +9,12 @@ Follow the main library workflow:
 1. [Create an account and find your library](using/get-started.md).
 2. [Add books](using/add-books.md) by uploading a file, searching metadata, or entering details manually.
 3. [Browse and find books](using/find-books.md).
-4. [Organize and share collections](using/collections.md).
+4. [Share the library and control access](using/library-access.md).
 5. [Read books and track progress](using/reading.md).
 6. [Import from Goodreads](using/import-goodreads.md) to bring over statuses, ratings, reviews, and shelves.
 7. [Connect an agent](using/connect-an-agent.md) to search your library and update personal reading data.
 
-See the [glossary](../GLOSSARY.md) for library, collection, book view, and reading-data terminology.
+See the [glossary](../GLOSSARY.md) for library, server role, tag visibility rule, book view, and reading-data terminology.
 
 ## Host Delb
 
@@ -35,7 +35,7 @@ Browse the [feature contracts](developing/reference/README.md) or [UI component 
 
 | Topic                                          | Reference                                                                                                                            |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Collection permissions and endpoints           | [Collections and access control](developing/reference/collections.md)                                                                |
+| Roles, tag rules, and access endpoints         | [Library access, roles, and tag visibility rules](developing/reference/library-access.md)                                            |
 | Reading status, dates, and progress rules      | [Reading status and progress](developing/reference/reading-status-progress.md)                                                       |
 | EPUB position persistence and reader endpoints | [EPUB reader](developing/reference/epub-reader.md)                                                                                   |
 | Settings, appearance, and synchronization      | [Settings](developing/reference/settings.md)                                                                                         |
@@ -53,7 +53,7 @@ Browse the [feature contracts](developing/reference/README.md) or [UI component 
 
 The architecture and core guides describe the implementation at the revision recorded in [documentation status](developing/documentation-status.md). Historical review records and future-work sections are identified separately from current behavior.
 
-The [exclusive collection model and shared default](adr/0004-exclusive-collections-and-shared-default.md) records the currently active collection contract. Existing installations use the [administrative migration](hosting/collection-migration.md). The accepted v1.0 target architecture that replaces collections with a single shared library, server roles, tag visibility rules, genres, and unified bookshelf layouts is recorded in [ADR 0005](adr/0005-single-library-roles-and-tag-visibility.md).
+[ADR 0005](adr/0005-single-library-roles-and-tag-visibility.md) records the current model: a single shared library, server roles, tag visibility rules, genres, and unified bookshelf layouts. It supersedes the [collection model in ADR 0004](adr/0004-exclusive-collections-and-shared-default.md). Existing installations follow [Upgrade to a single library](hosting/single-library-upgrade.md).
 
 ## Historical records
 

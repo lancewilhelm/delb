@@ -11,36 +11,43 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/library"
 )
 
-type collectionCatalogRow struct {
+type libraryCatalogRow struct {
 	ID            string
 	Title         string
 	Pages         *int
-	CollectionID  string
 	SpineRevision *string
 	Dimensions    *BookDimensions
 	AuthorNames   []string
 }
 
-type collectionBookDTO struct {
+type libraryBookDTO struct {
 	ID            string   `json:"id"`
 	Title         string   `json:"title"`
 	Pages         *int     `json:"pages"`
-	CollectionID  string   `json:"collectionId"`
 	SpineRevision *string  `json:"spineRevision"`
 	AuthorNames   []string `json:"authorNames"`
 }
 
-func readCollectionCatalog(ctx context.Context, q collections.Queryable, collectionID string) ([]collectionCatalogRow, error) {
+// readLibraryCatalog returns the books for the shared library bookshelf. When
+// userID is empty it returns every book; otherwise it returns only the books
+// that userID can see.
+func readLibraryCatalog(ctx context.Context, q library.Queryable, userID string) ([]libraryCatalogRow, error) {
+	filter := ""
+	args := []any{}
+	if userID != "" {
+		filter = "WHERE " + library.VisibleBookFilter("b")
+		args = append(args, userID)
+	}
+	args = append(args, BookshelfMaxBooks+1)
 	rows, err := q.QueryContext(ctx, `
 		SELECT
 			b.id,
 			b.title,
 			b.pages,
-			b.collection_id,
 			(SELECT revision FROM book_spines INDEXED BY book_spines_book_revision_idx WHERE book_id = b.id),
 			bsd.width,
 			bsd.height,
@@ -59,19 +66,19 @@ func readCollectionCatalog(ctx context.Context, q collections.Queryable, collect
 			)
 		FROM books b
 		LEFT JOIN book_shelf_dimensions bsd ON bsd.book_id = b.id
-		WHERE b.collection_id = ?
+		`+filter+`
 		ORDER BY b.created_at ASC, b.id ASC
 		LIMIT ?
-	`, collectionID, BookshelfMaxBooks+1)
+	`, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
 
-	out := make([]collectionCatalogRow, 0)
+	out := make([]libraryCatalogRow, 0)
 	for rows.Next() {
 		var (
-			r           collectionCatalogRow
+			r           libraryCatalogRow
 			pages       sql.NullInt64
 			spineRev    sql.NullString
 			dimW        sql.NullInt64
@@ -82,7 +89,7 @@ func readCollectionCatalog(ctx context.Context, q collections.Queryable, collect
 			authorJSON  string
 		)
 		if err := rows.Scan(
-			&r.ID, &r.Title, &pages, &r.CollectionID, &spineRev,
+			&r.ID, &r.Title, &pages, &spineRev,
 			&dimW, &dimH, &dimManualW, &dimManualH, &dimSrcPages,
 			&authorJSON,
 		); err != nil {
@@ -120,12 +127,12 @@ func readCollectionCatalog(ctx context.Context, q collections.Queryable, collect
 		return nil, err
 	}
 	if len(out) > BookshelfMaxBooks {
-		return nil, httpapi.NewError(http.StatusBadRequest, "This collection exceeds the supported bookshelf size.")
+		return nil, httpapi.NewError(http.StatusBadRequest, "This library exceeds the supported bookshelf size.")
 	}
 	return out, nil
 }
 
-func computeCollectionCatalogToken(catalog []collectionCatalogRow) string {
+func computeLibraryCatalogToken(catalog []libraryCatalogRow) string {
 	type entry struct {
 		ID         string          `json:"id"`
 		Pages      *int            `json:"pages"`
@@ -144,21 +151,7 @@ func computeCollectionCatalogToken(catalog []collectionCatalogRow) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func collectionMemberRole(ctx context.Context, q collections.Queryable, userID, collectionID string) (string, error) {
-	var role string
-	err := q.QueryRowContext(ctx, `
-		SELECT role FROM collection_members WHERE user_id = ? AND collection_id = ? LIMIT 1
-	`, userID, collectionID).Scan(&role)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", httpapi.NewError(http.StatusNotFound, "Collection not found")
-	}
-	if err != nil {
-		return "", err
-	}
-	return role, nil
-}
-
-func upsertBookShelfDimensions(ctx context.Context, q collections.Queryable, books []ShelfBook) error {
+func upsertBookShelfDimensions(ctx context.Context, q library.Queryable, books []ShelfBook) error {
 	for i := 0; i < len(books); i += 100 {
 		end := i + 100
 		if end > len(books) {
@@ -200,31 +193,41 @@ func upsertBookShelfDimensions(ctx context.Context, q collections.Queryable, boo
 	return nil
 }
 
-// GET /api/collections/{id}/bookshelf
-func (s *Service) handleGetCollectionBookshelf(w http.ResponseWriter, r *http.Request) {
-	userID := httpapi.SessionFromContext(r.Context()).User.ID
-	collectionID := r.PathValue("id")
-	if collectionID == "" {
-		httpapi.WriteError(w, http.StatusBadRequest, "Collection is required")
-		return
+// libraryBookshelfEditable reports whether userID can rearrange the shared
+// library bookshelf. Editors with tag visibility rules cannot, because they
+// do not see every book that the layout places.
+func libraryBookshelfEditable(ctx context.Context, q library.Queryable, userID string) (bool, error) {
+	canEdit, err := library.CanEditCatalog(ctx, q, userID)
+	if err != nil || !canEdit {
+		return false, err
 	}
+	restricted, err := library.HasTagRules(ctx, q, userID)
+	if err != nil {
+		return false, err
+	}
+	return !restricted, nil
+}
+
+// GET /api/library/bookshelf
+func (s *Service) handleGetLibraryBookshelf(w http.ResponseWriter, r *http.Request) {
+	userID := httpapi.SessionFromContext(r.Context()).User.ID
 
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
-		s.writeErr(w, "GET /api/collections/{id}/bookshelf begin tx failed", err)
+		s.writeErr(w, "GET /api/library/bookshelf begin tx failed", err)
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	role, err := collectionMemberRole(r.Context(), tx, userID, collectionID)
+	canEdit, err := libraryBookshelfEditable(r.Context(), tx, userID)
 	if err != nil {
-		s.writeErr(w, "GET /api/collections/{id}/bookshelf auth failed", err)
+		s.writeErr(w, "GET /api/library/bookshelf auth failed", err)
 		return
 	}
 
-	catalog, err := readCollectionCatalog(r.Context(), tx, collectionID)
+	catalog, err := readLibraryCatalog(r.Context(), tx, userID)
 	if err != nil {
-		s.writeErr(w, "GET /api/collections/{id}/bookshelf catalog failed", err)
+		s.writeErr(w, "GET /api/library/bookshelf catalog failed", err)
 		return
 	}
 
@@ -234,12 +237,12 @@ func (s *Service) handleGetCollectionBookshelf(w http.ResponseWriter, r *http.Re
 		hasStored bool
 	)
 	err = tx.QueryRowContext(r.Context(), `
-		SELECT revision, layout FROM bookshelf_layouts WHERE scope_kind = 'collection' AND scope_id = ? LIMIT 1
-	`, collectionID).Scan(&storedRev, &storedRaw)
+		SELECT revision, layout FROM bookshelf_layouts WHERE scope_kind = 'library' AND scope_id = ? LIMIT 1
+	`, library.LibraryScopeID).Scan(&storedRev, &storedRaw)
 	if err == nil {
 		hasStored = true
 	} else if !errors.Is(err, sql.ErrNoRows) {
-		s.writeErr(w, "GET /api/collections/{id}/bookshelf query failed", err)
+		s.writeErr(w, "GET /api/library/bookshelf query failed", err)
 		return
 	}
 
@@ -315,7 +318,7 @@ func (s *Service) handleGetCollectionBookshelf(w http.ResponseWriter, r *http.Re
 	var repairedAdj []string
 	if ParseBookshelfStruct(layout) == nil {
 		geomRaw, _ := json.Marshal(BookshelfGeometry(layout))
-		repairedArr, repairedAdj, err = ComposeBookshelfLayout(geomRaw, placements, collectionID)
+		repairedArr, repairedAdj, err = ComposeBookshelfLayout(geomRaw, placements, library.LibraryScopeID)
 		if err != nil {
 			httpapi.WriteError(w, http.StatusBadRequest, err.Error())
 			return
@@ -328,12 +331,12 @@ func (s *Service) handleGetCollectionBookshelf(w http.ResponseWriter, r *http.Re
 	}
 	reconciled, needsAdjustment, _ := ReconcileBookshelf(baseLayout, catalogBooks)
 	if ParseBookshelfStruct(reconciled) == nil {
-		httpapi.WriteError(w, http.StatusBadRequest, "This collection exceeds the supported bookshelf arrangement size.")
+		httpapi.WriteError(w, http.StatusBadRequest, "This library exceeds the supported bookshelf arrangement size.")
 		return
 	}
 
 	if err := tx.Commit(); err != nil {
-		s.writeErr(w, "GET /api/collections/{id}/bookshelf commit failed", err)
+		s.writeErr(w, "GET /api/library/bookshelf commit failed", err)
 		return
 	}
 
@@ -352,13 +355,12 @@ func (s *Service) handleGetCollectionBookshelf(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	booksDTO := make([]collectionBookDTO, len(catalog))
+	booksDTO := make([]libraryBookDTO, len(catalog))
 	for i, c := range catalog {
-		booksDTO[i] = collectionBookDTO{
+		booksDTO[i] = libraryBookDTO{
 			ID:            c.ID,
 			Title:         c.Title,
 			Pages:         c.Pages,
-			CollectionID:  c.CollectionID,
 			SpineRevision: c.SpineRevision,
 			AuthorNames:   c.AuthorNames,
 		}
@@ -367,22 +369,17 @@ func (s *Service) handleGetCollectionBookshelf(w http.ResponseWriter, r *http.Re
 	w.Header().Set("Cache-Control", "private, no-store")
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"revision":    storedRev,
-		"token":       computeCollectionCatalogToken(catalog),
+		"token":       computeLibraryCatalogToken(catalog),
 		"arrangement": reconciled,
 		"adjustments": adjustments,
 		"books":       booksDTO,
-		"canEdit":     role == "owner" || role == "editor",
+		"canEdit":     canEdit,
 	})
 }
 
-// PUT /api/collections/{id}/bookshelf
-func (s *Service) handlePutCollectionBookshelf(w http.ResponseWriter, r *http.Request) {
+// PUT /api/library/bookshelf
+func (s *Service) handlePutLibraryBookshelf(w http.ResponseWriter, r *http.Request) {
 	userID := httpapi.SessionFromContext(r.Context()).User.ID
-	collectionID := r.PathValue("id")
-	if collectionID == "" {
-		httpapi.WriteError(w, http.StatusBadRequest, "Collection is required")
-		return
-	}
 
 	raw, err := httpapi.ReadBodyBounded(r, maxBookshelfBodyBytes)
 	if err != nil {
@@ -414,28 +411,24 @@ func (s *Service) handlePutCollectionBookshelf(w http.ResponseWriter, r *http.Re
 
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
-		s.writeErr(w, "PUT /api/collections/{id}/bookshelf begin tx failed", err)
+		s.writeErr(w, "PUT /api/library/bookshelf begin tx failed", err)
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := collections.LockCollectionChanges(r.Context(), tx); err != nil {
-		s.writeErr(w, "PUT /api/collections/{id}/bookshelf lock failed", err)
-		return
-	}
-	role, err := collectionMemberRole(r.Context(), tx, userID, collectionID)
+	canEdit, err := libraryBookshelfEditable(r.Context(), tx, userID)
 	if err != nil {
-		s.writeErr(w, "PUT /api/collections/{id}/bookshelf auth failed", err)
+		s.writeErr(w, "PUT /api/library/bookshelf auth failed", err)
 		return
 	}
-	if role != "owner" && role != "editor" {
-		httpapi.WriteError(w, http.StatusForbidden, "Owner or editor access is required.")
+	if !canEdit {
+		httpapi.WriteError(w, http.StatusForbidden, "Editor or administrator access without tag visibility rules is required.")
 		return
 	}
 
-	catalog, err := readCollectionCatalog(r.Context(), tx, collectionID)
+	catalog, err := readLibraryCatalog(r.Context(), tx, "")
 	if err != nil {
-		s.writeErr(w, "PUT /api/collections/{id}/bookshelf catalog failed", err)
+		s.writeErr(w, "PUT /api/library/bookshelf catalog failed", err)
 		return
 	}
 
@@ -445,16 +438,16 @@ func (s *Service) handlePutCollectionBookshelf(w http.ResponseWriter, r *http.Re
 		hasStored bool
 	)
 	err = tx.QueryRowContext(r.Context(), `
-		SELECT revision, layout FROM bookshelf_layouts WHERE scope_kind = 'collection' AND scope_id = ? LIMIT 1
-	`, collectionID).Scan(&storedRev, &storedRaw)
+		SELECT revision, layout FROM bookshelf_layouts WHERE scope_kind = 'library' AND scope_id = ? LIMIT 1
+	`, library.LibraryScopeID).Scan(&storedRev, &storedRaw)
 	if err == nil {
 		hasStored = true
 	} else if !errors.Is(err, sql.ErrNoRows) {
-		s.writeErr(w, "PUT /api/collections/{id}/bookshelf stored query failed", err)
+		s.writeErr(w, "PUT /api/library/bookshelf stored query failed", err)
 		return
 	}
 
-	if storedRev != rev || computeCollectionCatalogToken(catalog) != token {
+	if storedRev != rev || computeLibraryCatalogToken(catalog) != token {
 		httpapi.WriteError(w, http.StatusConflict, "This bookshelf or its books changed. Reload to review the latest version.")
 		return
 	}
@@ -464,8 +457,8 @@ func (s *Service) handlePutCollectionBookshelf(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if err := validatePictureAssets(r.Context(), tx, PictureScope{Kind: "collection", ID: collectionID}, arrangement); err != nil {
-		s.writeErr(w, "PUT /api/collections/{id}/bookshelf pictures failed", err)
+	if err := validatePictureAssets(r.Context(), tx, PictureScope{Kind: "library", ID: library.LibraryScopeID}, arrangement); err != nil {
+		s.writeErr(w, "PUT /api/library/bookshelf pictures failed", err)
 		return
 	}
 
@@ -483,12 +476,12 @@ func (s *Service) handlePutCollectionBookshelf(w http.ResponseWriter, r *http.Re
 		currentIDs[c.ID] = c.Dimensions
 	}
 	if len(placed) != len(currentIDs) {
-		httpapi.WriteError(w, http.StatusConflict, "The collection books changed. Reload to review the latest version.")
+		httpapi.WriteError(w, http.StatusConflict, "The library books changed. Reload to review the latest version.")
 		return
 	}
 	for _, bk := range placed {
 		if _, ok := currentIDs[bk.ID]; !ok {
-			httpapi.WriteError(w, http.StatusConflict, "The collection books changed. Reload to review the latest version.")
+			httpapi.WriteError(w, http.StatusConflict, "The library books changed. Reload to review the latest version.")
 			return
 		}
 	}
@@ -506,42 +499,42 @@ func (s *Service) handlePutCollectionBookshelf(w http.ResponseWriter, r *http.Re
 		}
 	}
 	if err := upsertBookShelfDimensions(r.Context(), tx, changedDims); err != nil {
-		s.writeErr(w, "PUT /api/collections/{id}/bookshelf dimensions failed", err)
+		s.writeErr(w, "PUT /api/library/bookshelf dimensions failed", err)
 		return
 	}
 
 	nextRev := rev + 1
 	encoded, err := json.Marshal(arrangement)
 	if err != nil {
-		s.writeErr(w, "PUT /api/collections/{id}/bookshelf marshal failed", err)
+		s.writeErr(w, "PUT /api/library/bookshelf marshal failed", err)
 		return
 	}
 	if _, err := tx.ExecContext(r.Context(), `
 		INSERT INTO bookshelf_layouts (scope_kind, scope_id, revision, layout, updated_at)
-		VALUES ('collection', ?, ?, ?, ?)
+		VALUES ('library', ?, ?, ?, ?)
 		ON CONFLICT(scope_kind, scope_id) DO UPDATE SET
 			revision = excluded.revision,
 			layout = excluded.layout,
 			updated_at = excluded.updated_at
-	`, collectionID, nextRev, string(encoded), time.Now().UTC().UnixMilli()); err != nil {
-		s.writeErr(w, "PUT /api/collections/{id}/bookshelf upsert failed", err)
+	`, library.LibraryScopeID, nextRev, string(encoded), time.Now().UTC().UnixMilli()); err != nil {
+		s.writeErr(w, "PUT /api/library/bookshelf upsert failed", err)
 		return
 	}
 
-	updatedCatalog, err := readCollectionCatalog(r.Context(), tx, collectionID)
+	updatedCatalog, err := readLibraryCatalog(r.Context(), tx, "")
 	if err != nil {
-		s.writeErr(w, "PUT /api/collections/{id}/bookshelf reload failed", err)
+		s.writeErr(w, "PUT /api/library/bookshelf reload failed", err)
 		return
 	}
 	if err := tx.Commit(); err != nil {
-		s.writeErr(w, "PUT /api/collections/{id}/bookshelf commit failed", err)
+		s.writeErr(w, "PUT /api/library/bookshelf commit failed", err)
 		return
 	}
 
 	w.Header().Set("Cache-Control", "private, no-store")
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"revision": nextRev,
-		"token":    computeCollectionCatalogToken(updatedCatalog),
+		"token":    computeLibraryCatalogToken(updatedCatalog),
 	})
 }
 

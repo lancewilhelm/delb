@@ -13,7 +13,7 @@ The search modal can enable multiple providers and remembers choices in account 
 
 ## Creation and selective editing
 
-`POST /api/books/metadata-import/create` accepts a provider item or query and target collection IDs. The handler checks the session and target edit roles, resolves a record, detects possible duplicates, and creates or links catalog data.
+`POST /api/books/metadata-import/create` accepts a provider item or query. The handler checks the session and the Editor or Admin role, resolves a record, detects possible duplicates, and creates or links catalog data.
 
 The optional `hasPhysicalCopy` boolean marks a newly created entry as physical. When resolving a duplicate, `true` also marks the authorized existing entry; `false` or an omitted value leaves its current mark unchanged.
 
@@ -25,14 +25,14 @@ Metadata-only creation does not download an ebook. Canonical directory/cover wor
 
 ## Duplicate decisions
 
-| Action                      | Result                                                              |
-| --------------------------- | ------------------------------------------------------------------- |
-| Cancel                      | Leave the pending import unapplied                                  |
-| Add existing to collections | Link a visible candidate into missing editable targets              |
-| Replace selected            | System admin/owner replaces the selected existing record's metadata |
-| Add new entry               | Create a separate catalog entry                                     |
+| Action           | Result                                                              |
+| ---------------- | ------------------------------------------------------------------- |
+| Cancel           | Leave the pending import unapplied                                  |
+| Use existing     | Keep the visible candidate; optionally mark it as a physical copy   |
+| Replace selected | An Editor or Admin replaces the selected existing record's metadata |
+| Add new entry    | Create a separate catalog entry                                     |
 
-A replacement preserves the book ID and associated personal reading identity. Updating shared metadata affects every collection containing the record. The Add book dialog presents the candidate review and action-specific feedback.
+A replacement preserves the book ID and associated personal reading identity. Updating shared metadata affects everyone who can see the record. The Add book dialog presents the candidate review and action-specific feedback.
 
 ## Field mapping
 

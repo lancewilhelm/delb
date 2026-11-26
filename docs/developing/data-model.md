@@ -2,13 +2,12 @@
 
 The [Drizzle schema](../../.drizzle/migrations) describes Delb's own database. [SQL migrations](../../.drizzle/migrations) define upgrades. The separate [Calibre schema reference](reference/calibre-schema.md) describes an import source, not Delb's tables.
 
-## Shared catalog and collection access
+## Shared library and access
 
 ```mermaid
 erDiagram
-    users ||--o{ collection_members : joins
-    collections ||--o{ collection_members : grants
-    collections ||--o{ books : contains
+    users ||--o{ user_tag_rules : "is restricted by"
+    tags ||--o{ user_tag_rules : drives
     books ||--o{ book_files : stores
     books ||--o{ book_authors : credits
     authors ||--o{ book_authors : names
@@ -24,13 +23,11 @@ erDiagram
 
 `books` holds shared metadata, including title, description, publication fields, page count, publisher, series, cover pointer, and optional creator/import provenance. Its author, genre, tag, identifier, and file records are separate tables.
 
-`collections` defines named scopes, with one `is_default` designation. Every collection has an owner, synchronized with its required owner membership. `collection_members` grants owner, editor, or viewer access.
+Every book belongs to the one shared library; there is no owning account or collection. Separate entries can represent the same title and retain independent files and reading data. `created_by_user_id` and `added_by_user_id` are provenance only.
 
-Each `books.collection_id` identifies one collection. `collection_books` is a read-only projection for collection queries, with no independent membership state. Separate entries can represent the same title and retain independent files and reading data.
+`users.role` (`owner`, `admin`, `editor`, or `reader`) governs book mutations. `user_tag_rules` holds an account's `allow` and `block` rules against shared tags. The `visible_books(user_id, book_id)` view applies those rules, and every book query joins it. Owners and admins see every book. See the [library access reference](reference/library-access.md).
 
-Owner/editor membership governs book mutations. `created_by_user_id` is provenance. SQL guards protect required collection assignment and ownership through creation, transfer, leaving, deletion, and concurrent requests.
-
-Legacy `is_personal` values and `legacy_collection_books` provide the source for a staged [administrative migration](../hosting/collection-migration.md). Normal library traffic pauses until the retained plan commits. The migration preserves private memberships, splits entries and files, and enrolls existing users into a new shared default once.
+Migration `0022_single_library` removed the earlier `collections`, `collection_members`, `collection_books`, and `legacy_collection_books` objects and `books.collection_id`. See [Upgrade to a single library](../hosting/single-library-upgrade.md).
 
 ## Records scoped to a reader
 
@@ -46,13 +43,13 @@ Legacy `is_personal` values and `legacy_collection_books` provide the source for
 | `book_notes`                 | Private notes per reader/book; a book can have several                                 |
 | `personal_shelves`           | Lightweight private named book lists owned by a reader (`personal_shelf_books`)        |
 
-Visual bookshelf arrangements for both collections and personal shelves are stored on demand in one unified `bookshelf_layouts` table (`scope_kind`, `scope_id`, `revision`, `layout`), and decorative images live in `shelf_picture_assets` keyed by the same scope. Physical spine dimensions (`book_shelf_dimensions`) stay shared on the book entry.
+Visual bookshelf arrangements for the library (`scope_kind = 'library'`, `scope_id = 'main'`) and personal shelves (`scope_kind = 'personal'`) are stored on demand in one unified `bookshelf_layouts` table (`scope_kind`, `scope_id`, `revision`, `layout`), and decorative images live in `shelf_picture_assets` keyed by the same scope. Physical spine dimensions (`book_shelf_dimensions`) stay shared on the book entry.
 
 The same shared book can have different statuses, positions, ratings, rationale, and history for different users. Current endpoints select the authenticated user's records.
 
 ## Accounts and settings
 
-Better Auth uses `users`, `sessions`, `accounts`, and `verifications`. System roles are distinct from collection roles.
+Better Auth uses `users`, `sessions`, `accounts`, and `verifications`. `users.role` holds the server role.
 
 `user_settings` stores a JSON account document and a millisecond revision timestamp. That document includes desktop settings and an optional mobile override profile. `global_settings` stores installation-wide settings. `global_secrets` stores server-side credentials such as the Hardcover token and optional Google Books API key; settings responses expose availability rather than the secret values.
 
@@ -70,10 +67,9 @@ Read [storage recovery](../hosting/storage-recovery.md) before changing file del
 
 | Constraint                                                                   | Effect                                                                                |
 | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Unique user email                                                            | Collection member lookup identifies an existing account                               |
-| Unique collection/user membership                                            | A member has one role in a collection                                                 |
-| Owner index and lifecycle triggers                                           | Exactly one owner matching the collection owner                                       |
-| Required book collection and read-only projection                            | One collection per book entry                                                         |
+| Unique user email                                                            | An email address identifies one account                                               |
+| `user_tag_rules` primary key and mode check                                  | An account has at most one rule, `allow` or `block`, per tag                          |
+| `user_tag_rules.tag_id` restricts tag deletion                               | A tag that a visibility rule uses cannot be deleted                                   |
 | Unique non-null Calibre book ID                                              | Calibre re-import can identify an existing Delb book                                  |
 | Unique user/book status, position, preference, rating, review, and rationale | Personal values remain separate across readers                                        |
 | Unique book/identifier type                                                  | An identifier type has one value per book; cross-book duplicates still need detection |

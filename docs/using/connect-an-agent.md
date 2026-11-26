@@ -1,11 +1,11 @@
 # Connect an agent to Delb
 
-Delb provides an MCP endpoint for agents such as Hermes. A connection acts as your Delb account and can see books in your collections. You can allow it to change your personal reading data and, separately, shared book metadata. It cannot delete catalog books.
+Delb provides an MCP endpoint for agents such as Hermes. A connection acts as your Delb account and can see the books that your account can see. You can allow it to change your personal reading data and, separately, shared book metadata. It cannot delete catalog books.
 
 ## Create a connection
 
 1. Sign in to Delb and open **Settings > Connections**.
-2. Enter a name such as `Hermes`. Select personal changes if the agent should update your reading data. Select shared metadata edits if it should edit books in collections where you have editor access.
+2. Enter a name such as `Hermes`. Select personal changes if the agent should update your reading data. Select shared metadata edits if it should edit book metadata. Metadata edits also require the Editor or Admin server role.
 3. Select **Create connection** and copy the token. Delb shows the token once.
 4. Store the token as a secret on the machine running the agent. Treat it like a password.
 
@@ -39,7 +39,7 @@ The endpoint uses Streamable HTTP and a configured bearer token. It does not pro
 
 ## Available actions
 
-The agent can list collections and your personal shelves, browse and search visible books by title, author, identifier, or reading status, and read book details. It can filter book results by collection or personal shelf. Book details and search results include your reading dates, TBR rank, and private note when present. The TBR queue tool lists your visible To be read books in their saved global order with their notes.
+The agent can check your server role and whether tag visibility rules restrict your account, list your personal shelves, browse and search visible books by title, author, identifier, or reading status, and read book details. It can filter book results by personal shelf. Book details and search results include your reading dates, TBR rank, and private note when present. The TBR queue tool lists your visible To be read books in their saved global order with their notes.
 
 The agent can read your recent progress history, your saved reader percentage, and the book's progress-sync setting. With personal changes enabled, it can log a page number or percentage, optionally with a date. A page number requires a page count in the book's metadata. Each call adds a history entry, so check the history before retrying a call whose outcome is uncertain. On the book details page, the Progress section shows the latest percentage and an expandable history. Continue reading on the dashboard also shows the latest percentage. Refresh the book page's progress if it was open when the agent logged an entry.
 
@@ -49,4 +49,4 @@ With personal changes enabled, the agent can set or clear your reading status, e
 
 With shared metadata edits enabled, the agent can update title, authors, description, publication date, language, pages, publisher, series, identifiers, and tags on books you can edit. The agent reads the book first and sends its metadata version with the update. If the metadata changed in the meantime, Delb rejects the edit and the agent must read it again. Omitted fields remain unchanged. An explicit empty list or null clears fields where supported; authors, tags, and identifiers replace their existing lists. Delb marks truncated metadata in book details and rejects changes to a description, tag list, or identifier list that MCP cannot show in full. Edit those fields in Delb instead. Changing a title or authors can move managed book storage. The update result reports a storage warning if the metadata saved but that move failed.
 
-Collection access and shelf ownership still apply. A book that you can no longer access is unavailable to the connection. Book file paths and raw file records are not included in the MCP results. The connection does not grant file downloads, catalog deletion, or administration.
+Your server role, tag visibility rules, and shelf ownership still apply. A book that is hidden from your account is unavailable to the connection. Book file paths and raw file records are not included in the MCP results. The connection does not grant file downloads, catalog deletion, or administration.

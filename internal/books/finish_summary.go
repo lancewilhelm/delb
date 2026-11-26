@@ -176,7 +176,7 @@ func ReadFinishSummary(ctx context.Context, db *sql.DB, userID, bookID string) (
 	err := db.QueryRowContext(ctx, `
 		SELECT b.title, b.pages, b.cover_image_path, b.updated_at, s.name, b.series_index
 		FROM books b
-		INNER JOIN collection_members cm ON cm.collection_id = b.collection_id AND cm.user_id = ?
+		INNER JOIN visible_books vb ON vb.book_id = b.id AND vb.user_id = ?
 		LEFT JOIN series s ON s.id = b.series_id
 		WHERE b.id = ?
 		LIMIT 1
@@ -313,8 +313,8 @@ func yearFinishOrdinal(ctx context.Context, db *sql.DB, userID, bookID string, f
 		  AND CAST(strftime('%Y', ubs.finished_at, 'unixepoch', 'localtime') AS INTEGER) = ?
 		  AND (ubs.finished_at < ? OR (ubs.finished_at = ? AND ubs.book_id <= ?))
 		  AND EXISTS (
-			SELECT 1 FROM collection_members cm
-			WHERE cm.collection_id = b.collection_id AND cm.user_id = ubs.user_id
+			SELECT 1 FROM visible_books vb
+			WHERE vb.book_id = b.id AND vb.user_id = ubs.user_id
 		  )
 	`, userID, year, finishedAt, finishedAt, bookID).Scan(&n)
 	return n, err

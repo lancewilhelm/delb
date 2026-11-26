@@ -12,15 +12,15 @@ The page fetches the new session and pulls user/global settings before navigatio
 
 ## Add a book
 
-The [Add book modal](../../app/components/Books/BookAddModal.vue) loads writable collections, preselects the active collection or authorized default, and dispatches one of three paths.
+The [Add book modal](../../app/components/Books/BookAddModal.vue) is available to Editors and Admins and dispatches one of three paths.
 
-| Path     | Request                                                                                               | Database and file effects                                                                                                   |
-| -------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Upload   | `POST /api/books/upload`, multipart file and one `collectionId` field                                 | Extract metadata, review duplicates, coordinate stored-file creation/replacement, write book/file/author/collection records |
-| Metadata | `POST /api/books/metadata-import/create`, selected provider record or query and one collection target | Resolve shared entities, create book metadata, optionally store a cover; no ebook download                                  |
-| Manual   | `POST /api/books` from the blank editor                                                               | Validate title/authors, resolve shared entities, and write book/collection records without an ebook file                    |
+| Path     | Request                                                                     | Database and file effects                                                                                        |
+| -------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Upload   | `POST /api/books/upload`, multipart files                                   | Extract metadata, review duplicates, coordinate stored-file creation/replacement, write book/file/author records |
+| Metadata | `POST /api/books/metadata-import/create`, selected provider record or query | Resolve shared entities, create book metadata, optionally store a cover; no ebook download                       |
+| Manual   | `POST /api/books` from the blank editor                                     | Validate title/authors, resolve shared entities, and write book records without an ebook file                    |
 
-Each creation handler resolves one authorized target. Missing targets use the current shared default, subject to owner/editor membership. Multiple targets fail. The final database write rechecks authorization.
+Each creation handler requires the Editor or Admin role, and the final database write rechecks it. Every new book goes into the library.
 
 ### Upload coordination
 
@@ -30,8 +30,8 @@ sequenceDiagram
     participant API as Upload handler
     participant FS as Library and journal
     participant DB as SQLite
-    UI->>API: File and one collection target
-    API->>DB: Check session visibility and target roles
+    UI->>API: Files
+    API->>DB: Check session and editor role
     API->>API: Bound input, extract metadata, detect duplicates
     API->>FS: Stage files and record operation journal
     API->>DB: Commit book records and operation decision
@@ -41,35 +41,31 @@ sequenceDiagram
 
 The [upload handler](../../internal/books/books_files.go) uses [stored-create operations](../../internal/storage/create.go) and database decisions to coordinate files and rows. A replacement also uses the per-book lock and preserves the existing book identity. User reading records attached to that identity remain distinct from replaced content.
 
-Batch results require per-file inspection. Duplicate review can stop an individual import and request an explicit decision. Replacement requires collection owner/editor access and stays in the existing collection. A match in another collection creates an independent entry or cancels; a move is a separate confirmed action.
+Batch results require per-file inspection. Duplicate review can stop an individual import and request an explicit decision. Replacement requires the Editor or Admin role and a visible existing entry. A visible match can also be reused, or the import can create an independent entry or cancel.
 
 The [manual handler](../../internal/books/books_crud.go), [metadata handler](../../internal/books/books_metadata.go), and upload handler have different sequencing. Do not infer that all creation paths use the same database transaction or storage journal. Metadata cover fetches and canonical-directory work include best-effort steps after record creation.
 
 ## Browse and search
 
-The header's [collection store](../../app/stores/collections.ts) holds either All or a concrete collection selection. The [Books page](../../app/pages/books/index.vue) combines it with filters, sort settings, and view preferences. Grid/list components request pages and render the visible portion of the list.
+The [Books page](../../app/pages/books/index.vue) combines filters, sort settings, and view preferences. Grid/list components request pages and render the visible portion of the list.
 
-The dashboard's **Browse all books** link calls the [Books filter store](../../app/stores/booksIndexFilters.ts) to clear its persisted status, date-added, and file-presence filters before navigation. The collection selection, sort settings, and view preferences remain unchanged. Dashboard status links open the collection-scoped Books view with their status query parameters. The **To be read** tile opens the dedicated personal queue.
+The dashboard's **Browse all books** link calls the [Books filter store](../../app/stores/booksIndexFilters.ts) to clear its persisted status, date-added, and file-presence filters before navigation. Sort settings and view preferences remain unchanged. Dashboard status links open the Books view with their status query parameters. The **To be read** tile opens the dedicated personal queue.
 
-The [dashboard overview query](../../internal/books/dashboard.go) counts books in the active collection (including **To be read**), lists the most recently added books, previews each status list, and picks random samples for Pile art. Continue reading uses the reader's saved progress. Finished uses the reader's finish dates. Membership checks apply to counts and every list. [The dashboard reference](reference/dashboard.md) describes the request, order, and card art rules.
+The [dashboard overview query](../../internal/books/dashboard.go) counts the books that the reader can see (including **To be read**), lists the most recently added books, previews each status list, and picks random samples for Pile art. Continue reading uses the reader's saved progress. Finished uses the reader's finish dates. Tag visibility rules apply to counts and every list. [The dashboard reference](reference/dashboard.md) describes the request, order, and card art rules.
 
-[Book listing](../../internal/books/books_crud.go) first resolves the authenticated reader's collection memberships. A selected collection must belong to that set. Status filters join the reader's personal status records. Stable sort keys and cursors keep pagination consistent for a chosen ordering. The response enriches the page with the metadata selected by book views.
+[Book listing](../../internal/books/books_crud.go) joins the `visible_books` view for the authenticated reader. Status filters join the reader's personal status records. Stable sort keys and cursors keep pagination consistent for a chosen ordering. The response enriches the page with the metadata selected by book views.
 
-[Entity list queries](../../internal/books/catalog.go) serve book lists under authors, publishers, and tags. [Global search](../../internal/books/catalog.go) searches across accessible records, including stored identifiers. Its visibility scope is not an automatic copy of every Books-page filter.
+[Entity list queries](../../internal/books/catalog.go) serve book lists under authors, publishers, and tags. [Global search](../../internal/books/catalog.go) searches across visible records, including stored identifiers. Its visibility scope is not an automatic copy of every Books-page filter.
 
-Tag deletion and merging require system admin/owner authorization. They mutate shared catalog links across collections in a transaction and preserve book records. The selected collection does not limit the global effect.
+Tag deletion and merging require system admin/owner authorization. They mutate shared catalog links in a transaction and preserve book records. Deletion is refused while a tag visibility rule uses the tag, and merging moves the rules to the destination tag.
 
 Changing a view field updates account settings, not the book's metadata. The virtualized UI and cursor-paginated API solve different problems: the client limits rendered elements; the server limits requested records.
 
-## Collections and sharing
+## Accounts, roles, and tag rules
 
-Creating a [collection](../../internal/collections/handlers.go) establishes the owner relation. [Member upsert](../../internal/collections/handlers.go) resolves an existing account by email and accepts editor/viewer roles. It does not deliver an email invitation.
+The first account becomes the Owner. Later accounts are Readers until an Admin changes their role through the [admin user endpoints](../../internal/auth/handlers.go). Admins edit an Editor's or Reader's [tag visibility rules](../../internal/users/tag_rules.go) in the same user editor. Rule changes take effect on the account's next request because every query joins `visible_books`. Account deletion keeps the books that the account added; their provenance columns become null.
 
-The [single-book handler](../../internal/books/books_collections.go), [explicit selection move](../../internal/books/books_collections.go), and [source-scoped bulk handler](../../internal/books/books_collections.go) require edit rights in both source and destination. They validate expected source mappings and commit the move atomically. Readers remaining only in the source lose access.
-
-Ownership transfer establishes one owner and demotes the old owner to editor. Leave removes a non-owner membership. Collection deletion requires two warnings and the current collection name, and removes all contained books, reading data, and managed files. The default requires a replacement first. Book and collection rows are deleted atomically; the storage journal coordinates file cleanup and recovery. Account deletion is blocked while the account owns collections. Book deletion uses [collection owner/editor authorization and storage coordination](../../internal/storage/delete.go).
-
-The [collection settings dialog](../../app/components/Collections/EditCollectionModal.vue) handles member loading, immediate access saves, errors, focus, and separate confirmation states for consequential actions. Read the [permissions reference](reference/collections.md) for the role matrix.
+Book deletion uses [the editor role check and storage coordination](../../internal/storage/delete.go). Read the [library access reference](reference/library-access.md) for the role matrix.
 
 ## Reading and personal data
 

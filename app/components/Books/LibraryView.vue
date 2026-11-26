@@ -2,13 +2,12 @@
 import { useHead } from '~/composables/useHead';
 import { useBookSelectionStore } from '~/stores/bookSelection';
 import { useBooksIndexFiltersStore } from '~/stores/booksIndexFilters';
-import { useCollectionsStore } from '~/stores/collections';
+import { useAuth } from '~/composables/useAuth';
 import { useUiStore } from '~/stores/ui';
 import { $fetch } from '~/utils/apiFetch';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 import AppHeader from '~/components/AppHeader.vue';
-import BooksBookMoveModal from '~/components/Books/BookMoveModal.vue';
 import BooksInfiniteGrid from '~/components/Books/BooksInfiniteGrid.vue';
 import BooksInfiniteList from '~/components/Books/BooksInfiniteList.vue';
 import BooksSortDropdown from '~/components/Books/SortDropdown.vue';
@@ -17,7 +16,6 @@ import ModalWindow from '~/components/ModalWindow.vue';
 import UiDateInput from '~/components/ui/UiDateInput.vue';
 import ViewSelectorDropdown from '~/components/ViewSelectorDropdown.vue';
 import BookshelfView from '~/components/Books/BookshelfView.vue';
-import type { BookMoveSelection } from '~/utils/collectionActions';
 const props = defineProps<{ shelfId?: string }>();
 
 // Page metadata
@@ -25,9 +23,8 @@ useHead({
   title: props.shelfId ? 'Shelf' : 'Home',
 });
 
-// Scope (collection) lives in the header collection switcher dropdown.
 const uiStore = useUiStore();
-const collectionsStore = useCollectionsStore();
+const { canEditCatalog } = useAuth();
 const selectionStore = useBookSelectionStore();
 const booksFiltersStore = useBooksIndexFiltersStore();
 const route = useRoute();
@@ -64,15 +61,7 @@ function toggleSelectMode() {
     return;
   }
 
-  // Enter selection mode with the page's current scope
-  if (activeCollectionId.value) {
-    selectionStore.setMode({
-      enabled: true,
-      scope: { kind: 'collection', collectionId: activeCollectionId.value },
-    });
-  } else {
-    selectionStore.setMode({ enabled: true, scope: { kind: 'all' } });
-  }
+  selectionStore.setMode({ enabled: true, scope: { kind: 'all' } });
 }
 
 function getExplicitSelectedBookIds(): string[] {
@@ -120,7 +109,6 @@ async function resolveSelectedBookIds() {
   if (selectionStore.allSelectedInScope) {
     const excluded = new Set(getExcludedBookIds());
     const endpoint = booksEndpoint.value;
-    const scope = activeCollectionId.value;
     const sort = booksSortKey.value;
     const sortDir = booksSortDir.value;
     let cursor: string | undefined;
@@ -132,7 +120,6 @@ async function resolveSelectedBookIds() {
         data: { books: { id: string }[]; nextCursor: string | null };
       }>(endpoint, {
         query: {
-          collectionId: scope || undefined,
           sort,
           sortDir,
           limit: 200,
@@ -217,35 +204,6 @@ function toggleActionsDropdown() {
   actionsOpen.value = !actionsOpen.value;
 }
 
-const collectionsManageOpen = ref(false);
-const collectionsSaveError = ref<string | null>(null);
-const moveSelection = computed<BookMoveSelection>(() =>
-  selectionStore.allSelectedInScope && activeCollectionId.value
-    ? {
-        kind: 'collection',
-        collectionId: activeCollectionId.value,
-        excludedBookIds: getExcludedBookIds(),
-      }
-    : { kind: 'books', bookIds: getExplicitSelectedBookIds() },
-);
-function openCollectionsManager() {
-  if (!activeCollectionId.value && selectionStore.allSelectedInScope) {
-    collectionsSaveError.value = 'Choose individual books to move from All.';
-    return;
-  }
-  collectionsSaveError.value = null;
-  collectionsManageOpen.value = true;
-  closeActionsDropdown();
-}
-function closeCollectionsManager() {
-  collectionsManageOpen.value = false;
-}
-function onBooksMoved() {
-  selectionStore.clearSelection();
-  selectionStore.setMode({ enabled: false });
-  refreshBooksGrid();
-}
-
 type CopyChange = 'keep' | 'mark' | 'clear';
 const copiesModalOpen = ref(false);
 const copiesSubmitting = ref(false);
@@ -255,6 +213,7 @@ const bulkPhysical = ref<CopyChange>('keep');
 const bulkAudiobook = ref<CopyChange>('keep');
 
 function openCopiesModal() {
+  if (!canEditCatalog.value) return;
   copiesError.value = '';
   copiesResult.value = '';
   bulkPhysical.value = 'keep';
@@ -339,17 +298,11 @@ async function applyBulkStatus() {
     return;
   }
 
-  // If "All" + allSelectedInScope, we do not have a server-backed "All scope" bulk semantic yet.
-  if (!activeCollectionId.value && selectionStore.allSelectedInScope) {
-    statusError.value =
-      'Select all in All view is not supported for bulk status yet (needs a server-backed scope).';
-    return;
-  }
-
   statusSubmitting.value = true;
 
   try {
-    const ids = getExplicitSelectedBookIds();
+    const ids = await resolveSelectedBookIds();
+    if (!ids.length) throw new Error('No matching books are selected.');
 
     const res = await $fetch<BulkStatusResponse>('/api/books/bulk/status', {
       method: 'POST',
@@ -375,15 +328,6 @@ async function applyBulkStatus() {
   } finally {
     statusSubmitting.value = false;
   }
-}
-
-async function openManageCollectionsModal() {
-  await Promise.resolve();
-
-  // If load detected an unsupported mode, keep the modal closed and show the error inline.
-  if (collectionsSaveError.value) return;
-
-  openCollectionsManager();
 }
 
 function onDocumentPointerDownActions(e: MouseEvent) {
@@ -420,18 +364,6 @@ onBeforeUnmount(() => {
 });
 
 const errorMessage = ref<string | null>(null);
-
-// Provide a stable collectionId prop for the BooksInfiniteGrid (scroller lives inside component).
-const activeCollectionId = computed<string | undefined>(() => {
-  if (props.shelfId) return undefined;
-  if (
-    collectionsStore.activeSelection.kind === 'collection' &&
-    collectionsStore.activeSelection.collectionId
-  ) {
-    return collectionsStore.activeSelection.collectionId;
-  }
-  return undefined;
-});
 
 // Books grid error handler (keeps page-level message in sync)
 function handleBooksGridError(message: string) {
@@ -616,60 +548,17 @@ const isFiltersApplied = computed(() => {
 // Used to force-recreate the BooksInfiniteGrid (e.g. after upload) so it reloads from page 1.
 const booksGridKey = ref(0);
 
-// When scope changes, refresh the result set for the active view.
-watch(
-  () => collectionsStore.activeSelection,
-  async () => {
-    // When scope changes, ensure collections are loaded so collection-scoped queries are valid after navigation.
-    if (!collectionsStore.collections.length) {
-      await collectionsStore.fetchCollections();
-    }
-  },
-  { deep: true },
-);
-
 const booksSortKey = computed(() => uiStore.booksSortKey);
 const booksSortDir = computed(() => uiStore.booksSortDirection);
 const booksViewMode = computed(() => uiStore.booksViewMode);
 const hydrated = ref(false);
 const bookshelfActive = computed(
-  () =>
-    hydrated.value &&
-    uiStore.bookshelfActive &&
-    (!!activeCollectionId.value || !!props.shelfId),
+  () => hydrated.value && uiStore.bookshelfActive,
 );
 const bookshelfView = ref<{
   canLeave: () => boolean;
   refreshCatalog: () => Promise<void>;
 } | null>(null);
-let revertingShelfSelection = false;
-watch(
-  () => collectionsStore.activeSelection,
-  (next, previous) => {
-    if (
-      revertingShelfSelection ||
-      !!props.shelfId ||
-      !hydrated.value ||
-      !uiStore.bookshelfActive ||
-      !bookshelfView.value ||
-      !previous ||
-      (next.kind === 'collection' &&
-        previous.kind === 'collection' &&
-        next.collectionId === previous.collectionId) ||
-      (next.kind === 'all' && previous.kind === 'all')
-    )
-      return;
-    if (!bookshelfView.value.canLeave()) {
-      revertingShelfSelection = true;
-      if (previous.kind === 'all') collectionsStore.setActiveAll();
-      else collectionsStore.setActiveCollection(previous.collectionId);
-      revertingShelfSelection = false;
-      return;
-    }
-    if (next.kind === 'all') uiStore.setBookshelfActive(false);
-  },
-  { flush: 'sync' },
-);
 function onBookUploaded() {
   refreshBooksGrid();
 }
@@ -710,13 +599,8 @@ const effectiveBooksViewMode = computed(() =>
   hydrated.value ? booksViewMode.value : 'grid',
 );
 
-onMounted(async () => {
+onMounted(() => {
   filtersHydrated.value = true;
-
-  // Ensure collections are loaded so collection-scoped queries are valid after navigation.
-  if (!collectionsStore.collections.length) {
-    await collectionsStore.fetchCollections();
-  }
 });
 </script>
 
@@ -738,9 +622,7 @@ onMounted(async () => {
             <!-- Books sort + filters -->
             <div class="flex items-center gap-1 self-center">
               <BooksViewToggle
-                :show-bookshelf="
-                  !!shelfId || (hydrated && !!activeCollectionId)
-                "
+                :show-bookshelf="!!shelfId || hydrated"
                 :bookshelf="bookshelfActive"
                 @bookshelf="setBookshelfActive"
               />
@@ -793,15 +675,7 @@ onMounted(async () => {
                         <span class="truncate text-sm">Add to Shelf</span>
                       </button>
                       <button
-                        class="w-full px-3 py-2 text-left flex justify-between! gap-3 rounded-none! hover:bg-(--sub-color)/15"
-                        role="menuitem"
-                        type="button"
-                        @click="openManageCollectionsModal"
-                      >
-                        <span class="truncate text-sm">Move to collection</span>
-                      </button>
-
-                      <button
+                        v-if="canEditCatalog"
                         class="w-full px-3 py-2 text-left flex justify-between! gap-3 rounded-none! hover:bg-(--sub-color)/15"
                         role="menuitem"
                         type="button"
@@ -882,20 +756,6 @@ onMounted(async () => {
                   </span>
                 </button>
               </div>
-
-              <p
-                v-if="collectionsSaveError"
-                class="text-sm text-(--contrast-error-color)"
-              >
-                {{ collectionsSaveError }}
-              </p>
-
-              <BooksBookMoveModal
-                :open="collectionsManageOpen"
-                :selection="moveSelection"
-                @close="closeCollectionsManager"
-                @moved="onBooksMoved"
-              />
 
               <p v-if="copiesResult" class="text-sm" role="status">
                 {{ copiesResult }}
@@ -1348,7 +1208,6 @@ onMounted(async () => {
             <BooksInfiniteGrid
               v-if="!bookshelfActive && effectiveBooksViewMode === 'grid'"
               :key="`grid-${booksGridKey}-${booksSortKey}-${booksSortDir}-${effectiveBooksViewMode}`"
-              :collection-id="activeCollectionId"
               :sort="booksSortKey"
               :sort-dir="booksSortDir"
               :endpoint="booksEndpoint"
@@ -1366,7 +1225,6 @@ onMounted(async () => {
             <BooksInfiniteList
               v-else-if="!bookshelfActive && effectiveBooksViewMode === 'list'"
               :key="`list-${booksGridKey}-${booksSortKey}-${booksSortDir}-${effectiveBooksViewMode}`"
-              :collection-id="activeCollectionId"
               :sort="booksSortKey"
               :sort-dir="booksSortDir"
               :endpoint="booksEndpoint"
@@ -1383,10 +1241,9 @@ onMounted(async () => {
             />
             <BookshelfView
               v-else
-              :key="shelfId || activeCollectionId"
+              :key="shelfId || 'library'"
               ref="bookshelfView"
               :endpoint="booksEndpoint"
-              :collection-id="activeCollectionId"
               :personal-shelf-id="shelfId"
             />
           </div>

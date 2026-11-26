@@ -2,16 +2,11 @@ package httpapi
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"log/slog"
 	"net/http"
-	"strings"
 
 	"github.com/lancewilhelm/delb/internal/auth"
 )
-
-const CollectionMigrationRequiredMessage = "Collection migration required. An administrator must preview and apply it in Settings > Admin > Collections."
 
 type sessionContextKey struct{}
 
@@ -71,92 +66,4 @@ func RequireAdmin(authSvc *auth.Service, logger *slog.Logger, next http.Handler)
 func RequireAdminFunc(authSvc *auth.Service, logger *slog.Logger, next http.HandlerFunc) http.HandlerFunc {
 	h := RequireAdmin(authSvc, logger, next)
 	return h.ServeHTTP
-}
-
-// CollectionMigrationGate mirrors server/middleware/collection-migration.ts:
-// when system_state['collections-model'] != 'exclusive', all /api/* routes
-// return 503 except the migration endpoint, auth read/sign-in/sign-out,
-// first-user sign-up (when users table is empty), and GET /api/settings*.
-func CollectionMigrationGate(db *sql.DB, logger *slog.Logger, next http.Handler) http.Handler {
-	if db == nil {
-		return next
-	}
-	if logger == nil {
-		logger = slog.Default()
-	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		pathname := r.URL.Path
-		if !strings.HasPrefix(pathname, "/api/") {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		state, err := readCollectionModelState(r.Context(), db)
-		if err != nil {
-			logger.Error("failed to check collections-model state", "path", pathname, "error", err)
-			WriteError(w, http.StatusInternalServerError, "Internal Server Error")
-			return
-		}
-		if state == "exclusive" {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		if pathname == "/api/settings/admin/collections-migration" {
-			next.ServeHTTP(w, r)
-			return
-		}
-		if strings.HasSuffix(pathname, "/sign-up/email") {
-			hasUsers, err := hasAnyUser(r.Context(), db)
-			if err != nil {
-				logger.Error("failed to check users table during maintenance gate", "error", err)
-				WriteError(w, http.StatusInternalServerError, "Internal Server Error")
-				return
-			}
-			if !hasUsers {
-				next.ServeHTTP(w, r)
-				return
-			}
-		}
-		if strings.HasPrefix(pathname, "/api/auth/") &&
-			(r.Method == http.MethodGet ||
-				strings.HasSuffix(pathname, "/sign-in/email") ||
-				strings.HasSuffix(pathname, "/sign-out")) {
-			next.ServeHTTP(w, r)
-			return
-		}
-		if r.Method == http.MethodGet &&
-			(pathname == "/api/settings" ||
-				pathname == "/api/settings/user" ||
-				pathname == "/api/settings/global") {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		WriteError(w, http.StatusServiceUnavailable, CollectionMigrationRequiredMessage)
-	})
-}
-
-func readCollectionModelState(ctx context.Context, db *sql.DB) (string, error) {
-	var val string
-	err := db.QueryRowContext(ctx, `SELECT value FROM system_state WHERE key = 'collections-model' LIMIT 1`).Scan(&val)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "pending", nil
-	}
-	if err != nil {
-		return "", err
-	}
-	return val, nil
-}
-
-func hasAnyUser(ctx context.Context, db *sql.DB) (bool, error) {
-	var id string
-	err := db.QueryRowContext(ctx, `SELECT id FROM users LIMIT 1`).Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return true, nil
 }

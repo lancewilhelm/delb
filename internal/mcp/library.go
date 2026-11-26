@@ -13,44 +13,43 @@ import (
 	"github.com/lancewilhelm/delb/internal/books"
 	"github.com/lancewilhelm/delb/internal/bookshelf"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/library"
 )
 
-type mcpCollectionItem struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Role string `json:"role"`
+type mcpLibraryAccess struct {
+	Role                 string `json:"role"`
+	CanEditCatalog       bool   `json:"canEditCatalog"`
+	RestrictedByTagRules bool   `json:"restrictedByTagRules"`
+	ConnectionCanWrite   bool   `json:"connectionCanWrite"`
+	ConnectionCanEdit    bool   `json:"connectionCanEditMetadata"`
 }
 
-func (s *Service) listCollections(ctx context.Context, actor *Actor) ([]mcpCollectionItem, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT c.id, c.name, cm.role
-		FROM collections c
-		INNER JOIN collection_members cm ON cm.collection_id = c.id
-		WHERE cm.user_id = ?
-		ORDER BY c.name ASC
-	`, actor.UserID)
+// libraryAccess reports the signed-in account's server role and whether tag
+// visibility rules hide part of the library from it.
+func (s *Service) libraryAccess(ctx context.Context, actor *Actor) (mcpLibraryAccess, error) {
+	role, err := library.UserRole(ctx, s.db, actor.UserID)
 	if err != nil {
-		return nil, err
+		return mcpLibraryAccess{}, err
 	}
-	defer func() { _ = rows.Close() }()
-	out := make([]mcpCollectionItem, 0)
-	for rows.Next() {
-		var item mcpCollectionItem
-		if err := rows.Scan(&item.ID, &item.Name, &item.Role); err != nil {
-			return nil, err
-		}
-		out = append(out, item)
+	restricted, err := library.HasTagRules(ctx, s.db, actor.UserID)
+	if err != nil {
+		return mcpLibraryAccess{}, err
 	}
-	return out, rows.Err()
+	return mcpLibraryAccess{
+		Role:                 role,
+		CanEditCatalog:       library.CanEditCatalogRole(role),
+		RestrictedByTagRules: restricted,
+		ConnectionCanWrite:   actor.CanWrite,
+		ConnectionCanEdit:    actor.CanEditMetadata,
+	}, nil
 }
 
 type searchBooksInput struct {
-	Query        string
-	CollectionID string
-	After        string
-	Limit        int
-	ShelfID      string
-	Statuses     []string
+	Query    string
+	After    string
+	Limit    int
+	ShelfID  string
+	Statuses []string
 }
 
 type searchBookItem struct {
@@ -73,7 +72,7 @@ type searchBooksResult struct {
 
 func (s *Service) searchBooks(ctx context.Context, actor *Actor, input searchBooksInput) (*searchBooksResult, error) {
 	where := []string{
-		`EXISTS (SELECT 1 FROM collection_members cm WHERE cm.collection_id = b.collection_id AND cm.user_id = ?)`,
+		`EXISTS (SELECT 1 FROM visible_books vb WHERE vb.book_id = b.id AND vb.user_id = ?)`,
 	}
 	args := []any{actor.UserID, actor.UserID, actor.UserID}
 
@@ -102,10 +101,6 @@ func (s *Service) searchBooks(ctx context.Context, actor *Actor, input searchBoo
 		}
 	}
 
-	if input.CollectionID != "" {
-		where = append(where, "b.collection_id = ?")
-		args = append(args, input.CollectionID)
-	}
 	if input.After != "" {
 		where = append(where, "b.id > ?")
 		args = append(args, input.After)
@@ -302,7 +297,7 @@ func (s *Service) getBook(ctx context.Context, actor *Actor, bookID string) (*mc
 		LEFT JOIN user_book_status ubs ON ubs.book_id = b.id AND ubs.user_id = ?
 		LEFT JOIN user_book_rationale ubr ON ubr.book_id = b.id AND ubr.user_id = ?
 		WHERE b.id = ?
-		  AND EXISTS (SELECT 1 FROM collection_members cm WHERE cm.collection_id = b.collection_id AND cm.user_id = ?)
+		  AND EXISTS (SELECT 1 FROM visible_books vb WHERE vb.book_id = b.id AND vb.user_id = ?)
 		LIMIT 1
 	`, actor.UserID, actor.UserID, bookID, actor.UserID).Scan(
 		&id, &title, &desc, &pub, &lang, &pages,
@@ -532,7 +527,7 @@ func (s *Service) listMyTbr(ctx context.Context, actor *Actor, after string, lim
 			WHERE ubs.user_id = ?
 			  AND ubs.status = 'to_be_read'
 			  AND ubs.tbr_rank IS NOT NULL
-			  AND EXISTS (SELECT 1 FROM collection_members cm WHERE cm.collection_id = b.collection_id AND cm.user_id = ?)
+			  AND EXISTS (SELECT 1 FROM visible_books vb WHERE vb.book_id = b.id AND vb.user_id = ?)
 			  AND b.id = ?
 			LIMIT 1
 		`, actor.UserID, actor.UserID, after).Scan(&cursorID, &rank)
@@ -554,7 +549,7 @@ func (s *Service) listMyTbr(ctx context.Context, actor *Actor, after string, lim
 		WHERE ubs.user_id = ?
 		  AND ubs.status = 'to_be_read'
 		  AND ubs.tbr_rank IS NOT NULL
-		  AND EXISTS (SELECT 1 FROM collection_members cm WHERE cm.collection_id = b.collection_id AND cm.user_id = ?)
+		  AND EXISTS (SELECT 1 FROM visible_books vb WHERE vb.book_id = b.id AND vb.user_id = ?)
 	`, actor.UserID, actor.UserID).Scan(&totalCount); err != nil {
 		return nil, err
 	}
@@ -575,7 +570,7 @@ func (s *Service) listMyTbr(ctx context.Context, actor *Actor, after string, lim
 		WHERE ubs.user_id = ?
 		  AND ubs.status = 'to_be_read'
 		  AND ubs.tbr_rank IS NOT NULL
-		  AND EXISTS (SELECT 1 FROM collection_members cm WHERE cm.collection_id = b.collection_id AND cm.user_id = ?)
+		  AND EXISTS (SELECT 1 FROM visible_books vb WHERE vb.book_id = b.id AND vb.user_id = ?)
 		`+cursorClause+`
 		ORDER BY ubs.tbr_rank ASC, b.id ASC
 		LIMIT ?

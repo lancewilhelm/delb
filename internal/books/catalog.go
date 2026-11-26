@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/library"
 	"github.com/lancewilhelm/delb/internal/storage"
 )
 
@@ -112,33 +113,11 @@ func (s *Service) handleListGenres(w http.ResponseWriter, r *http.Request) {
 func (s *Service) handleListEntities(w http.ResponseWriter, r *http.Request, kind entityKind) {
 	userID := httpapi.SessionFromContext(r.Context()).User.ID
 	q := r.URL.Query()
-	collectionID := q.Get("collectionId")
-
-	if collectionID != "" {
-		var found string
-		err := s.db.QueryRowContext(r.Context(), `
-			SELECT collection_id FROM collection_members WHERE collection_id = ? AND user_id = ? LIMIT 1
-		`, collectionID, userID).Scan(&found)
-		if errors.Is(err, sql.ErrNoRows) {
-			httpapi.WriteError(w, http.StatusForbidden, "Forbidden")
-			return
-		}
-		if err != nil {
-			s.writeErrWithFallback(w, "list entities membership failed", "Failed to load "+string(kind), err)
-			return
-		}
-	}
-
 	limit := boundedIntStrict(q.Get("limit"), 50, 1, 100)
 	offset := boundedIntStrict(q.Get("offset"), 0, 0, 1000000000)
 	previewLimit := boundedIntStrict(q.Get("previewLimit"), 8, -1, math.MaxInt32)
 	search := strings.TrimSpace(q.Get("search"))
 	cfg := entityConfigs[kind]
-
-	var colArg any
-	if collectionID != "" {
-		colArg = collectionID
-	}
 
 	sqlQuery := `
 		WITH visible AS (
@@ -147,10 +126,8 @@ func (s *Service) handleListEntities(w http.ResponseWriter, r *http.Request, kin
 			FROM ` + cfg.table + ` e
 			` + cfg.relation + `
 			JOIN books b ON ` + cfg.key + ` = ` + cfg.rhs + `
-			JOIN collection_books cb ON cb.book_id = b.id
-			JOIN collection_members cm ON cm.collection_id = cb.collection_id
-			WHERE cm.user_id = ?
-			  AND (? IS NULL OR cb.collection_id = ?)
+			JOIN visible_books vb ON vb.book_id = b.id
+			WHERE vb.user_id = ?
 			  AND e.name GLOB ?
 		), summaries AS (
 			SELECT id, name, count(*) AS book_count FROM visible
@@ -167,7 +144,7 @@ func (s *Service) handleListEntities(w http.ResponseWriter, r *http.Request, kin
 	`
 
 	rows, err := s.db.QueryContext(r.Context(), sqlQuery,
-		userID, colArg, colArg, TitleFilterGlob(search),
+		userID, TitleFilterGlob(search),
 		limit+1, offset, limit, previewLimit, previewLimit,
 	)
 	if err != nil {
@@ -258,15 +235,15 @@ func (s *Service) handleListEntities(w http.ResponseWriter, r *http.Request, kin
 func visibleEntitySQL(kind string) string {
 	switch kind {
 	case "author":
-		return `EXISTS (SELECT 1 FROM book_authors ba INNER JOIN books b ON b.id = ba.book_id INNER JOIN collection_books cb ON cb.book_id = b.id INNER JOIN collection_members cm ON cm.collection_id = cb.collection_id WHERE ba.author_id = authors.id AND cm.user_id = ?)`
+		return `EXISTS (SELECT 1 FROM book_authors ba INNER JOIN books b ON b.id = ba.book_id INNER JOIN visible_books vb ON vb.book_id = b.id WHERE ba.author_id = authors.id AND vb.user_id = ?)`
 	case "tag":
-		return `EXISTS (SELECT 1 FROM book_tags bt INNER JOIN books b ON b.id = bt.book_id INNER JOIN collection_books cb ON cb.book_id = b.id INNER JOIN collection_members cm ON cm.collection_id = cb.collection_id WHERE bt.tag_id = tags.id AND cm.user_id = ?)`
+		return `EXISTS (SELECT 1 FROM book_tags bt INNER JOIN books b ON b.id = bt.book_id INNER JOIN visible_books vb ON vb.book_id = b.id WHERE bt.tag_id = tags.id AND vb.user_id = ?)`
 	case "genre":
-		return `EXISTS (SELECT 1 FROM book_genres bg INNER JOIN books b ON b.id = bg.book_id INNER JOIN collection_books cb ON cb.book_id = b.id INNER JOIN collection_members cm ON cm.collection_id = cb.collection_id WHERE bg.genre_id = genres.id AND cm.user_id = ?)`
+		return `EXISTS (SELECT 1 FROM book_genres bg INNER JOIN books b ON b.id = bg.book_id INNER JOIN visible_books vb ON vb.book_id = b.id WHERE bg.genre_id = genres.id AND vb.user_id = ?)`
 	case "publisher":
-		return `EXISTS (SELECT 1 FROM books b INNER JOIN collection_books cb ON cb.book_id = b.id INNER JOIN collection_members cm ON cm.collection_id = cb.collection_id WHERE b.publisher_id = publishers.id AND cm.user_id = ?)`
+		return `EXISTS (SELECT 1 FROM books b INNER JOIN visible_books vb ON vb.book_id = b.id WHERE b.publisher_id = publishers.id AND vb.user_id = ?)`
 	case "series":
-		return `EXISTS (SELECT 1 FROM books b INNER JOIN collection_books cb ON cb.book_id = b.id INNER JOIN collection_members cm ON cm.collection_id = cb.collection_id WHERE b.series_id = series.id AND cm.user_id = ?)`
+		return `EXISTS (SELECT 1 FROM books b INNER JOIN visible_books vb ON vb.book_id = b.id WHERE b.series_id = series.id AND vb.user_id = ?)`
 	default:
 		return "0=1"
 	}
@@ -440,7 +417,6 @@ func (s *Service) handleListEntityBooks(w http.ResponseWriter, r *http.Request, 
 	}
 
 	q := r.URL.Query()
-	collectionID := q.Get("collectionId")
 	limit := clampIntQuery(q.Get("limit"), 1, 200, 48)
 	sortKey := NormalizeSortKey(q.Get("sort"))
 	sortDir := NormalizeSortDir(q.Get("sortDir"), sortKey)
@@ -459,62 +435,30 @@ func (s *Service) handleListEntityBooks(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	memberCollectionIDs, err := getUserMemberCollectionIDs(r.Context(), s.db, userID)
-	if err != nil {
-		s.writeErrWithFallback(w, "entity books memberships failed", "Failed to fetch "+visKind+" books", err)
-		return
-	}
-	var targetIDs []string
-	if collectionID != "" {
-		for _, cid := range memberCollectionIDs {
-			if cid == collectionID {
-				targetIDs = []string{collectionID}
-				break
-			}
-		}
-	} else {
-		targetIDs = memberCollectionIDs
-	}
-	if len(targetIDs) == 0 {
-		httpapi.WriteJSON(w, http.StatusOK, map[string]any{
-			"success": true,
-			"data": map[string]any{
-				responseKey:  entity,
-				"books":      []any{},
-				"nextCursor": nil,
-			},
-		})
-		return
-	}
-
 	var joinSQL, filterSQL string
 	switch visKind {
 	case "author":
-		joinSQL = `INNER JOIN book_authors ba ON ba.book_id = b.id INNER JOIN collection_books cb ON cb.book_id = b.id`
+		joinSQL = `INNER JOIN book_authors ba ON ba.book_id = b.id`
 		filterSQL = `ba.author_id = ?`
 	case "publisher":
-		joinSQL = `INNER JOIN collection_books cb ON cb.book_id = b.id`
 		filterSQL = `b.publisher_id = ?`
 	case "tag":
-		joinSQL = `INNER JOIN book_tags bt ON bt.book_id = b.id INNER JOIN collection_books cb ON cb.book_id = b.id`
+		joinSQL = `INNER JOIN book_tags bt ON bt.book_id = b.id`
 		filterSQL = `bt.tag_id = ?`
 	case "genre":
-		joinSQL = `INNER JOIN book_genres bg ON bg.book_id = b.id INNER JOIN collection_books cb ON cb.book_id = b.id`
+		joinSQL = `INNER JOIN book_genres bg ON bg.book_id = b.id`
 		filterSQL = `bg.genre_id = ?`
 	}
 
-	args := make([]any, 0, len(targetIDs)+7)
+	args := make([]any, 0, 8)
 	if sortKey == SortDateFinished {
 		joinSQL += FinishedJoinSQL
 		args = append(args, userID)
 	}
-	args = append(args, entityID)
+	args = append(args, entityID, userID)
 	where := []string{
 		filterSQL,
-		"cb.collection_id IN (" + makePlaceholders(len(targetIDs)) + ")",
-	}
-	for _, cid := range targetIDs {
-		args = append(args, cid)
+		library.VisibleBookFilter("b"),
 	}
 	if ordering.WhereSQL != "" {
 		where = append(where, ordering.WhereSQL)
@@ -630,7 +574,6 @@ func (s *Service) handleListSeriesBooks(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	q := r.URL.Query()
-	collectionID := q.Get("collectionId")
 	limit := clampIntQuery(q.Get("limit"), 1, 200, 48)
 	cursor, cursorSec := decodeSeriesCursor(q.Get("cursor"))
 
@@ -647,38 +590,11 @@ func (s *Service) handleListSeriesBooks(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	memberCollectionIDs, err := getUserMemberCollectionIDs(r.Context(), s.db, userID)
-	if err != nil {
-		s.writeErrWithFallback(w, "GET /api/series/{id}/books memberships failed", "Failed to fetch series books", err)
-		return
-	}
-	var targetIDs []string
-	if collectionID != "" {
-		for _, cid := range memberCollectionIDs {
-			if cid == collectionID {
-				targetIDs = []string{collectionID}
-				break
-			}
-		}
-	} else {
-		targetIDs = memberCollectionIDs
-	}
-	if len(targetIDs) == 0 {
-		httpapi.WriteJSON(w, http.StatusOK, map[string]any{
-			"success": true,
-			"data":    map[string]any{"series": seriesMeta, "books": []any{}, "nextCursor": nil},
-		})
-		return
-	}
-
-	args := make([]any, 0, len(targetIDs)+5)
-	args = append(args, seriesID)
+	args := make([]any, 0, 6)
+	args = append(args, seriesID, userID)
 	where := []string{
 		"b.series_id = ?",
-		"cb.collection_id IN (" + makePlaceholders(len(targetIDs)) + ")",
-	}
-	for _, cid := range targetIDs {
-		args = append(args, cid)
+		library.VisibleBookFilter("b"),
 	}
 	if cursor != nil {
 		where = append(where, "(b.created_at < ? OR (b.created_at = ? AND b.id < ?))")
@@ -689,7 +605,6 @@ func (s *Service) handleListSeriesBooks(w http.ResponseWriter, r *http.Request) 
 	rows, err := s.db.QueryContext(r.Context(), `
 		SELECT `+bookSelectColumns+`
 		FROM books b
-		INNER JOIN collection_books cb ON cb.book_id = b.id
 		WHERE `+strings.Join(where, " AND ")+`
 		GROUP BY b.id
 		ORDER BY b.created_at DESC, b.id DESC
@@ -852,6 +767,11 @@ func mutateCatalogTerm(ctx context.Context, db *sql.DB, userID, visKind, table, 
 		}
 	}
 
+	if table == "tags" {
+		if err := moveTagRules(ctx, tx, kind, sourceID, targetID); err != nil {
+			return err
+		}
+	}
 	if kind == "merge" {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO `+joinTable+` (book_id, `+fkCol+`)
@@ -868,6 +788,33 @@ func mutateCatalogTerm(ctx context.Context, db *sql.DB, userID, visKind, table, 
 		return err
 	}
 	return tx.Commit()
+}
+
+// moveTagRules keeps tag visibility rules intact when a tag goes away. A merge
+// moves the rules to the destination tag, and a block rule wins if a user had
+// both modes. A delete is refused while any rule uses the tag.
+func moveTagRules(ctx context.Context, tx *sql.Tx, kind, sourceID, targetID string) error {
+	if kind != "merge" {
+		var used int
+		err := tx.QueryRowContext(ctx, `SELECT 1 FROM user_tag_rules WHERE tag_id = ? LIMIT 1`, sourceID).Scan(&used)
+		if err == nil {
+			return httpapi.NewError(http.StatusConflict, "Tag visibility rules use this tag. Remove it from those rules first.")
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO user_tag_rules (user_id, tag_id, mode, created_at)
+		SELECT user_id, ?, mode, created_at FROM user_tag_rules WHERE tag_id = ?
+		ON CONFLICT(user_id, tag_id) DO UPDATE SET
+			mode = CASE WHEN user_tag_rules.mode = 'block' OR excluded.mode = 'block' THEN 'block' ELSE 'allow' END
+	`, targetID, sourceID); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `DELETE FROM user_tag_rules WHERE tag_id = ?`, sourceID)
+	return err
 }
 
 var (
@@ -921,14 +868,8 @@ func (s *Service) handleGlobalSearch(w http.ResponseWriter, r *http.Request) {
 		isbn10DigitsRe.MatchString(normIdent)
 
 	// ---- Books bucket
-	memberColIDs, err := getUserMemberCollectionIDs(r.Context(), s.db, userID)
-	if err != nil {
-		s.writeErrWithFallback(w, "GET /api/search memberships failed", "Failed to search", err)
-		return
-	}
-
 	booksBucket := make([]map[string]any, 0)
-	if len(memberColIDs) > 0 {
+	{
 		type searchBookRow struct {
 			id         string
 			title      string
@@ -940,11 +881,7 @@ func (s *Service) handleGlobalSearch(w http.ResponseWriter, r *http.Request) {
 			matchedVal string
 		}
 
-		colPh := makePlaceholders(len(memberColIDs))
-		colArgs := make([]any, len(memberColIDs))
-		for i, cid := range memberColIDs {
-			colArgs[i] = cid
-		}
+		colArgs := []any{userID}
 
 		var merged []searchBookRow
 		appendBookQuery := func(query string, extraArgs []any, matchKind string, hasMatchedVal bool) error {
@@ -985,8 +922,8 @@ func (s *Service) handleGlobalSearch(w http.ResponseWriter, r *http.Request) {
 		if err := appendBookQuery(`
 			SELECT b.id, b.title, b.published, b.created_at, b.updated_at, b.cover_image_path
 			FROM books b
-			INNER JOIN collection_books cb ON cb.book_id = b.id
-			WHERE cb.collection_id IN (`+colPh+`) AND b.title LIKE ? ESCAPE '\'
+			INNER JOIN visible_books vb ON vb.book_id = b.id
+			WHERE vb.user_id = ? AND b.title LIKE ? ESCAPE '\'
 			LIMIT ?
 		`, []any{prefix, limPrefix}, "titlePrefix", false); err != nil {
 			s.writeErrWithFallback(w, "GET /api/search title prefix failed", "Failed to search", err)
@@ -995,8 +932,8 @@ func (s *Service) handleGlobalSearch(w http.ResponseWriter, r *http.Request) {
 		if err := appendBookQuery(`
 			SELECT b.id, b.title, b.published, b.created_at, b.updated_at, b.cover_image_path
 			FROM books b
-			INNER JOIN collection_books cb ON cb.book_id = b.id
-			WHERE cb.collection_id IN (`+colPh+`) AND b.title LIKE ? ESCAPE '\'
+			INNER JOIN visible_books vb ON vb.book_id = b.id
+			WHERE vb.user_id = ? AND b.title LIKE ? ESCAPE '\'
 			LIMIT ?
 		`, []any{contains, limContains}, "titleContains", false); err != nil {
 			s.writeErrWithFallback(w, "GET /api/search title contains failed", "Failed to search", err)
@@ -1005,10 +942,10 @@ func (s *Service) handleGlobalSearch(w http.ResponseWriter, r *http.Request) {
 		if err := appendBookQuery(`
 			SELECT b.id, b.title, b.published, b.created_at, b.updated_at, b.cover_image_path
 			FROM books b
-			INNER JOIN collection_books cb ON cb.book_id = b.id
+			INNER JOIN visible_books vb ON vb.book_id = b.id
 			INNER JOIN book_authors ba ON ba.book_id = b.id
 			INNER JOIN authors a ON a.id = ba.author_id
-			WHERE cb.collection_id IN (`+colPh+`) AND a.name LIKE ? ESCAPE '\'
+			WHERE vb.user_id = ? AND a.name LIKE ? ESCAPE '\'
 			LIMIT ?
 		`, []any{contains, limContains}, "author", false); err != nil {
 			s.writeErrWithFallback(w, "GET /api/search author match failed", "Failed to search", err)
@@ -1022,9 +959,9 @@ func (s *Service) handleGlobalSearch(w http.ResponseWriter, r *http.Request) {
 			if err := appendBookQuery(`
 				SELECT b.id, b.title, b.published, b.created_at, b.updated_at, b.cover_image_path, bi.value
 				FROM books b
-				INNER JOIN collection_books cb ON cb.book_id = b.id
+				INNER JOIN visible_books vb ON vb.book_id = b.id
 				INNER JOIN book_identifiers bi ON bi.book_id = b.id
-				WHERE cb.collection_id IN (`+colPh+`) AND UPPER(bi.value) LIKE ? ESCAPE '\'
+				WHERE vb.user_id = ? AND UPPER(bi.value) LIKE ? ESCAPE '\'
 				LIMIT ?
 			`, []any{"%" + EscapeLike(normIdent) + "%", limIdent}, "identifier", true); err != nil {
 				s.writeErrWithFallback(w, "GET /api/search ident match failed", "Failed to search", err)

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useAuth } from '~/composables/useAuth';
 import { useHead } from '~/composables/useHead';
-import { useCollectionsStore } from '~/stores/collections';
 import {
   useUserSettingsStore,
   type BaseUserSettings,
@@ -40,23 +39,12 @@ import type {
 } from '#shared/types/dashboard';
 useHead({ title: 'Dashboard' });
 
-const collectionsStore = useCollectionsStore();
 const userSettingsStore = useUserSettingsStore();
 const { user } = useAuth();
 const displayName = computed(() => user.value?.name?.trim() || 'there');
-const collectionName = computed(() =>
-  collectionsStore.activeSelection.kind === 'all'
-    ? 'All'
-    : (collectionsStore.activeCollection?.name ?? ''),
-);
-const scope = computed(() =>
-  collectionsStore.activeSelection.kind === 'collection'
-    ? collectionsStore.activeSelection.collectionId
-    : '',
-);
 
 const overview = ref<DashboardOverview | null>(
-  readDashboardCache(user.value?.id, scope.value),
+  readDashboardCache(user.value?.id),
 );
 const shelves = ref<DashboardShelfSummary[] | null>(
   readShelvesCache(user.value?.id),
@@ -73,25 +61,22 @@ async function loadOverview() {
   const request = ++requestNumber;
   controller?.abort();
   controller = new AbortController();
-  // Paint this scope's last overview right away; never show another scope's.
-  overview.value = readDashboardCache(user.value?.id, scope.value);
+  // Paint this user's last overview right away while fresh data loads.
+  overview.value = readDashboardCache(user.value?.id);
   loading.value = !overview.value;
   errorMessage.value = '';
   try {
     const response = await $fetch<{ success: true; data: DashboardOverview }>(
       '/api/dashboard/overview',
       {
-        query: {
-          collectionId: scope.value,
-          ...(pileSize.value === 'auto' ? {} : { pile: pileSize.value }),
-        },
+        query: pileSize.value === 'auto' ? {} : { pile: pileSize.value },
         signal: controller.signal,
       },
     );
     if (request !== requestNumber) return;
     overview.value = response.data;
     primeBookPreviews(response.data.lists.reading);
-    writeDashboardCache(user.value?.id, scope.value, response.data);
+    writeDashboardCache(user.value?.id, response.data);
   } catch {
     if (request !== requestNumber) return;
     errorMessage.value = 'Could not load your dashboard. Please try again.';
@@ -143,8 +128,6 @@ const pileSize = computed(() => dashboardSettings.value.pileSize);
 type PileBook = DashboardShelfSummary['previews'][number] | DashboardBook;
 /** Keyed like card art overrides (`all`, `reading`, `shelf:<id>`, …). */
 const piles = ref<Record<string, HeldPile<PileBook>>>({});
-// The collection the status piles were picked from.
-let pileScope: string | null = null;
 
 /**
  * A pile from a response: its sample when that has the size the reader asked
@@ -173,13 +156,6 @@ function holdPiles(next: Record<string, HeldPile<PileBook>>) {
 watch(
   overview,
   (data) => {
-    if (pileScope !== scope.value) {
-      // Another collection's piles hold other books.
-      piles.value = Object.fromEntries(
-        Object.entries(piles.value).filter(([key]) => key.startsWith('shelf:')),
-      );
-      pileScope = scope.value;
-    }
     if (!data) return;
     const next: Record<string, HeldPile<PileBook>> = {
       all: pileFrom(data.piles?.all, data.counts.total, true),
@@ -234,7 +210,7 @@ async function loadMoreRecent() {
     const response = await $fetch<{
       data: { books: DashboardBook[]; nextOffset: number | null };
     }>('/api/dashboard/recent', {
-      query: { collectionId: scope.value, offset },
+      query: { offset },
     });
     if (request !== moreRequest) return;
     moreRecent.value = [...moreRecent.value, ...response.data.books];
@@ -265,7 +241,6 @@ async function loadMoreSpines() {
       data: { books: DashboardBook[]; nextOffset: number | null };
     }>('/api/dashboard/recent', {
       query: {
-        collectionId: scope.value,
         offset: spineBooks.value.length,
         spines: 1,
       },
@@ -278,13 +253,6 @@ async function loadMoreSpines() {
   } finally {
     if (request === spineRequest) loadingSpines = false;
   }
-}
-
-function resetSpines() {
-  ++spineRequest;
-  loadingSpines = false;
-  spineBooks.value = [];
-  spinesComplete.value = false;
 }
 
 const shelfBooks = computed(() =>
@@ -374,20 +342,7 @@ function onStatusChange(change: BookStatusChange) {
   void loadOverview();
 }
 
-watch(scope, () => {
-  // Older covers belong to the previous collection.
-  ++moreRequest;
-  loadingMore = false;
-  moreRecent.value = [];
-  resetSpines();
-  if (shelfUsesSpines.value) void loadMoreSpines();
-  void loadOverview();
-});
 onMounted(() => {
-  // Fire collections and dashboard in parallel; if fetchCollections()
-  // reconciles activeSelection, the scope watcher re-fetches.
-  if (!collectionsStore.collections.length)
-    void collectionsStore.fetchCollections();
   void loadOverview();
   void loadShelves();
 });
@@ -410,13 +365,9 @@ onBeforeUnmount(() => {
       <main class="dashboard" :aria-busy="loading">
         <header class="dashboard-greeting">
           <h1>Hello, {{ displayName }}.</h1>
-          <p>
-            Collection: <span>{{ collectionName }}</span>
-          </p>
         </header>
 
         <DashboardLibraryCard
-          :key="scope"
           :counts="overview?.counts ?? null"
           :recent="wallBooks"
           :initial-cover-count="overview?.recent.length ?? 0"
@@ -573,14 +524,6 @@ onBeforeUnmount(() => {
     serif;
   letter-spacing: -1px;
 }
-.dashboard-greeting p {
-  margin: 0;
-  font-size: 14px;
-  opacity: 0.7;
-}
-.dashboard-greeting p span {
-  font-weight: 500;
-}
 .dashboard-section-head {
   display: flex;
   align-items: baseline;
@@ -675,9 +618,6 @@ onBeforeUnmount(() => {
   }
   .dashboard-greeting h1 {
     font-size: 26px;
-  }
-  .dashboard-greeting p {
-    margin-top: 6px;
   }
   .dashboard-tiles {
     grid-template-columns: repeat(2, minmax(0, 1fr));

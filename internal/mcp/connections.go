@@ -17,8 +17,8 @@ import (
 	"unicode/utf16"
 
 	"github.com/google/uuid"
-	"github.com/lancewilhelm/delb/internal/collections"
 	"github.com/lancewilhelm/delb/internal/httpapi"
+	"github.com/lancewilhelm/delb/internal/library"
 )
 
 const maxConnectionBodyBytes int64 = 4096
@@ -120,9 +120,9 @@ func (s *Service) listConnections(ctx context.Context, userID string) ([]Connect
 	out := make([]ConnectionInfo, 0)
 	for rows.Next() {
 		var (
-			id, name          string
-			canW, canM        int64
-			createdMs, expMs  int64
+			id, name         string
+			canW, canM       int64
+			createdMs, expMs int64
 		)
 		if err := rows.Scan(&id, &name, &canW, &canM, &createdMs, &expMs); err != nil {
 			return nil, err
@@ -216,7 +216,7 @@ func (s *Service) authenticateConnection(ctx context.Context, authHeader string)
 	}, nil
 }
 
-func authorizeWrite(ctx context.Context, q collections.Queryable, actor *Actor, scope string) error {
+func authorizeWrite(ctx context.Context, q library.Queryable, actor *Actor, scope string) error {
 	var (
 		canWrite        int64
 		canEditMetadata int64
