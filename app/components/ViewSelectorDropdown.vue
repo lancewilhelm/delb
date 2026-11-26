@@ -9,13 +9,7 @@ type NavItem = {
   icon: string;
 };
 
-const dashboard: NavItem = {
-  label: 'Dashboard',
-  to: '/',
-  icon: 'lucide:layout-dashboard',
-};
 const primaryItems: NavItem[] = [
-  dashboard,
   { label: 'Books', to: '/books', icon: 'lucide:book' },
   { label: 'Shelves', to: '/shelves', icon: 'lucide:library' },
   { label: 'To be read', to: '/to-be-read', icon: 'lucide:list-ordered' },
@@ -41,7 +35,7 @@ const primaryMeasure = ref<HTMLElement | null>(null);
 const catalogMeasure = ref<HTMLElement | null>(null);
 const moreMeasure = ref<HTMLElement | null>(null);
 
-const activeItem = computed(() => items.find(isActive) ?? dashboard);
+const activeItem = computed(() => items.find(isActive));
 const visibleItems = computed(() => {
   if (layout.value === 'full') return items;
   if (layout.value === 'compact') return primaryItems;
@@ -150,11 +144,11 @@ onBeforeUnmount(() => {
         </template>
         <template v-else>
           <Icon
-            :name="activeItem.icon"
+            :name="activeItem?.icon ?? 'lucide:library'"
             class="text-(--contrast-main-color) opacity-90 shrink-0 text-2xl"
           />
           <span class="truncate text-xl text-(--contrast-main-color)">
-            {{ activeItem.label }}
+            {{ activeItem?.label ?? 'Browse' }}
           </span>
           <Icon
             name="lucide:chevron-down"

@@ -20,10 +20,11 @@ Grid/list components virtualize rendered items while the server paginates record
 
 ### Responsive navigation
 
-The navigation shows every destination when the toolbar has room. At smaller
-widths, Dashboard, Books, Shelves, and To be read stay visible. **More** holds
-Authors, Series, Publishers, Genres, and Tags. When that row cannot fit, a
-single dropdown shows the current view and links to every destination.
+The **Delb** wordmark opens the dashboard. The toolbar shows all eight library
+tabs when they fit. At smaller widths, Books, Shelves, and To be read stay
+visible. **More** holds Authors, Series, Publishers, Genres, and Tags. When
+that row cannot fit, a single dropdown contains the eight tabs. Its button
+shows the current view or **Browse** when no tab is active.
 
 ### Library bookshelf
 

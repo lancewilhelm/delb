@@ -12,7 +12,8 @@ Sign in and select **Books** in the navigation. The Books view shows every book 
 
 If the navigation has less room, open **More** to find Authors, Series,
 Publishers, Genres, and Tags. On the narrowest screens, select the current
-view's name to choose any destination.
+view's name or **Browse** to open the menu. Select **Delb** in the header to
+return to the dashboard.
 
 Book grids and lists support title, page count, publication date, date-added, and date-finished sorting in either direction. Date finished uses your own finish dates; books without one come last. The separate series presentation has its own layout.
 
