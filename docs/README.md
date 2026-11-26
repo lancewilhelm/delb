@@ -53,7 +53,7 @@ Browse the [feature contracts](developing/reference/README.md) or [UI component 
 
 The architecture and core guides describe the implementation at the revision recorded in [documentation status](developing/documentation-status.md). Historical review records and future-work sections are identified separately from current behavior.
 
-The [exclusive collection model and shared default](adr/0004-exclusive-collections-and-shared-default.md) records the collection contract. Existing installations use the [administrative migration](hosting/collection-migration.md).
+The [exclusive collection model and shared default](adr/0004-exclusive-collections-and-shared-default.md) records the currently active collection contract. Existing installations use the [administrative migration](hosting/collection-migration.md). The accepted v1.0 target architecture that replaces collections with a single shared library, server roles, tag visibility rules, genres, and unified bookshelf layouts is recorded in [ADR 0005](adr/0005-single-library-roles-and-tag-visibility.md).
 
 ## Historical records
 
