@@ -42,7 +42,7 @@ type migrationFile struct {
 
 // ErrPredatesBaseline reports a database that started before the pre-1.0
 // migration squash and never reached the schema that the baseline describes.
-var ErrPredatesBaseline = errors.New("this database predates Delb's v1.0 migration baseline: upgrade it with the last release before v1.0 (which applies migration 0022_single_library), then start this version")
+var ErrPredatesBaseline = errors.New("this database predates Delb's v1.0 migration baseline. Upgrade to Delb v0.2.1 to apply migration 0022_single_library, then start this version")
 
 // MigrateResult describes what Migrate did.
 type MigrateResult struct {

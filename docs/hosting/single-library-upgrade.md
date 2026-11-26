@@ -9,7 +9,7 @@ Delb `v1.0` starts its database history from a single baseline migration, `0000_
 - a new, empty database, or
 - a database that has already applied `0022_single_library`.
 
-If your server runs an older release, first upgrade to the last release before `v1.0`, which still includes the full migration chain and applies `0022_single_library`. Start it once, review access as described below, and then upgrade to `v1.0`. If you start `v1.0` on an older database, it stops before changing anything and reports that the database predates the migration baseline.
+If your database still needs `0022_single_library`, upgrade to [Delb v0.2.1](https://github.com/lancewilhelm/delb/releases/tag/v0.2.1) first. For Docker, use `ghcr.io/lancewilhelm/delb:v0.2.1`. Start Delb, confirm that the migration completes, and review access as described below before upgrading to `v1.0`. If you start `v1.0` on a database that still needs `0022_single_library`, startup stops before applying any migrations.
 
 > [!IMPORTANT]
 > After the upgrade, **every account can see every book**, including books that were in private collections. If some books should stay hidden from some accounts, tag those books and add tag visibility rules right after upgrading. Consider closing registration until you have reviewed access.
