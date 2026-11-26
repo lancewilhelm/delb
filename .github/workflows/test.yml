@@ -33,3 +33,9 @@ jobs:
       - run: pnpm test:integration
       - name: Build production container
         run: docker build -t delb:ci .
+      - name: Verify container temporary directory permissions
+        run: |
+          set -o pipefail
+          container=$(docker create --tmpfs /app/data delb:ci)
+          trap 'docker rm -v "$container" >/dev/null' EXIT
+          docker export "$container" | tar -tvf - tmp/ | grep '^drwxrwxrwt '
