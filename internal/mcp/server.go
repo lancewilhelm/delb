@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	maxMCPBodyBytes     int64 = 64 * 1024
-	maxSafeJSInteger          = 9007199254740991
+	maxMCPBodyBytes  int64 = 64 * 1024
+	maxSafeJSInteger       = 9007199254740991
 )
 
 var (
@@ -45,6 +45,7 @@ var (
 		"seriesIndex":   {},
 		"authors":       {},
 		"tags":          {},
+		"genres":        {},
 		"identifiers":   {},
 	}
 )
@@ -547,7 +548,7 @@ func (s *Service) buildMCPServer(actor *Actor) *sdkmcp.Server {
 	// 10. update_book_metadata
 	srv.AddTool(&sdkmcp.Tool{
 		Name:        "update_book_metadata",
-		Description: "Update only the supplied shared catalog fields. Read get_book first and provide its metadataVersion to prevent overwriting later changes. Authors, tags and identifiers replace their entire lists. Requires metadata permission and collection editor access. Changing title or authors may move managed storage; inspect storageWarning.",
+		Description: "Update only the supplied shared catalog fields. Read get_book first and provide its metadataVersion to prevent overwriting later changes. Authors, tags, genres, and identifiers replace their entire lists. Requires metadata permission and collection editor access. Changing title or authors may move managed storage; inspect storageWarning.",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -567,6 +568,7 @@ func (s *Service) buildMCPServer(actor *Actor) *sdkmcp.Server {
 						"seriesIndex":   map[string]any{"type": []string{"number", "null"}},
 						"authors":       map[string]any{"type": "array", "minItems": 1, "maxItems": 100, "items": map[string]any{"type": "string", "minLength": 1, "maxLength": 300}},
 						"tags":          map[string]any{"type": []string{"array", "null"}, "maxItems": 100, "items": map[string]any{"type": "string", "minLength": 1, "maxLength": 300}},
+						"genres":        map[string]any{"type": []string{"array", "null"}, "maxItems": 100, "items": map[string]any{"type": "string", "minLength": 1, "maxLength": 300}},
 						"identifiers": map[string]any{
 							"type":     []string{"array", "null"},
 							"maxItems": 100,
@@ -786,6 +788,27 @@ func validateAndConvertMetadataChanges(changes map[string]json.RawMessage) (map[
 			}
 			b, _ := json.Marshal(trimmed)
 			out["tags"] = b
+		}
+	}
+
+	if raw, ok := changes["genres"]; ok {
+		if strings.TrimSpace(string(raw)) == "null" {
+			out["genres"] = json.RawMessage("null")
+		} else {
+			var list []string
+			if json.Unmarshal(raw, &list) != nil || len(list) > 100 {
+				return nil, httpapi.NewError(http.StatusBadRequest, "Invalid genres.")
+			}
+			trimmed := make([]string, len(list))
+			for i, g := range list {
+				s := strings.TrimSpace(g)
+				if s == "" || utf16Len(s) > 300 {
+					return nil, httpapi.NewError(http.StatusBadRequest, "Invalid genre.")
+				}
+				trimmed[i] = s
+			}
+			b, _ := json.Marshal(trimmed)
+			out["genres"] = b
 		}
 	}
 

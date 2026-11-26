@@ -2,6 +2,7 @@ export const bookFieldCatalog = [
   { id: 'title', label: 'Title', width: 350, weight: 2 },
   { id: 'authors', label: 'Authors', width: 250, weight: 1.5 },
   { id: 'series', label: 'Series', width: 150, weight: 1 },
+  { id: 'genres', label: 'Genres', width: 200, weight: 1 },
   { id: 'tags', label: 'Tags', width: 200, weight: 1 },
   { id: 'publisher', label: 'Publisher', width: 180, weight: 1 },
   { id: 'published', label: 'Publication date', width: 150, weight: 1 },
@@ -31,6 +32,7 @@ export type BookViewBook = {
   publisher?: Named | null;
   series?: Named | null;
   seriesIndex?: number | null;
+  genres?: Named[];
   tags?: Named[];
   description?: string | null;
   published?: string | null;
@@ -146,6 +148,8 @@ export function bookFieldParts(
             },
           ]
         : [];
+    case 'genres':
+      return linked(book.genres ?? [], 'genres');
     case 'tags':
       return linked(book.tags ?? [], 'tags');
     case 'publisher':

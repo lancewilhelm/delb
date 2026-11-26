@@ -33,6 +33,7 @@ const items: NavItem[] = [
     to: '/publishers',
     icon: 'lucide:building-2',
   },
+  { id: 'genres', label: 'Genres', to: '/genres', icon: 'lucide:shapes' },
   { id: 'tags', label: 'Tags', to: '/tags', icon: 'lucide:tag' },
 ];
 
@@ -124,33 +125,33 @@ onBeforeUnmount(() => {
         class="absolute left-0 mt-1 w-44 bg-(--bg-color) border border-(--contrast-border-color) rounded-md shadow-lg z-150 overflow-hidden"
         role="menu"
       >
-          <RouterLink
-            v-for="item in items"
-            :key="item.id"
-            :to="item.to"
-            class="w-full px-3 py-2 text-left justify-start! gap-3 transition rounded-none! flex items-center"
-            :class="
-              isActive(item)
-                ? 'bg-(--sub-color)/20 text-(--contrast-main-color)'
-                : 'hover:bg-(--sub-color)/15 text-(--contrast-main-color) opacity-80 hover:opacity-100'
-            "
-            role="menuitem"
-            @click="closeDropdown"
-          >
-            <Icon
-              :name="item.icon"
-              class="text-(--contrast-main-color) opacity-80 shrink-0"
-            />
-            <span class="truncate text-sm">
-              {{ item.label }}
-            </span>
+        <RouterLink
+          v-for="item in items"
+          :key="item.id"
+          :to="item.to"
+          class="w-full px-3 py-2 text-left justify-start! gap-3 transition rounded-none! flex items-center"
+          :class="
+            isActive(item)
+              ? 'bg-(--sub-color)/20 text-(--contrast-main-color)'
+              : 'hover:bg-(--sub-color)/15 text-(--contrast-main-color) opacity-80 hover:opacity-100'
+          "
+          role="menuitem"
+          @click="closeDropdown"
+        >
+          <Icon
+            :name="item.icon"
+            class="text-(--contrast-main-color) opacity-80 shrink-0"
+          />
+          <span class="truncate text-sm">
+            {{ item.label }}
+          </span>
 
-            <Icon
-              v-if="isActive(item)"
-              name="lucide:check"
-              class="ml-auto text-(--contrast-main-color) opacity-80 shrink-0"
-            />
-          </RouterLink>
+          <Icon
+            v-if="isActive(item)"
+            name="lucide:check"
+            class="ml-auto text-(--contrast-main-color) opacity-80 shrink-0"
+          />
+        </RouterLink>
       </div>
     </div>
 

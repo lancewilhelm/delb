@@ -144,6 +144,18 @@ export const routes: RouteRecordRaw[] = [
     meta: userOnly,
   },
   {
+    path: '/genres',
+    name: 'genres',
+    component: () => import('~/pages/genres/index.vue'),
+    meta: userOnly,
+  },
+  {
+    path: '/genres/:id',
+    name: 'genres-id',
+    component: () => import('~/pages/genres/[id].vue'),
+    meta: userOnly,
+  },
+  {
     path: '/tags',
     name: 'tags',
     component: () => import('~/pages/tags/index.vue'),

@@ -213,7 +213,7 @@ interface ImportFields {
   publisher: boolean;
   published: boolean;
   language: boolean;
-  tags: boolean;
+  genres: boolean;
   cover: boolean;
 
   // New fields
@@ -536,7 +536,7 @@ function initializeFields(itemKey: string, item: GoogleBookItem) {
     publisher: !!item.volumeInfo.publisher,
     published: !!item.volumeInfo.publishedDate,
     language: !!item.volumeInfo.language,
-    tags: !!(item.volumeInfo.categories && item.volumeInfo.categories.length),
+    genres: !!(item.volumeInfo.categories && item.volumeInfo.categories.length),
     cover: !!getThumbnail(item),
 
     identifiers: !!(
@@ -558,7 +558,7 @@ function getFields(itemKey: string): ImportFields {
       publisher: false,
       published: false,
       language: false,
-      tags: false,
+      genres: false,
       cover: false,
 
       identifiers: false,
@@ -590,7 +590,7 @@ function importMetadata(result: SearchResult) {
         publisher: true,
         published: true,
         language: true,
-        tags: true,
+        genres: true,
         cover: true,
         identifiers: true,
         series: true,
@@ -627,7 +627,7 @@ function selectAllFields(itemId: string, item: GoogleBookItem) {
   fields.publisher = !!item.volumeInfo.publisher;
   fields.published = !!item.volumeInfo.publishedDate;
   fields.language = !!item.volumeInfo.language;
-  fields.tags = !!(
+  fields.genres = !!(
     item.volumeInfo.categories && item.volumeInfo.categories.length
   );
   fields.cover = !!getThumbnail(item);
@@ -649,7 +649,7 @@ function clearAllFields(itemKey: string) {
   fields.publisher = false;
   fields.published = false;
   fields.language = false;
-  fields.tags = false;
+  fields.genres = false;
   fields.cover = false;
 
   fields.identifiers = false;
@@ -1128,7 +1128,7 @@ function getThumbnail(item: GoogleBookItem): string {
                   </label>
                   <span v-else class="opacity-60 text-xs"> Pages: N/A </span>
 
-                  <!-- Categories/Tags -->
+                  <!-- Genres -->
                   <label
                     v-if="
                       result.googleItem?.volumeInfo.categories &&
@@ -1137,7 +1137,7 @@ function getThumbnail(item: GoogleBookItem): string {
                     class="flex items-center gap-2 cursor-pointer text-xs"
                   >
                     <input
-                      v-model="getFields(resultKey(result)).tags"
+                      v-model="getFields(resultKey(result)).genres"
                       type="checkbox"
                       class="peer sr-only"
                     />
@@ -1146,14 +1146,14 @@ function getThumbnail(item: GoogleBookItem): string {
                     ></span>
                     <div class="flex-1 min-w-0">
                       <div class="text-xs flex items-center gap-2">
-                        <span class="opacity-60"> Tags: </span>
+                        <span class="opacity-60"> Genres: </span>
                         <span class="flex flex-wrap gap-2">
                           <span
-                            v-for="(tag, index) in result.googleItem.volumeInfo
-                              .categories"
+                            v-for="(genre, index) in result.googleItem
+                              .volumeInfo.categories"
                             :key="index"
                             class="border rounded p-1"
-                            >{{ tag }}</span
+                            >{{ genre }}</span
                           >
                         </span>
                       </div>

@@ -3,12 +3,19 @@ import { useDebounceFn } from '@vueuse/core';
 import { useUiStore } from '~/stores/ui';
 import { $fetch } from '~/utils/apiFetch';
 import { navigateTo } from '~/utils/navigation';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from 'vue';
 import SearchBookResult from '~/components/Search/BookResult.vue';
 import SearchDialogFrame from '~/components/Search/DialogFrame.vue';
 import { buildBookCoverUrl } from '~/utils/covers';
 
-type SearchKind = 'book' | 'author' | 'series' | 'publisher' | 'tag';
+type SearchKind = 'book' | 'author' | 'series' | 'publisher' | 'genre' | 'tag';
 
 type GlobalSearchResultItem = {
   kind: SearchKind;
@@ -50,6 +57,7 @@ type SearchApiResponse = {
       authors: SearchApiBucketRow[];
       series: SearchApiBucketRow[];
       publishers: SearchApiBucketRow[];
+      genres?: SearchApiBucketRow[];
       tags: SearchApiBucketRow[];
     };
   };
@@ -76,6 +84,7 @@ const results = ref<GroupedResults[]>([
   { kind: 'author', label: 'Authors', items: [] },
   { kind: 'series', label: 'Series', items: [] },
   { kind: 'publisher', label: 'Publishers', items: [] },
+  { kind: 'genre', label: 'Genres', items: [] },
   { kind: 'tag', label: 'Tags', items: [] },
 ]);
 
@@ -111,6 +120,7 @@ function closeModal() {
     { kind: 'author', label: 'Authors', items: [] },
     { kind: 'series', label: 'Series', items: [] },
     { kind: 'publisher', label: 'Publishers', items: [] },
+    { kind: 'genre', label: 'Genres', items: [] },
     { kind: 'tag', label: 'Tags', items: [] },
   ];
 }
@@ -159,6 +169,12 @@ function goToResult(item: GlobalSearchResultItem) {
     return;
   }
 
+  if (item.kind === 'genre') {
+    closeModal();
+    navigateTo(`/genres/${item.id}`);
+    return;
+  }
+
   if (item.kind === 'tag') {
     closeModal();
     navigateTo(`/tags/${item.id}`);
@@ -201,6 +217,7 @@ async function runSearch(q: string, generation: number) {
       { kind: 'author', label: 'Authors', items: [] },
       { kind: 'series', label: 'Series', items: [] },
       { kind: 'publisher', label: 'Publishers', items: [] },
+      { kind: 'genre', label: 'Genres', items: [] },
       { kind: 'tag', label: 'Tags', items: [] },
     ];
     highlightedIndex.value = 0;
@@ -268,6 +285,15 @@ async function runSearch(q: string, generation: number) {
         icon: 'lucide:building-2',
       })) ?? [];
 
+    const genreItems: GlobalSearchResultItem[] =
+      buckets?.genres?.map((r) => ({
+        kind: 'genre',
+        id: String(r.id),
+        title: toNameTitle(r),
+        subtitle: null,
+        icon: 'lucide:shapes',
+      })) ?? [];
+
     const tagItems: GlobalSearchResultItem[] =
       buckets?.tags?.map((r) => ({
         kind: 'tag',
@@ -283,6 +309,7 @@ async function runSearch(q: string, generation: number) {
       { kind: 'author', label: 'Authors', items: authorItems },
       { kind: 'series', label: 'Series', items: seriesItems },
       { kind: 'publisher', label: 'Publishers', items: publisherItems },
+      { kind: 'genre', label: 'Genres', items: genreItems },
       { kind: 'tag', label: 'Tags', items: tagItems },
     ];
 

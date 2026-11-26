@@ -40,7 +40,13 @@ A catalog entry without a downloadable ebook file. It can represent a physical b
 Descriptive information about a book, such as its title, authors, identifiers, and cover. It is distinct from the book's reading content.
 
 **Catalog vocabulary**:
-The authors, tags, series, and publishers shared across Delb's book entries. Individual entries select their own associations with these terms.
+The authors, genres, tags, series, and publishers shared across Delb's book entries. Individual entries select their own associations with these terms.
+
+**Genre**:
+A shared bibliographic category attached to a book entry, populated automatically from metadata providers or embedded EPUB subjects and editable in the book editor.
+
+**Tag**:
+A manual shared label attached to a book entry for browsing and filtering, kept separate from provider-imported genres.
 
 **Catalog metadata**:
 Book metadata recorded in Delb's catalog.

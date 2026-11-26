@@ -11,6 +11,7 @@ export type BookEditorBaseline = {
   pages?: number | null;
   authors?: { id?: string; name: string; position?: number | null }[] | null;
   tags?: { id?: string; name: string }[] | null;
+  genres?: { id?: string; name: string }[] | null;
   publisher?: { id?: string; name: string } | null;
   series?: { id?: string; name: string; index?: number | null } | null;
   identifiers?: BookIdentifierRow[] | null;
@@ -35,6 +36,8 @@ export type BookEditorDirtyInput = {
   authorInput: string;
   tagChips: { name: string }[];
   tagInput: string;
+  genreChips?: { name: string }[];
+  genreInput?: string;
   identifierTypeInput: string;
   identifierValueInput: string;
   hasSelectedCoverFile: boolean;
@@ -172,6 +175,7 @@ export function hasBookEditorUnsavedChanges(
   if (
     input.authorInput.trim().length > 0 ||
     input.tagInput.trim().length > 0 ||
+    (input.genreInput ?? '').trim().length > 0 ||
     input.identifierTypeInput.trim().length > 0 ||
     input.identifierValueInput.trim().length > 0
   ) {
@@ -222,6 +226,12 @@ export function hasBookEditorUnsavedChanges(
   const currentTags = input.tagChips.map((chip) => chip.name);
   const baselineTags = (baseline.tags ?? []).map((tag) => tag.name);
   if (!nameListsEqual(currentTags, baselineTags)) return true;
+
+  if (input.genreChips !== undefined) {
+    const currentGenres = input.genreChips.map((chip) => chip.name);
+    const baselineGenres = (baseline.genres ?? []).map((genre) => genre.name);
+    if (!nameListsEqual(currentGenres, baselineGenres)) return true;
+  }
 
   return false;
 }

@@ -6,7 +6,7 @@ Sign in and select a collection in the header. Choose **All** to include books f
 
 ## Browse the catalog
 
-1. Select **Books**, **Authors**, **Series**, **Publishers**, or **Tags** in the navigation.
+1. Select **Books**, **Authors**, **Series**, **Publishers**, **Genres**, or **Tags** in the navigation.
 2. Open a book or an entity to see its available books.
 3. In book grids and lists, use the sort control to choose an order.
 
@@ -15,7 +15,7 @@ Book grids and lists support title, page count, publication date, date-added, an
 ## Search across the library
 
 1. Select **Open global search** in the header.
-2. Enter a title, author, series, publisher, tag, or stored ISBN.
+2. Enter a title, author, series, publisher, genre, tag, or stored ISBN.
 3. Select a result to open it.
 
 Global search uses book visibility across your accessible collections. Do not assume the header's selected collection narrows every search result. Search is distinct from the command palette, which performs application actions and changes settings.

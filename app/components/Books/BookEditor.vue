@@ -91,7 +91,7 @@ interface ImportFields {
   publisher: boolean;
   published: boolean;
   language: boolean;
-  tags: boolean;
+  genres: boolean;
   cover: boolean;
 
   // new: identifiers + series + pages
@@ -194,6 +194,7 @@ type Book = {
   // related entities (denormalized by API)
   authors?: { id: string; name: string; position?: number | null }[];
   tags?: { id: string; name: string }[];
+  genres?: { id: string; name: string }[];
 
   publisher?: { id: string; name: string } | null;
   series?: { id: string; name: string; index?: number | null } | null;
@@ -274,6 +275,7 @@ function makeEmptyBook(): Book {
     pages: null,
     authors: [],
     tags: [],
+    genres: [],
     publisher: null,
     series: null,
     identifiers: [],
@@ -602,6 +604,13 @@ const tagSuggestOpen = ref(false);
 const tagSearching = ref(false);
 let tagSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
+const genreInput = ref('');
+const genreChips = ref<NameChip[]>([]);
+const genreSuggestions = ref<{ id: string; name: string }[]>([]);
+const genreSuggestOpen = ref(false);
+const genreSearching = ref(false);
+let genreSearchTimer: ReturnType<typeof setTimeout> | null = null;
+
 const publisherInput = ref('');
 const publisherSuggestions = ref<{ id: string; name: string }[]>([]);
 const publisherSuggestOpen = ref(false);
@@ -797,6 +806,32 @@ async function fetchTagSuggestions(query: string) {
   }
 }
 
+async function fetchGenreSuggestions(query: string) {
+  const q = normalizeName(query);
+  if (!q) {
+    genreSuggestions.value = [];
+    genreSuggestOpen.value = false;
+    return;
+  }
+
+  genreSearching.value = true;
+  try {
+    const results = await fetchSuggestions('/api/genres/search', q, 8);
+
+    const filtered = results.filter((r) => {
+      const nm = normalizeName(r.name).toLowerCase();
+      return !genreChips.value.some(
+        (c) => (c.id && c.id === r.id) || c.name.toLowerCase() === nm,
+      );
+    });
+
+    genreSuggestions.value = filtered;
+    genreSuggestOpen.value = true;
+  } finally {
+    genreSearching.value = false;
+  }
+}
+
 async function fetchPublisherSuggestions(query: string) {
   const q = normalizeName(query);
   if (!q) {
@@ -891,6 +926,34 @@ watch(
 );
 
 watch(
+  () => genreInput.value,
+  (v) => {
+    const committed = chipCommitFromComma(genreChips.value, v);
+    if (committed.committed) {
+      genreChips.value = committed.chips;
+      genreInput.value = committed.input;
+      genreSuggestOpen.value = false;
+    }
+
+    if (genreSearchTimer) {
+      clearTimeout(genreSearchTimer);
+      genreSearchTimer = null;
+    }
+
+    const q = normalizeName(genreInput.value);
+    if (!q) {
+      genreSuggestions.value = [];
+      genreSuggestOpen.value = false;
+      return;
+    }
+
+    genreSearchTimer = setTimeout(() => {
+      fetchGenreSuggestions(q);
+    }, 250);
+  },
+);
+
+watch(
   () => publisherInput.value,
   (v) => {
     // Only search/show suggestions while the input is actively focused.
@@ -949,6 +1012,10 @@ onBeforeUnmount(() => {
     clearTimeout(tagSearchTimer);
     tagSearchTimer = null;
   }
+  if (genreSearchTimer) {
+    clearTimeout(genreSearchTimer);
+    genreSearchTimer = null;
+  }
   if (publisherSearchTimer) {
     clearTimeout(publisherSearchTimer);
     publisherSearchTimer = null;
@@ -1003,6 +1070,12 @@ function bookToForm(b: Book) {
   tagInput.value = '';
   tagSuggestions.value = [];
   tagSuggestOpen.value = false;
+
+  // Genres (chips)
+  genreChips.value = (b.genres ?? []).map((g) => ({ id: g.id, name: g.name }));
+  genreInput.value = '';
+  genreSuggestions.value = [];
+  genreSuggestOpen.value = false;
 
   // Identifiers (lean v1): render as newline list
   const ids = (b.identifiers ?? [])
@@ -1139,6 +1212,13 @@ function commitPendingChips() {
     tagInput.value = committedTags.input;
     tagSuggestOpen.value = false;
   }
+
+  const committedGenres = chipCommitOnEnter(genreChips.value, genreInput.value);
+  if (committedGenres.committed) {
+    genreChips.value = committedGenres.chips;
+    genreInput.value = committedGenres.input;
+    genreSuggestOpen.value = false;
+  }
 }
 
 function buildPayload() {
@@ -1147,6 +1227,7 @@ function buildPayload() {
     // send names (server will link/create as needed)
     authors: authorChips.value.map((c) => c.name),
     tags: tagChips.value.map((c) => c.name),
+    genres: genreChips.value.map((c) => c.name),
 
     description: normalizeStringOrNullFromOptional(form.description),
     published: normalizeDateOnlyOrNull(form.published),
@@ -1332,6 +1413,8 @@ const hasUnsavedChanges = computed(() =>
     authorInput: authorInput.value,
     tagChips: tagChips.value,
     tagInput: tagInput.value,
+    genreChips: genreChips.value,
+    genreInput: genreInput.value,
     identifierTypeInput: identifierTypeInput.value,
     identifierValueInput: identifierValueInput.value,
     hasSelectedCoverFile: Boolean(selectedCoverFile.value),
@@ -1656,7 +1739,7 @@ async function handleAutoFetchMetadata() {
         publisher: true,
         published: true,
         language: true,
-        tags: true,
+        genres: true,
         cover: true,
         identifiers: true,
         series: true,
@@ -1747,13 +1830,13 @@ async function handleMetadataSelect(selection: MetadataImportSelection) {
       form.pages = String(item.volumeInfo.pageCount);
     }
 
-    // Tags (categories/tags -> tag chips by name; server resolves on save)
-    if (fields.tags && item.volumeInfo.categories?.length) {
-      const tagsFromCategories = uniqByLower(item.volumeInfo.categories);
-      tagChips.value = tagsFromCategories.map((name) => ({ name }));
-      tagInput.value = '';
-      tagSuggestions.value = [];
-      tagSuggestOpen.value = false;
+    // Genres (provider categories -> genre chips by name; server resolves on save)
+    if (fields.genres && item.volumeInfo.categories?.length) {
+      const genresFromCategories = uniqByLower(item.volumeInfo.categories);
+      genreChips.value = genresFromCategories.map((name) => ({ name }));
+      genreInput.value = '';
+      genreSuggestions.value = [];
+      genreSuggestOpen.value = false;
     }
 
     // Identifiers (supports ISBN + non-ISBN identifiers like Hardcover id)
@@ -2416,6 +2499,120 @@ watch(
                   inputmode="decimal"
                   placeholder="(blank to clear)"
                 />
+              </div>
+            </div>
+
+            <!-- Genres -->
+            <div class="grid gap-2">
+              <div class="flex items-center gap-1">
+                <label
+                  class="text-sm opacity-70"
+                  :class="
+                    genreChips
+                      .map((c) => c.name)
+                      .join(', ')
+                      .trim() !==
+                    (book.genres ?? [])
+                      .map((g) => g.name)
+                      .join(', ')
+                      .trim()
+                      ? 'text-(--contrast-error-color)'
+                      : ''
+                  "
+                  >Genres</label
+                >
+                <Icon
+                  v-if="
+                    genreChips
+                      .map((c) => c.name)
+                      .join(', ')
+                      .trim() !==
+                    (book.genres ?? [])
+                      .map((g) => g.name)
+                      .join(', ')
+                      .trim()
+                  "
+                  v-tooltip="'Reset genres'"
+                  name="ri:reset-left-line"
+                  class="text-(--contrast-error-color) cursor-pointer text-sm"
+                  @click="
+                    genreChips = (book.genres ?? []).map((g) => ({
+                      id: g.id,
+                      name: g.name,
+                    }));
+                    genreInput = '';
+                    genreSuggestions = [];
+                    genreSuggestOpen = false;
+                  "
+                />
+              </div>
+
+              <!-- Selected genre chips -->
+              <div v-if="genreChips.length" class="flex flex-wrap gap-2">
+                <UiChip
+                  v-for="(c, i) in genreChips"
+                  :key="(c.id ?? c.name) + ':' + i"
+                  :label="c.name"
+                  @remove="genreChips = chipRemove(genreChips, i)"
+                />
+              </div>
+
+              <!-- Genre input + suggestions -->
+              <div class="relative">
+                <input
+                  v-model="genreInput"
+                  class="w-full px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color)"
+                  type="text"
+                  placeholder="Type genres… (comma to create chips)"
+                  @keydown.enter.prevent="
+                    (() => {
+                      const committed = chipCommitOnEnter(
+                        genreChips,
+                        genreInput,
+                      );
+                      if (committed.committed) {
+                        genreChips = committed.chips;
+                        genreInput = committed.input;
+                        genreSuggestOpen = false;
+                      }
+                    })()
+                  "
+                  @keydown.esc="
+                    (() => {
+                      genreSuggestions = [];
+                      genreSuggestOpen = false;
+                    })()
+                  "
+                  @focus="genreSuggestOpen = !!genreSuggestions.length"
+                />
+
+                <div
+                  v-if="
+                    genreSuggestOpen &&
+                    (genreSearching || genreSuggestions.length)
+                  "
+                  class="absolute z-50 mt-1 w-full rounded-md border border-(--contrast-border-color) bg-(--bg-color) shadow-lg overflow-hidden"
+                >
+                  <div
+                    v-if="genreSearching"
+                    class="px-3 py-2 text-sm opacity-70"
+                  >
+                    Searching…
+                  </div>
+
+                  <div
+                    v-for="s in genreSuggestions"
+                    :key="s.id"
+                    class="w-full px-3 py-2 text-left text-sm hover:bg-(--sub-color)/10 cursor-pointer"
+                    @click="
+                      genreChips = chipAddFromSuggestion(genreChips, s);
+                      genreInput = '';
+                      genreSuggestOpen = false;
+                    "
+                  >
+                    {{ s.name }}
+                  </div>
+                </div>
               </div>
             </div>
 

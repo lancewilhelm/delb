@@ -168,6 +168,14 @@ test('detects author chips, tag chips, and uncommitted chip or identifier inputs
   removedTag.tagChips.pop();
   assert.equal(hasBookEditorUnsavedChanges(removedTag), true);
 
+  const addedGenre = createCleanInput();
+  addedGenre.genreChips = [{ name: 'Science Fiction' }];
+  assert.equal(hasBookEditorUnsavedChanges(addedGenre), true);
+
+  const genreTyping = createCleanInput();
+  genreTyping.genreInput = 'Fantasy';
+  assert.equal(hasBookEditorUnsavedChanges(genreTyping), true);
+
   const authorTyping = createCleanInput();
   authorTyping.authorInput = 'Ursula';
   assert.equal(hasBookEditorUnsavedChanges(authorTyping), true);

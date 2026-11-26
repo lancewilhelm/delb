@@ -154,10 +154,10 @@ func (s *Service) searchBooks(ctx context.Context, actor *Actor, input searchBoo
 	var rawItems []searchBookItem
 	for rows.Next() {
 		var (
-			id, title                       string
-			pub, status, note               sql.NullString
-			startedAt, finishedAt, dnfAt    sql.NullInt64
-			tbrRank                         sql.NullInt64
+			id, title                    string
+			pub, status, note            sql.NullString
+			startedAt, finishedAt, dnfAt sql.NullInt64
+			tbrRank                      sql.NullInt64
 		)
 		if err := rows.Scan(&id, &title, &pub, &status, &startedAt, &finishedAt, &dnfAt, &tbrRank, &note); err != nil {
 			_ = rows.Close()
@@ -259,6 +259,8 @@ type mcpBookDetail struct {
 	IdentifiersTruncated bool            `json:"identifiersTruncated"`
 	Tags                 []string        `json:"tags"`
 	TagsTruncated        bool            `json:"tagsTruncated"`
+	Genres               []string        `json:"genres"`
+	GenresTruncated      bool            `json:"genresTruncated"`
 }
 
 func truncateUTF16(s string, maxUnits int) (string, bool) {
@@ -375,6 +377,28 @@ func (s *Service) getBook(ctx context.Context, actor *Actor, bookID string) (*mc
 	}
 	_ = tRows.Close()
 
+	gRows, err := tx.QueryContext(ctx, `
+		SELECT g.name
+		FROM book_genres bg
+		INNER JOIN genres g ON g.id = bg.genre_id
+		WHERE bg.book_id = ?
+		ORDER BY g.name ASC
+		LIMIT 101
+	`, bookID)
+	if err != nil {
+		return nil, err
+	}
+	genreNames := make([]string, 0)
+	for gRows.Next() {
+		var name string
+		if err := gRows.Scan(&name); err != nil {
+			_ = gRows.Close()
+			return nil, err
+		}
+		genreNames = append(genreNames, name)
+	}
+	_ = gRows.Close()
+
 	metaVer, err := books.ComputeMetadataVersion(ctx, tx, bookID)
 	if err != nil {
 		return nil, err
@@ -397,6 +421,10 @@ func (s *Service) getBook(ctx context.Context, actor *Actor, bookID string) (*mc
 	tagsTrunc := len(tagNames) > 100
 	if tagsTrunc {
 		tagNames = tagNames[:100]
+	}
+	genresTrunc := len(genreNames) > 100
+	if genresTrunc {
+		genreNames = genreNames[:100]
 	}
 
 	return &mcpBookDetail{
@@ -424,6 +452,8 @@ func (s *Service) getBook(ctx context.Context, actor *Actor, bookID string) (*mc
 		IdentifiersTruncated: identsTrunc,
 		Tags:                 tagNames,
 		TagsTruncated:        tagsTrunc,
+		Genres:               genreNames,
+		GenresTruncated:      genresTrunc,
 	}, nil
 }
 
@@ -646,6 +676,7 @@ func (s *Service) setTbrNote(ctx context.Context, actor *Actor, bookID, note str
 func (s *Service) editMetadata(ctx context.Context, actor *Actor, bookID, expectedVersion string, body map[string]json.RawMessage) (map[string]any, error) {
 	_, hasDesc := body["description"]
 	_, hasTags := body["tags"]
+	_, hasGenres := body["genres"]
 	_, hasIdents := body["identifiers"]
 
 	storageWarning, err := s.books.UpdateBookMetadata(
@@ -670,6 +701,15 @@ func (s *Service) editMetadata(ctx context.Context, actor *Actor, bookID, expect
 				}
 				if cnt > 100 {
 					return httpapi.NewError(http.StatusBadRequest, "This book has more tags than MCP can show. Edit tags in Delb instead.")
+				}
+			}
+			if hasGenres {
+				var cnt int
+				if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM book_genres WHERE book_id = ?`, bookID).Scan(&cnt); err != nil {
+					return err
+				}
+				if cnt > 100 {
+					return httpapi.NewError(http.StatusBadRequest, "This book has more genres than MCP can show. Edit genres in Delb instead.")
 				}
 			}
 			if hasIdents {

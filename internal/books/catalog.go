@@ -24,6 +24,7 @@ const (
 	entityPublishers entityKind = "publishers"
 	entitySeries     entityKind = "series"
 	entityTags       entityKind = "tags"
+	entityGenres     entityKind = "genres"
 )
 
 type entityListConfig struct {
@@ -63,6 +64,13 @@ var entityConfigs = map[entityKind]entityListConfig{
 		rhs:      "b.id",
 		order:    "v.title, v.book_id",
 	},
+	entityGenres: {
+		table:    "genres",
+		relation: "JOIN book_genres rel ON rel.genre_id = e.id",
+		key:      "rel.book_id",
+		rhs:      "b.id",
+		order:    "v.title, v.book_id",
+	},
 }
 
 var intStrRe = regexp.MustCompile(`^-?\d+$`)
@@ -95,6 +103,9 @@ func (s *Service) handleListSeries(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Service) handleListTags(w http.ResponseWriter, r *http.Request) {
 	s.handleListEntities(w, r, entityTags)
+}
+func (s *Service) handleListGenres(w http.ResponseWriter, r *http.Request) {
+	s.handleListEntities(w, r, entityGenres)
 }
 
 // Mirrors server/utils/books/entity-list.ts + entity-list-query.ts.
@@ -250,6 +261,8 @@ func visibleEntitySQL(kind string) string {
 		return `EXISTS (SELECT 1 FROM book_authors ba INNER JOIN books b ON b.id = ba.book_id INNER JOIN collection_books cb ON cb.book_id = b.id INNER JOIN collection_members cm ON cm.collection_id = cb.collection_id WHERE ba.author_id = authors.id AND cm.user_id = ?)`
 	case "tag":
 		return `EXISTS (SELECT 1 FROM book_tags bt INNER JOIN books b ON b.id = bt.book_id INNER JOIN collection_books cb ON cb.book_id = b.id INNER JOIN collection_members cm ON cm.collection_id = cb.collection_id WHERE bt.tag_id = tags.id AND cm.user_id = ?)`
+	case "genre":
+		return `EXISTS (SELECT 1 FROM book_genres bg INNER JOIN books b ON b.id = bg.book_id INNER JOIN collection_books cb ON cb.book_id = b.id INNER JOIN collection_members cm ON cm.collection_id = cb.collection_id WHERE bg.genre_id = genres.id AND cm.user_id = ?)`
 	case "publisher":
 		return `EXISTS (SELECT 1 FROM books b INNER JOIN collection_books cb ON cb.book_id = b.id INNER JOIN collection_members cm ON cm.collection_id = cb.collection_id WHERE b.publisher_id = publishers.id AND cm.user_id = ?)`
 	case "series":
@@ -326,6 +339,9 @@ func (s *Service) handleSearchSeries(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Service) handleSearchTags(w http.ResponseWriter, r *http.Request) {
 	s.handleAdminEntitySearch(w, r, "tags", "tag", 8, true)
+}
+func (s *Service) handleSearchGenres(w http.ResponseWriter, r *http.Request) {
+	s.handleAdminEntitySearch(w, r, "genres", "genre", 8, true)
 }
 
 func (s *Service) handleAdminEntitySearch(w http.ResponseWriter, r *http.Request, table, visKind string, defaultLimit int, useInstr bool) {
@@ -411,6 +427,9 @@ func (s *Service) handleListPublisherBooks(w http.ResponseWriter, r *http.Reques
 func (s *Service) handleListTagBooks(w http.ResponseWriter, r *http.Request) {
 	s.handleListEntityBooks(w, r, "tag", "tags", "Tag", "tag")
 }
+func (s *Service) handleListGenreBooks(w http.ResponseWriter, r *http.Request) {
+	s.handleListEntityBooks(w, r, "genre", "genres", "Genre", "genre")
+}
 
 func (s *Service) handleListEntityBooks(w http.ResponseWriter, r *http.Request, visKind, table, label, responseKey string) {
 	userID := httpapi.SessionFromContext(r.Context()).User.ID
@@ -479,6 +498,9 @@ func (s *Service) handleListEntityBooks(w http.ResponseWriter, r *http.Request, 
 	case "tag":
 		joinSQL = `INNER JOIN book_tags bt ON bt.book_id = b.id INNER JOIN collection_books cb ON cb.book_id = b.id`
 		filterSQL = `bt.tag_id = ?`
+	case "genre":
+		joinSQL = `INNER JOIN book_genres bg ON bg.book_id = b.id INNER JOIN collection_books cb ON cb.book_id = b.id`
+		filterSQL = `bg.genre_id = ?`
 	}
 
 	args := make([]any, 0, len(targetIDs)+7)
@@ -732,6 +754,15 @@ func (s *Service) handleListSeriesBooks(w http.ResponseWriter, r *http.Request) 
 
 // DELETE /api/tags/{id}
 func (s *Service) handleDeleteTag(w http.ResponseWriter, r *http.Request) {
+	s.handleDeleteCatalogTerm(w, r, "tag", "tags", "book_tags", "tag_id", "Tag")
+}
+
+// DELETE /api/genres/{id}
+func (s *Service) handleDeleteGenre(w http.ResponseWriter, r *http.Request) {
+	s.handleDeleteCatalogTerm(w, r, "genre", "genres", "book_genres", "genre_id", "Genre")
+}
+
+func (s *Service) handleDeleteCatalogTerm(w http.ResponseWriter, r *http.Request, visKind, table, joinTable, fkCol, label string) {
 	user := httpapi.SessionFromContext(r.Context()).User
 	if user.Role != "admin" && user.Role != "owner" {
 		httpapi.WriteError(w, http.StatusForbidden, "Forbidden")
@@ -739,11 +770,11 @@ func (s *Service) handleDeleteTag(w http.ResponseWriter, r *http.Request) {
 	}
 	sourceID := r.PathValue("id")
 	if sourceID == "" {
-		httpapi.WriteError(w, http.StatusBadRequest, "Missing tag id")
+		httpapi.WriteError(w, http.StatusBadRequest, "Missing "+visKind+" id")
 		return
 	}
-	if err := mutateTag(r.Context(), s.db, user.ID, "delete", sourceID, ""); err != nil {
-		s.writeErr(w, "DELETE /api/tags/{id} failed", err)
+	if err := mutateCatalogTerm(r.Context(), s.db, user.ID, visKind, table, joinTable, fkCol, label, "delete", sourceID, ""); err != nil {
+		s.writeErr(w, "DELETE /api/"+table+"/{id} failed", err)
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
@@ -751,6 +782,15 @@ func (s *Service) handleDeleteTag(w http.ResponseWriter, r *http.Request) {
 
 // POST /api/tags/{id}/merge
 func (s *Service) handleMergeTag(w http.ResponseWriter, r *http.Request) {
+	s.handleMergeCatalogTerm(w, r, "tag", "tags", "book_tags", "tag_id", "Tag")
+}
+
+// POST /api/genres/{id}/merge
+func (s *Service) handleMergeGenre(w http.ResponseWriter, r *http.Request) {
+	s.handleMergeCatalogTerm(w, r, "genre", "genres", "book_genres", "genre_id", "Genre")
+}
+
+func (s *Service) handleMergeCatalogTerm(w http.ResponseWriter, r *http.Request, visKind, table, joinTable, fkCol, label string) {
 	user := httpapi.SessionFromContext(r.Context()).User
 	if user.Role != "admin" && user.Role != "owner" {
 		httpapi.WriteError(w, http.StatusForbidden, "Forbidden")
@@ -776,8 +816,8 @@ func (s *Service) handleMergeTag(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "Source and destination are required")
 		return
 	}
-	if err := mutateTag(r.Context(), s.db, user.ID, "merge", sourceID, targetID); err != nil {
-		s.writeErr(w, "POST /api/tags/{id}/merge failed", err)
+	if err := mutateCatalogTerm(r.Context(), s.db, user.ID, visKind, table, joinTable, fkCol, label, "merge", sourceID, targetID); err != nil {
+		s.writeErr(w, "POST /api/"+table+"/{id}/merge failed", err)
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
@@ -786,9 +826,9 @@ func (s *Service) handleMergeTag(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func mutateTag(ctx context.Context, db *sql.DB, userID, kind, sourceID, targetID string) error {
+func mutateCatalogTerm(ctx context.Context, db *sql.DB, userID, visKind, table, joinTable, fkCol, label, kind, sourceID, targetID string) error {
 	if kind == "merge" && sourceID == targetID {
-		return httpapi.NewError(http.StatusBadRequest, "Choose a different destination tag")
+		return httpapi.NewError(http.StatusBadRequest, "Choose a different destination "+visKind)
 	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -800,12 +840,12 @@ func mutateTag(ctx context.Context, db *sql.DB, userID, kind, sourceID, targetID
 	if kind == "merge" {
 		checkIDs = append(checkIDs, targetID)
 	}
-	vis := visibleEntitySQL("tag")
+	vis := visibleEntitySQL(visKind)
 	for _, id := range checkIDs {
 		var existing string
-		err := tx.QueryRowContext(ctx, `SELECT id FROM tags WHERE id = ? AND `+vis+` LIMIT 1`, id, userID).Scan(&existing)
+		err := tx.QueryRowContext(ctx, `SELECT id FROM `+table+` WHERE id = ? AND `+vis+` LIMIT 1`, id, userID).Scan(&existing)
 		if errors.Is(err, sql.ErrNoRows) {
-			return httpapi.NewError(http.StatusNotFound, "Tag not found")
+			return httpapi.NewError(http.StatusNotFound, label+" not found")
 		}
 		if err != nil {
 			return err
@@ -814,28 +854,28 @@ func mutateTag(ctx context.Context, db *sql.DB, userID, kind, sourceID, targetID
 
 	if kind == "merge" {
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO book_tags (book_id, tag_id)
-			SELECT book_id, ? FROM book_tags WHERE tag_id = ?
-			ON CONFLICT(book_id, tag_id) DO NOTHING
+			INSERT INTO `+joinTable+` (book_id, `+fkCol+`)
+			SELECT book_id, ? FROM `+joinTable+` WHERE `+fkCol+` = ?
+			ON CONFLICT(book_id, `+fkCol+`) DO NOTHING
 		`, targetID, sourceID); err != nil {
 			return err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM book_tags WHERE tag_id = ?`, sourceID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM `+joinTable+` WHERE `+fkCol+` = ?`, sourceID); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM tags WHERE id = ?`, sourceID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE id = ?`, sourceID); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
 var (
-	isbnPrefixRe   = regexp.MustCompile(`(?i)^\s*isbn(?:-?1[03])?\s*[:#]?\s*`)
-	startsISBNRe   = regexp.MustCompile(`(?i)^\s*isbn`)
+	isbnPrefixRe    = regexp.MustCompile(`(?i)^\s*isbn(?:-?1[03])?\s*[:#]?\s*`)
+	startsISBNRe    = regexp.MustCompile(`(?i)^\s*isbn`)
 	isbnLikeCharsRe = regexp.MustCompile(`^[0-9Xx\-\s]{10,}$`)
-	isbn13DigitsRe = regexp.MustCompile(`^[0-9]{13}$`)
-	isbn10DigitsRe = regexp.MustCompile(`^[0-9X]{10}$`)
+	isbn13DigitsRe  = regexp.MustCompile(`^[0-9]{13}$`)
+	isbn10DigitsRe  = regexp.MustCompile(`^[0-9X]{10}$`)
 )
 
 func normalizeSearchIdentCandidate(input string) string {
@@ -861,6 +901,7 @@ func (s *Service) handleGlobalSearch(w http.ResponseWriter, r *http.Request) {
 					"authors":    []any{},
 					"series":     []any{},
 					"publishers": []any{},
+					"genres":     []any{},
 					"tags":       []any{},
 				},
 			},
@@ -889,14 +930,14 @@ func (s *Service) handleGlobalSearch(w http.ResponseWriter, r *http.Request) {
 	booksBucket := make([]map[string]any, 0)
 	if len(memberColIDs) > 0 {
 		type searchBookRow struct {
-			id          string
-			title       string
-			published   sql.NullString
-			createdAt   int64
-			updatedAt   int64
-			cover       sql.NullString
-			matchKind   string
-			matchedVal  string
+			id         string
+			title      string
+			published  sql.NullString
+			createdAt  int64
+			updatedAt  int64
+			cover      sql.NullString
+			matchKind  string
+			matchedVal string
 		}
 
 		colPh := makePlaceholders(len(memberColIDs))
@@ -1218,6 +1259,11 @@ func (s *Service) handleGlobalSearch(w http.ResponseWriter, r *http.Request) {
 		s.writeErrWithFallback(w, "GET /api/search publishers failed", "Failed to search", err)
 		return
 	}
+	genresBucket, err := searchEntityBucket("genres", "genre")
+	if err != nil {
+		s.writeErrWithFallback(w, "GET /api/search genres failed", "Failed to search", err)
+		return
+	}
 	tagsBucket, err := searchEntityBucket("tags", "tag")
 	if err != nil {
 		s.writeErrWithFallback(w, "GET /api/search tags failed", "Failed to search", err)
@@ -1234,6 +1280,7 @@ func (s *Service) handleGlobalSearch(w http.ResponseWriter, r *http.Request) {
 				"authors":    authorsBucket,
 				"series":     seriesBucket,
 				"publishers": publishersBucket,
+				"genres":     genresBucket,
 				"tags":       tagsBucket,
 			},
 		},

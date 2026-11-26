@@ -121,6 +121,7 @@ func ingestDropboxFile(
 		description string
 		language    string
 		published   string
+		subjects    []string
 	)
 	if format == "epub" {
 		meta, err := epub.ParseMetadataFromBytes(buf, fallbackTitle)
@@ -136,6 +137,7 @@ func ingestDropboxFile(
 		description = meta.Description
 		language = meta.Language
 		published = meta.Published
+		subjects = meta.Subjects
 	}
 
 	bookID := uuid.NewString()
@@ -250,6 +252,30 @@ func ingestDropboxFile(
 		VALUES (?, ?, ?, ?, ?)
 	`, uuid.NewString(), bookID, format, relativePath, nowSec); err != nil {
 		return nil, err
+	}
+	for _, subj := range subjects {
+		name := strings.TrimSpace(subj)
+		if name == "" {
+			continue
+		}
+		var gid string
+		err := tx.QueryRowContext(ctx, `SELECT id FROM genres WHERE name = ? LIMIT 1`, name).Scan(&gid)
+		if errors.Is(err, sql.ErrNoRows) {
+			gid = uuid.NewString()
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO genres (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)
+			`, gid, name, nowSec, nowSec); err != nil {
+				return nil, err
+			}
+		} else if err != nil {
+			return nil, err
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO book_genres (book_id, genre_id) VALUES (?, ?)
+			ON CONFLICT(book_id, genre_id) DO NOTHING
+		`, bookID, gid); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := tx.Commit(); err != nil {

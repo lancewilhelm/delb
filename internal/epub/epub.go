@@ -38,6 +38,7 @@ type Metadata struct {
 	Publisher   string
 	Published   string
 	Subject     string
+	Subjects    []string
 	ISBN        string
 	UUID        string
 }
@@ -123,6 +124,19 @@ func ParseMetadataFromBytes(input []byte, fallbackTitle string) (Metadata, error
 		out.Language = firstTextByLocalName(metaElem, "language")
 		out.Publisher = firstTextByLocalName(metaElem, "publisher")
 		out.Subject = firstTextByLocalName(metaElem, "subject")
+		seenSubj := make(map[string]struct{})
+		for _, el := range findAllByLocalName(metaElem, "subject") {
+			val := strings.TrimSpace(el.Text())
+			if val == "" {
+				continue
+			}
+			key := strings.ToLower(val)
+			if _, ok := seenSubj[key]; ok {
+				continue
+			}
+			seenSubj[key] = struct{}{}
+			out.Subjects = append(out.Subjects, val)
+		}
 		out.Published = firstTextByLocalName(metaElem, "date")
 
 		for _, el := range findAllByLocalName(metaElem, "identifier") {

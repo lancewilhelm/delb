@@ -401,12 +401,17 @@ func TestMCPConnectionsAndServerParity(t *testing.T) {
 		"expectedVersion": ver,
 		"changes": map[string]any{
 			"title":       "A Wizard of Earthsea",
-			"tags":        []string{"Fantasy"},
+			"tags":        []string{"Favorites"},
+			"genres":      []string{"Fantasy"},
 			"identifiers": []map[string]any{{"type": "isbn", "value": "9780547773742"}},
 		},
 	})
-	if upd["book"].(map[string]any)["title"] != "A Wizard of Earthsea" {
+	updBook := upd["book"].(map[string]any)
+	if updBook["title"] != "A Wizard of Earthsea" {
 		t.Fatalf("update_book_metadata = %v", upd)
+	}
+	if genres, ok := updBook["genres"].([]any); !ok || len(genres) != 1 || genres[0] != "Fantasy" {
+		t.Fatalf("update_book_metadata genres = %v, want [Fantasy]", updBook["genres"])
 	}
 	// Stale expectedVersion returns conflict isError=true
 	msg := callToolExpectErr(t, rwClient, "update_book_metadata", map[string]any{
