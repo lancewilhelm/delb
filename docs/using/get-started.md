@@ -24,14 +24,16 @@ New users join the shared default as editors. It can already contain books. You 
 
 ## Use the dashboard
 
-Select **Delb** to open the dashboard. It describes the collection selected in the header.
+Select **Delb** in the header from any page to open the dashboard. It describes the collection selected in the header.
 
 - The **All books** card shows your total, covers of recently added books, and a link for each reading status. Select **Browse all books** to open every book with filters cleared.
 - **Continue reading** shows your latest logged progress or saved reader percentage. Right-click or long-press a cover to change its reading status.
 - **Reading status** has a tile for each status. To be read opens your ranked queue; the others open the Books view filtered to that status.
 - **Your shelves** has a tile for each personal shelf and a **New shelf** tile.
 
-Each tile's **⋯** menu changes its card art: Collage, Fan, Stack, Shelf, Pile, or Wall. The All books card's **⋯** menu switches between Wall, Pile, and Shelf. A Pile shows a random handful of the list's books each time the page loads, and you can drag them around. **Pile size** in **Appearance → Dashboard** sets how many books each pile holds, up to 250, and **Pour speed** sets how quickly they pour in. Shelf stands the books' spines in a row; turn on **Spine art only** in **Appearance → Dashboard** to show only books that have spine art. **Appearance → Dashboard** sets these defaults, turns the status bar on the All books card on or off, and can make the Wall drift slowly upward through your covers.
+Each tile's **⋯** menu changes its card art: Collage, Fan, Stack, Shelf, Pile, or Wall. The All books card's **⋯** menu switches between Wall, Pile, and Shelf. The All books Wall starts at a random cover from your recent books each time you open the dashboard. **Wall motion** in **Appearance → Dashboard** can make the Wall drift upward through more of your covers. Shelf stands the books' spines in a row. Turn on **Spine art only** to show only books that have spine art.
+
+A Pile shows a random handful of the list's books, and you can drag them around. In **Appearance → Dashboard**, **Pile size** sets how many books each pile holds, up to 250. **Pile pour** lets you drop books one by one (**Staggered**), drop them **All at once**, or start with the books in place (**No pour**). **Pour speed** controls the staggered drop. When your system reduces motion, the books start in place in every mode.
 
 See the [dashboard reference](../developing/reference/dashboard.md) for list order and data rules.
 

@@ -11,7 +11,7 @@ The dashboard uses the active collection from the header. All includes the authe
 | Reading status   | One tile per status (Reading, To be read, Finished, DNF, No status) with its count and cover art; To be read opens the dedicated queue, others the Books view |
 | Your shelves     | One tile per personal shelf, then **New shelf**                                                                                                               |
 
-**Browse all books** clears the persisted Books filters before navigating; status links keep them. All counts, including To be read, describe the selected collection.
+The **Delb** link in the header always opens the dashboard. **Browse all books** clears the persisted Books filters before navigating; status links keep them. All counts, including To be read, describe the selected collection.
 
 ### All books art
 
@@ -32,6 +32,8 @@ Wall depends on how many recent covers the collection has, so a small collection
 | 1–3    | The books face-out with dashed empty slots, plus **Add books**             |
 | 0      | Line art with **Add books**                                                |
 
+Both wall layouts choose a random starting cover from the overview's first page when the dashboard opens or the selected collection changes. With drift on, new pages extend that same cover sequence.
+
 Books without a cover image, or whose image fails to load, use the generated title cover.
 
 ### Card art
@@ -51,9 +53,9 @@ Shelf art sizes each spine the way the bookshelf does: a width set by hand on th
 
 Every style works from a single cover up. Pile tiles hold books picked at random from the list, ten by default or the reader's **Pile size**; the other styles show the start of the list in its order. Wall fills 25 slots: lists with 25 or more books show no repeats, smaller lists repeat covers in a pattern where no copy touches another, and lists under four books draw as Fan. Shelf stands the list's books as spines in one row, in list order, the same way as the All books Shelf. A row that fits is centered. A list with more books than fit runs past both edges of the tile, so the cut spines show that it holds more. DNF art is desaturated.
 
-**Appearance → Dashboard → Pile size** sets how many books every pile holds: **Auto** (the defaults above), or **Custom** with a number from 1 to 250. Piles bigger than their default use smaller covers. **Pour speed**, from 1 to 10 (default 5), sets how quickly the books pour in: 10 pours in half the default time, and 1 takes five times as long.
+**Appearance → Dashboard → Pile size** sets how many books every pile holds: **Auto** (the defaults above), or **Custom** with a number from 1 to 250. Piles bigger than their default use smaller covers. **Pile pour** offers **Staggered**, **All at once**, and **No pour**. All at once starts every book's fall together. No pour places books directly in the pile, where they can still be dragged. In Staggered mode, **Pour speed** ranges from 1 to 10 and defaults to 5. Level 10 takes half the default time, and level 1 takes five times as long.
 
-Pile picks its books and lands in a new random scatter every time the page loads. At the default **Pour speed**, the books pour in one after another, at most 0.07 seconds apart, and a whole pour takes at most 2.5 seconds. Each pile drops in once. A sample of the wrong size, from a cache made before the reader changed **Pile size**, is not shown; the pile waits for a fitting sample instead. When fresh data replaces the cached dashboard, each pile keeps its books unless its list changed size. If the books do change, the books that stay keep their places and only new books drop in. Readers can drag a book in a pile: it lifts, tilts with the motion, then drops, slides a short way, and settles. Books overlap rather than collide. A drag does not open the tile. With reduced motion, books are placed without the drop-in or tilt.
+Pile picks its books and lands in a new random scatter every time the page loads. At the default **Pour speed**, the books pour in one after another, at most 0.07 seconds apart, and a whole pour takes at most 2.5 seconds. The initial layout runs once per pile. A sample of the wrong size, from a cache made before the reader changed **Pile size**, is not shown; the pile waits for a fitting sample instead. When fresh data replaces the cached dashboard, each pile keeps its books unless its list changed size. If the books do change, the books that stay keep their places and only new books follow the configured pour. Readers can drag a book in a pile: it lifts, tilts with the motion, then drops, slides a short way, and settles. Books overlap rather than collide. A drag does not open the tile. With reduced motion, books are placed without the drop-in or tilt.
 
 ## Dashboard API
 

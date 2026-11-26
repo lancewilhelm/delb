@@ -190,6 +190,22 @@ test('pour speed is a 1–10 level; 5 keeps the default pour', () => {
   assert.equal(pourTimeScale(1), 5, 'the slowest takes five times as long');
 });
 
+test('pile pour mode preserves the saved speed and defaults to staggered', () => {
+  assert.equal(normalizeDashboardSettings({}).pilePourMode, 'staggered');
+  for (const mode of ['together', 'none']) {
+    const settings = normalizeDashboardSettings({
+      pilePourMode: mode,
+      pourSpeed: 8,
+    });
+    assert.equal(settings.pilePourMode, mode);
+    assert.equal(settings.pourSpeed, 8);
+  }
+  assert.equal(
+    normalizeDashboardSettings({ pilePourMode: 'invalid' }).pilePourMode,
+    'staggered',
+  );
+});
+
 test('status segments skip empty statuses', () => {
   const segments = statusSegments({
     total: 4,
@@ -243,6 +259,10 @@ test('drifting wall rows never place a cover next to a copy of itself', () => {
   // Reading order matches the static wall's first rows.
   assert.equal(wallBookIndex(1, 2, 9, 45, false), 11);
   assert.equal(wallBookIndex(5, 0, 9, 45, false), 0, 'wraps to the newest');
+  assert.equal(wallBookIndex(0, 0, 9, 45, false, 42), 42);
+  assert.equal(wallBookIndex(0, 3, 9, 45, false, 42), 0);
+  assert.equal(wallBookIndex(1, 0, 9, 90, false, 42), 51);
+  assert.equal(wallBookIndex(1, 0, 7, 8, true, 7), 1);
 });
 
 test('wall motion defaults off and drops unknown directions', () => {

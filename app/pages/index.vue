@@ -416,8 +416,10 @@ onBeforeUnmount(() => {
         </header>
 
         <DashboardLibraryCard
+          :key="scope"
           :counts="overview?.counts ?? null"
           :recent="wallBooks"
+          :initial-cover-count="overview?.recent.length ?? 0"
           :pile-books="piles.all?.books ?? []"
           :pile-size="dashboardSettings.pileSize"
           :shelf-books="shelfBooks"
