@@ -22,12 +22,7 @@ COPY shared ./shared
 COPY public ./public
 
 ARG APP_VERSION=unknown
-ARG NUXT_PUBLIC_APP_VERSION=""
-RUN VERSION="${APP_VERSION}" && \
-  if [ "${VERSION}" = "unknown" ] && [ -n "${NUXT_PUBLIC_APP_VERSION}" ]; then \
-    VERSION="${NUXT_PUBLIC_APP_VERSION}"; \
-  fi && \
-  VITE_APP_VERSION="${VERSION}" pnpm build:web
+RUN VITE_APP_VERSION="${APP_VERSION}" pnpm build:web
 
 # -------------------------------
 # Stage 2: Compile static Go binary with embedded SPA and SQL migrations
@@ -47,8 +42,9 @@ COPY cmd ./cmd
 COPY internal ./internal
 COPY --from=web-build /src/dist ./dist
 
+ARG APP_VERSION=dev
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-  go build -trimpath -ldflags="-s -w" -o /out/delb ./cmd/delb
+  go build -trimpath -ldflags="-s -w -X main.version=${APP_VERSION}" -o /out/delb ./cmd/delb
 
 RUN mkdir -p /rootfs/etc /rootfs/app/data /rootfs/app/library /rootfs/app/dropbox /rootfs/tmp && \
   printf 'delb:x:1001:1001:Delb:/app:/sbin/nologin\n' > /rootfs/etc/passwd && \

@@ -7,6 +7,10 @@ on:
   release:
     types: [published]
 
+concurrency:
+  group: docker-image-${{ github.event_name == 'push' && 'edge' || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
 jobs:
   verify:
     uses: ./.github/workflows/test.yml
@@ -38,19 +42,30 @@ jobs:
 
       - name: Decide Docker image tags
         id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
-          IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/delb
-          TAGS="${IMAGE_NAME}:twilight"
-          if [ "${{ github.event_name }}" = "release" ]; then
-            TAGS="${TAGS},${IMAGE_NAME}:stable"
-            TAGS="${TAGS},${IMAGE_NAME}:${GITHUB_REF##*/}"
+          owner=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          image="ghcr.io/$owner/delb"
+          version=edge
+          tags="$image:edge"
+          if [[ "$GITHUB_EVENT_NAME" == release ]]; then
+            version="$GITHUB_REF_NAME"
+            if [[ ! "$version" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ || ${#version} -gt 128 ]]; then
+              echo "::error::Use a release tag such as v1.0.0 or v1.1.0-rc.1."
+              exit 1
+            fi
+            tags="$image:$version"
+            if [[ "$PRERELEASE" == false && "$version" != *-* ]]; then
+              latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+              if [[ "$version" == "$latest" ]]; then
+                tags="$tags,$image:stable"
+              fi
+            fi
           fi
-          echo "tags=$TAGS" >> $GITHUB_OUTPUT
-
-      - name: Get build commit
-        id: get_version
-        run: |
-          echo "version=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+          echo "version=$version+$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -61,4 +76,4 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |
-            APP_VERSION=${{ steps.get_version.outputs.version }}
+            APP_VERSION=${{ steps.meta.outputs.version }}
