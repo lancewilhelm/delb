@@ -17,6 +17,12 @@ return to the dashboard.
 
 Book grids and lists support title, page count, publication date, date-added, and date-finished sorting in either direction. Date finished uses your own finish dates; books without one come last. The separate series presentation has its own layout.
 
+### Choose a card style
+
+On Shelves, Authors, Series, Publishers, Genres, or Tags, use **Card style**
+above the grid. Choose Collage, Fan, Stack, Shelf, Pile, or Wall to change all
+cards on that page. Delb remembers the choice separately for each page.
+
 ## Search across the library
 
 1. Select **Open global search** in the header.

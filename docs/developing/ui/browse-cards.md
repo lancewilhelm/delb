@@ -1,30 +1,30 @@
 # Browse list cards (covers)
 
-The top-level browse pages (Series, Authors, Publishers, Genres, and Tags) render a strip of book covers on the right side of each row.
+Shelves, Authors, Series, Publishers, Genres, and Tags use the dashboard's
+square artwork tiles. The **Card style** picker applies one style to all tiles
+on its page. The account saves each page's choice under `browseCardArt`. Fan
+is the default.
 
 ## Implementation details
 
-- Catalog list endpoints in [`internal/books/catalog.go`](../../../internal/books/catalog.go) return a `books` array per row with a nullable `coverThumbnailUrl`:
-  - `GET /api/series`
-  - `GET /api/authors`
-  - `GET /api/publishers`
-  - `GET /api/genres`
-  - `GET /api/tags`
-- UI pages render up to 4 covers per row:
-  - [`app/pages/series/index.vue`](../../../app/pages/series/index.vue)
-  - [`app/pages/authors/index.vue`](../../../app/pages/authors/index.vue)
-  - [`app/pages/publishers/index.vue`](../../../app/pages/publishers/index.vue)
-  - [`app/pages/genres/index.vue`](../../../app/pages/genres/index.vue)
-  - [`app/pages/tags/index.vue`](../../../app/pages/tags/index.vue)
+[BrowseCardGrid](../../../app/components/BrowseCardGrid.vue) supplies the
+title, visible book count, preview books, and detail link to the shared
+[dashboard tile](../../../app/components/Dashboard/DashboardListTile.vue).
+
+The [catalog list endpoints](../../../internal/books/catalog.go) include
+`GET /api/authors`, `GET /api/series`, `GET /api/publishers`,
+`GET /api/genres`, and `GET /api/tags`. The browse pages request `artPreviews=1`
+to include coverless books and the spine metadata that Shelf art uses. The
+query applies tag visibility to both the counts and the previews, and returns
+up to 25 preview books per card. The [Shelves endpoint](../../../internal/bookshelf/shelves.go)
+uses its `previews` option.
 
 ## Interaction details
 
-- Covers support a right-click context menu via [`app/components/BookCover.vue`](../../../app/components/BookCover.vue) (`contextMenuItems` prop).
-- Book thumbnails wire the menu to:
-  - **View**, linking to `/books/:id`.
-  - **Download**, shown only when the book has files; multiple files show per-format choices.
-- The context menu lazily queries `GET /api/books/:id/files` in [`internal/books/books_files.go`](../../../internal/books/books_files.go).
+Select a tile to open its book listing. Browse tiles use the page's shared
+style. Administrators can right-click a Tags or Genres tile or press Shift+F10
+on its link to open its management menu.
 
 ## Series list cards (covers)
 
-Series rows order covers by series index. `GET /api/series` in [`internal/books/catalog.go`](../../../internal/books/catalog.go) returns book records with nullable cover thumbnail URLs, and [`app/pages/series/index.vue`](../../../app/pages/series/index.vue) chooses how many covers to display.
+The series endpoint orders previews by series index, then title and ID.

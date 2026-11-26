@@ -185,9 +185,29 @@ func TestGenresCRUDMergeDeleteAndMetadataImport(t *testing.T) {
 	for _, raw := range genreRows {
 		m := raw.(map[string]any)
 		genreIDByName[m["name"].(string)] = m["id"].(string)
+		if len(m["books"].([]any)) != 0 {
+			t.Fatalf("default list should exclude coverless previews: %v", m)
+		}
 	}
 	if genreIDByName["Science Fiction"] == "" || genreIDByName["Sci-Fi"] == "" || genreIDByName["Literary Fiction"] == "" {
 		t.Fatalf("unexpected genres list: %v", genreIDByName)
+	}
+
+	resp, artList := doJSON(http.MethodGet, "/api/genres?artPreviews=1&search=Literary", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/genres with art previews: status = %d", resp.StatusCode)
+	}
+	artRows := artList["data"].(map[string]any)["genres"].([]any)
+	if len(artRows) != 1 {
+		t.Fatalf("expected the matching genre, got %v", artRows)
+	}
+	previews := artRows[0].(map[string]any)["books"].([]any)
+	if len(previews) != 1 {
+		t.Fatalf("expected one coverless preview, got %v", previews)
+	}
+	preview := previews[0].(map[string]any)
+	if preview["title"] != "Tidewater Hours" || preview["coverImagePath"] != nil {
+		t.Fatalf("unexpected coverless preview: %v", preview)
 	}
 
 	resp, searchBody := doJSON(http.MethodGet, "/api/search?q=Literary", nil)

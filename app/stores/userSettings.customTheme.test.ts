@@ -20,6 +20,7 @@ import {
   defaultDashboardSettings,
   normalizeDashboardSettings,
 } from '../utils/dashboardArt';
+import { normalizeBrowseCardArt } from '../utils/browseCards';
 
 // Supply Nuxt auto-imports to exercise the actual store without a Nuxt server.
 function createStore() {
@@ -31,7 +32,8 @@ function createStore() {
     .replace(/import [\s\S]*?from '~\/utils\/customTheme';/, '')
     .replace(/import [\s\S]*?from '~\/utils\/appearanceContrast';/, '')
     .replace(/import [\s\S]*?from '~\/utils\/themePreference';/, '')
-    .replace(/import [\s\S]*?from '~\/utils\/dashboardArt';/, '');
+    .replace(/import [\s\S]*?from '~\/utils\/dashboardArt';/, '')
+    .replace(/import [\s\S]*?from '~\/utils\/browseCards';/, '');
   const code = transformSync(source, { loader: 'ts', format: 'cjs' }).code;
   const mobile = ref(false);
   const module = {
@@ -52,6 +54,7 @@ function createStore() {
     normalizeThemePreference,
     defaultDashboardSettings,
     normalizeDashboardSettings,
+    normalizeBrowseCardArt,
     useIsMobileDevice: () => mobile,
     useAuth: () => ({ session: ref(null) }),
     useDebounceFn: () => () => {},
