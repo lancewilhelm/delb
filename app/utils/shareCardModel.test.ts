@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   availableShareCardToggles,
+  buildProgressSeriesFromHistory,
   buildShareCardChart,
   buildShareCardModel,
   DEFAULT_SHARE_CARD_TOGGLES,
@@ -152,26 +153,120 @@ test('toggles pare a card down to cover and title', () => {
   assert.equal(model.title, 'The Synthetic Almanac');
 });
 
-test('an unfinished book without dates still builds a model', () => {
-  const model = buildShareCardModel(
-    summary({
-      status: 'reading',
-      finishedAt: null,
-      finishedDate: null,
-      startedDate: null,
-      durationDays: null,
-      pagesPerDay: null,
-      rating: null,
-      finishYear: null,
-      yearFinishOrdinal: null,
-      progress: { checkpointCount: 0, days: [] },
-    }),
+test('non-finished statuses adapt labels, available toggles, and stats', () => {
+  // Currently reading with start date & progress
+  const readingSummary = summary({
+    status: 'reading',
+    startedDate: '2026-11-20',
+    finishedAt: null,
+    finishedDate: null,
+    durationDays: null,
+    pagesPerDay: null,
+    rating: null,
+    finishYear: null,
+    yearFinishOrdinal: null,
+    currentProgressPercent: 42.4,
+    progress: buildProgressSeriesFromHistory(
+      [
+        { occurredDate: '2026-11-20', progressPercent: 10 },
+        { occurredDate: '2026-11-22', progressPercent: 25 },
+        { occurredDate: '2026-11-25', progressPercent: 42.4 },
+      ],
+      412,
+      '2026-11-20',
+    ),
+  });
+  const readingAvail = availableShareCardToggles(readingSummary, '2026-11-27');
+  assert.equal(readingAvail.rating, false);
+  assert.equal(readingAvail.duration, true);
+  assert.equal(readingAvail.progress, true);
+  assert.equal(readingAvail.pages, true);
+  assert.equal(readingAvail.chart, true);
+
+  const readingModel = buildShareCardModel(
+    readingSummary,
+    DEFAULT_SHARE_CARD_TOGGLES,
+    '2026-11-27',
+  );
+  assert.equal(readingModel.eyebrow, 'Currently Reading · November 2026');
+  assert.equal(readingModel.statusBanner, 'CURRENTLY READING');
+  assert.equal(readingModel.dateRange, 'Started Nov 20, 2026');
+  assert.equal(readingModel.durationDays, 8);
+  assert.equal(readingModel.progressPercent, 42);
+  assert.equal(readingModel.pagesPerDay, null);
+  assert.equal(readingModel.yearOrdinal, null);
+  assert.ok(readingModel.chart);
+  assert.deepEqual(
+    shareCardStats(readingModel).map((s) => `${s.value}${s.unit}`),
+    ['42%', '8days', '412pages'],
+  );
+
+  // To be read disables dates, progress, and chart
+  const tbrSummary = summary({
+    status: 'to_be_read',
+    tbrRank: 3,
+    startedDate: null,
+    finishedDate: null,
+    durationDays: null,
+    pagesPerDay: null,
+    rating: null,
+    finishYear: null,
+    yearFinishOrdinal: null,
+    progress: { checkpointCount: 0, days: [] },
+  });
+  const tbrAvail = availableShareCardToggles(tbrSummary);
+  assert.equal(tbrAvail.duration, false);
+  assert.equal(tbrAvail.progress, false);
+  assert.equal(tbrAvail.chart, false);
+  assert.equal(tbrAvail.pages, true);
+  const tbrModel = buildShareCardModel(tbrSummary, DEFAULT_SHARE_CARD_TOGGLES);
+  assert.equal(tbrModel.eyebrow, 'To Be Read · #3');
+  assert.equal(tbrModel.statusBanner, 'TO BE READ');
+  assert.equal(tbrModel.monthLabel, 'TBR #3');
+  assert.equal(tbrModel.dateRange, null);
+  assert.equal(tbrModel.durationDays, null);
+
+  // DNF shows DNF date, progress reached, and span without finish ordinal or pace
+  const dnfSummary = summary({
+    status: 'dnf',
+    startedDate: '2026-11-01',
+    dnfDate: '2026-11-05',
+    finishedDate: null,
+    durationDays: null,
+    pagesPerDay: null,
+    currentProgressPercent: 31,
+    finishYear: null,
+    yearFinishOrdinal: null,
+    progress: { checkpointCount: 0, days: [] },
+  });
+  const dnfModel = buildShareCardModel(dnfSummary, DEFAULT_SHARE_CARD_TOGGLES);
+  assert.equal(dnfModel.eyebrow, 'Did Not Finish · November 2026');
+  assert.equal(dnfModel.statusBanner, 'DID NOT FINISH');
+  assert.equal(dnfModel.dateRange, 'Nov 1 – Nov 5, 2026');
+  assert.equal(dnfModel.durationDays, 5);
+  assert.equal(dnfModel.progressPercent, 31);
+  assert.equal(dnfModel.pagesPerDay, null);
+
+  // Unset status uses clean library framing
+  const unsetSummary = summary({
+    status: null,
+    startedDate: null,
+    finishedDate: null,
+    durationDays: null,
+    pagesPerDay: null,
+    rating: null,
+    finishYear: null,
+    yearFinishOrdinal: null,
+    progress: { checkpointCount: 0, days: [] },
+  });
+  const unsetModel = buildShareCardModel(
+    unsetSummary,
     DEFAULT_SHARE_CARD_TOGGLES,
   );
-  assert.equal(model.eyebrow, 'Finished');
-  assert.equal(model.monthLabel, null);
-  assert.equal(model.dateRange, null);
-  assert.equal(model.stars, null);
+  assert.equal(unsetModel.eyebrow, 'From My Library');
+  assert.equal(unsetModel.statusBanner, 'FROM MY LIBRARY');
+  assert.equal(unsetModel.dateRange, null);
+  assert.equal(unsetModel.durationDays, null);
 });
 
 test('one-day reads use singular units', () => {

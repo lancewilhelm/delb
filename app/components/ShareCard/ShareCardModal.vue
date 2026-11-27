@@ -3,6 +3,7 @@ import { computed, nextTick, ref, shallowRef, watch } from 'vue';
 import ModalWindow from '~/components/ModalWindow.vue';
 import { useShareCardStore } from '~/stores/shareCard';
 import { $fetch } from '~/utils/apiFetch';
+import { fetchBookDetail } from '~/utils/bookPreviewCache';
 import { buildBookCoverUrl } from '~/utils/covers';
 import {
   canCopyImage,
@@ -14,6 +15,7 @@ import {
 import { formatSize } from '~/utils/shareCardLayout';
 import {
   availableShareCardToggles,
+  buildProgressSeriesFromHistory,
   buildShareCardModel,
   DEFAULT_SHARE_CARD_TOGGLES,
   SHARE_CARD_BACKGROUNDS,
@@ -76,6 +78,8 @@ const effectiveToggles = computed<ShareCardToggles>(() => ({
   rating: toggles.value.rating && available.value.rating,
   duration: toggles.value.duration && available.value.duration,
   pages: toggles.value.pages && available.value.pages,
+  progress:
+    toggles.value.progress !== false && Boolean(available.value.progress),
   chart: toggles.value.chart && available.value.chart && presetDrawsChart.value,
   logo: toggles.value.logo,
 }));
@@ -88,48 +92,117 @@ const transparent = computed(() =>
   isTransparentCard({ preset: preset.value, background: background.value }),
 );
 
+const statusBadgeLabel = computed(() => {
+  switch (summary.value?.status) {
+    case 'finished':
+      return 'Finished';
+    case 'reading':
+      return 'Currently reading';
+    case 'to_be_read':
+      return 'To be read';
+    case 'dnf':
+      return 'Did not finish';
+    default:
+      return 'In library';
+  }
+});
+
 const toggleRows = computed(() => {
   const s = summary.value;
   const a = available.value;
-  return [
-    {
-      key: 'rating' as const,
-      label: 'Rating',
-      disabled: !a.rating,
-      hint: a.rating ? null : 'No rating yet',
-    },
-    {
-      key: 'duration' as const,
-      label: 'Duration & dates',
-      disabled: !a.duration,
-      hint: !a.duration
+  const st = s?.status ?? null;
+
+  const durationLabel =
+    st === 'reading'
+      ? 'Started & days'
+      : st === 'finished'
+        ? 'Duration & dates'
+        : 'Reading dates';
+  const durationHint =
+    st === 'finished'
+      ? !a.duration
         ? 'No finish date'
         : s?.startedDate
           ? null
-          : 'No start date, so no duration',
-    },
-    {
-      key: 'pages' as const,
-      label: 'Page count & pace',
-      disabled: !a.pages,
-      hint: !a.pages
-        ? 'No page count'
-        : s?.startedDate
+          : 'No start date, so no duration'
+      : st === 'reading'
+        ? a.duration
           ? null
-          : 'No start date, so no pace',
-    },
-    {
-      key: 'chart' as const,
-      label: 'Pace chart',
-      disabled: !presetDrawsChart.value || !a.chart,
-      hint: !presetDrawsChart.value
+          : 'Add a start date to show days reading'
+        : st === 'dnf'
+          ? a.duration
+            ? null
+            : 'No start or DNF date recorded'
+          : st === 'to_be_read'
+            ? 'Not tracked for To be read'
+            : 'Set a reading status to include dates';
+
+  const pagesLabel = st === 'finished' ? 'Page count & pace' : 'Page count';
+  const pagesHint = !a.pages
+    ? 'No page count'
+    : st === 'finished' && !s?.startedDate
+      ? 'No start date, so no pace'
+      : null;
+
+  const chartHint =
+    st === 'to_be_read' || st == null
+      ? 'Available when reading or finished'
+      : !presetDrawsChart.value
         ? 'Not used by this style'
         : a.chart
           ? null
-          : 'Needs progress logged on 3 or more days',
+          : 'Needs progress logged on 3 or more days';
+
+  const rows: {
+    key: keyof ShareCardToggles;
+    label: string;
+    disabled: boolean;
+    hint: string | null;
+  }[] = [
+    {
+      key: 'rating',
+      label: 'Rating',
+      disabled: !a.rating,
+      hint: a.rating
+        ? null
+        : st === 'to_be_read'
+          ? 'Rate this book to show stars'
+          : 'No rating yet',
     },
-    { key: 'logo' as const, label: 'Delb logo', disabled: false, hint: null },
   ];
+
+  if (st === 'reading' || st === 'dnf') {
+    rows.push({
+      key: 'progress',
+      label: st === 'dnf' ? 'Progress reached' : 'Reading progress',
+      disabled: !a.progress,
+      hint: a.progress ? null : 'No progress logged yet',
+    });
+  }
+
+  rows.push(
+    {
+      key: 'duration',
+      label: durationLabel,
+      disabled: !a.duration,
+      hint: durationHint,
+    },
+    {
+      key: 'pages',
+      label: pagesLabel,
+      disabled: !a.pages,
+      hint: pagesHint,
+    },
+    {
+      key: 'chart',
+      label: 'Pace chart',
+      disabled: !presetDrawsChart.value || !a.chart,
+      hint: chartHint,
+    },
+    { key: 'logo', label: 'Delb logo', disabled: false, hint: null },
+  );
+
+  return rows;
 });
 
 function setToggle(key: keyof ShareCardToggles, value: boolean) {
@@ -187,6 +260,16 @@ async function loadFonts() {
   );
 }
 
+function formatLocalYmd(value: string | number | Date | null | undefined) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 let loadToken = 0;
 async function load(bookId: string) {
   const token = ++loadToken;
@@ -203,7 +286,53 @@ async function load(bookId: string) {
       `/api/books/${encodeURIComponent(bookId)}/finish-summary`,
     );
     if (token !== loadToken) return;
-    const data = res.data;
+    const data: FinishSummary = { ...res.data };
+
+    // Enrich non-finished books with status-specific details (TBR rank, DNF date,
+    // and live progress/history for Currently Reading and DNF cards).
+    if (data.status !== 'finished') {
+      const [detail, progressRes] = await Promise.all([
+        fetchBookDetail(bookId).catch(() => null) as Promise<{
+          userStatusDnfAt?: string | number | Date | null;
+          userStatusTbrRank?: number | null;
+        } | null>,
+        data.status === 'reading' || data.status === 'dnf'
+          ? $fetch<{
+              data?: {
+                latest?: { progressPercent?: number } | null;
+                history?: { occurredDate: string; progressPercent: number }[];
+              };
+            }>(`/api/books/${encodeURIComponent(bookId)}/progress`).catch(
+              () => null,
+            )
+          : Promise.resolve(null),
+      ]);
+      if (token !== loadToken) return;
+
+      if (detail) {
+        data.dnfDate = formatLocalYmd(detail.userStatusDnfAt);
+        data.tbrRank =
+          typeof detail.userStatusTbrRank === 'number'
+            ? detail.userStatusTbrRank
+            : null;
+      }
+      if (progressRes?.data) {
+        const latestPct = progressRes.data.latest?.progressPercent;
+        if (typeof latestPct === 'number' && Number.isFinite(latestPct)) {
+          data.currentProgressPercent = latestPct;
+        }
+        const history = progressRes.data.history ?? [];
+        if (history.length) {
+          data.progress = buildProgressSeriesFromHistory(
+            history,
+            data.pages,
+            data.startedDate,
+            data.status === 'dnf' ? data.dnfDate : null,
+          );
+        }
+      }
+    }
+
     summary.value = data;
     toggles.value = { ...DEFAULT_SHARE_CARD_TOGGLES };
 
@@ -349,7 +478,17 @@ function close() {
       aria-labelledby="share-card-title"
     >
       <div class="flex items-center justify-between gap-2">
-        <h2 id="share-card-title" class="text-lg font-semibold">Share card</h2>
+        <div class="flex items-center gap-2">
+          <h2 id="share-card-title" class="text-lg font-semibold">
+            Reading status card
+          </h2>
+          <span
+            v-if="summary"
+            class="px-2 py-0.5 rounded-full text-xs border border-(--contrast-border-color) opacity-80"
+          >
+            {{ statusBadgeLabel }}
+          </span>
+        </div>
         <button
           type="button"
           class="p-1 rounded-md hover:bg-(--sub-alt-color)"
@@ -472,7 +611,7 @@ function close() {
               <input
                 type="checkbox"
                 class="mt-0.5"
-                :checked="toggles[row.key] && !row.disabled"
+                :checked="toggles[row.key] !== false && !row.disabled"
                 :disabled="row.disabled"
                 @change="
                   setToggle(

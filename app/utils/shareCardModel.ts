@@ -16,7 +16,8 @@ export type FinishProgressDay = {
   hasCheckpoint: boolean;
 };
 
-/** Response data of `GET /api/books/{id}/finish-summary`. */
+/** Response data of `GET /api/books/{id}/finish-summary`, optionally enriched
+ *  on the client with status-specific details (DNF date, TBR rank, live progress). */
 export type FinishSummary = {
   book: {
     id: string;
@@ -32,6 +33,9 @@ export type FinishSummary = {
   finishedAt: string | null;
   startedDate: string | null;
   finishedDate: string | null;
+  dnfDate?: string | null;
+  tbrRank?: number | null;
+  currentProgressPercent?: number | null;
   durationDays: number | null;
   pages: number | null;
   pagesPerDay: number | null;
@@ -69,6 +73,7 @@ export type ShareCardToggles = {
   rating: boolean;
   duration: boolean;
   pages: boolean;
+  progress?: boolean;
   chart: boolean;
   logo: boolean;
 };
@@ -77,6 +82,7 @@ export const DEFAULT_SHARE_CARD_TOGGLES: ShareCardToggles = {
   rating: true,
   duration: true,
   pages: true,
+  progress: true,
   chart: true,
   logo: true,
 };
@@ -85,7 +91,7 @@ export const DEFAULT_SHARE_CARD_TOGGLES: ShareCardToggles = {
 export const MIN_CHART_CHECKPOINTS = 3;
 
 export type ShareCardStat = {
-  key: 'days' | 'pages' | 'pace' | 'rating';
+  key: 'days' | 'pages' | 'pace' | 'rating' | 'progress';
   value: string;
   unit: string;
   label: string;
@@ -110,19 +116,30 @@ export type ShareCardChart = {
 };
 
 export type ShareCardModel = {
+  status: FinishSummary['status'];
   title: string;
   authors: string;
-  /** "Finished · November 2026", or "Finished" without a finish date. */
+  /** Status-aware eyebrow, e.g. "Finished · November 2026" or "Currently Reading". */
   eyebrow: string;
-  /** "Nov 2026", or null without a finish date. */
+  /** Uppercase banner for Swiss Grid header, e.g. "FINISHED READING" or "CURRENTLY READING". */
+  statusBanner: string;
+  /** Caption above duration hero stat in Editorial Split (e.g. "Start to finish" or "Reading so far"). */
+  durationCaption: string;
+  /** Caption above duration number in Pace Overlay (e.g. "Finished in" or "Reading for"). */
+  durationOverlayCaption: string;
+  /** Caption above pages number in Pace Overlay (e.g. "Read" or "Length"). */
+  pagesOverlayCaption: string;
+  /** Short badge/month label, e.g. "Nov 2026", "TBR #3", or null. */
   monthLabel: string | null;
-  /** "Nov 3 – Nov 11, 2026", or null. */
+  /** "Nov 3 – Nov 11, 2026" or "Started Nov 3, 2026", or null. */
   dateRange: string | null;
   /** "Book 12 of 2026", or null. */
   yearOrdinal: string | null;
   durationDays: number | null;
   pages: number | null;
   pagesPerDay: number | null;
+  /** Latest reading progress percent (0..100) for in-progress / DNF books, or null. */
+  progressPercent: number | null;
   /** Stars from 0.5 to 5 in half steps, or null. */
   stars: number | null;
   chart: ShareCardChart | null;
@@ -233,55 +250,254 @@ export function buildShareCardChart(
   };
 }
 
+function localTodayYmd(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function inclusiveDaySpanYmd(
+  start: string | null | undefined,
+  end: string | null | undefined,
+): number | null {
+  const s = parseYmd(start);
+  const e = parseYmd(end);
+  if (!s || !e) return null;
+  const startUtc = Date.UTC(s.year, s.month - 1, s.day);
+  const endUtc = Date.UTC(e.year, e.month - 1, e.day);
+  if (endUtc < startUtc) return null;
+  return Math.round((endUtc - startUtc) / 86_400_000) + 1;
+}
+
+/**
+ * Builds a daily progress series on the client from `/api/books/{id}/progress`
+ * history entries for in-progress (`reading`) or `dnf` books.
+ */
+export function buildProgressSeriesFromHistory(
+  entries: { occurredDate: string; progressPercent: number }[],
+  pages: number | null,
+  startDate?: string | null,
+  endDate?: string | null,
+): FinishSummary['progress'] {
+  const valid = entries.filter((e) => parseYmd(e.occurredDate) != null);
+  if (!valid.length) return { checkpointCount: 0, days: [] };
+
+  const best = new Map<string, number>();
+  for (const e of valid) {
+    const pct = Math.max(0, Math.min(100, e.progressPercent));
+    const prev = best.get(e.occurredDate);
+    if (prev == null || pct > prev) best.set(e.occurredDate, pct);
+  }
+  const sortedDates = Array.from(best.keys()).sort();
+  const firstDate =
+    startDate && parseYmd(startDate) && startDate <= sortedDates[0]!
+      ? startDate
+      : sortedDates[0]!;
+  const lastLogDate = sortedDates[sortedDates.length - 1]!;
+  const lastDate =
+    endDate && parseYmd(endDate) && endDate >= lastLogDate
+      ? endDate
+      : lastLogDate;
+
+  const span = inclusiveDaySpanYmd(firstDate, lastDate);
+  if (!span || span <= 0 || span > 3660) {
+    return { checkpointCount: 0, days: [] };
+  }
+
+  const startParts = parseYmd(firstDate)!;
+  const startUtc = Date.UTC(
+    startParts.year,
+    startParts.month - 1,
+    startParts.day,
+  );
+  const days: FinishProgressDay[] = [];
+  let cumulative = 0;
+  let prevPages = 0;
+  for (let i = 0; i < span; i++) {
+    const d = new Date(startUtc + i * 86_400_000);
+    const ymd = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    const pct = best.get(ymd);
+    const hasCheckpoint = pct != null;
+    const before = cumulative;
+    if (hasCheckpoint && pct > cumulative) cumulative = pct;
+    const curPages =
+      pages != null && pages > 0
+        ? Math.round((cumulative / 100) * pages)
+        : null;
+    const pagesRead = curPages != null ? curPages - prevPages : null;
+    if (curPages != null) prevPages = curPages;
+    days.push({
+      date: ymd,
+      percent: Math.round(cumulative * 100) / 100,
+      deltaPercent: Math.round((cumulative - before) * 100) / 100,
+      pages: curPages,
+      pagesRead,
+      hasCheckpoint,
+    });
+  }
+  return { checkpointCount: best.size, days };
+}
+
+function effectiveDurationDays(
+  summary: FinishSummary,
+  todayYmd: string,
+): number | null {
+  if (summary.status === 'finished') {
+    return summary.startedDate != null &&
+      summary.durationDays != null &&
+      summary.durationDays > 0
+      ? summary.durationDays
+      : null;
+  }
+  if (summary.status === 'reading') {
+    if (!summary.startedDate) return null;
+    return inclusiveDaySpanYmd(summary.startedDate, todayYmd);
+  }
+  if (summary.status === 'dnf') {
+    if (!summary.startedDate || !summary.dnfDate) return null;
+    return inclusiveDaySpanYmd(summary.startedDate, summary.dnfDate);
+  }
+  return null;
+}
+
+function effectiveProgressPercent(summary: FinishSummary): number | null {
+  if (summary.status !== 'reading' && summary.status !== 'dnf') return null;
+  const pct = summary.currentProgressPercent;
+  if (typeof pct !== 'number' || !Number.isFinite(pct) || pct <= 0) return null;
+  return Math.min(100, Math.round(pct));
+}
+
 export function buildShareCardModel(
   summary: FinishSummary,
   toggles: ShareCardToggles,
+  todayYmd = localTodayYmd(),
 ): ShareCardModel {
+  const status = summary.status;
   const finished = parseYmd(summary.finishedDate);
-  const durationKnown =
-    summary.startedDate != null &&
-    summary.durationDays != null &&
-    summary.durationDays > 0;
+  const started = parseYmd(summary.startedDate);
+  const dnf = parseYmd(summary.dnfDate);
+  const durationDays = effectiveDurationDays(summary, todayYmd);
+  const durationKnown = durationDays != null && durationDays > 0;
   const pagesKnown = summary.pages != null && summary.pages > 0;
+  const progressPct = effectiveProgressPercent(summary);
   const rating =
     summary.rating != null && summary.rating >= 1 && summary.rating <= 10
       ? summary.rating / 2
       : null;
+  const tbrRank =
+    typeof summary.tbrRank === 'number' &&
+    Number.isFinite(summary.tbrRank) &&
+    summary.tbrRank > 0
+      ? Math.round(summary.tbrRank)
+      : null;
 
-  return {
-    title: summary.book.title.trim() || 'Untitled',
-    authors: formatAuthors(summary.book.authors),
-    eyebrow: finished
+  let eyebrow = 'From My Library';
+  let statusBanner = 'FROM MY LIBRARY';
+  let monthLabel: string | null = null;
+  let dateRange: string | null = null;
+  let yearOrdinal: string | null = null;
+  let durationCaption = 'Start to finish';
+  let durationOverlayCaption = 'Finished in';
+  let pagesOverlayCaption = 'Length';
+
+  if (status === 'finished') {
+    eyebrow = finished
       ? `Finished · ${MONTHS_LONG[finished.month - 1]} ${finished.year}`
-      : 'Finished',
-    monthLabel: finished
+      : 'Finished';
+    statusBanner = 'FINISHED READING';
+    monthLabel = finished
       ? `${shortMonth(finished.month)} ${finished.year}`
-      : null,
-    dateRange:
+      : null;
+    dateRange =
       toggles.duration && finished
         ? formatDateRange(
             durationKnown ? summary.startedDate : null,
             summary.finishedDate,
           )
-        : null,
-    yearOrdinal:
+        : null;
+    yearOrdinal =
       toggles.duration &&
       summary.yearFinishOrdinal != null &&
       summary.finishYear != null
         ? `Book ${summary.yearFinishOrdinal} of ${summary.finishYear}`
-        : null,
-    durationDays:
-      toggles.duration && durationKnown ? summary.durationDays : null,
+        : null;
+    durationCaption = 'Start to finish';
+    durationOverlayCaption = 'Finished in';
+    pagesOverlayCaption = 'Read';
+  } else if (status === 'reading') {
+    eyebrow = started
+      ? `Currently Reading · ${MONTHS_LONG[started.month - 1]} ${started.year}`
+      : 'Currently Reading';
+    statusBanner = 'CURRENTLY READING';
+    monthLabel = started
+      ? `Started ${shortMonth(started.month)} ${started.year}`
+      : null;
+    dateRange =
+      toggles.duration && started
+        ? `Started ${shortMonth(started.month)} ${started.day}, ${started.year}`
+        : null;
+    durationCaption = 'Reading so far';
+    durationOverlayCaption = 'Reading for';
+    pagesOverlayCaption = 'Length';
+  } else if (status === 'to_be_read') {
+    eyebrow = tbrRank != null ? `To Be Read · #${tbrRank}` : 'To Be Read';
+    statusBanner = 'TO BE READ';
+    monthLabel = tbrRank != null ? `TBR #${tbrRank}` : null;
+    pagesOverlayCaption = 'Length';
+  } else if (status === 'dnf') {
+    eyebrow = dnf
+      ? `Did Not Finish · ${MONTHS_LONG[dnf.month - 1]} ${dnf.year}`
+      : 'Did Not Finish';
+    statusBanner = 'DID NOT FINISH';
+    monthLabel = dnf ? `${shortMonth(dnf.month)} ${dnf.year}` : null;
+    if (toggles.duration) {
+      if (dnf) {
+        dateRange = formatDateRange(
+          durationKnown ? summary.startedDate : null,
+          summary.dnfDate,
+        );
+      } else if (started) {
+        dateRange = `Started ${shortMonth(started.month)} ${started.day}, ${started.year}`;
+      }
+    }
+    durationCaption = 'Reading span';
+    durationOverlayCaption = 'Read for';
+    pagesOverlayCaption = 'Length';
+  }
+
+  const canHaveChart =
+    status === 'finished'
+      ? durationKnown
+      : status === 'reading' || status === 'dnf';
+  const showProgress = toggles.progress !== false;
+
+  return {
+    status,
+    title: summary.book.title.trim() || 'Untitled',
+    authors: formatAuthors(summary.book.authors),
+    eyebrow,
+    statusBanner,
+    durationCaption,
+    durationOverlayCaption,
+    pagesOverlayCaption,
+    monthLabel,
+    dateRange,
+    yearOrdinal,
+    durationDays: toggles.duration && durationKnown ? durationDays : null,
     pages: toggles.pages && pagesKnown ? summary.pages : null,
     pagesPerDay:
+      status === 'finished' &&
       toggles.pages &&
       pagesKnown &&
       durationKnown &&
       summary.pagesPerDay != null
         ? summary.pagesPerDay
         : null,
+    progressPercent: showProgress ? progressPct : null,
     stars: toggles.rating ? rating : null,
-    chart: toggles.chart && durationKnown ? buildShareCardChart(summary) : null,
+    chart: toggles.chart && canHaveChart ? buildShareCardChart(summary) : null,
     showLogo: toggles.logo,
   };
 }
@@ -289,6 +505,14 @@ export function buildShareCardModel(
 /** The stats a card can show, in display order. */
 export function shareCardStats(model: ShareCardModel): ShareCardStat[] {
   const stats: ShareCardStat[] = [];
+  if (model.progressPercent != null) {
+    stats.push({
+      key: 'progress',
+      value: `${Math.round(model.progressPercent)}`,
+      unit: '%',
+      label: model.status === 'dnf' ? 'reached' : 'progress',
+    });
+  }
   if (model.durationDays != null) {
     stats.push({
       key: 'days',
@@ -327,16 +551,32 @@ export function shareCardStats(model: ShareCardModel): ShareCardStat[] {
 /** Which toggles have data behind them for this summary. */
 export function availableShareCardToggles(
   summary: FinishSummary,
+  todayYmd = localTodayYmd(),
 ): ShareCardToggles {
-  const durationKnown =
-    summary.startedDate != null &&
-    summary.durationDays != null &&
-    summary.durationDays > 0;
+  const durationDays = effectiveDurationDays(summary, todayYmd);
+  const durationKnown = durationDays != null && durationDays > 0;
+  const status = summary.status;
+
+  const hasDateInfo =
+    status === 'finished'
+      ? summary.finishedDate != null
+      : status === 'reading'
+        ? summary.startedDate != null
+        : status === 'dnf'
+          ? summary.dnfDate != null || summary.startedDate != null
+          : false;
+
+  const canHaveChart =
+    status === 'finished'
+      ? durationKnown
+      : status === 'reading' || status === 'dnf';
+
   return {
     rating: summary.rating != null && summary.rating > 0,
-    duration: summary.finishedDate != null,
+    duration: hasDateInfo,
     pages: summary.pages != null && summary.pages > 0,
-    chart: durationKnown && buildShareCardChart(summary) != null,
+    progress: effectiveProgressPercent(summary) != null,
+    chart: canHaveChart && buildShareCardChart(summary) != null,
     logo: true,
   };
 }

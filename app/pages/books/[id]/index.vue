@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useClipboard } from '@vueuse/core';
 import { useHead } from '~/composables/useHead';
+import { useMiniCoverStore } from '~/stores/miniCover';
 import { useShareCardStore } from '~/stores/shareCard';
 import { useUserSettingsStore } from '~/stores/userSettings';
 import { $fetch } from '~/utils/apiFetch';
@@ -20,6 +21,7 @@ import BooksBookPersonalShelves from '~/components/Books/BookPersonalShelves.vue
 import BooksBookNotes from '~/components/Books/BookNotes.vue';
 import BooksBookProgressHistory from '~/components/Books/BookProgressHistory.vue';
 import BooksBookReviewEditor from '~/components/Books/BookReviewEditor.vue';
+import BooksBookShareMenu from '~/components/Books/BookShareMenu.vue';
 import BooksTbrRationaleEditor from '~/components/Books/TbrRationaleEditor.vue';
 import HoverScrollText from '~/components/HoverScrollText.vue';
 import ModalWindow from '~/components/ModalWindow.vue';
@@ -165,8 +167,18 @@ function syncProgressSyncValue() {
 }
 
 const shareCard = useShareCardStore();
+const miniCover = useMiniCoverStore();
 // The status before the select changed it, so a save can tell a new finish.
 let statusBeforeEdit: UserBookStatus | null | undefined;
+
+watch(
+  () => miniCover.lastSavedSpine,
+  (saved) => {
+    if (!saved || !book.value || saved.bookId !== book.value.id) return;
+    book.value.spineRevision = saved.revision;
+    spineFailed.value = false;
+  },
+);
 
 const selectedStatusValue = computed<string>({
   get() {
@@ -1250,6 +1262,12 @@ const { copy } = useClipboard();
                 </div>
               </div>
 
+              <BooksBookShareMenu
+                :book-id="book.id"
+                :user-status="book.userStatus"
+                :finished-at="book.userStatusFinishedAt"
+              />
+
               <RouterLink
                 v-if="canEditBook"
                 v-tooltip="'Edit book details'"
@@ -1293,16 +1311,6 @@ const { copy } = useClipboard();
                       {{ opt.label }}
                     </option>
                   </select>
-
-                  <button
-                    v-if="book?.userStatus === 'finished' && !statusSaving"
-                    type="button"
-                    class="flex items-center gap-1 px-2 py-1.5 rounded-md border border-(--contrast-border-color) text-sm hover:border-(--contrast-main-color)"
-                    @click="shareCard.open(bookId)"
-                  >
-                    <Icon name="lucide:share-2" class="w-4 h-4" />
-                    Share card
-                  </button>
 
                   <div class="text-xs opacity-70 whitespace-nowrap">
                     <span v-if="statusSaving">Saving...</span>
