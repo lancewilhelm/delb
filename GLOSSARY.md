@@ -70,7 +70,10 @@ A reader's saved location within an ebook. It is distinct from the historical pr
 A reader's history of progress entries for a book, recorded manually, through reader sync, or when marking the book Finished.
 
 **Share card**:
-An image that a reader exports to share a finished book outside Delb. It combines the cover with the reader's own stats, such as reading duration, pages, pace, and rating. It never includes a link to the library, the review, or notes.
+An image that a reader exports to share a book outside Delb. It adapts its headline and available stats—such as progress, reading duration, pages, pace, and rating—to the reader's current status for the book. It never includes a link to the library, the review, or notes.
+
+**Mini book cover**:
+A printable 50 × 30 mm flat wrap image (two 20 × 30 mm covers around a 10 × 30 mm spine) exported from Delb with physical print DPI metadata (`pHYs`) so readers can fold it around a 20 × 10 × 30 mm miniature book block.
 
 **TBR queue**:
 A reader's private, ordered list of books they plan to read. The queue contains only books that the reader can see.
