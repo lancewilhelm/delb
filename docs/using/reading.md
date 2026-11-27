@@ -57,20 +57,43 @@ To show status icons on covers, enable **Reading status badges** under **Setting
 
 Changes affect your account's status, not anyone else's. See [status and date rules](../developing/reference/reading-status-progress.md) for the complete transitions.
 
-## Share a finished book
+## Share a book
 
-A share card is an image of a book you finished, with its cover and your reading stats, for posting on social media.
+Open any book detail page and select the **Share** button in the action bar to copy a link, export a reading status card, or build a printable mini book cover.
 
-1. Open a book whose status is **Finished** and select **Share card** next to the status. When you choose **Finished** for a book, a notice also offers **Share card**.
+### Copy a link
+
+Select **Share → Copy link** to copy the URL for that book in your library. Only accounts that already have access to the book can open the link.
+
+### Export a reading status card
+
+A reading status card is an image of a book with its cover and your reading details for posting outside Delb. It works for any reading status—Finished, Currently reading, To be read, DNF, or unset—and adjusts its headline and available toggles to match what you have recorded.
+
+1. Open a book and select **Share → Reading status card**. When you choose **Finished** for a book, a notice also offers **Share card**.
 2. Choose a **Style**: **Cover palette**, **Editorial split**, **Swiss grid**, **Duotone**, or **Pace overlay**. Most styles take their colors from the cover.
 3. Choose a **Format**: **Square** for posts, **Story** for full-screen stories, or **Landscape** for link-style posts.
 4. For **Pace overlay**, choose a **Background**. **Theme** uses your Delb theme, **Soft cover** uses a blurred copy of the cover, and **Transparent** leaves the background empty so that you can place the image over your own photo.
-5. Under **Show**, clear anything that you want to leave off: the rating, duration and dates, page count and pace, the pace chart, or the Delb logo.
+5. Under **Show**, clear anything that you want to leave off. Unavailable items for your current status—such as finish pace on a To be read book—are disabled with an explanation.
 6. Select **Download PNG**, **Copy image**, or **Share**. **Copy image** and **Share** appear only when your browser supports them.
 
-The card shows only details that you recorded. Without a start date, it shows no duration or pace. Without a page count, it shows no page stats. The pace chart needs progress logged on at least three different days between your start and finish dates. The card never includes a link to your library, your review, or your notes.
+The card shows only details that you recorded. For **Currently reading** and **DNF**, it can include your latest progress percentage, reading days, and a pace chart once you have logged progress on at least three different days. The card never includes a link to your library, your review, or your notes.
 
 To stop the notice after you finish a book, select **Don't ask again** in it. To turn it back on, use **Offer a share card when I finish a book** under **Settings → General → Share cards**. See the [share cards reference](../developing/reference/share-cards.md) for how stats and colors are calculated.
+
+### Create a mini book cover
+
+A mini book cover is a printable flat wrap sized for a 20 × 10 × 30 mm miniature book (20 × 30 mm left cover, 10 × 30 mm spine in a 1:3 aspect ratio, and 20 × 30 mm right cover—50 × 30 mm flat).
+
+1. Open a book and select **Share → Mini book cover**.
+2. Preview the flat wrap or switch to **3D Folded** to inspect how the panels fold around a book block. Toggle **Guides** or **Actual size** in the preview toolbar as needed.
+3. Adjust the **Spine**:
+   - Delb checks whether the current spine matches 1:3 and warns if it is off-ratio.
+   - When the ratio differs, choose **Crop** (and drag the spine in the preview to reposition it), **Fit**, or **Stretch**, or switch to **Plain** for a clean type-only spine.
+   - Select **Upload spine image** to use a custom spine image for this export. Editors and Admins can also choose **Save spine to book** to replace the book's saved spine, or use **Make a 1:3 spine** (when ChatGPT image generation is connected) to regenerate a 1:3 spine from the current spine and trim it with the 1:3 crop box.
+4. Under **Covers**, choose whether the back panel uses the **Same cover**, a solid **Cover color**, or a **Blurred** cover, and optionally flip the orientation for right-to-left books.
+5. Under **Export PNG**, choose **Standard (300 dpi)** or **High (600 dpi)**, optional **Bleed** (0, 1, or 2 mm), **Fold ticks**, and **Corner trim marks**, then select **Download PNG** or **Copy image**.
+
+Print the downloaded PNG at **100% / Actual size** (turn off "Fit to page"). The PNG embeds physical DPI metadata so print software sizes it to 50 × 30 mm automatically. The image never includes a link to your library.
 
 ## Write a review and keep notes
 

@@ -96,7 +96,7 @@ See [book view design record](../../archive/book-view-settings.md), [system arch
 
 ## Share cards
 
-`shareCard.promptOnFinish` defaults to `true`. While it is on, choosing **Finished** for one book shows a toast that offers a share card. **Don't ask again** in the toast sets it to `false`, and **Offer a share card when I finish a book** in **Settings → General → Share cards** turns it back on. Any value other than `false` normalizes to `true`. It uses the active desktop or mobile profile. The **Share card** button on finished books does not depend on it. See the [share cards reference](share-cards.md).
+`shareCard.promptOnFinish` defaults to `true`. While it is on, choosing **Finished** for one book shows a toast that offers a share card. **Don't ask again** in the toast sets it to `false`, and **Offer a share card when I finish a book** in **Settings → General → Share cards** turns it back on. Any value other than `false` normalizes to `true`. It uses the active desktop or mobile profile. The **Share → Reading status card** action on a book page does not depend on it. See the [share cards reference](share-cards.md).
 
 ## Cover reading-status badges
 

@@ -136,6 +136,9 @@ function mountBookDetail(opts: {
       useRouter: () => ({ back: () => {} }),
     },
     '~/composables/useHead': { useHead: () => {} },
+    '~/stores/miniCover': {
+      useMiniCoverStore: () => ({ open: () => {}, lastSavedSpine: null }),
+    },
     '~/stores/shareCard': {
       useShareCardStore: () => ({ open: () => {}, notifyFinished: () => {} }),
     },
@@ -168,6 +171,7 @@ function mountBookDetail(opts: {
     '~/components/BookCover.vue': stubModule('book-cover'),
     '~/components/Books/BookNotes.vue': stubModule('book-notes'),
     '~/components/Books/BookReviewEditor.vue': stubModule('book-review-editor'),
+    '~/components/Books/BookShareMenu.vue': stubModule('book-share-menu'),
     '~/components/Books/BookPersonalShelves.vue': stubModule(
       'book-personal-shelves',
     ),

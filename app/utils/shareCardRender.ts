@@ -1023,21 +1023,35 @@ function renderEditorialSplit(
   }
 
   const hero =
-    model.durationDays != null
+    model.progressPercent != null
       ? {
-          value: formatCount(model.durationDays),
-          unit: model.durationDays === 1 ? 'day' : 'days',
+          value: String(Math.round(model.progressPercent)),
+          unit: '%',
         }
-      : model.pages != null
-        ? { value: formatCount(model.pages), unit: 'pages' }
-        : null;
+      : model.durationDays != null
+        ? {
+            value: formatCount(model.durationDays),
+            unit: model.durationDays === 1 ? 'day' : 'days',
+          }
+        : model.pages != null
+          ? { value: formatCount(model.pages), unit: 'pages' }
+          : null;
   if (hero) {
     const parts: string[] = [];
-    if (model.durationDays != null) parts.push('Start to finish');
-    if (model.durationDays != null && model.pages != null)
-      parts.push(`${formatCount(model.pages)} pages`);
-    if (model.durationDays == null && model.dateRange)
-      parts.push(model.dateRange);
+    if (model.progressPercent != null) {
+      parts.push(model.status === 'dnf' ? 'Progress reached' : 'Progress');
+      if (model.durationDays != null)
+        parts.push(
+          `${formatCount(model.durationDays)} ${model.durationDays === 1 ? 'day' : 'days'}`,
+        );
+      if (model.pages != null) parts.push(`${formatCount(model.pages)} pages`);
+    } else {
+      if (model.durationDays != null) parts.push(model.durationCaption);
+      if (model.durationDays != null && model.pages != null)
+        parts.push(`${formatCount(model.pages)} pages`);
+      if (model.durationDays == null && model.dateRange)
+        parts.push(model.dateRange);
+    }
     if (model.yearOrdinal) parts.push(model.yearOrdinal);
     const cap = parts.join(' · ').toUpperCase();
     if (cap) {
@@ -1123,7 +1137,7 @@ function renderSwissGrid(
   ctx.fillStyle = p.ink;
   drawTracked(
     ctx,
-    'FINISHED READING',
+    model.statusBanner,
     area.x,
     area.y + headerH - 2.2 * u,
     font(600, 2.6 * u, MONO),
@@ -1654,14 +1668,24 @@ function renderPaceOverlay(
   const centerBottom = pillY - 6 * u;
   const numSize = (landscape ? 10 : story ? 13 : 10.5) * u;
   const nums: { cap: string; value: string; unit: string }[] = [];
-  if (model.durationDays != null)
+  if (model.progressPercent != null)
     nums.push({
-      cap: 'Finished in',
+      cap: model.status === 'dnf' ? 'Reached' : 'Progress',
+      value: String(Math.round(model.progressPercent)),
+      unit: '%',
+    });
+  if (model.durationDays != null && nums.length < 2)
+    nums.push({
+      cap: model.durationOverlayCaption,
       value: formatCount(model.durationDays),
       unit: model.durationDays === 1 ? 'day' : 'days',
     });
-  if (model.pages != null)
-    nums.push({ cap: 'Read', value: formatCount(model.pages), unit: 'pages' });
+  if (model.pages != null && nums.length < 2)
+    nums.push({
+      cap: model.pagesOverlayCaption,
+      value: formatCount(model.pages),
+      unit: 'pages',
+    });
   if (nums.length === 0 && model.stars != null)
     nums.push({ cap: 'Rated', value: model.stars.toFixed(1), unit: '★' });
   const numsH = nums.length ? numSize + 4 * u : 0;

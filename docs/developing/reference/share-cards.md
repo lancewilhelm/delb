@@ -1,10 +1,16 @@
-# Share cards
+# Share cards and mini book covers
 
-A share card is a PNG image that summarizes one finished book for posting outside Delb. The browser draws it on a canvas from the reader's own finish summary. The card never includes a link to the library, the reader's review, or notes.
+The book detail page provides a unified **Share** menu ([BookShareMenu.vue](../../../app/components/Books/BookShareMenu.vue)) with three actions:
+
+1. **Copy link** — copies the book's library URL (tag visibility rules still apply on the server).
+2. **Reading status card** — draws a Canvas 2D PNG summarizing the book for any reading status (`finished`, `reading`, `to_be_read`, `dnf`, or unset), without including a library link, review, or notes.
+3. **Mini book cover** — builds a printable 50 × 30 mm flat wrap (`20 × 30 mm` covers around a `10 × 30 mm` spine) with embedded PNG `pHYs` physical dimensions.
 
 ## Finish summary endpoint
 
-`GET /api/books/{id}/finish-summary` returns the data that a card draws. The [handler](../../../internal/books/finish_summary.go) requires a session and uses the same visibility check as `GET /api/books/{id}`. A book that the reader cannot see returns 404. Every personal field comes from the authenticated reader's own rows, so another account that can see the book never sees this reader's dates, rating, or progress.
+`GET /api/books/{id}/finish-summary` returns the core data that a reading status card draws. The [handler](../../../internal/books/finish_summary.go) requires a session and uses the same visibility check as `GET /api/books/{id}`. A book that the reader cannot see returns 404. Every personal field comes from the authenticated reader's own rows, so another account that can see the book never sees this reader's dates, rating, or progress.
+
+For non-finished statuses, [ShareCardModal.vue](../../../app/components/ShareCard/ShareCardModal.vue) also enriches the model on the client from `GET /api/books/{id}` (for `userStatusDnfAt` and `userStatusTbrRank`) and `GET /api/books/{id}/progress` (for latest percentage and progress history checkpoints when `status` is `reading` or `dnf`).
 
 | Field                             | Meaning                                                                                                                            |
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -35,17 +41,18 @@ Logs are bucketed by the local calendar day of `occurred_at`, and the highest pe
 
 ## Card model and toggles
 
-[`buildShareCardModel`](../../../app/utils/shareCardModel.ts) combines the summary with the reader's toggles. A stat appears only when its toggle is on and the data exists:
+[`buildShareCardModel`](../../../app/utils/shareCardModel.ts) combines the summary with the reader's toggles and adapts headlines, banners, and available controls to `status`. A stat appears only when its toggle is on and the underlying data makes sense for that status:
 
-| Toggle            | Shows                                      | Needs                                      |
-| ----------------- | ------------------------------------------ | ------------------------------------------ |
-| Rating            | Stars or a rating stat                     | A rating                                   |
-| Duration & dates  | Days, the date range, and "Book N of YYYY" | A finish date; days also need a start date |
-| Page count & pace | Pages and pages per day                    | A page count; pace also needs a start date |
-| Pace chart        | The pace curve or daily bar chart          | A start date and 3 or more checkpoint days |
-| Delb logo         | The Delb mark                              | Nothing                                    |
+| Toggle                               | Shows                                                            | Needs                                                                         |
+| ------------------------------------ | ---------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Rating                               | Stars or a rating stat                                           | A rating                                                                      |
+| Reading progress (`reading` / `dnf`) | Current or reached progress percentage                           | A positive logged progress percentage                                         |
+| Duration & dates / Started & days    | Days, date range (or start date), and "Book N of YYYY" on finish | A finish date (`finished`), start date (`reading`), or start/DNF date (`dnf`) |
+| Page count & pace / Page count       | Pages, plus pages per day on finished books                      | A page count; pace also needs a finished book with a start date               |
+| Pace chart                           | The pace curve or daily bar chart                                | `finished`, `reading`, or `dnf` with 3 or more distinct checkpoint days       |
+| Delb logo                            | The Delb mark                                                    | Nothing                                                                       |
 
-The chart threshold prevents a made-up straight line between a start and a finish. The Cover palette and Duotone styles draw no chart, so the dialog disables that toggle for them.
+The chart threshold prevents a made-up straight line between two points. The Cover palette and Duotone styles draw no chart, so the dialog disables that toggle for them.
 
 ## Styles and formats
 
@@ -77,7 +84,15 @@ Formats are Square (1080 × 1080, the default), Story (1080 × 1920), and Landsc
 
 ## Entry points
 
-- The book detail page shows **Share card** next to the status when the reader's status is Finished.
+- The book detail action bar provides **Share** ([BookShareMenu.vue](../../../app/components/Books/BookShareMenu.vue)) with **Copy link**, **Reading status card**, and **Mini book cover**.
 - Choosing **Finished** for one book, on the book detail page or from a cover's **Reading status** menu, shows a toast: "Finished _Title_ · Share card". It closes after about nine seconds and stays while the pointer or focus is on it. **Don't ask again** sets `shareCard.promptOnFinish` to `false` (see [settings](settings.md#share-cards)). Bulk status changes, Goodreads imports, and editing only the finish date show no toast.
 
-The [share card store](../../../app/stores/shareCard.ts) holds the open book and the toast. The [dialog](../../../app/components/ShareCard/ShareCardModal.vue) and [toast](../../../app/components/ShareCard/ShareCardToast.vue) are mounted once in `app.vue`, so either entry point works on any page.
+The [share card store](../../../app/stores/shareCard.ts) and [mini cover store](../../../app/stores/miniCover.ts) hold the active book for each modal. [ShareCardModal.vue](../../../app/components/ShareCard/ShareCardModal.vue), [MiniCoverModal.vue](../../../app/components/MiniCover/MiniCoverModal.vue), and [ShareCardToast.vue](../../../app/components/ShareCard/ShareCardToast.vue) are mounted once in `app.vue`.
+
+## Mini book covers
+
+The Mini Book Cover studio builds a printable flat wrap for a 20 × 10 × 30 mm miniature book (`50 × 30 mm` flat: left 20 × 30 mm cover, center 10 × 30 mm spine, right 20 × 30 mm cover).
+
+- **Pure layout and rendering:** [miniCoverLayout.ts](../../../app/utils/miniCoverLayout.ts) computes whole-pixel panel rectangles, bleed bounds, trim-mark margins, 1:3 trim suggestions, and save-ready `SpineEdits` without DOM dependencies. [miniCoverRender.ts](../../../app/utils/miniCoverRender.ts) draws into any Canvas 2D context at `(0, 0)` so a future multi-cover print sheet page can tile multiple books with `ctx.translate`.
+- **Spine ratio checking and editing:** `spineRatioStatus` in [spine-artwork.ts](../../../shared/spine-artwork.ts) classifies the active spine against 1:3 (`<= 4%` fit, `4–12%` slight, `> 12%` mismatch). Readers can adjust **Crop** (with drag-to-reposition), **Fit**, or **Stretch**, upload a local spine image for export, or use a **Plain** type-only spine. Editors and Admins can also save a local spine back to `POST /api/books/{id}/spine` or regenerate a 1:3 spine from the current spine via `POST /api/books/{id}/spine-generate` followed by an inline 1:3 trim box.
+- **Physical PNG metadata:** [pngPhys.ts](../../../app/utils/pngPhys.ts) injects a PNG `pHYs` chunk (`12,000 px/m` at 12 px/mm for Standard 300 dpi, `24,000 px/m` at 24 px/mm for High 600 dpi) so print software preserves exact millimeter dimensions.
