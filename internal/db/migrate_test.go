@@ -79,20 +79,20 @@ func TestMigrateFreshAndIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Migrate fresh: %v", err)
 	}
-	if res.Applied != 1 {
-		t.Fatalf("Applied = %d, want 1", res.Applied)
+	if res.Applied != 2 {
+		t.Fatalf("Applied = %d, want 2", res.Applied)
 	}
 	if res.BackupPath != "" {
 		t.Fatalf("expected no backup on fresh DB, got %q", res.BackupPath)
 	}
 
-	// Verify __drizzle_migrations has 1 row with Drizzle-compatible hash and timestamp.
+	// Verify __drizzle_migrations has 2 rows with Drizzle-compatible hash and timestamp.
 	var count int
 	if err := opened.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM "__drizzle_migrations"`).Scan(&count); err != nil {
 		t.Fatalf("count __drizzle_migrations: %v", err)
 	}
-	if count != 1 {
-		t.Fatalf("__drizzle_migrations count = %d, want 1", count)
+	if count != 2 {
+		t.Fatalf("__drizzle_migrations count = %d, want 2", count)
 	}
 
 	// Verify hash of the baseline matches sha256(0000_initial.sql).
@@ -259,15 +259,24 @@ func seedHistory(t *testing.T, lastCreatedAt int64) (*db.OpenResult, func()) {
 
 func TestMigrateSkipsBaselineForDatabasesAtFinalPreBaselineMigration(t *testing.T) {
 	// 1795300000000 is when 0022_single_library ran; such a database already
-	// has the baseline schema.
+	// has the baseline schema, so only post-baseline migrations should apply.
 	opened, done := seedHistory(t, 1795300000000)
 	defer done()
+	// Seed the baseline tables that 0001 alters/references so the post-baseline migration can apply.
+	for _, stmt := range []string{
+		`CREATE TABLE books (id text PRIMARY KEY NOT NULL)`,
+		`CREATE TABLE book_spines (book_id text PRIMARY KEY NOT NULL, original_base64 text NOT NULL, original_type text NOT NULL, image_base64 text NOT NULL, edits text NOT NULL, revision text NOT NULL)`,
+	} {
+		if _, err := opened.DB.ExecContext(context.Background(), stmt); err != nil {
+			t.Fatalf("seed baseline tables: %v", err)
+		}
+	}
 	res, err := db.Migrate(context.Background(), opened.DB, opened.FilePath, opened.IsMemory, delb.MigrationsFS)
 	if err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	if res.Applied != 0 || res.BackupPath != "" {
-		t.Fatalf("got %+v, want no migrations and no backup", res)
+	if res.Applied != 1 || res.BackupPath == "" {
+		t.Fatalf("got %+v, want 1 post-baseline migration applied with backup", res)
 	}
 }
 

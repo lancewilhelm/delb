@@ -2117,6 +2117,24 @@ func (s *Service) handleDeleteBook(w http.ResponseWriter, r *http.Request) {
 			if coverImagePath.Valid && coverImagePath.String != "" {
 				candidates = append(candidates, coverImagePath.String)
 			}
+			var spineImg, spineOrig string
+			if serr := s.db.QueryRowContext(r.Context(), `SELECT image_path, original_path FROM book_spines WHERE book_id = ? LIMIT 1`, bookID).Scan(&spineImg, &spineOrig); serr == nil {
+				if spineImg != "" {
+					candidates = append(candidates, spineImg)
+				}
+				if spineOrig != "" {
+					candidates = append(candidates, spineOrig)
+				}
+			}
+			var miniImg, miniSrc string
+			if merr := s.db.QueryRowContext(r.Context(), `SELECT spine_image_path, spine_source_path FROM book_mini_covers WHERE book_id = ? LIMIT 1`, bookID).Scan(&miniImg, &miniSrc); merr == nil {
+				if miniImg != "" {
+					candidates = append(candidates, miniImg)
+				}
+				if miniSrc != "" {
+					candidates = append(candidates, miniSrc)
+				}
+			}
 			for _, stored := range dedupeStrings(candidates) {
 				if stored == "" {
 					continue
@@ -2160,6 +2178,7 @@ func (s *Service) handleDeleteBook(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			deleteQueries := []string{
+				`DELETE FROM book_mini_covers WHERE book_id = ?`,
 				`DELETE FROM book_spines WHERE book_id = ?`,
 				`DELETE FROM personal_shelf_books WHERE book_id = ?`,
 				`DELETE FROM book_files WHERE book_id = ?`,

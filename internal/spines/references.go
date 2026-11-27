@@ -20,6 +20,7 @@ type SeriesSpineReference struct {
 	Title       string   `json:"title"`
 	SeriesIndex *float64 `json:"seriesIndex"`
 	Revision    string   `json:"revision"`
+	ImagePath   string   `json:"-"`
 	ImageBase64 string   `json:"-"`
 }
 
@@ -87,9 +88,9 @@ func FindSeriesSpines(ctx context.Context, db *sql.DB, userID, bookID string, se
 	}
 
 	includeImages := selected != nil
-	selectImg := `''`
+	selectImg := `'', ''`
 	if includeImages {
-		selectImg = `bs.image_base64`
+		selectImg = `bs.image_path, bs.image_base64`
 	}
 
 	args := []any{userID, seriesID.String, bookID}
@@ -133,7 +134,7 @@ func FindSeriesSpines(ctx context.Context, db *sql.DB, userID, bookID string, se
 			r   SeriesSpineReference
 			idx sql.NullFloat64
 		)
-		if err := rows.Scan(&r.BookID, &r.Title, &idx, &r.Revision, &r.ImageBase64); err != nil {
+		if err := rows.Scan(&r.BookID, &r.Title, &idx, &r.Revision, &r.ImagePath, &r.ImageBase64); err != nil {
 			return nil, err
 		}
 		if idx.Valid {

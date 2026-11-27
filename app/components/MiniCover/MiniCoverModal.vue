@@ -10,10 +10,7 @@ import {
 import ModalWindow from '~/components/ModalWindow.vue';
 import { useMiniCoverStore } from '~/stores/miniCover';
 import { $fetch } from '~/utils/apiFetch';
-import {
-  fetchBookDetail,
-  invalidateBookDetail,
-} from '~/utils/bookPreviewCache';
+import { fetchBookDetail } from '~/utils/bookPreviewCache';
 import { buildBookCoverUrl } from '~/utils/covers';
 import {
   buildSpineEditsForSave,
@@ -63,7 +60,27 @@ type BookSummary = {
   authors?: { id: string; name: string }[];
 };
 
-type SpineSourceKind = 'saved' | 'uploaded' | 'generated' | 'plain';
+type SavedMiniCoverSettings = {
+  spineSource: 'mini' | 'book' | 'plain';
+  spineFit: MiniCoverSpineFit;
+  spineOffset: number;
+  backStyle: MiniCoverBackStyle;
+  orientation: MiniCoverOrientation;
+  resolution: MiniCoverResolution;
+  bleedMm: MiniCoverBleedMm;
+  foldMarks: boolean;
+  trimMarks: boolean;
+};
+
+type MiniCoverResponse = {
+  hasSpine: boolean;
+  spineRevision: string | null;
+  spineEdits: unknown;
+  settings: SavedMiniCoverSettings | null;
+  updatedAt: string | null;
+};
+
+type SpineSourceKind = 'mini' | 'book' | 'uploaded' | 'generated' | 'plain';
 type PreviewMode = 'flat' | 'folded';
 type CropEdge = 'left' | 'right' | 'top' | 'bottom';
 
@@ -92,7 +109,7 @@ let loadToken = 0;
 
 const open = computed(() => store.openBookId != null);
 
-// Loaded book + assets
+// Loaded book + cover
 const loading = ref(false);
 const loadError = ref<string | null>(null);
 const book = shallowRef<BookSummary | null>(null);
@@ -100,12 +117,17 @@ const coverAsset = shallowRef<MiniCoverImageSource | null>(null);
 const coverFailed = ref(false);
 const palette = shallowRef<CardPalette>(paletteFromHex(null));
 
-// Saved spine
-const savedSpineRevision = ref<string | null>(null);
-const savedSpineAsset = shallowRef<MiniCoverImageSource | null>(null);
-const savedSpineError = ref<string | null>(null);
+// Separate saved mini-cover spine (stored in book_mini_covers / mini-spine.webp)
+const miniSpineRevision = ref<string | null>(null);
+const miniSpineAsset = shallowRef<MiniCoverImageSource | null>(null);
+const miniSpineError = ref<string | null>(null);
 
-// Local uploaded & generated spines (session-scoped unless saved to book)
+// Book's regular bookshelf/detail spine (read-only reference here)
+const bookSpineRevision = ref<string | null>(null);
+const bookSpineAsset = shallowRef<MiniCoverImageSource | null>(null);
+const bookSpineError = ref<string | null>(null);
+
+// Session-staged uploaded & generated spines
 const uploadedSpine = shallowRef<StagedSpineAsset | null>(null);
 const generatedSpine = shallowRef<StagedSpineAsset | null>(null);
 const spineSource = ref<SpineSourceKind>('plain');
@@ -150,11 +172,12 @@ const instructions = ref('');
 const generating = ref(false);
 const spineError = ref<string | null>(null);
 
-// Save-to-book flow (editors only)
-const saveConfirmOpen = ref(false);
-const savingToBook = ref(false);
+// Persistence for mini-cover spine + settings
+const savingMiniCover = ref(false);
+const removingMiniSpine = ref(false);
 const saveStatusMessage = ref<string | null>(null);
 const saveConflict = ref(false);
+const savedSettingsJson = ref<string | null>(null);
 
 // Cover & layout options
 const backStyle = ref<MiniCoverBackStyle>('same');
@@ -170,8 +193,10 @@ const showGuides = ref(true);
 const actualSize = ref(false);
 const zoom = ref(100);
 const foldedDataUrl = ref<string | null>(null);
-const foldedYaw = ref(-20);
+const foldedYaw = ref(-28);
 let foldDrag: { pointerId: number; x: number; startYaw: number } | null = null;
+let offscreenExportCanvas: HTMLCanvasElement | null = null;
+let offscreenFoldedCanvas: HTMLCanvasElement | null = null;
 let spinePanDrag: {
   pointerId: number;
   x: number;
@@ -216,7 +241,8 @@ const activeStagedAsset = computed<StagedSpineAsset | null>(() => {
 });
 
 const activeSpineImage = computed<MiniCoverImageSource | null>(() => {
-  if (spineSource.value === 'saved') return savedSpineAsset.value;
+  if (spineSource.value === 'mini') return miniSpineAsset.value;
+  if (spineSource.value === 'book') return bookSpineAsset.value;
   if (spineSource.value === 'uploaded') {
     const a = uploadedSpine.value;
     return a
@@ -246,7 +272,6 @@ const activeSpineCrop = computed<CropInsets>(() => {
   return activeStagedAsset.value?.crop ?? FULL_CROP_INSETS;
 });
 
-/** Effective cropped dimensions of the currently active spine image. */
 const activeSpineEffectiveDims = computed<{
   width: number;
   height: number;
@@ -317,18 +342,19 @@ const lowResWarning = computed(() => {
   return notes.join(' ');
 });
 
+const hasReferenceSpineForGeneration = computed(
+  () =>
+    activeSpineImage.value !== null ||
+    miniSpineAsset.value !== null ||
+    bookSpineAsset.value !== null ||
+    generatedSpine.value !== null ||
+    uploadedSpine.value !== null,
+);
+
 const seriesSelectionLimit = computed(
   () =>
     MAX_SERIES_SPINE_REFERENCES -
     (hasReferenceSpineForGeneration.value ? 1 : 0),
-);
-
-const hasReferenceSpineForGeneration = computed(
-  () =>
-    activeSpineImage.value !== null ||
-    savedSpineAsset.value !== null ||
-    generatedSpine.value !== null ||
-    uploadedSpine.value !== null,
 );
 
 const hasUnsavedLocalSpine = computed(
@@ -336,6 +362,44 @@ const hasUnsavedLocalSpine = computed(
     (spineSource.value === 'uploaded' && Boolean(uploadedSpine.value)) ||
     (spineSource.value === 'generated' && Boolean(generatedSpine.value)),
 );
+
+function buildCurrentSettingsPayload(
+  sourceOverride?: 'mini' | 'book' | 'plain',
+): SavedMiniCoverSettings {
+  const persistedSource: 'mini' | 'book' | 'plain' =
+    sourceOverride ??
+    (spineSource.value === 'mini' ||
+    spineSource.value === 'book' ||
+    spineSource.value === 'plain'
+      ? spineSource.value
+      : miniSpineAsset.value
+        ? 'mini'
+        : bookSpineAsset.value
+          ? 'book'
+          : 'plain');
+
+  return {
+    spineSource: persistedSource,
+    spineFit: spineFit.value,
+    spineOffset: Math.round(spineOffset.value * 100) / 100,
+    backStyle: backStyle.value,
+    orientation: orientation.value,
+    resolution: resolution.value,
+    bleedMm: bleedMm.value,
+    foldMarks: foldMarks.value,
+    trimMarks: trimMarks.value,
+  };
+}
+
+const currentSettingsJson = computed(() =>
+  JSON.stringify(buildCurrentSettingsPayload()),
+);
+
+const settingsDirty = computed(() => {
+  if (hasUnsavedLocalSpine.value) return true;
+  if (savedSettingsJson.value == null) return false;
+  return currentSettingsJson.value !== savedSettingsJson.value;
+});
 
 const subtitleText = computed(() =>
   orientation.value === 'ltr'
@@ -347,10 +411,8 @@ const fileName = computed(() =>
   miniCoverFileName(book.value?.title ?? 'book', resolution.value),
 );
 
-// CSS pixel width for preview canvas
 const flatPreviewWidthStyle = computed(() => {
   if (actualSize.value) {
-    // 1 mm = 96 / 25.4 CSS px
     const totalMm =
       MINI_COVER_MM.totalWidth + bleedMm.value * 2 + layout.value.marginMm * 2;
     return `${Math.round((totalMm * 96) / 25.4)}px`;
@@ -358,7 +420,6 @@ const flatPreviewWidthStyle = computed(() => {
   return `${Math.round((460 * zoom.value) / 100)}px`;
 });
 
-// Percentage coordinates for SVG guide overlay inside the preview wrap
 const guidePercents = computed(() => {
   const l = layout.value;
   return {
@@ -373,47 +434,150 @@ const guidePercents = computed(() => {
   };
 });
 
-// 3D folded preview face backgrounds (cropped directly from the trimRect of the canvas)
-const foldedStyle = computed(() => {
-  const l = layout.value;
-  const totalW = l.width;
-  const totalH = l.height;
-  // Scale so trimRect matches the 3D book faces cleanly
-  const bgSizeW = (totalW / l.panels.front.w) * 100;
-  const bgSizeH = (totalH / l.panels.front.h) * 100;
-  const bgSizeSpineW = (totalW / l.panels.spine.w) * 100;
+// 3D folded mini book geometry (20 × 10 × 30 mm scaled at 7 px/mm with rounded spine shoulders)
+const FOLD_H = 210; // 30 mm
+const FOLD_D = 140; // 20 mm cover depth
+const FOLD_W = 70; // 10 mm spine width
+const FOLD_R = 11; // ~1.6 mm spine edge radius
+const FOLD_SHOULDER_SEGMENTS = 6;
+const FOLD_FLAT_SPINE_W = FOLD_W - FOLD_R * 2;
+const FOLD_COVER_W = FOLD_D - FOLD_R;
+const FOLD_ARC_LEN = (Math.PI / 2) * FOLD_R;
+const FOLD_SURFACE_LEN =
+  FOLD_COVER_W * 2 + FOLD_ARC_LEN * 2 + FOLD_FLAT_SPINE_W;
 
-  const posPercent = (panelX: number, panelW: number) => {
-    const denom = totalW - panelW;
-    return denom > 0 ? (panelX / denom) * 100 : 0;
-  };
-  const posYPercent = () => {
-    const denom = totalH - l.trimRect.h;
-    return denom > 0 ? (l.trimRect.y / denom) * 100 : 0;
-  };
-  const yPct = posYPercent();
+type FoldedPanelStyle = {
+  key: string;
+  style: Record<string, string>;
+};
+
+const foldedPanels = computed<{
+  leftCover: Record<string, string>;
+  rightCover: Record<string, string>;
+  spineFlat: Record<string, string>;
+  leftShoulder: FoldedPanelStyle[];
+  rightShoulder: FoldedPanelStyle[];
+}>(() => {
   const imgUrl = foldedDataUrl.value ? `url("${foldedDataUrl.value}")` : 'none';
+  const bgSize = `${FOLD_SURFACE_LEN.toFixed(2)}px ${FOLD_H}px`;
+  const halfD = FOLD_D / 2;
+  const halfW = FOLD_W / 2;
+  const arcCenterZ = halfD - FOLD_R;
+  const arcCenterX = halfW - FOLD_R;
+  const segAngleDeg = 90 / FOLD_SHOULDER_SEGMENTS;
+  const segAngleRad = (segAngleDeg * Math.PI) / 180;
+  const chordW = 2 * FOLD_R * Math.sin(segAngleRad / 2);
+  const segArcLen = FOLD_ARC_LEN / FOLD_SHOULDER_SEGMENTS;
+  const overlapPx = 0.55;
+  const stripW = chordW + overlapPx * 2;
+  const radiusMid = FOLD_R * Math.cos(segAngleRad / 2);
+
+  const layerBg = (shade: string, uStartPx: number) => ({
+    backgroundImage: imgUrl === 'none' ? shade : `${shade}, ${imgUrl}`,
+    backgroundSize: imgUrl === 'none' ? '100% 100%' : `100% 100%, ${bgSize}`,
+    backgroundPosition:
+      imgUrl === 'none' ? '0 0' : `0 0, ${(-uStartPx).toFixed(2)}px 0px`,
+    backgroundRepeat: 'no-repeat',
+  });
+
+  // Left cover runs from u = 0 to u = FOLD_COVER_W (x = -halfW, z from -halfD to +arcCenterZ)
+  const coverCenterZ = (-halfD + arcCenterZ) / 2;
+  const leftCover: Record<string, string> = {
+    width: `${FOLD_COVER_W}px`,
+    height: `${FOLD_H}px`,
+    marginLeft: `${(-FOLD_COVER_W / 2).toFixed(2)}px`,
+    transform: `translate3d(${(-halfW).toFixed(2)}px, 0, ${coverCenterZ.toFixed(2)}px) rotateY(-90deg)`,
+    ...layerBg(
+      'linear-gradient(90deg, rgba(0,0,0,0.06), rgba(255,255,255,0.04) 85%, rgba(0,0,0,0.12))',
+      0,
+    ),
+  };
+
+  // Left rounded shoulder: 6 segments going left-to-right from -90deg (left cover) to 0deg (spine)
+  const leftShoulder: FoldedPanelStyle[] = [];
+  for (let i = 0; i < FOLD_SHOULDER_SEGMENTS; i++) {
+    const t = (i + 0.5) / FOLD_SHOULDER_SEGMENTS; // 0 = left cover edge, 1 = spine edge
+    const angleDeg = -90 * (1 - t);
+    const angleRad = (angleDeg * Math.PI) / 180;
+    const mx = -arcCenterX + radiusMid * Math.sin(angleRad);
+    const mz = arcCenterZ + radiusMid * Math.cos(angleRad);
+    const uStart = FOLD_COVER_W + i * segArcLen - overlapPx;
+    const highlight = Math.max(0, Math.sin(t * Math.PI) * 0.16);
+    const shadow = (1 - t) * 0.14;
+    const shade = `linear-gradient(90deg, rgba(0,0,0,${shadow.toFixed(3)}), rgba(255,255,255,${highlight.toFixed(3)}))`;
+    leftShoulder.push({
+      key: `ls-${i}`,
+      style: {
+        width: `${stripW.toFixed(2)}px`,
+        height: `${FOLD_H}px`,
+        marginLeft: `${(-stripW / 2).toFixed(2)}px`,
+        transform: `translate3d(${mx.toFixed(2)}px, 0, ${mz.toFixed(2)}px) rotateY(${angleDeg.toFixed(2)}deg)`,
+        ...layerBg(shade, uStart),
+      },
+    });
+  }
+
+  // Flat spine center: u from FOLD_COVER_W + FOLD_ARC_LEN across FOLD_FLAT_SPINE_W
+  const spineStartU = FOLD_COVER_W + FOLD_ARC_LEN;
+  const spinePad = 0.4;
+  const spineFlat: Record<string, string> = {
+    width: `${(FOLD_FLAT_SPINE_W + spinePad * 2).toFixed(2)}px`,
+    height: `${FOLD_H}px`,
+    marginLeft: `${(-(FOLD_FLAT_SPINE_W / 2 + spinePad)).toFixed(2)}px`,
+    transform: `translate3d(0, 0, ${halfD}px)`,
+    ...layerBg(
+      'linear-gradient(90deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02) 35%, rgba(0,0,0,0) 70%, rgba(0,0,0,0.08))',
+      spineStartU - spinePad,
+    ),
+  };
+
+  // Right rounded shoulder: 6 segments going left-to-right from 0deg (spine) to +90deg (right cover)
+  const rightShoulder: FoldedPanelStyle[] = [];
+  const rightShoulderStartU = spineStartU + FOLD_FLAT_SPINE_W;
+  for (let i = 0; i < FOLD_SHOULDER_SEGMENTS; i++) {
+    const t = (i + 0.5) / FOLD_SHOULDER_SEGMENTS; // 0 = spine edge, 1 = right cover edge
+    const angleDeg = 90 * t;
+    const angleRad = (angleDeg * Math.PI) / 180;
+    const mx = arcCenterX + radiusMid * Math.sin(angleRad);
+    const mz = arcCenterZ + radiusMid * Math.cos(angleRad);
+    const uStart = rightShoulderStartU + i * segArcLen - overlapPx;
+    const highlight = Math.max(0, Math.sin(t * Math.PI) * 0.1);
+    const shadow = t * 0.18;
+    const shade = `linear-gradient(90deg, rgba(255,255,255,${highlight.toFixed(3)}), rgba(0,0,0,${shadow.toFixed(3)}))`;
+    rightShoulder.push({
+      key: `rs-${i}`,
+      style: {
+        width: `${stripW.toFixed(2)}px`,
+        height: `${FOLD_H}px`,
+        marginLeft: `${(-stripW / 2).toFixed(2)}px`,
+        transform: `translate3d(${mx.toFixed(2)}px, 0, ${mz.toFixed(2)}px) rotateY(${angleDeg.toFixed(2)}deg)`,
+        ...layerBg(shade, uStart),
+      },
+    });
+  }
+
+  // Right cover runs from u = rightShoulderStartU + FOLD_ARC_LEN to FOLD_SURFACE_LEN
+  const rightCoverStartU = rightShoulderStartU + FOLD_ARC_LEN;
+  const rightCover: Record<string, string> = {
+    width: `${FOLD_COVER_W}px`,
+    height: `${FOLD_H}px`,
+    marginLeft: `${(-FOLD_COVER_W / 2).toFixed(2)}px`,
+    transform: `translate3d(${halfW.toFixed(2)}px, 0, ${coverCenterZ.toFixed(2)}px) rotateY(90deg)`,
+    ...layerBg(
+      'linear-gradient(90deg, rgba(0,0,0,0.12), rgba(255,255,255,0.04) 15%, rgba(0,0,0,0.05))',
+      rightCoverStartU,
+    ),
+  };
 
   return {
-    front: {
-      backgroundImage: imgUrl,
-      backgroundSize: `${bgSizeW}% ${bgSizeH}%`,
-      backgroundPosition: `${posPercent(l.panels.right.x, l.panels.right.w)}% ${yPct}%`,
-    },
-    spine: {
-      backgroundImage: imgUrl,
-      backgroundSize: `${bgSizeSpineW}% ${bgSizeH}%`,
-      backgroundPosition: `${posPercent(l.panels.spine.x, l.panels.spine.w)}% ${yPct}%`,
-    },
-    back: {
-      backgroundImage: imgUrl,
-      backgroundSize: `${bgSizeW}% ${bgSizeH}%`,
-      backgroundPosition: `${posPercent(l.panels.left.x, l.panels.left.w)}% ${yPct}%`,
-    },
+    leftCover,
+    rightCover,
+    spineFlat,
+    leftShoulder,
+    rightShoulder,
   };
 });
 
-// Focus management
 watch(
   open,
   async (isOpen) => {
@@ -462,7 +626,6 @@ function clearSessionAssets() {
   uploadedSpine.value = null;
   generatedSpine.value = null;
   trimMode.value = false;
-  saveConfirmOpen.value = false;
   saveStatusMessage.value = null;
   saveConflict.value = false;
   spineError.value = null;
@@ -525,37 +688,69 @@ function applyRecommendedFit() {
   spineOffset.value = 0;
 }
 
-async function loadSavedSpine(bookId: string, token: number) {
-  savedSpineError.value = null;
-  savedSpineAsset.value = null;
-  savedSpineRevision.value = null;
+async function loadBookSpine(bookId: string, token: number) {
+  bookSpineError.value = null;
+  bookSpineAsset.value = null;
+  bookSpineRevision.value = null;
   try {
     const meta = await $fetch<{
       exists: boolean;
       revision: string | null;
     }>(`/api/books/${encodeURIComponent(bookId)}/spine?variant=metadata`);
     if (token !== loadToken) return;
-    if (!meta.exists || !meta.revision) {
-      spineSource.value = 'plain';
-      return;
-    }
-    savedSpineRevision.value = meta.revision;
+    if (!meta.exists || !meta.revision) return;
+    bookSpineRevision.value = meta.revision;
     const img = await loadImage(
       `/api/books/${encodeURIComponent(bookId)}/spine?v=${encodeURIComponent(meta.revision)}`,
     );
     if (token !== loadToken) return;
-    savedSpineAsset.value = {
+    bookSpineAsset.value = {
       image: img,
       width: img.naturalWidth,
       height: img.naturalHeight,
       edgeColor: sampleEdgeColor(img),
     };
-    spineSource.value = 'saved';
-    applyRecommendedFit();
   } catch {
     if (token !== loadToken) return;
-    savedSpineError.value = 'Could not load the saved spine image.';
-    spineSource.value = 'plain';
+    bookSpineError.value = 'Could not load the book’s bookshelf spine.';
+  }
+}
+
+async function loadSavedMiniCover(
+  bookId: string,
+  token: number,
+): Promise<SavedMiniCoverSettings | null> {
+  miniSpineError.value = null;
+  miniSpineAsset.value = null;
+  miniSpineRevision.value = null;
+  try {
+    const res = await $fetch<MiniCoverResponse>(
+      `/api/books/${encodeURIComponent(bookId)}/mini-cover`,
+    );
+    if (token !== loadToken) return null;
+    if (res.hasSpine && res.spineRevision) {
+      miniSpineRevision.value = res.spineRevision;
+      try {
+        const img = await loadImage(
+          `/api/books/${encodeURIComponent(bookId)}/mini-cover/spine?v=${encodeURIComponent(res.spineRevision)}`,
+        );
+        if (token !== loadToken) return null;
+        miniSpineAsset.value = {
+          image: img,
+          width: img.naturalWidth,
+          height: img.naturalHeight,
+          edgeColor: sampleEdgeColor(img),
+        };
+      } catch {
+        if (token !== loadToken) return null;
+        miniSpineError.value = 'Could not load the saved mini cover spine.';
+      }
+    }
+    return res.settings;
+  } catch {
+    if (token !== loadToken) return null;
+    miniSpineError.value = 'Could not load saved mini cover settings.';
+    return null;
   }
 }
 
@@ -609,14 +804,29 @@ async function loadAll(bookId: string) {
   book.value = null;
   coverAsset.value = null;
   coverFailed.value = false;
-  savedSpineAsset.value = null;
-  savedSpineRevision.value = null;
-  savedSpineError.value = null;
+  miniSpineAsset.value = null;
+  miniSpineRevision.value = null;
+  miniSpineError.value = null;
+  bookSpineAsset.value = null;
+  bookSpineRevision.value = null;
+  bookSpineError.value = null;
+  savedSettingsJson.value = null;
   clearSessionAssets();
+
+  // Reset layout controls to defaults before restoring saved settings
+  backStyle.value = 'same';
+  orientation.value = 'ltr';
+  resolution.value = 'high';
+  bleedMm.value = 0;
+  foldMarks.value = true;
+  trimMarks.value = false;
+  spineFit.value = 'crop';
+  spineOffset.value = 0;
   previewMode.value = 'flat';
   actualSize.value = false;
   zoom.value = 100;
-  foldedYaw.value = -20;
+  foldedYaw.value = -28;
+  foldedDataUrl.value = null;
 
   try {
     const loaded = (await fetchBookDetail(bookId)) as BookSummary | null;
@@ -627,7 +837,6 @@ async function loadAll(bookId: string) {
     }
     book.value = loaded;
 
-    // Load cover and spine in parallel
     const coverPromise = (async () => {
       if (!loaded.coverImagePath) {
         palette.value = paletteFromHex(null);
@@ -657,12 +866,47 @@ async function loadAll(bookId: string) {
       }
     })();
 
-    const spinePromise = loadSavedSpine(loaded.id, token);
-    const extrasPromise = loaded.canEdit
-      ? loadEditorExtras(loaded.id, token)
-      : Promise.resolve();
+    const [savedSettings] = await Promise.all([
+      loadSavedMiniCover(loaded.id, token),
+      loadBookSpine(loaded.id, token),
+      coverPromise,
+      loaded.canEdit ? loadEditorExtras(loaded.id, token) : Promise.resolve(),
+    ]);
+    if (token !== loadToken) return;
 
-    await Promise.all([coverPromise, spinePromise, extrasPromise]);
+    if (savedSettings) {
+      backStyle.value = savedSettings.backStyle;
+      orientation.value = savedSettings.orientation;
+      resolution.value = savedSettings.resolution;
+      bleedMm.value = savedSettings.bleedMm;
+      foldMarks.value = savedSettings.foldMarks;
+      trimMarks.value = savedSettings.trimMarks;
+      spineFit.value = savedSettings.spineFit;
+      spineOffset.value = savedSettings.spineOffset;
+
+      if (savedSettings.spineSource === 'mini' && miniSpineAsset.value) {
+        spineSource.value = 'mini';
+      } else if (savedSettings.spineSource === 'book' && bookSpineAsset.value) {
+        spineSource.value = 'book';
+      } else if (savedSettings.spineSource === 'plain') {
+        spineSource.value = 'plain';
+      } else {
+        spineSource.value = miniSpineAsset.value
+          ? 'mini'
+          : bookSpineAsset.value
+            ? 'book'
+            : 'plain';
+      }
+      savedSettingsJson.value = JSON.stringify(buildCurrentSettingsPayload());
+    } else {
+      spineSource.value = miniSpineAsset.value
+        ? 'mini'
+        : bookSpineAsset.value
+          ? 'book'
+          : 'plain';
+      applyRecommendedFit();
+      savedSettingsJson.value = JSON.stringify(buildCurrentSettingsPayload());
+    }
   } catch (err) {
     if (token !== loadToken) return;
     const e = err as { data?: { message?: string }; message?: string };
@@ -687,46 +931,81 @@ watch(
   { immediate: true },
 );
 
-// Render canvas whenever inputs change
-function draw() {
-  const el = canvasRef.value;
-  const b = book.value;
-  if (!el || !b || loading.value || loadError.value) return;
-
-  const l = layout.value;
-  if (el.width !== l.width) el.width = l.width;
-  if (el.height !== l.height) el.height = l.height;
-  const ctx = el.getContext('2d');
-  if (!ctx) return;
-
-  renderMiniCover(
-    ctx,
-    l,
-    {
-      cover: coverAsset.value,
-      spine: spineSource.value === 'plain' ? null : activeSpineImage.value,
-      spineCrop: activeSpineCrop.value,
-      spineFit: spineFit.value,
-      spineOffset: spineOffset.value,
-      backStyle: backStyle.value,
-      palette: palette.value,
-      book: {
-        id: b.id,
-        title: b.title,
-        authors: authorText.value,
-      },
+function buildRenderSources(b: BookSummary) {
+  return {
+    cover: coverAsset.value,
+    spine: spineSource.value === 'plain' ? null : activeSpineImage.value,
+    spineCrop: activeSpineCrop.value,
+    spineFit: spineFit.value,
+    spineOffset: spineOffset.value,
+    backStyle: backStyle.value,
+    palette: palette.value,
+    book: {
+      id: b.id,
+      title: b.title,
+      authors: authorText.value,
     },
-    {
+  };
+}
+
+function renderToCanvas(
+  el: HTMLCanvasElement,
+  targetLayout: ReturnType<typeof layoutMiniCover>,
+  b: BookSummary,
+  marks: { foldMarks: boolean; trimMarks: boolean },
+): boolean {
+  if (el.width !== targetLayout.width) el.width = targetLayout.width;
+  if (el.height !== targetLayout.height) el.height = targetLayout.height;
+  const ctx = el.getContext('2d');
+  if (!ctx) return false;
+  renderMiniCover(ctx, targetLayout, buildRenderSources(b), marks);
+  return true;
+}
+
+function renderExportCanvas(): HTMLCanvasElement | null {
+  const b = book.value;
+  if (!b || loading.value || loadError.value) return null;
+  const target =
+    canvasRef.value ??
+    (offscreenExportCanvas ??= document.createElement('canvas'));
+  const ok = renderToCanvas(target, layout.value, b, {
+    foldMarks: foldMarks.value,
+    trimMarks: effectiveTrimMarks.value,
+  });
+  return ok ? target : null;
+}
+
+function draw() {
+  const b = book.value;
+  if (!b || loading.value || loadError.value) return;
+
+  if (canvasRef.value) {
+    renderToCanvas(canvasRef.value, layout.value, b, {
       foldMarks: foldMarks.value,
       trimMarks: effectiveTrimMarks.value,
-    },
-  );
+    });
+  }
 
   if (previewMode.value === 'folded') {
-    try {
-      foldedDataUrl.value = el.toDataURL('image/png');
-    } catch {
-      foldedDataUrl.value = null;
+    const foldedCanvas = (offscreenFoldedCanvas ??=
+      document.createElement('canvas'));
+    const cleanLayout = layoutMiniCover({
+      pxPerMm: 12,
+      bleedMm: 0,
+      trimMarks: false,
+      orientation: orientation.value,
+    });
+    if (
+      renderToCanvas(foldedCanvas, cleanLayout, b, {
+        foldMarks: false,
+        trimMarks: false,
+      })
+    ) {
+      try {
+        foldedDataUrl.value = foldedCanvas.toDataURL('image/png');
+      } catch {
+        foldedDataUrl.value = null;
+      }
     }
   }
 }
@@ -735,7 +1014,8 @@ watch(
   [
     book,
     coverAsset,
-    savedSpineAsset,
+    miniSpineAsset,
+    bookSpineAsset,
     uploadedSpine,
     generatedSpine,
     spineSource,
@@ -762,17 +1042,16 @@ watch(
 );
 
 function selectSpineSource(next: SpineSourceKind) {
-  if (next === 'saved' && !savedSpineAsset.value) return;
+  if (next === 'mini' && !miniSpineAsset.value) return;
+  if (next === 'book' && !bookSpineAsset.value) return;
   if (next === 'uploaded' && !uploadedSpine.value) return;
   if (next === 'generated' && !generatedSpine.value) return;
   trimMode.value = false;
-  saveConfirmOpen.value = false;
   saveStatusMessage.value = null;
   spineSource.value = next;
   applyRecommendedFit();
 }
 
-// File staging (shared validation limits with SpineArtworkEditor)
 async function stageSpineFile(
   chosen: File,
   target: 'uploaded' | 'generated',
@@ -816,7 +1095,6 @@ async function stageSpineFile(
       spineSource.value = 'generated';
     }
     spineError.value = null;
-    saveConfirmOpen.value = false;
     saveStatusMessage.value = null;
     saveConflict.value = false;
     applyRecommendedFit();
@@ -841,7 +1119,6 @@ async function onChooseSpineFile(event: Event) {
   }
 }
 
-// Fetch the active spine as a Blob to pass as `previous` to spine generation
 async function getReferenceSpineFileForGeneration(): Promise<File | null> {
   if (spineSource.value === 'generated' && generatedSpine.value) {
     return generatedSpine.value.file;
@@ -849,14 +1126,29 @@ async function getReferenceSpineFileForGeneration(): Promise<File | null> {
   if (spineSource.value === 'uploaded' && uploadedSpine.value) {
     return uploadedSpine.value.file;
   }
-  if (book.value && savedSpineRevision.value) {
+  if (book.value && spineSource.value === 'mini' && miniSpineRevision.value) {
     try {
       const res = await fetch(
-        `/api/books/${encodeURIComponent(book.value.id)}/spine?v=${encodeURIComponent(savedSpineRevision.value)}`,
+        `/api/books/${encodeURIComponent(book.value.id)}/mini-cover/spine?v=${encodeURIComponent(miniSpineRevision.value)}`,
       );
       if (res.ok) {
         const blob = await res.blob();
-        return new File([blob], 'current-spine.webp', {
+        return new File([blob], 'mini-spine.webp', {
+          type: blob.type || 'image/webp',
+        });
+      }
+    } catch {
+      return null;
+    }
+  }
+  if (book.value && bookSpineRevision.value) {
+    try {
+      const res = await fetch(
+        `/api/books/${encodeURIComponent(book.value.id)}/spine?v=${encodeURIComponent(bookSpineRevision.value)}`,
+      );
+      if (res.ok) {
+        const blob = await res.blob();
+        return new File([blob], 'book-spine.webp', {
           type: blob.type || 'image/webp',
         });
       }
@@ -882,7 +1174,6 @@ async function generateOneToThreeSpine() {
   generating.value = true;
   spineError.value = null;
   saveStatusMessage.value = null;
-  saveConfirmOpen.value = false;
 
   try {
     const previousFile = await getReferenceSpineFileForGeneration();
@@ -1037,7 +1328,6 @@ function adjustTrimCrop(
     next.bottom = clampCropPct(initial.bottom - dy, initial.top);
 
   if (trimLockRatio.value) {
-    // Enforce 1:3 width-to-height on the crop box
     const horizChanged = edges.includes('left') || edges.includes('right');
     const vertChanged = edges.includes('top') || edges.includes('bottom');
     const visW = ((100 - next.left - next.right) / 100) * asset.width;
@@ -1143,7 +1433,6 @@ function moveSpinePan(event: PointerEvent) {
     spinePanDrag.axis === 'x'
       ? event.clientX - spinePanDrag.x
       : event.clientY - spinePanDrag.y;
-  // Dragging right/down pulls the image in that direction (moves crop window opposite)
   const next = spinePanDrag.startOffset - (delta / spinePanDrag.spanPx) * 2;
   spineOffset.value = Math.max(-1, Math.min(1, Math.round(next * 100) / 100));
 }
@@ -1169,20 +1458,33 @@ function startFoldRotate(event: PointerEvent) {
 function moveFoldRotate(event: PointerEvent) {
   if (!foldDrag || foldDrag.pointerId !== event.pointerId) return;
   const dx = event.clientX - foldDrag.x;
-  foldedYaw.value = Math.max(-42, Math.min(42, foldDrag.startYaw + dx * 0.35));
+  foldedYaw.value = Math.max(
+    -120,
+    Math.min(120, foldDrag.startYaw + dx * 0.45),
+  );
+}
+
+function keyFoldRotate(event: KeyboardEvent) {
+  if (event.key === 'ArrowLeft') {
+    event.preventDefault();
+    foldedYaw.value = Math.max(-120, foldedYaw.value - 10);
+  } else if (event.key === 'ArrowRight') {
+    event.preventDefault();
+    foldedYaw.value = Math.min(120, foldedYaw.value + 10);
+  }
 }
 
 function stopFoldRotate(event: PointerEvent) {
   if (foldDrag?.pointerId === event.pointerId) foldDrag = null;
 }
 
-// Save active local spine back to the book (editors only)
-async function confirmSaveSpineToBook() {
+// Save dedicated mini-cover spine + settings (separate from the bookshelf spine)
+async function saveMiniSpineAndSettings() {
   const b = book.value;
   const asset = activeStagedAsset.value;
-  if (!b || !asset || !canEdit.value || savingToBook.value) return;
+  if (!b || !asset || !canEdit.value || savingMiniCover.value) return;
 
-  savingToBook.value = true;
+  savingMiniCover.value = true;
   spineError.value = null;
   saveStatusMessage.value = null;
   saveConflict.value = false;
@@ -1195,32 +1497,46 @@ async function confirmSaveSpineToBook() {
       fit: spineFit.value,
       offset: spineOffset.value,
     });
+    const settingsPayload = buildCurrentSettingsPayload('mini');
+    settingsPayload.spineOffset = 0;
+
     const body = new FormData();
     body.append('file', asset.file);
-    body.append('revision', savedSpineRevision.value ?? '');
+    body.append('revision', miniSpineRevision.value ?? '');
     body.append('edits', JSON.stringify(edits));
+    body.append('settings', JSON.stringify(settingsPayload));
 
     const result = await $fetch<{ revision: string }>(
-      `/api/books/${encodeURIComponent(b.id)}/spine`,
+      `/api/books/${encodeURIComponent(b.id)}/mini-cover/spine`,
       { method: 'POST', body },
     );
 
-    savedSpineRevision.value = result.revision;
-    invalidateBookDetail(b.id);
-    store.notifySpineSaved(b.id, result.revision);
-    saveConfirmOpen.value = false;
-    saveStatusMessage.value = 'Saved as the book’s spine.';
-
-    // Reload saved spine asset in the background so "Saved" reflects the new revision
+    miniSpineRevision.value = result.revision;
     const img = await loadImage(
-      `/api/books/${encodeURIComponent(b.id)}/spine?v=${encodeURIComponent(result.revision)}`,
+      `/api/books/${encodeURIComponent(b.id)}/mini-cover/spine?v=${encodeURIComponent(result.revision)}`,
     );
-    savedSpineAsset.value = {
+    miniSpineAsset.value = {
       image: img,
       width: img.naturalWidth,
       height: img.naturalHeight,
       edgeColor: sampleEdgeColor(img),
     };
+
+    if (spineSource.value === 'uploaded') {
+      revokeAsset(uploadedSpine.value);
+      uploadedSpine.value = null;
+    } else if (spineSource.value === 'generated') {
+      revokeAsset(generatedSpine.value);
+      generatedSpine.value = null;
+    }
+    spineSource.value = 'mini';
+    spineOffset.value = 0;
+    trimMode.value = false;
+    savedSettingsJson.value = JSON.stringify(
+      buildCurrentSettingsPayload('mini'),
+    );
+    saveStatusMessage.value =
+      'Saved mini cover spine & settings (bookshelf spine unchanged).';
   } catch (cause: unknown) {
     const isConflict =
       typeof cause === 'object' &&
@@ -1230,33 +1546,100 @@ async function confirmSaveSpineToBook() {
     if (isConflict) {
       saveConflict.value = true;
       spineError.value =
-        'This book’s spine changed elsewhere. Reload the saved spine before saving, or keep downloading your local export.';
+        'This book’s mini cover spine changed elsewhere. Reload it before saving, or keep downloading your local export.';
     } else {
       spineError.value =
-        'Could not save the spine to the book. Your local preview is still ready to export.';
+        'Could not save the mini cover spine. Your local preview is still ready to export.';
     }
   } finally {
-    savingToBook.value = false;
+    savingMiniCover.value = false;
   }
 }
 
-async function reloadSavedSpineAfterConflict() {
+async function saveMiniCoverSettingsOnly() {
+  const b = book.value;
+  if (!b || !canEdit.value || savingMiniCover.value) return;
+
+  savingMiniCover.value = true;
+  spineError.value = null;
+  saveStatusMessage.value = null;
+
+  try {
+    const payload = buildCurrentSettingsPayload();
+    await $fetch(`/api/books/${encodeURIComponent(b.id)}/mini-cover`, {
+      method: 'PUT',
+      body: { settings: payload },
+    });
+    savedSettingsJson.value = JSON.stringify(payload);
+    saveStatusMessage.value = 'Saved mini cover settings.';
+  } catch {
+    spineError.value = 'Could not save mini cover settings.';
+  } finally {
+    savingMiniCover.value = false;
+  }
+}
+
+async function removeSavedMiniSpine() {
+  const b = book.value;
+  if (
+    !b ||
+    !canEdit.value ||
+    !miniSpineRevision.value ||
+    removingMiniSpine.value
+  )
+    return;
+
+  removingMiniSpine.value = true;
+  spineError.value = null;
+  saveStatusMessage.value = null;
+  saveConflict.value = false;
+
+  try {
+    await $fetch(`/api/books/${encodeURIComponent(b.id)}/mini-cover/spine`, {
+      method: 'DELETE',
+      body: { revision: miniSpineRevision.value },
+    });
+    miniSpineRevision.value = null;
+    miniSpineAsset.value = null;
+    if (spineSource.value === 'mini') {
+      spineSource.value = bookSpineAsset.value ? 'book' : 'plain';
+      applyRecommendedFit();
+    }
+    saveStatusMessage.value = 'Removed saved mini cover spine.';
+  } catch (cause: unknown) {
+    const isConflict =
+      typeof cause === 'object' &&
+      cause !== null &&
+      'statusCode' in cause &&
+      cause.statusCode === 409;
+    if (isConflict) {
+      saveConflict.value = true;
+      spineError.value =
+        'This mini cover spine changed elsewhere. Reload before removing.';
+    } else {
+      spineError.value = 'Could not remove the saved mini cover spine.';
+    }
+  } finally {
+    removingMiniSpine.value = false;
+  }
+}
+
+async function reloadMiniCoverAfterConflict() {
   if (!book.value) return;
   saveConflict.value = false;
   spineError.value = null;
-  const token = loadToken;
-  await loadSavedSpine(book.value.id, token);
+  await loadSavedMiniCover(book.value.id, loadToken);
 }
 
 // Export actions
 async function onDownload() {
-  const el = canvasRef.value;
-  if (!el || exportBusy.value) return;
+  if (exportBusy.value) return;
+  const el = renderExportCanvas();
+  if (!el) return;
   exportBusy.value = 'download';
   actionMessage.value = null;
   actionError.value = null;
   try {
-    draw();
     const blob = await canvasToPhysicalPngBlob(el, resInfo.value.pxPerMm);
     downloadPngBlob(blob, fileName.value);
     actionMessage.value = `Saved ${fileName.value}.`;
@@ -1269,13 +1652,13 @@ async function onDownload() {
 }
 
 async function onCopyImage() {
-  const el = canvasRef.value;
-  if (!el || exportBusy.value || !copySupported) return;
+  if (exportBusy.value || !copySupported) return;
+  const el = renderExportCanvas();
+  if (!el) return;
   exportBusy.value = 'copy';
   actionMessage.value = null;
   actionError.value = null;
   try {
-    draw();
     await navigator.clipboard.write([
       new ClipboardItem({
         'image/png': canvasToPhysicalPngBlob(el, resInfo.value.pxPerMm),
@@ -1442,32 +1825,47 @@ onBeforeUnmount(() => {
               <div
                 class="folded-stage"
                 tabindex="0"
-                aria-label="3D folded mini book preview. Drag horizontally to rotate."
+                aria-label="3D folded mini book preview. Drag horizontally or use arrow keys to rotate."
                 @pointerdown="startFoldRotate"
                 @pointermove="moveFoldRotate"
                 @pointerup="stopFoldRotate"
                 @pointercancel="stopFoldRotate"
+                @keydown="keyFoldRotate"
               >
                 <div
                   class="mini-book-3d"
                   :style="{
-                    transform: `rotateX(-10deg) rotateY(${foldedYaw}deg)`,
+                    transform: `rotateX(-11deg) rotateY(${foldedYaw}deg)`,
                   }"
                 >
+                  <div class="book-ground-shadow" aria-hidden="true" />
+                  <div
+                    class="book-face book-face-back"
+                    :style="foldedPanels.leftCover"
+                  />
+                  <div
+                    v-for="seg in foldedPanels.leftShoulder"
+                    :key="seg.key"
+                    class="book-face book-face-shoulder"
+                    :style="seg.style"
+                  />
                   <div
                     class="book-face book-face-spine"
-                    :style="foldedStyle.spine"
+                    :style="foldedPanels.spineFlat"
+                  />
+                  <div
+                    v-for="seg in foldedPanels.rightShoulder"
+                    :key="seg.key"
+                    class="book-face book-face-shoulder"
+                    :style="seg.style"
                   />
                   <div
                     class="book-face book-face-front"
-                    :style="foldedStyle.front"
-                  />
-                  <div
-                    class="book-face book-face-back"
-                    :style="foldedStyle.back"
+                    :style="foldedPanels.rightCover"
                   />
                   <div class="book-face book-face-pages" />
                   <div class="book-face book-face-top-pages" />
+                  <div class="book-face book-face-bottom-pages" />
                 </div>
               </div>
               <span class="preview-label">
@@ -1495,7 +1893,6 @@ onBeforeUnmount(() => {
                       :aria-label="`Mini book cover preview for ${book.title}`"
                     />
 
-                    <!-- Direct drag target over the spine when crop offset is active -->
                     <div
                       v-if="canDragSpineOffset"
                       class="spine-pan-target"
@@ -1512,7 +1909,6 @@ onBeforeUnmount(() => {
                       @pointercancel="stopSpinePan"
                     />
 
-                    <!-- Non-exported visual fold & ratio guides -->
                     <svg
                       v-if="showGuides"
                       class="guide-overlay"
@@ -1561,7 +1957,6 @@ onBeforeUnmount(() => {
                     </svg>
                   </div>
 
-                  <!-- Height bracket on the right -->
                   <div
                     v-if="showGuides"
                     class="height-bracket"
@@ -1571,7 +1966,6 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
 
-                <!-- Bottom dimension chips aligned to the 3 panels -->
                 <div
                   v-if="showGuides"
                   class="panel-chips"
@@ -1612,7 +2006,6 @@ onBeforeUnmount(() => {
             </template>
           </div>
 
-          <!-- Preview toolbar -->
           <div class="preview-tools">
             <div class="tool-group" role="group" aria-label="Preview mode">
               <button
@@ -1702,15 +2095,15 @@ onBeforeUnmount(() => {
           <section class="control-section">
             <div class="controls-heading">
               <div>
-                <h3>Spine (10 × 30 mm · 1:3)</h3>
+                <h3>Mini spine (10 × 30 mm · 1:3)</h3>
                 <p>
-                  Use the saved spine, upload your own, or regenerate at 1:3.
+                  Saved separately from the book’s bookshelf spine so you can
+                  tune 1:3 wraps independently.
                 </p>
               </div>
               <Icon name="lucide:columns-3" aria-hidden="true" />
             </div>
 
-            <!-- Ratio status indicator -->
             <div
               v-if="spineSource === 'plain'"
               class="ratio-pill ratio-neutral"
@@ -1722,7 +2115,7 @@ onBeforeUnmount(() => {
               />
               <span>
                 {{
-                  savedSpineAsset
+                  miniSpineAsset || bookSpineAsset
                     ? 'Using a plain 1:3 spine.'
                     : 'No spine artwork yet. Using a plain 1:3 spine.'
                 }}
@@ -1752,8 +2145,8 @@ onBeforeUnmount(() => {
               />
               <span>
                 Slightly off 1:3 (currently {{ spineRatio.label }}). Cropping
-                trims about
-                {{ Math.max(0.5, spineRatio.trimMm).toFixed(1) }} mm.
+                trims about {{ Math.max(0.5, spineRatio.trimMm).toFixed(1) }}
+                mm.
               </span>
             </div>
 
@@ -1767,7 +2160,7 @@ onBeforeUnmount(() => {
                 {{
                   spineRatio.recommendedFit === 'fit'
                     ? 'It is much wider than 1:3, so regenerating or uploading a narrow spine works best.'
-                    : 'Choose how to fit it below, or make a 1:3 spine.'
+                    : 'Choose how to fit it below, or make a dedicated 1:3 mini spine.'
                 }}
               </p>
               <div class="error-links">
@@ -1784,11 +2177,21 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <p v-if="savedSpineError" role="alert" class="studio-error">
-              {{ savedSpineError }}
+            <p v-if="miniSpineError" role="alert" class="studio-error">
+              {{ miniSpineError }}
               <button
                 type="button"
-                @click="book && loadSavedSpine(book.id, loadToken)"
+                @click="book && loadSavedMiniCover(book.id, loadToken)"
+              >
+                Retry
+              </button>
+            </p>
+
+            <p v-if="bookSpineError" role="alert" class="studio-error">
+              {{ bookSpineError }}
+              <button
+                type="button"
+                @click="book && loadBookSpine(book.id, loadToken)"
               >
                 Retry
               </button>
@@ -1799,9 +2202,9 @@ onBeforeUnmount(() => {
               <button
                 v-if="saveConflict"
                 type="button"
-                @click="reloadSavedSpineAfterConflict"
+                @click="reloadMiniCoverAfterConflict"
               >
-                Reload saved spine
+                Reload mini spine
               </button>
             </p>
 
@@ -1810,18 +2213,28 @@ onBeforeUnmount(() => {
               <legend>Spine source</legend>
               <div class="segmented-row">
                 <button
+                  v-if="miniSpineAsset"
                   type="button"
-                  :disabled="!savedSpineAsset"
-                  :class="{ active: spineSource === 'saved' }"
-                  :aria-pressed="spineSource === 'saved'"
-                  :title="
-                    savedSpineAsset
-                      ? 'Use the book’s saved spine'
-                      : 'No saved spine yet'
-                  "
-                  @click="selectSpineSource('saved')"
+                  :class="{ active: spineSource === 'mini' }"
+                  :aria-pressed="spineSource === 'mini'"
+                  title="Dedicated saved mini cover spine"
+                  @click="selectSpineSource('mini')"
                 >
-                  Saved
+                  Mini spine
+                </button>
+                <button
+                  type="button"
+                  :disabled="!bookSpineAsset"
+                  :class="{ active: spineSource === 'book' }"
+                  :aria-pressed="spineSource === 'book'"
+                  :title="
+                    bookSpineAsset
+                      ? 'Use the book’s bookshelf spine'
+                      : 'No bookshelf spine yet'
+                  "
+                  @click="selectSpineSource('book')"
+                >
+                  Book spine
                 </button>
                 <button
                   v-if="uploadedSpine"
@@ -1884,7 +2297,7 @@ onBeforeUnmount(() => {
               </p>
             </fieldset>
 
-            <!-- Upload + Trim + Save-to-book actions -->
+            <!-- Upload + Trim + Save / Remove mini spine actions -->
             <input
               ref="filePicker"
               type="file"
@@ -1916,53 +2329,39 @@ onBeforeUnmount(() => {
               <button
                 v-if="canEdit && hasUnsavedLocalSpine"
                 type="button"
-                :disabled="generating || savingToBook"
-                @click="saveConfirmOpen = !saveConfirmOpen"
+                class="upload-action"
+                :disabled="generating || savingMiniCover || trimMode"
+                @click="saveMiniSpineAndSettings"
               >
                 <Icon name="lucide:save" aria-hidden="true" />
-                Save spine to book
+                {{ savingMiniCover ? 'Saving…' : 'Save mini spine & settings' }}
+              </button>
+              <button
+                v-if="canEdit && spineSource === 'mini' && miniSpineAsset"
+                type="button"
+                :disabled="generating || removingMiniSpine"
+                @click="removeSavedMiniSpine"
+              >
+                <Icon name="lucide:trash-2" aria-hidden="true" />
+                {{ removingMiniSpine ? 'Removing…' : 'Remove mini spine' }}
               </button>
             </div>
             <p v-if="hasUnsavedLocalSpine" class="field-hint">
-              Used for this export only unless saved to the book.
+              {{
+                canEdit
+                  ? 'Not saved yet — save to reuse this 1:3 spine later without changing the bookshelf spine.'
+                  : 'Used for this export only.'
+              }}
             </p>
             <p v-if="saveStatusMessage" role="status" class="status-message">
               {{ saveStatusMessage }}
             </p>
 
-            <!-- Inline confirmation for saving local spine back to the book -->
-            <div
-              v-if="saveConfirmOpen && canEdit && hasUnsavedLocalSpine"
-              class="confirm-box"
-            >
-              <p>
-                Replace this book’s spine for everyone? This replaces the
-                current spine artwork.
-              </p>
-              <div class="actions">
-                <button
-                  type="button"
-                  class="upload-action"
-                  :disabled="savingToBook"
-                  @click="confirmSaveSpineToBook"
-                >
-                  {{ savingToBook ? 'Saving…' : 'Replace book spine' }}
-                </button>
-                <button
-                  type="button"
-                  :disabled="savingToBook"
-                  @click="saveConfirmOpen = false"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-
             <!-- Regenerate as 1:3 block -->
             <div ref="generateSectionRef" class="generation">
               <div class="controls-heading">
                 <div>
-                  <h3>Make a 1:3 spine</h3>
+                  <h3>Make a 1:3 mini spine</h3>
                   <p>
                     Experimental · Regenerates a 1:3 spine using the saved cover
                     and ChatGPT.
@@ -1972,8 +2371,9 @@ onBeforeUnmount(() => {
               </div>
 
               <p v-if="!canEdit" class="generation-note">
-                Only people who can edit this book can generate or save spines.
-                You can still upload any spine image above for this export.
+                Only people who can edit this book can generate or save mini
+                spines. You can still upload any spine image above for this
+                export.
               </p>
               <p
                 v-else-if="connectionChecked && !connection"
@@ -2239,12 +2639,37 @@ onBeforeUnmount(() => {
 
       <footer class="studio-footer">
         <span v-if="canEdit && hasUnsavedLocalSpine" class="footer-note">
-          Your {{ spineSource }} spine is used for this export only.
+          Unsaved {{ spineSource }} mini spine — save it to reuse later.
+        </span>
+        <span v-else-if="canEdit && settingsDirty" class="footer-note">
+          Mini cover settings have unsaved changes.
         </span>
         <span v-else class="footer-note">
           20 × 10 × 30 mm miniature wrap (50 × 30 mm flat)
         </span>
-        <button type="button" @click="close">Done</button>
+        <div class="footer-actions">
+          <button
+            v-if="canEdit && hasUnsavedLocalSpine"
+            type="button"
+            class="footer-secondary"
+            :disabled="savingMiniCover || generating || trimMode"
+            @click="saveMiniSpineAndSettings"
+          >
+            {{ savingMiniCover ? 'Saving…' : 'Save mini spine' }}
+          </button>
+          <button
+            v-else-if="canEdit && settingsDirty"
+            type="button"
+            class="footer-secondary"
+            :disabled="savingMiniCover || generating"
+            @click="saveMiniCoverSettingsOnly"
+          >
+            {{ savingMiniCover ? 'Saving…' : 'Save settings' }}
+          </button>
+          <button type="button" class="footer-primary" @click="close">
+            Done
+          </button>
+        </div>
       </footer>
     </section>
   </ModalWindow>
@@ -2318,13 +2743,31 @@ onBeforeUnmount(() => {
   font-size: 12px;
   opacity: 0.72;
 }
-.studio-footer button {
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.footer-primary {
   padding: 8px 16px;
   border-radius: 7px;
   background: var(--main-color);
   color: var(--contrast-inverse-color);
   font-size: 13px;
   font-weight: 600;
+}
+.footer-secondary {
+  padding: 7px 13px;
+  border-radius: 7px;
+  border: 1px solid var(--contrast-main-color);
+  color: var(--contrast-main-color);
+  background: var(--bg-color);
+  font-size: 13px;
+  font-weight: 600;
+}
+.footer-secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 @media (max-width: 720px) {
   .mini-cover-studio {
@@ -2493,7 +2936,6 @@ onBeforeUnmount(() => {
   text-align: center;
 }
 
-/* 3D Folded preview */
 .folded-stage {
   flex: 1;
   width: 100%;
@@ -2501,7 +2943,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  perspective: 900px;
+  perspective: 920px;
   cursor: grab;
   user-select: none;
   touch-action: none;
@@ -2511,8 +2953,8 @@ onBeforeUnmount(() => {
 }
 .mini-book-3d {
   position: relative;
-  width: 68px;
-  height: 204px;
+  width: 70px;
+  height: 210px;
   transform-style: preserve-3d;
   transition: transform 80ms linear;
 }
@@ -2523,54 +2965,88 @@ onBeforeUnmount(() => {
 }
 .book-face {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 50%;
   backface-visibility: hidden;
   background-repeat: no-repeat;
-  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 12%);
+  transform-origin: center center;
 }
-.book-face-spine {
-  width: 68px;
-  height: 204px;
-  transform: translateZ(68px);
+.book-face-spine,
+.book-face-shoulder {
+  box-shadow: none;
 }
 .book-face-front {
-  width: 136px;
-  height: 204px;
-  left: 68px;
-  transform-origin: left center;
-  transform: translateZ(68px) rotateY(84deg);
+  border-radius: 0 3px 3px 0;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 12%);
 }
 .book-face-back {
-  width: 136px;
-  height: 204px;
-  left: -136px;
-  transform-origin: right center;
-  transform: translateZ(68px) rotateY(-84deg);
+  border-radius: 3px 0 0 3px;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 12%);
 }
 .book-face-pages {
   width: 64px;
-  height: 198px;
+  height: 204px;
   top: 3px;
-  left: 2px;
-  transform: translateZ(-64px) rotateY(180deg);
-  background: linear-gradient(90deg, #ede9df, #f7f4ec 50%, #e4dfd3);
-}
-.book-face-top-pages {
-  width: 64px;
-  height: 132px;
-  left: 2px;
-  top: -66px;
-  transform-origin: center center;
-  transform: translateZ(2px) rotateX(90deg);
+  margin-left: -32px;
+  transform: translate3d(0, 0, -68px) rotateY(180deg);
   background: repeating-linear-gradient(
     90deg,
-    #f6f2e9 0px,
-    #f6f2e9 2px,
+    #f5f1e7 0px,
+    #f5f1e7 2px,
+    #e4dfd2 3px
+  );
+  box-shadow: inset 0 0 6px rgb(0 0 0 / 16%);
+}
+.book-face-top-pages {
+  width: 66px;
+  height: 136px;
+  top: 2px;
+  margin-left: -33px;
+  transform-origin: center center;
+  transform: translate3d(0, -68px, 0) rotateX(90deg);
+  border-radius: 0 0 10px 10px;
+  background: repeating-linear-gradient(
+    90deg,
+    #f7f3ea 0px,
+    #f7f3ea 2px,
     #e5dfd1 3px
   );
+  box-shadow: inset 0 0 5px rgb(0 0 0 / 14%);
+}
+.book-face-bottom-pages {
+  width: 66px;
+  height: 136px;
+  top: 208px;
+  margin-left: -33px;
+  transform-origin: center center;
+  transform: translate3d(0, -68px, 0) rotateX(-90deg);
+  border-radius: 10px 10px 0 0;
+  background: repeating-linear-gradient(
+    90deg,
+    #ebe6da 0px,
+    #ebe6da 2px,
+    #dcd5c5 3px
+  );
+  box-shadow: inset 0 0 5px rgb(0 0 0 / 18%);
+}
+.book-ground-shadow {
+  position: absolute;
+  width: 112px;
+  height: 168px;
+  top: 218px;
+  left: 50%;
+  margin-left: -56px;
+  transform: translate3d(0, -84px, 0) rotateX(90deg);
+  border-radius: 18px;
+  background: radial-gradient(
+    ellipse at center,
+    rgb(0 0 0 / 32%) 0%,
+    rgb(0 0 0 / 12%) 52%,
+    transparent 74%
+  );
+  pointer-events: none;
 }
 
-/* Inline trim editor (mirrors SpineArtworkEditor handles) */
 .trim-viewport {
   display: flex;
   flex: 1;
@@ -2763,7 +3239,6 @@ onBeforeUnmount(() => {
   color: var(--contrast-inverse-color);
 }
 
-/* Preview toolbar */
 .preview-tools {
   display: flex;
   flex-wrap: wrap;
@@ -2797,7 +3272,6 @@ onBeforeUnmount(() => {
   min-width: 32px;
 }
 
-/* Control column */
 .section-divider {
   margin-top: 16px;
   padding-top: 14px;
@@ -2947,15 +3421,6 @@ onBeforeUnmount(() => {
 }
 .actions .upload-action:hover:not(:disabled) {
   background: color-mix(in srgb, var(--main-color) 85%, var(--bg-color));
-}
-
-.confirm-box {
-  margin-top: 10px;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid var(--contrast-border-color);
-  background: color-mix(in srgb, var(--sub-alt-color) 70%, var(--bg-color));
-  font-size: 12px;
 }
 
 .generation {

@@ -82,14 +82,16 @@ To stop the notice after you finish a book, select **Don't ask again** in it. To
 
 ### Create a mini book cover
 
-A mini book cover is a printable flat wrap sized for a 20 × 10 × 30 mm miniature book (20 × 30 mm left cover, 10 × 30 mm spine in a 1:3 aspect ratio, and 20 × 30 mm right cover—50 × 30 mm flat).
+A mini book cover is a printable flat wrap sized for a 20 × 10 × 30 mm miniature book (20 × 30 mm left cover, 10 × 30 mm spine in a 1:3 aspect ratio, and 20 × 30 mm right cover—50 × 30 mm flat). A book's saved mini cover spine and print settings are stored separately from the book's bookshelf spine so that changes in the mini cover studio never alter the spine shown on your library pages.
 
 1. Open a book and select **Share → Mini book cover**.
 2. Preview the flat wrap or switch to **3D Folded** to inspect how the panels fold around a book block. Toggle **Guides** or **Actual size** in the preview toolbar as needed.
 3. Adjust the **Spine**:
+   - Choose a source: **Mini spine** (the book's saved 1:3 mini spine, when one exists), **Book spine** (the book's bookshelf spine, used as a starting point), **Uploaded**, **Generated**, or **Plain** for a clean type-only spine.
    - Delb checks whether the current spine matches 1:3 and warns if it is off-ratio.
-   - When the ratio differs, choose **Crop** (and drag the spine in the preview to reposition it), **Fit**, or **Stretch**, or switch to **Plain** for a clean type-only spine.
-   - Select **Upload spine image** to use a custom spine image for this export. Editors and Admins can also choose **Save spine to book** to replace the book's saved spine, or use **Make a 1:3 spine** (when ChatGPT image generation is connected) to regenerate a 1:3 spine from the current spine and trim it with the 1:3 crop box.
+   - When the ratio differs, choose **Crop** (and drag the spine in the preview to reposition it), **Fit**, or **Stretch**.
+   - Select **Upload spine image** to use a custom spine image, or use **Make a 1:3 spine** (when ChatGPT image generation is connected) to regenerate a 1:3 spine from the current spine and trim it with the 1:3 crop box.
+   - Editors and Admins can select **Save mini spine & settings** to store the dedicated mini spine and print settings on the book (without changing the bookshelf spine), **Save settings** to save only the layout and export options, or **Remove saved mini spine** to clear the saved mini spine while keeping the saved settings.
 4. Under **Covers**, choose whether the back panel uses the **Same cover**, a solid **Cover color**, or a **Blurred** cover, and optionally flip the orientation for right-to-left books.
 5. Under **Export PNG**, choose **Standard (300 dpi)** or **High (600 dpi)**, optional **Bleed** (0, 1, or 2 mm), **Fold ticks**, and **Corner trim marks**, then select **Download PNG** or **Copy image**.
 

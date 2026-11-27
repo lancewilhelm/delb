@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/lancewilhelm/delb/internal/books"
 	"github.com/lancewilhelm/delb/internal/httpapi"
 	"github.com/lancewilhelm/delb/internal/library"
+	"github.com/lancewilhelm/delb/internal/storage"
 )
 
 const (
@@ -220,27 +222,27 @@ func (s *Service) handleBookSpine(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// Select ONLY the blob column needed for the requested variant so
-		// rendering shelves never reads multi-megabyte original_base64 blobs.
+		// Read file path (or legacy base64 fallback) for the requested variant.
 		var (
-			ct     string
-			rawB64 string
+			ct      string
+			relPath string
+			rawB64  string
 		)
 		if variant == "source" {
 			err = s.db.QueryRowContext(r.Context(), `
-				SELECT original_type, original_base64
+				SELECT original_type, original_path, original_base64
 				FROM book_spines
 				WHERE book_id = ?
 				LIMIT 1
-			`, bookID).Scan(&ct, &rawB64)
+			`, bookID).Scan(&ct, &relPath, &rawB64)
 		} else {
 			ct = "image/webp"
 			err = s.db.QueryRowContext(r.Context(), `
-				SELECT image_base64
+				SELECT image_path, image_base64
 				FROM book_spines
 				WHERE book_id = ?
 				LIMIT 1
-			`, bookID).Scan(&rawB64)
+			`, bookID).Scan(&relPath, &rawB64)
 		}
 		if errors.Is(err, sql.ErrNoRows) {
 			httpapi.WriteError(w, http.StatusNotFound, "No spine artwork")
@@ -251,9 +253,13 @@ func (s *Service) handleBookSpine(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		data, err := base64.StdEncoding.DecodeString(rawB64)
+		data, err := s.readStoredSpineBytes(relPath, rawB64)
+		if errors.Is(err, os.ErrNotExist) {
+			httpapi.WriteError(w, http.StatusNotFound, "No spine artwork")
+			return
+		}
 		if err != nil {
-			s.writeErr(w, "GET /api/books/{id}/spine base64 decode failed", err)
+			s.writeErr(w, "GET /api/books/{id}/spine read failed", err)
 			return
 		}
 		w.Header().Set("Content-Type", ct)
@@ -285,30 +291,57 @@ func (s *Service) handleBookSpine(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		tx, err := s.db.BeginTx(r.Context(), nil)
-		if err != nil {
-			s.writeErr(w, "DELETE /api/books/{id}/spine begin tx failed", err)
-			return
-		}
-		defer func() { _ = tx.Rollback() }()
+		err = storage.WithBookStorageLock(r.Context(), s.libraryDir, bookID, func() error {
+			var currentRev, imgPath, origPath string
+			err := s.db.QueryRowContext(r.Context(), `
+				SELECT revision, image_path, original_path FROM book_spines WHERE book_id = ? LIMIT 1
+			`, bookID).Scan(&currentRev, &imgPath, &origPath)
+			if errors.Is(err, sql.ErrNoRows) || (err == nil && currentRev != expectedRev) {
+				return httpapi.NewError(http.StatusConflict, "Spine artwork changed. Reload before saving.")
+			}
+			if err != nil {
+				return err
+			}
 
-		if err := library.AssertBookEditor(r.Context(), tx, swu.User.ID, bookID); err != nil {
-			s.writeErr(w, "DELETE /api/books/{id}/spine tx auth failed", err)
-			return
-		}
-		res, err := tx.ExecContext(r.Context(), `
-			DELETE FROM book_spines WHERE book_id = ? AND revision = ?
-		`, bookID, expectedRev)
+			sources := s.existingAbsPaths(imgPath, origPath)
+			commitDB := func(opID string) error {
+				tx, err := s.db.BeginTx(r.Context(), nil)
+				if err != nil {
+					return err
+				}
+				defer func() { _ = tx.Rollback() }()
+				if err := library.AssertBookEditor(r.Context(), tx, swu.User.ID, bookID); err != nil {
+					return err
+				}
+				if opID != "" {
+					if _, err := tx.ExecContext(r.Context(), `
+						INSERT INTO storage_operations (id, book_id, kind, created_at)
+						VALUES (?, ?, 'delete', ?)
+					`, opID, bookID, time.Now().UTC().Unix()); err != nil {
+						return err
+					}
+				}
+				res, err := tx.ExecContext(r.Context(), `
+					DELETE FROM book_spines WHERE book_id = ? AND revision = ?
+				`, bookID, expectedRev)
+				if err != nil {
+					return err
+				}
+				if n, _ := res.RowsAffected(); n == 0 {
+					return httpapi.NewError(http.StatusConflict, "Spine artwork changed. Reload before saving.")
+				}
+				return tx.Commit()
+			}
+			if len(sources) > 0 {
+				if err := os.MkdirAll(s.libraryDir, 0o755); err != nil {
+					return err
+				}
+				return storage.DeleteStoredFiles(r.Context(), s.libraryDir, bookID, sources, storage.DBDeleteDecision(s.db), commitDB)
+			}
+			return commitDB("")
+		})
 		if err != nil {
-			s.writeErr(w, "DELETE /api/books/{id}/spine delete failed", err)
-			return
-		}
-		if n, _ := res.RowsAffected(); n == 0 {
-			httpapi.WriteError(w, http.StatusConflict, "Spine artwork changed. Reload before saving.")
-			return
-		}
-		if err := tx.Commit(); err != nil {
-			s.writeErr(w, "DELETE /api/books/{id}/spine commit failed", err)
+			s.writeErr(w, "DELETE /api/books/{id}/spine failed", err)
 			return
 		}
 		httpapi.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
@@ -353,96 +386,115 @@ func (s *Service) handleBookSpine(w http.ResponseWriter, r *http.Request) {
 	}
 	expected := string(revisionPart.Data)
 
-	var (
-		prevRev     string
-		prevOrigB64 string
-		hasPrevious bool
-	)
-	err = s.db.QueryRowContext(r.Context(), `
-		SELECT revision, original_base64 FROM book_spines WHERE book_id = ? LIMIT 1
-	`, bookID).Scan(&prevRev, &prevOrigB64)
-	if err == nil {
-		hasPrevious = true
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		s.writeErr(w, "POST /api/books/{id}/spine previous lookup failed", err)
-		return
-	}
-
-	if prevRev != expected {
-		httpapi.WriteError(w, http.StatusConflict, "Spine artwork changed. Reload before saving.")
-		return
-	}
-	if filePart == nil && !hasPrevious {
-		httpapi.WriteError(w, http.StatusBadRequest, "Choose a spine image")
-		return
-	}
-
-	var original []byte
-	if filePart != nil {
-		original = filePart.Data
-	} else {
-		original, err = base64.StdEncoding.DecodeString(prevOrigB64)
-		if err != nil {
-			s.writeErr(w, "POST /api/books/{id}/spine decode previous failed", err)
-			return
+	var newRevision string
+	err = storage.WithBookStorageLock(r.Context(), s.libraryDir, bookID, func() error {
+		var (
+			prevRev      string
+			prevOrigPath string
+			prevOrigB64  string
+			hasPrevious  bool
+		)
+		err := s.db.QueryRowContext(r.Context(), `
+			SELECT revision, original_path, original_base64 FROM book_spines WHERE book_id = ? LIMIT 1
+		`, bookID).Scan(&prevRev, &prevOrigPath, &prevOrigB64)
+		if err == nil {
+			hasPrevious = true
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return err
 		}
-	}
 
-	renderedWebP, contentType, err := RenderSpine(original, *edits)
+		if prevRev != expected {
+			return httpapi.NewError(http.StatusConflict, "Spine artwork changed. Reload before saving.")
+		}
+		if filePart == nil && !hasPrevious {
+			return httpapi.NewError(http.StatusBadRequest, "Choose a spine image")
+		}
+
+		var original []byte
+		if filePart != nil {
+			original = filePart.Data
+		} else {
+			original, err = s.readStoredSpineBytes(prevOrigPath, prevOrigB64)
+			if err != nil {
+				return err
+			}
+		}
+
+		renderedWebP, contentType, err := RenderSpine(original, *edits)
+		if err != nil {
+			return httpapi.NewError(http.StatusBadRequest, "Use a static JPEG, PNG, WebP or AVIF under 10 MB and 24 megapixels.")
+		}
+
+		relDir, absDir, err := storage.ResolveBookStorageDir(r.Context(), s.db, s.libraryDir, bookID)
+		if err != nil {
+			return err
+		}
+
+		ext := storage.SpineFileExt(contentType)
+		renderedName := "spine.webp"
+		sourceName := "spine.source." + ext
+		renderedRel := relDir + "/" + renderedName
+		sourceRel := relDir + "/" + sourceName
+
+		newRevision = uuid.NewString()
+		editsJSON, err := json.Marshal(edits)
+		if err != nil {
+			return err
+		}
+
+		files := []storage.CoverUpdateFile{
+			{TargetPath: filepath.Join(absDir, renderedName), Data: renderedWebP},
+			{TargetPath: filepath.Join(absDir, sourceName), Data: original},
+		}
+		stale := s.existingAbsPaths(prevOrigPath)
+
+		return storage.WriteBookSpineFiles(r.Context(), s.db, s.libraryDir, bookID, absDir, files, stale, func(opID string) error {
+			tx, err := s.db.BeginTx(r.Context(), nil)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = tx.Rollback() }()
+
+			if err := library.AssertBookEditor(r.Context(), tx, swu.User.ID, bookID); err != nil {
+				return err
+			}
+			var currentRev string
+			err = tx.QueryRowContext(r.Context(), `
+				SELECT revision FROM book_spines WHERE book_id = ? LIMIT 1
+			`, bookID).Scan(&currentRev)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+			if currentRev != expected {
+				return httpapi.NewError(http.StatusConflict, "Spine artwork changed. Reload before saving.")
+			}
+
+			if _, err := tx.ExecContext(r.Context(), `
+				INSERT INTO storage_operations (id, book_id, kind, created_at)
+				VALUES (?, ?, 'cover', ?)
+			`, opID, bookID, time.Now().UTC().Unix()); err != nil {
+				return err
+			}
+
+			if _, err := tx.ExecContext(r.Context(), `
+				INSERT INTO book_spines (book_id, original_base64, original_type, image_base64, edits, revision, image_path, original_path)
+				VALUES (?, '', ?, '', ?, ?, ?, ?)
+				ON CONFLICT(book_id) DO UPDATE SET
+					original_base64 = '',
+					original_type = excluded.original_type,
+					image_base64 = '',
+					edits = excluded.edits,
+					revision = excluded.revision,
+					image_path = excluded.image_path,
+					original_path = excluded.original_path
+			`, bookID, contentType, string(editsJSON), newRevision, renderedRel, sourceRel); err != nil {
+				return err
+			}
+			return tx.Commit()
+		})
+	})
 	if err != nil {
-		httpapi.WriteError(w, http.StatusBadRequest, "Use a static JPEG, PNG, WebP or AVIF under 10 MB and 24 megapixels.")
-		return
-	}
-
-	newRevision := uuid.NewString()
-	editsJSON, err := json.Marshal(edits)
-	if err != nil {
-		s.writeErr(w, "POST /api/books/{id}/spine marshal edits failed", err)
-		return
-	}
-	origB64 := base64.StdEncoding.EncodeToString(original)
-	imgB64 := base64.StdEncoding.EncodeToString(renderedWebP)
-
-	tx, err := s.db.BeginTx(r.Context(), nil)
-	if err != nil {
-		s.writeErr(w, "POST /api/books/{id}/spine begin tx failed", err)
-		return
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := library.AssertBookEditor(r.Context(), tx, swu.User.ID, bookID); err != nil {
-		s.writeErr(w, "POST /api/books/{id}/spine tx auth failed", err)
-		return
-	}
-	var currentRev string
-	err = tx.QueryRowContext(r.Context(), `
-		SELECT revision FROM book_spines WHERE book_id = ? LIMIT 1
-	`, bookID).Scan(&currentRev)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		s.writeErr(w, "POST /api/books/{id}/spine current revision check failed", err)
-		return
-	}
-	if currentRev != expected {
-		httpapi.WriteError(w, http.StatusConflict, "Spine artwork changed. Reload before saving.")
-		return
-	}
-
-	if _, err := tx.ExecContext(r.Context(), `
-		INSERT INTO book_spines (book_id, original_base64, original_type, image_base64, edits, revision)
-		VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT(book_id) DO UPDATE SET
-			original_base64 = excluded.original_base64,
-			original_type = excluded.original_type,
-			image_base64 = excluded.image_base64,
-			edits = excluded.edits,
-			revision = excluded.revision
-	`, bookID, origB64, contentType, imgB64, string(editsJSON), newRevision); err != nil {
-		s.writeErr(w, "POST /api/books/{id}/spine upsert failed", err)
-		return
-	}
-
-	if err := tx.Commit(); err != nil {
-		s.writeErr(w, "POST /api/books/{id}/spine commit failed", err)
+		s.writeErr(w, "POST /api/books/{id}/spine failed", err)
 		return
 	}
 
@@ -772,7 +824,7 @@ func (s *Service) handleSpineGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, sp := range seriesSpines {
-		decoded, derr := base64.StdEncoding.DecodeString(sp.ImageBase64)
+		decoded, derr := s.readStoredSpineBytes(sp.ImagePath, sp.ImageBase64)
 		if derr != nil {
 			httpapi.WriteError(w, http.StatusBadRequest, "A selected series spine could not be used. Reload the references and try again.")
 			return

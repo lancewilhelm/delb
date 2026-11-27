@@ -504,6 +504,12 @@ func MoveBookStorageToCanonical(
 		return MoveBookStorageResult{}, err
 	}
 
+	var spineImagePath, spineOriginalPath string
+	_ = db.QueryRowContext(ctx, `SELECT image_path, original_path FROM book_spines WHERE book_id = ? LIMIT 1`, bookID).Scan(&spineImagePath, &spineOriginalPath)
+
+	var miniSpineImagePath, miniSpineSourcePath string
+	_ = db.QueryRowContext(ctx, `SELECT spine_image_path, spine_source_path FROM book_mini_covers WHERE book_id = ? LIMIT 1`, bookID).Scan(&miniSpineImagePath, &miniSpineSourcePath)
+
 	currentDirPosix := ""
 	if len(files) > 0 {
 		preferred := files[0]
@@ -518,6 +524,14 @@ func MoveBookStorageToCanonical(
 		}
 	} else if coverImagePath.Valid && coverImagePath.String != "" {
 		currentDirPosix = dirnamePosix(coverImagePath.String)
+	} else if spineImagePath != "" {
+		currentDirPosix = dirnamePosix(spineImagePath)
+	} else if spineOriginalPath != "" {
+		currentDirPosix = dirnamePosix(spineOriginalPath)
+	} else if miniSpineImagePath != "" {
+		currentDirPosix = dirnamePosix(miniSpineImagePath)
+	} else if miniSpineSourcePath != "" {
+		currentDirPosix = dirnamePosix(miniSpineSourcePath)
 	}
 	if currentDirPosix == "" {
 		return MoveBookStorageResult{Moved: false, Reason: "no-files"}, nil
@@ -612,6 +626,58 @@ func MoveBookStorageToCanonical(
 		}
 	}
 
+	moveAsset := func(stored string) (string, error) {
+		if stored == "" {
+			return "", nil
+		}
+		source, err := ResolveUnderLibrary(absRoot, stored)
+		if err != nil {
+			return "", err
+		}
+		if _, seen := knownSources[source]; seen {
+			rel, rerr := filepath.Rel(absRoot, filepath.Join(targetDirAbs, filepath.Base(source)))
+			if rerr != nil {
+				return "", rerr
+			}
+			return BaseDir + "/" + filepath.ToSlash(rel), nil
+		}
+		knownSources[source] = struct{}{}
+		dest := filepath.Join(targetDirAbs, filepath.Base(source))
+		if source == dest {
+			return "", nil
+		}
+		ok, err := pathExists(source)
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			return "", nil
+		}
+		entries = append(entries, MoveEntry{Source: source, Destination: dest})
+		rel, err := filepath.Rel(absRoot, dest)
+		if err != nil {
+			return "", err
+		}
+		return BaseDir + "/" + filepath.ToSlash(rel), nil
+	}
+
+	newSpineImagePath, err := moveAsset(spineImagePath)
+	if err != nil {
+		return MoveBookStorageResult{}, err
+	}
+	newSpineOriginalPath, err := moveAsset(spineOriginalPath)
+	if err != nil {
+		return MoveBookStorageResult{}, err
+	}
+	newMiniSpineImagePath, err := moveAsset(miniSpineImagePath)
+	if err != nil {
+		return MoveBookStorageResult{}, err
+	}
+	newMiniSpineSourcePath, err := moveAsset(miniSpineSourcePath)
+	if err != nil {
+		return MoveBookStorageResult{}, err
+	}
+
 	sidecars, err := os.ReadDir(currentDirAbs)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return MoveBookStorageResult{}, err
@@ -662,6 +728,36 @@ func MoveBookStorageToCanonical(
 			if _, err := tx.ExecContext(ctx, `
 				UPDATE books SET cover_image_path = ?, updated_at = ? WHERE id = ?
 			`, newCoverPath, now, bookID); err != nil {
+				return err
+			}
+		}
+		if newSpineImagePath != "" || newSpineOriginalPath != "" {
+			nextImg := spineImagePath
+			if newSpineImagePath != "" {
+				nextImg = newSpineImagePath
+			}
+			nextOrig := spineOriginalPath
+			if newSpineOriginalPath != "" {
+				nextOrig = newSpineOriginalPath
+			}
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE book_spines SET image_path = ?, original_path = ? WHERE book_id = ?
+			`, nextImg, nextOrig, bookID); err != nil {
+				return err
+			}
+		}
+		if newMiniSpineImagePath != "" || newMiniSpineSourcePath != "" {
+			nextImg := miniSpineImagePath
+			if newMiniSpineImagePath != "" {
+				nextImg = newMiniSpineImagePath
+			}
+			nextSrc := miniSpineSourcePath
+			if newMiniSpineSourcePath != "" {
+				nextSrc = newMiniSpineSourcePath
+			}
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE book_mini_covers SET spine_image_path = ?, spine_source_path = ?, updated_at = ? WHERE book_id = ?
+			`, nextImg, nextSrc, now, bookID); err != nil {
 				return err
 			}
 		}
