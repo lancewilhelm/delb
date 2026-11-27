@@ -57,7 +57,9 @@ Delb's Go auth package ([`internal/auth`](../../internal/auth/store.go)) uses th
 
 ## Files and operation decisions
 
-`book_files` stores file format, relative path, and file metadata. Bytes live under `library/`. Cover files can exist even when the book has no downloadable ebook.
+`book_files` stores file format, relative path, and file metadata. Bytes live under `library/`. Cover files (`cover.webp` and `cover.source.<ext>`), bookshelf spine artwork (`spine.webp` and `spine.source.<ext>` referenced from `book_spines`), and dedicated mini-cover spines (`mini-spine.webp` and `mini-spine.source.<ext>` referenced from `book_mini_covers`) live in the same book folder next to the cover, even when the book has no downloadable ebook. On startup (when auto-migration is enabled), Delb extracts any legacy base64 spine rows from `book_spines` into book-folder files, clears the base64 columns, and compacts the database with `VACUUM`.
+
+`book_mini_covers` also stores per-book mini-cover studio settings independently of `book_spines`, so saving or editing a printable mini cover does not overwrite the bookshelf spine.
 
 `storage_operations` stores durable operation decisions alongside the database mutation. Filesystem journals preserve the associated staged/original paths. Operation IDs connect the database decision to recovery work. These records and `.delb-*` directories are part of consistency handling, not disposable caches.
 

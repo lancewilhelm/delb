@@ -144,6 +144,11 @@ func main() {
 		} else {
 			dbLogger.Debug("database schema is up to date")
 		}
+
+		if _, err := spines.MigrateDBSpinesToFiles(ctx, opened.DB, cfg.LibraryDir, opened.IsMemory, rootLogger.With("component", "spines")); err != nil {
+			dbLogger.Error("spine file migration failed", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	if *migrateOnly {

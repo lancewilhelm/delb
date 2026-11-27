@@ -12,6 +12,8 @@ const (
 	SpineMaxPixels         = 24_000_000
 	SpineStretchWidth      = 256
 	SpineStretchHeight     = 768
+	MiniSpineStretchWidth  = 360
+	MiniSpineStretchHeight = 1080
 	SpineMaxFitWidth       = 512
 	SpineMaxFitHeight      = 1600
 	ReferenceMaxDimension  = 2048
@@ -83,6 +85,16 @@ func ParseSpineEdits(raw any) (*SpineEdits, bool) {
 
 // RenderSpine mirrors server/utils/books/spine-image.ts renderSpine using pure Go.
 func RenderSpine(raw []byte, edits SpineEdits) (webpBytes []byte, contentType string, err error) {
+	return renderSpineWithTarget(raw, edits, SpineStretchWidth, SpineStretchHeight)
+}
+
+// RenderMiniSpine renders a dedicated mini-cover spine image in WebP format
+// with enough resolution for 600 dpi 10x30 mm prints.
+func RenderMiniSpine(raw []byte, edits SpineEdits) (webpBytes []byte, contentType string, err error) {
+	return renderSpineWithTarget(raw, edits, MiniSpineStretchWidth, MiniSpineStretchHeight)
+}
+
+func renderSpineWithTarget(raw []byte, edits SpineEdits, stretchW, stretchH int) (webpBytes []byte, contentType string, err error) {
 	if len(raw) == 0 || len(raw) > SpineMaxBytes {
 		return nil, "", errors.New("Invalid image size")
 	}
@@ -131,7 +143,7 @@ func RenderSpine(raw []byte, edits SpineEdits) (webpBytes []byte, contentType st
 
 	var resized = books.ResizeInsideNoEnlarge(cropped, SpineMaxFitWidth, SpineMaxFitHeight)
 	if edits.Stretch {
-		resized = books.ResizeExactFill(cropped, SpineStretchWidth, SpineStretchHeight)
+		resized = books.ResizeExactFill(cropped, stretchW, stretchH)
 	}
 
 	out, err := books.EncodeWebP(resized)

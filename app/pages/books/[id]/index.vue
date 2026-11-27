@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useClipboard } from '@vueuse/core';
 import { useHead } from '~/composables/useHead';
-import { useMiniCoverStore } from '~/stores/miniCover';
 import { useShareCardStore } from '~/stores/shareCard';
 import { useUserSettingsStore } from '~/stores/userSettings';
 import { $fetch } from '~/utils/apiFetch';
@@ -167,18 +166,8 @@ function syncProgressSyncValue() {
 }
 
 const shareCard = useShareCardStore();
-const miniCover = useMiniCoverStore();
 // The status before the select changed it, so a save can tell a new finish.
 let statusBeforeEdit: UserBookStatus | null | undefined;
-
-watch(
-  () => miniCover.lastSavedSpine,
-  (saved) => {
-    if (!saved || !book.value || saved.bookId !== book.value.id) return;
-    book.value.spineRevision = saved.revision;
-    spineFailed.value = false;
-  },
-);
 
 const selectedStatusValue = computed<string>({
   get() {
@@ -1151,8 +1140,6 @@ const { copy } = useClipboard();
             <div
               class="detail-spine rounded-sm shadow-md"
               :class="{
-                'rounded-r-2xl':
-                  userSettingsStore.activeSettings.coverStyle.roundedRight,
                 'spine-gloss':
                   userSettingsStore.activeSettings.coverStyle.detailSpineGloss,
                 grayscale:

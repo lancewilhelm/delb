@@ -136,9 +136,6 @@ function mountBookDetail(opts: {
       useRouter: () => ({ back: () => {} }),
     },
     '~/composables/useHead': { useHead: () => {} },
-    '~/stores/miniCover': {
-      useMiniCoverStore: () => ({ open: () => {}, lastSavedSpine: null }),
-    },
     '~/stores/shareCard': {
       useShareCardStore: () => ({ open: () => {}, notifyFinished: () => {} }),
     },
@@ -247,6 +244,12 @@ test('book detail page gates spine artwork and image request on coverStyle.showD
           typeof n.props.class === 'string' &&
           n.props.class.includes('detail-artwork'),
       );
+    const spineContainers = () =>
+      view.findAll(
+        (n) =>
+          typeof n.props.class === 'string' &&
+          n.props.class.includes('detail-spine'),
+      );
     const spineImages = () =>
       view.findAll(
         (n) =>
@@ -264,6 +267,15 @@ test('book detail page gates spine artwork and image request on coverStyle.showD
       '/api/books/book-1/spine?v=rev-1',
     );
     assert.equal(covers().length, 1);
+
+    // Rounded cover edges must not round the right edge of the spine itself
+    view.activeSettings.coverStyle.roundedRight = true;
+    await vue.nextTick();
+    assert.equal(spineContainers().length, 1);
+    assert.equal(
+      String(spineContainers()[0]?.props.class ?? '').includes('rounded-r-2xl'),
+      false,
+    );
 
     // Disabled: falls back cleanly to standalone <BookCover> and does not render spine <img>
     view.activeSettings.coverStyle.showDetailSpine = false;

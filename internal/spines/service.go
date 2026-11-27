@@ -60,6 +60,10 @@ func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	// Book spine artwork (GET, POST, DELETE, else 405)
 	mux.HandleFunc("/api/books/{id}/spine", reqSess(s.handleBookSpine))
 
+	// Mini book cover settings & dedicated mini-cover spine (separate from bookshelf spine)
+	mux.HandleFunc("/api/books/{id}/mini-cover", reqSess(s.handleBookMiniCover))
+	mux.HandleFunc("/api/books/{id}/mini-cover/spine", reqSess(s.handleBookMiniCoverSpine))
+
 	// Spine generation routes
 	mux.HandleFunc("POST /api/books/{id}/spine-generate", s.handleSpineGenerate)
 	mux.HandleFunc("/api/books/{id}/spine-generate/connection", s.handleSpineGenerateConnection)
