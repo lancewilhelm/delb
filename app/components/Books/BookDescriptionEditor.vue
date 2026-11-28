@@ -341,7 +341,7 @@ function clearFormatting() {
       </div>
       <textarea
         :value="modelValue"
-        class="w-full h-52 max-h-52 overflow-y-auto px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) font-mono text-sm resize-y"
+        class="description-source w-full h-52 max-h-52 overflow-y-auto px-3 py-2 rounded-md border border-(--contrast-border-color) bg-(--bg-color) text-sm resize-y"
         :placeholder="placeholder"
         @input="
           emit(
@@ -355,6 +355,10 @@ function clearFormatting() {
 </template>
 
 <style scoped>
+.description-source {
+  font-family: 'Paper Mono', var(--font-mono);
+}
+
 .description-toolbar-btn {
   align-items: center;
   background: color-mix(in srgb, var(--bg-color) 100%, transparent);

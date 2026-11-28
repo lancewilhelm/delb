@@ -214,6 +214,7 @@ test('SPA boot script applies stored preset, system, custom, mobile, and font pr
         light: 'guage_light',
         dark: 'guage_dark',
       },
+      fontFamily: 'Allo',
       mobile: {
         enabled: true,
         settings: {
@@ -223,19 +224,26 @@ test('SPA boot script applies stored preset, system, custom, mobile, and font pr
             light: 'guage_light',
             dark: 'guage_dark',
           },
+          fontFamily: 'Katagami Text',
         },
       },
     },
   });
-  assert.equal(
-    runBoot({ stored: mobileStored, userAgent: 'Mozilla/5.0 (Macintosh)' })
-      .themeEl?.href,
-    '/css/themes/paper.css',
+  const desktopBoot = runBoot({ stored: mobileStored });
+  assert.equal(desktopBoot.themeEl?.href, '/css/themes/paper.css');
+  assert.match(
+    desktopBoot.fontEl?.textContent ?? '',
+    /font-family: Allo !important/,
   );
-  assert.equal(
-    runBoot({ stored: mobileStored, userAgent: 'Mozilla/5.0 (iPhone)' })
-      .themeEl?.href,
-    '/css/themes/nord.css',
+
+  const mobileBoot = runBoot({
+    stored: mobileStored,
+    userAgent: 'Mozilla/5.0 (iPhone)',
+  });
+  assert.equal(mobileBoot.themeEl?.href, '/css/themes/nord.css');
+  assert.match(
+    mobileBoot.fontEl?.textContent ?? '',
+    /font-family: Katagami Text !important/,
   );
 
   // Corrupted localStorage falls back cleanly without throwing
