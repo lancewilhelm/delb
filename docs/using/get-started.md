@@ -49,6 +49,12 @@ If a form reports an error, correct the named field and submit again. A failed r
 
 The palette also opens the custom theme editor and the grid and list field-order controls. Changes use the active device profile and save like changes in **Settings → Appearance**.
 
+## Change the app font
+
+Open **Settings → Appearance → Font** and select a font, such as **Allo** or **Katagami Text**. You can also search for either font by name in the command palette. The interface updates immediately and your choice saves automatically.
+
+When editing a book description, select **HTML** to see the source in Paper Mono.
+
 ## Adjust interface contrast
 
 1. Open **Settings → Appearance**.

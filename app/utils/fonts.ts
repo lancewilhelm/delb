@@ -1,4 +1,6 @@
-// Self-hosted font imports for all 10 user-selectable font families.
+// Self-hosted font imports for the app.
+import '../assets/fonts/webfonts.css';
+
 import '@fontsource/fira-code/latin-400.css';
 import '@fontsource/fira-code/latin-500.css';
 import '@fontsource/fira-code/latin-600.css';

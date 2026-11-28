@@ -23,6 +23,7 @@ import {
   normalizeBrowseCardArt,
   type BrowseCardArtSettings,
 } from '~/utils/browseCards';
+import type { FontFamily } from '~/utils/fontFamilies';
 import {
   defaultThemePreference,
   normalizeThemePreference,
@@ -32,20 +33,6 @@ import {
 export type MetadataProviderKey = 'googleBooks' | 'hardcover';
 
 export type BookDeleteMode = 'db_only' | 'everything';
-
-export const fontFamilyOptions = [
-  'Fira Code',
-  'Geist',
-  'IBM Plex Mono',
-  'Inter',
-  'Montserrat',
-  'Nunito',
-  'Poppins',
-  'PT Serif',
-  'Noto Serif',
-  'Roboto Mono',
-] as const;
-export type FontFamily = (typeof fontFamilyOptions)[number];
 
 export const funboxModes = ['confetti', 'snow'];
 export type FunboxMode = (typeof funboxModes)[number];

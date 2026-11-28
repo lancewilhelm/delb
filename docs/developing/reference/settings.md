@@ -25,6 +25,12 @@ The [command palette](../../../app/composables/useCommandPalette.ts) uses the sa
 
 This keeps initial paint fast without server-side rendering while still reconciling persisted local preferences with database-backed account settings on load.
 
+## App fonts
+
+The `fontFamily` setting belongs to the active desktop or mobile profile and defaults to Nunito. The [font list](../../../app/utils/fontFamilies.ts) supplies the Appearance picker, command palette, and boot script.
+
+Delb bundles the official WOFF2 files for [Allo 1.1.1](https://github.com/joshpuckett/allo/tree/b37d6d19b638fae82d8bc000571882af2fbf0d62), the Latin, Greek, and Cyrillic build of [Katagami Text 1.6](https://katagami.kevinliu.studio/), and [Paper Mono](https://github.com/paper-design/paper-mono/tree/74fc5537cc1f7b39aa8cccfa7dd3822e17143cca). The book description editor uses Paper Mono for HTML source. The [font license notices](../../../public/licenses/fonts/) ship with the app.
+
 ## Fixed and system appearance
 
 The current account field is `themePreference`, defined in [themePreference.ts](../../../app/utils/themePreference.ts):

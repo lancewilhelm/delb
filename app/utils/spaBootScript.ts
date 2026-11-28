@@ -1,9 +1,10 @@
+import { fontFamilyOptions } from './fontFamilies';
+
 /**
  * Builds the synchronous inline `<head>` script that applies persisted theme
  * and font preferences from `localStorage` before first paint in SPA mode.
  *
- * Kept self-contained with zero Nuxt imports so `nuxt.config.ts` and unit tests
- * can import it directly.
+ * The generated script runs independently of the app bundle.
  */
 export function buildSpaBootScript(): string {
   return `(() => {
@@ -21,18 +22,7 @@ export function buildSpaBootScript(): string {
       subAltColor: '#cccccc',
       errorColor: '#883333'
     };
-    var allowedFonts = {
-      'Fira Code': true,
-      'Geist': true,
-      'IBM Plex Mono': true,
-      'Inter': true,
-      'Montserrat': true,
-      'Nunito': true,
-      'Poppins': true,
-      'PT Serif': true,
-      'Noto Serif': true,
-      'Roboto Mono': true
-    };
+    var allowedFonts = ${JSON.stringify(fontFamilyOptions)};
     var parsed = null;
     try {
       var raw = localStorage.getItem('delb.userSettings');
@@ -100,7 +90,7 @@ export function buildSpaBootScript(): string {
 
       var pathname = typeof location !== 'undefined' ? location.pathname : '';
       var isAuthRoute = pathname === '/login' || pathname === '/register';
-      var font = !isAuthRoute && typeof active.fontFamily === 'string' && allowedFonts[active.fontFamily]
+      var font = !isAuthRoute && allowedFonts.includes(active.fontFamily)
         ? active.fontFamily
         : 'Geist, sans-serif';
       var existingFont = document.getElementById('currentFontFamilyStyle');

@@ -2,7 +2,8 @@ import { useAuth } from '~/composables/useAuth';
 import { useBookViewFields } from '~/composables/useBookViewFields';
 import { useThemeAppearance } from '~/composables/useThemeAppearance';
 import { useUiStore } from '~/stores/ui';
-import { fontFamilyOptions, useUserSettingsStore } from '~/stores/userSettings';
+import { useUserSettingsStore } from '~/stores/userSettings';
+import { fontFamilyOptions } from '~/utils/fontFamilies';
 import { debounce } from '~/utils/debounce';
 import { navigateTo } from '~/utils/navigation';
 import {
